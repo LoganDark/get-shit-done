@@ -186,20 +186,42 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
   };
 
   // ─── status ──────────────────────────────────────────────────────────────
+  // CR-02: porcelain v1 (no `-z`) C-style-quotes paths containing spaces, tabs,
+  // control bytes, or non-ASCII (controlled by core.quotePath). Slicing line[3..]
+  // verbatim mangles those paths and also breaks rename entries (` -> ` syntax).
+  // Use `-z` for the structured-entry path so paths arrive verbatim, NUL-separated.
+  // The 5-field `raw` field still preserves the user-visible porcelain text from a
+  // separate (newline-mode) call so byte-identity baselines are unaffected.
   const status = (opts: StatusOpts = {}): StatusResult => {
-    const args = opts.porcelain === false ? ['status'] : ['status', '--porcelain'];
-    const r = execGit(cwd, args);
+    if (opts.porcelain === false) {
+      const r = execGit(cwd, ['status']);
+      return { entries: [], raw: r.stdout };
+    }
+    // Parse path-safe entries from `-z` output; preserve byte-identity `raw` from
+    // the newline-mode `--porcelain` call (matches GIT-02 baselines).
+    const rawRes = execGit(cwd, ['status', '--porcelain']);
+    const zRes = execGit(cwd, ['-c', 'core.quotePath=false', 'status', '--porcelain', '-z']);
     const entries: StatusEntry[] = [];
-    if (opts.porcelain !== false) {
-      for (const line of r.stdout.split('\n').filter(Boolean)) {
-        // Porcelain v1: XY <space> path
-        const index = line[0] ?? ' ';
-        const worktree = line[1] ?? ' ';
-        const path = line.slice(3);
+    if (zRes.exitCode === 0 && zRes.stdout.length > 0) {
+      // `-z` records: XY <space> path NUL [origPath NUL when XY indicates rename/copy]
+      // Note vcsExec trims trailing whitespace; NUL bytes survive trimming.
+      const tokens = zRes.stdout.split('\0');
+      // The trailing element after the final NUL is an empty string we ignore.
+      for (let i = 0; i < tokens.length; i += 1) {
+        const tok = tokens[i];
+        if (!tok) continue;
+        const index = tok[0] ?? ' ';
+        const worktree = tok[1] ?? ' ';
+        const path = tok.slice(3);
         entries.push({ path, index, worktree });
+        // Rename/copy entries are followed by a second token holding origPath.
+        // Consume it so it is not interpreted as a fresh entry.
+        if (index === 'R' || index === 'C' || worktree === 'R' || worktree === 'C') {
+          i += 1;
+        }
       }
     }
-    return { entries, raw: r.stdout };
+    return { entries, raw: rawRes.stdout };
   };
 
   // ─── diff ────────────────────────────────────────────────────────────────

@@ -86,6 +86,21 @@ describe('createGitAdapter — status', () => {
     const paths = r.entries.map((e) => e.path);
     expect(paths).toContain('untracked.txt');
   });
+
+  it('status({porcelain: true}) returns paths with spaces verbatim (CR-02)', () => {
+    // Porcelain v1 (newline mode) C-style-quotes paths containing whitespace
+    // unless `-z` is used. The adapter must round-trip the literal filename.
+    const vcs = createGitAdapter(tmpDir);
+    writeFileSync(join(tmpDir, 'a b.txt'), 'x\n');
+    const r = vcs.status({ porcelain: true });
+    const paths = r.entries.map((e) => e.path);
+    expect(paths).toContain('a b.txt');
+    // No literal quote characters should leak through.
+    for (const p of paths) {
+      expect(p.startsWith('"')).toBe(false);
+      expect(p.endsWith('"')).toBe(false);
+    }
+  });
 });
 
 describe('createGitAdapter — diff', () => {
