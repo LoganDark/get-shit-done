@@ -170,4 +170,101 @@ function isUsageOutput(text) {
   return /Usage:\s*gsd-tools/.test(text) && /Commands:/.test(text);
 }
 
-module.exports = { runGsdTools, createTempDir, createTempProject, createTempGitProject, cleanup, parseFrontmatter, isUsageOutput, TOOLS_PATH };
+// ─── VCS adapter test harness (Phase 1 plan 04) ─────────────────────────────
+// RESEARCH Pitfall 1: two-runner trap — node --test has no describe.for / test.extend.
+// RESEARCH Pitfall 3: pre-build guard — fail loudly with a recovery instruction.
+// RESEARCH Pitfall 6: BACKENDS_AVAILABLE and parseBackendsEnv MUST come from sdk/dist-cjs (single source).
+
+let _vcsModule = null;
+let _backendsModule = null;
+function _loadVcs() {
+  if (_vcsModule && _backendsModule) return { vcs: _vcsModule, backends: _backendsModule };
+  try {
+    _vcsModule = require('../sdk/dist-cjs/vcs/index.js');
+    _backendsModule = require('../sdk/dist-cjs/vcs/backends.js');
+  } catch (err) {
+    throw new Error(
+      'VCS adapter not built. Run: pnpm -F sdk build:cjs\n' +
+      '  Underlying error: ' + (err && err.message ? err.message : String(err))
+    );
+  }
+  return { vcs: _vcsModule, backends: _backendsModule };
+}
+
+const __VCS_TEST_ONLY_SYMBOL = Symbol.for('gsd.vcs.testOnly');
+
+function vcsTest(kindOrKinds, suiteFn) {
+  const { describe, before, after, beforeEach } = require('node:test');
+  const { vcs: vcsLib, backends } = _loadVcs();
+
+  let kinds;
+  if (kindOrKinds === 'auto') {
+    // B-4: parseBackendsEnv returns { available, requested, unavailable }.
+    const result = backends.parseBackendsEnv(process.env.GSD_TEST_BACKENDS);
+    if (result.requested.length > 0 && result.available.length === 0) {
+      const msg = '[GSD_TEST_BACKENDS] requested ' + JSON.stringify(result.requested) +
+        ' but none are in BACKENDS_AVAILABLE (' + JSON.stringify(backends.BACKENDS_AVAILABLE) +
+        '); 0 tests will run. Unavailable: ' + JSON.stringify(result.unavailable) + '.';
+      if (process.env.CI === 'true') throw new Error(msg);
+      process.stderr.write('WARN ' + msg + '\n');
+    }
+    kinds = result.available;
+  } else {
+    const requested = Array.isArray(kindOrKinds) ? kindOrKinds : [kindOrKinds];
+    kinds = requested.filter(function (k) { return backends.BACKENDS_AVAILABLE.includes(k); });
+    if (requested.length > 0 && kinds.length === 0) {
+      const msg = 'vcsTest(' + JSON.stringify(requested) + ') resolved to 0 backends; AVAILABLE=' + JSON.stringify(backends.BACKENDS_AVAILABLE);
+      if (process.env.CI === 'true') throw new Error(msg);
+      process.stderr.write('WARN ' + msg + '\n');
+    }
+  }
+
+  for (const kind of kinds) {
+    describe('vcs[' + kind + ']', () => {
+      let sharedDir = null;
+      let sharedAdapter = null;
+      let snapshotHandle = null;
+
+      before(() => {
+        if (kind !== 'git') {
+          throw new Error("backend '" + kind + "' not yet implemented in Phase 1 (BACKENDS_AVAILABLE=" + backends.BACKENDS_AVAILABLE.join(',') + ')');
+        }
+        sharedDir = createTempGitProject('gsd-vcs-cjs-');
+        sharedAdapter = vcsLib.createVcsAdapter(sharedDir, { kind: 'git' });
+        const testApi = sharedAdapter[__VCS_TEST_ONLY_SYMBOL];
+        if (!testApi) throw new Error('Adapter missing __vcsTestOnly namespace');
+        snapshotHandle = testApi.snapshot();
+      });
+
+      beforeEach(() => {
+        if (sharedAdapter && snapshotHandle) {
+          const testApi = sharedAdapter[__VCS_TEST_ONLY_SYMBOL];
+          testApi.restore(snapshotHandle);
+        }
+      });
+
+      after(() => {
+        if (sharedDir) cleanup(sharedDir);
+        sharedDir = null;
+        sharedAdapter = null;
+        snapshotHandle = null;
+      });
+
+      const handle = {
+        getKind: () => kind,
+        getCwd: () => sharedDir,
+        getVcs: () => sharedAdapter,
+      };
+      suiteFn(handle);
+    });
+  }
+}
+
+const _exports = {
+  runGsdTools, createTempDir, createTempProject, createTempGitProject, cleanup, parseFrontmatter, isUsageOutput, TOOLS_PATH,
+  vcsTest,
+};
+Object.defineProperty(_exports, 'BACKENDS_AVAILABLE', { enumerable: true, get: () => _loadVcs().backends.BACKENDS_AVAILABLE });
+Object.defineProperty(_exports, 'BACKENDS_DECLARED', { enumerable: true, get: () => _loadVcs().backends.BACKENDS_DECLARED });
+Object.defineProperty(_exports, 'parseBackendsEnv', { enumerable: true, get: () => _loadVcs().backends.parseBackendsEnv });
+module.exports = _exports;
