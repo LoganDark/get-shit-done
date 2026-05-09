@@ -1,0 +1,6 @@
+packages:
+  - sdk
+allowBuilds:
+  esbuild: true
+onlyBuiltDependencies:
+  - esbuild
