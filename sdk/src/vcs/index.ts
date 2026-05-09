@@ -10,6 +10,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
+import { createGitAdapter } from './backends/git.js';
 import type { VcsAdapter, VcsKind } from './types.js';
 
 export interface CreateVcsAdapterOpts {
@@ -23,9 +24,8 @@ export function createVcsAdapter(cwd: string, opts: CreateVcsAdapterOpts = {}): 
     // per planning revision; no fallback or `as`-cast needed.
     throw new GSDError('jj backend not yet implemented (Phase 3)', ErrorClassification.Blocked);
   }
-  // Plan 03 replaces this body with `return createGitAdapter(cwd)`.
-  // For plan 02, return a frozen stub that surfaces `kind` and `cwd` only.
-  return createGitAdapterStub(cwd);
+  // Plan 03: createGitAdapter is the real backend (sdk/src/vcs/backends/git.ts).
+  return createGitAdapter(cwd);
 }
 
 function resolveKind(cwd: string, opts: CreateVcsAdapterOpts): VcsKind {
@@ -36,48 +36,6 @@ function resolveKind(cwd: string, opts: CreateVcsAdapterOpts): VcsKind {
   if (existsSync(join(cwd, '.git'))) return 'git';
   // No VCS detected — default to git per RESEARCH § Auto-detect (allows pre-init flows).
   return 'git';
-}
-
-// Stub — replaced by createGitAdapter in plan 03.
-function createGitAdapterStub(cwd: string): VcsAdapter {
-  const notImpl = (verb: string) => () => {
-    throw new GSDError(
-      `vcs.${verb} not yet implemented (plan 03 wires the git backend)`,
-      ErrorClassification.Blocked,
-    );
-  };
-  return Object.freeze({
-    kind: 'git' as const,
-    cwd,
-    commit: notImpl('commit') as never,
-    log: notImpl('log') as never,
-    status: notImpl('status') as never,
-    diff: notImpl('diff') as never,
-    refs: Object.freeze({
-      head: 'head:' as unknown as VcsAdapter['refs']['head'],
-      parent: 'parent:' as unknown as VcsAdapter['refs']['parent'],
-      bookmarks: Object.freeze({
-        list: notImpl('refs.bookmarks.list') as never,
-        create: notImpl('refs.bookmarks.create') as never,
-        move: notImpl('refs.bookmarks.move') as never,
-        delete: notImpl('refs.bookmarks.delete') as never,
-        exists: notImpl('refs.bookmarks.exists') as never,
-      }),
-    }),
-    workspace: Object.freeze({
-      add: notImpl('workspace.add') as never,
-      forget: notImpl('workspace.forget') as never,
-      list: notImpl('workspace.list') as never,
-    }),
-    hooks: Object.freeze({ fire: notImpl('hooks.fire') as never }),
-    findConflicts: notImpl('findConflicts') as never,
-    push: notImpl('push') as never,
-    fetch: notImpl('fetch') as never,
-    gitOnly: Object.freeze({
-      createAnnotatedTag: notImpl('gitOnly.createAnnotatedTag') as never,
-      version: notImpl('gitOnly.version') as never,
-    }),
-  }) as unknown as VcsAdapter;
 }
 
 // Re-exports for convenience

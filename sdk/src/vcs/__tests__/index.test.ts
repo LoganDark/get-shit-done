@@ -23,7 +23,7 @@ afterEach(async () => {
   delete process.env.GSD_VCS;
 });
 
-describe('createVcsAdapter — git backend stub', () => {
+describe('createVcsAdapter — git backend (real, plan 03)', () => {
   it('auto-detects git and returns kind=git, cwd=tmpDir', () => {
     const vcs = createVcsAdapter(tmpDir);
     expect(vcs.kind).toBe('git');
@@ -42,9 +42,10 @@ describe('createVcsAdapter — git backend stub', () => {
     }
   });
 
-  it('every method on the stub throws "not yet implemented" (plan 03 swap-in safety)', () => {
+  it('plan 03: real backend wired — gitOnly.version() returns a real `git version …` string', () => {
     const vcs = createVcsAdapter(tmpDir);
-    expect(() => vcs.commit({ message: 'x' })).toThrow(/not yet implemented/);
+    if (vcs.kind !== 'git') throw new Error('expected git adapter');
+    expect(vcs.gitOnly.version()).toMatch(/^git version /);
   });
 });
 
