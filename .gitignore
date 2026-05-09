@@ -57,6 +57,7 @@ Thumbs.db
 !.env.example
 .next/
 dist/
+sdk/dist-cjs/
 build/
 __pycache__/
 *.pyc

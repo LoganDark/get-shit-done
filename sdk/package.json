@@ -16,6 +16,7 @@
   },
   "files": [
     "dist",
+    "dist-cjs",
     "shared",
     "prompts"
   ],
@@ -34,9 +35,12 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc -p tsconfig.cjs.json",
+    "build:esm": "tsc",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
     "check:alias-drift": "pnpm run build && node scripts/check-command-aliases-fresh.mjs",
-    "prepublishOnly": "rm -rf dist && tsc && chmod +x dist/cli.js",
+    "dev": "tsc -w & tsc -p tsconfig.cjs.json -w",
+    "prepublishOnly": "rm -rf dist dist-cjs && tsc && tsc -p tsconfig.cjs.json && chmod +x dist/cli.js",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration"
