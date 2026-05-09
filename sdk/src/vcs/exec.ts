@@ -2,6 +2,12 @@
  * vcs/exec — single spawn wrapper backing every VcsAdapter call.
  *
  * Return shape: { exitCode, stdout, stderr, timedOut, error }
+ *   - exitCode: process exit status, OR `EXIT_CODE_SIGNAL_KILLED` (-1) when the
+ *               child was killed by signal (spawnSync result.status === null).
+ *               Distinguishing these cases matters because `git diff` returns
+ *               exit 1 to mean "differences found" — a normal outcome — and
+ *               callers cannot otherwise distinguish that from "process was
+ *               killed". See WR-06.
  *   - timedOut: true when spawnSync reports SIGTERM + ETIMEDOUT — callers must
  *               branch on this to surface a structured warning (PRED.k302).
  *   - error:    spawnSync error object or null
@@ -15,6 +21,16 @@ import { spawnSync } from 'node:child_process';
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 export const DEFAULT_VCS_TIMEOUT_MS = 10000;
+
+/**
+ * Sentinel value for `ExecResult.exitCode` when spawnSync's `result.status` is
+ * null (process killed by signal, e.g. SIGTERM from a timeout, or never
+ * spawned). Callers that need to distinguish "killed" from "exited 1" should
+ * branch on `exitCode === EXIT_CODE_SIGNAL_KILLED` rather than treating the
+ * `1` collapse as ambiguous (WR-06). The 5-field shape also exposes `timedOut`
+ * and `error` for the specific causes.
+ */
+export const EXIT_CODE_SIGNAL_KILLED = -1;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -82,7 +98,10 @@ export function vcsExec(
     result.signal === 'SIGTERM' &&
     (result.error as NodeJS.ErrnoException | null | undefined)?.code === 'ETIMEDOUT';
   return {
-    exitCode: result.status ?? 1,
+    // WR-06: result.status is null when killed by signal. Surface that as
+    // EXIT_CODE_SIGNAL_KILLED (-1) so callers can disambiguate from a real
+    // exit-1 (e.g. `git diff` reporting differences).
+    exitCode: result.status ?? EXIT_CODE_SIGNAL_KILLED,
     stdout: (result.stdout ?? '').toString().trim(),
     stderr: (result.stderr ?? '').toString().trim(),
     timedOut,
