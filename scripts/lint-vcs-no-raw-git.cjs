@@ -54,8 +54,11 @@ const GIT_PATTERNS = [
   { re: /spawn\s*\(\s*['"]git['"]/,     label: "spawn('git', …)" },
   { re: /execFileSync\s*\(\s*['"]git['"]/, label: "execFileSync('git', …)" },
   { re: /execFile\s*\(\s*['"]git['"]/,  label: "execFile('git', …)" },
-  { re: /execSync\s*\(\s*['"`]git\s/,   label: "execSync('git …', …)" },
-  { re: /\bexec\s*\(\s*['"`]git\s/,     label: "exec('git …', …)" },
+  // CR-01: tighten regex to also catch `execSync('git')`, `execSync(\`git\`)` (no trailing
+  // whitespace) — match whitespace OR the closing quote/backtick directly, the same
+  // shape the spawnSync patterns use.
+  { re: /execSync\s*\(\s*['"`]git(?:\s|['"`])/, label: "execSync('git…', …)" },
+  { re: /\bexec\s*\(\s*['"`]git(?:\s|['"`])/,   label: "exec('git…', …)" },
 ];
 
 function globToRegExp(glob) {

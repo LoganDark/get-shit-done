@@ -53,6 +53,30 @@ test('lint-vcs-no-raw-git exits 1 on a fixture containing execSync("git status")
   }
 });
 
+test('lint-vcs-no-raw-git exits 1 on a fixture containing execSync("git") (no trailing space)', () => {
+  // CR-01: tightened regex must catch `execSync('git')` (no whitespace after `git`)
+  // and `execSync(\`git\`)` — bypass surfaces that the original `git\s` pattern missed.
+  const fixDir = fs.mkdtempSync(path.join(os.tmpdir(), '__lint-fixture-vcs-'));
+  const fixFile = path.join(fixDir, 'bare.cjs');
+  try {
+    fs.writeFileSync(
+      fixFile,
+      "const { execSync } = require('child_process');\n" +
+      "execSync('git', { cwd: '.' });\n" +
+      "execSync(`git`, { cwd: '.' });\n"
+    );
+    const r = spawnSync(process.execPath, [SCRIPT, '--scan-root', fixDir], { encoding: 'utf-8' });
+    assert.equal(
+      r.status, 1,
+      'expected exit 1 (violation) but got ' + r.status + '\nstderr: ' + r.stderr
+    );
+    assert.match(r.stderr, /lint-vcs-no-raw-git/);
+    assert.match(r.stderr, /execSync\('git/);
+  } finally {
+    fs.rmSync(fixDir, { recursive: true, force: true });
+  }
+});
+
 test('inline annotation `// vcs-lint:allow-git-here` exempts a single line', () => {
   const fixDir = fs.mkdtempSync(path.join(os.tmpdir(), '__lint-fixture-vcs-'));
   const fixFile = path.join(fixDir, 'annotated.cjs');
