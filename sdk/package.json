@@ -35,12 +35,12 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "build": "tsc && tsc -p tsconfig.cjs.json",
+    "build": "tsc && pnpm run build:cjs",
     "build:esm": "tsc",
-    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json && node -e \"require('node:fs').writeFileSync('dist-cjs/package.json', JSON.stringify({type:'commonjs'},null,2)+'\\n')\"",
     "check:alias-drift": "pnpm run build && node scripts/check-command-aliases-fresh.mjs",
     "dev": "tsc -w & tsc -p tsconfig.cjs.json -w",
-    "prepublishOnly": "rm -rf dist dist-cjs && tsc && tsc -p tsconfig.cjs.json && chmod +x dist/cli.js",
+    "prepublishOnly": "rm -rf dist dist-cjs && tsc && pnpm run build:cjs && chmod +x dist/cli.js",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration"
