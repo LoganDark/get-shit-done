@@ -26,10 +26,10 @@ A hard fork of [`gsd-build/get-shit-done`](https://github.com/gsd-build/get-shit
 
 **Adapter foundation**
 
-- [ ] **VCS-01**: VCS adapter interface defined in `sdk/src/vcs/` (or equivalent) with explicit contract for every operation GSD performs (commit, log, status, branch/ref-equiv, worktree/workspace, diff, blame, stash, hook trigger)
-- [ ] **VCS-02**: Git backend implementation of the adapter, behaviorally equivalent to existing inline git calls
+- [x] **VCS-01**: VCS adapter interface defined in `sdk/src/vcs/` with explicit contract for every operation GSD performs (commit, log, status, branch/ref-equiv, worktree/workspace, diff, blame, stash, hook trigger) — *Validated in Phase 1*
+- [x] **VCS-02**: Git backend implementation of the adapter, behaviorally equivalent to existing inline git calls — *Validated in Phase 1 (5 byte-identity baselines pass)*
 - [ ] **VCS-03**: jj backend implementation of the adapter, behaviorally equivalent to git backend on every contract method
-- [ ] **VCS-04**: Backend selection mechanism (auto-detect via `.git`/`.jj` presence, override via config)
+- [x] **VCS-04**: Backend selection mechanism (auto-detect via `.git`/`.jj` presence, override via config) — *Validated in Phase 1*
 - [ ] **VCS-05**: Existing call sites in `bin/lib/{core,verify,commands,worktree-safety,init,graphify,drift}.cjs` migrated to the adapter
 - [ ] **VCS-06**: Existing call sites in `sdk/src/query/{commit,init,verify,progress,check-ship-ready,check-decision-coverage,docs-init}.ts` migrated to the adapter
 
@@ -156,4 +156,7 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-09 after initialization*
+
+**Phase 1 complete (2026-05-09):** Adapter Foundation + Git Backend landed — `sdk/src/vcs/` houses the `VcsAdapter` discriminated-union contract, `createGitAdapter` answers every method byte-identically to the pre-migration `execSync('git …')` baselines, the parameterized two-runner harness (vitest + node:test) is wired with a single source-of-truth `BACKENDS_AVAILABLE`, and the no-raw-git lint guard (whole-repo default-deny) is enforced in CI. Phase 2 (bulk call-site migration) is unblocked.
+
+*Last updated: 2026-05-09 after Phase 1 completion*
