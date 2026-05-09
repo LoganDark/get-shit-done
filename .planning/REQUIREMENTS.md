@@ -189,17 +189,109 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 
 ## Traceability
 
-Empty initially — populated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (To be filled by roadmapper) | | |
+| VCS-01 | Phase 1 | Pending |
+| VCS-02 | Phase 1 | Pending |
+| VCS-03 | Phase 1 | Pending |
+| VCS-04 | Phase 1 | Pending |
+| VCS-05 | Phase 1 | Pending |
+| VCS-06 | Phase 1 | Pending |
+| VCS-07 | Phase 1 | Pending |
+| GIT-01 | Phase 1 | Pending |
+| GIT-02 | Phase 1 | Pending |
+| GIT-03 | Phase 1 | Pending |
+| TEST-01 | Phase 1 | Pending |
+| TEST-02 | Phase 1 | Pending |
+| TEST-03 | Phase 1 | Pending |
+| TEST-04 | Phase 1 | Pending |
+| TEST-06 | Phase 1 | Pending |
+| TEST-07 | Phase 1 | Pending |
+| MIGR-01 | Phase 2 | Pending |
+| MIGR-02 | Phase 2 | Pending |
+| MIGR-03 | Phase 2 | Pending |
+| MIGR-04 | Phase 2 | Pending |
+| TEST-05 | Phase 2 | Pending |
+| UPSTREAM-01 | Phase 2 | Pending |
+| UPSTREAM-02 | Phase 2 | Pending |
+| UPSTREAM-03 | Phase 2 | Pending |
+| JJ-01 | Phase 3 | Pending |
+| JJ-02 | Phase 3 | Pending |
+| JJ-03 | Phase 3 | Pending |
+| JJ-04 | Phase 3 | Pending |
+| JJ-05 | Phase 3 | Pending |
+| JJ-06 | Phase 3 | Pending |
+| JJ-07 | Phase 3 | Pending |
+| SQUASH-01 | Phase 3 | Pending |
+| SQUASH-02 | Phase 3 | Pending |
+| SQUASH-03 | Phase 3 | Pending |
+| SQUASH-04 | Phase 3 | Pending |
+| SQUASH-05 | Phase 3 | Pending |
+| SQUASH-06 | Phase 3 | Pending |
+| SQUASH-07 | Phase 3 | Pending |
+| REFS-01 | Phase 3 | Pending |
+| REFS-02 | Phase 3 | Pending |
+| REFS-03 | Phase 3 | Pending |
+| REFS-04 | Phase 3 | Pending |
+| REFS-05 | Phase 3 | Pending |
+| REFS-06 | Phase 3 | Pending |
+| CONFLICT-01 | Phase 3 | Pending |
+| CONFLICT-02 | Phase 3 | Pending |
+| CONFLICT-03 | Phase 3 | Pending |
+| TEST-08 | Phase 3 | Pending |
+| CI-01 | Phase 3 | Pending |
+| CI-02 | Phase 3 | Pending |
+| WS-01 | Phase 4 | Pending |
+| WS-02 | Phase 4 | Pending |
+| WS-03 | Phase 4 | Pending |
+| WS-04 | Phase 4 | Pending |
+| WS-05 | Phase 4 | Pending |
+| WS-06 | Phase 4 | Pending |
+| WS-07 | Phase 4 | Pending |
+| WS-08 | Phase 4 | Pending |
+| WS-09 | Phase 4 | Pending |
+| WS-10 | Phase 4 | Pending |
+| WS-11 | Phase 4 | Pending |
+| WS-12 | Phase 4 | Pending |
+| WS-13 | Phase 4 | Pending |
+| HOOK-01 | Phase 4 | Pending |
+| HOOK-02 | Phase 4 | Pending |
+| HOOK-03 | Phase 4 | Pending |
+| HOOK-04 | Phase 4 | Pending |
+| HOOK-05 | Phase 4 | Pending |
+| CI-04 | Phase 4 | Pending |
+| CMD-01 | Phase 5 | Pending |
+| CMD-02 | Phase 5 | Pending |
+| CMD-03 | Phase 5 | Pending |
+| CMD-04 | Phase 5 | Pending |
+| CMD-05 | Phase 5 | Pending |
+| CMD-06 | Phase 5 | Pending |
+| CMD-07 | Phase 5 | Pending |
+| CMD-08 | Phase 5 | Pending |
+| CMD-09 | Phase 5 | Pending |
+| CMD-10 | Phase 5 | Pending |
+| CMD-11 | Phase 5 | Pending |
+| PROMPT-01 | Phase 5 | Pending |
+| PROMPT-02 | Phase 5 | Pending |
+| PROMPT-03 | Phase 5 | Pending |
+| BROWN-01 | Phase 5 | Pending |
+| BROWN-02 | Phase 5 | Pending |
+| CI-03 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 78 total (across 13 categories)
-- Mapped to phases: 0 (pre-roadmap)
-- Unmapped: 78 ⚠️ (will resolve to 0 after roadmap)
+- v1 requirements: 86 total (across 15 categories) — note: original footer reported "78 across 13" but actual content sums to 86 across 15 sections (SQUASH and BROWN are separate top-level sections, plus larger per-category sizes than initially summarized). Reconcile at next phase transition.
+- Mapped to phases: 86 (100%)
+- Unmapped: 0
+
+**Per-phase distribution:**
+- Phase 1: 16 requirements (VCS-01..07, GIT-01..03, TEST-01..04, TEST-06, TEST-07)
+- Phase 2: 8 requirements (MIGR-01..04, TEST-05, UPSTREAM-01..03)
+- Phase 3: 26 requirements (JJ-01..07, SQUASH-01..07, REFS-01..06, CONFLICT-01..03, TEST-08, CI-01, CI-02)
+- Phase 4: 19 requirements (WS-01..13, HOOK-01..05, CI-04)
+- Phase 5: 17 requirements (CMD-01..11, PROMPT-01..03, BROWN-01..02, CI-03)
+
+**Total mapped:** 16 + 8 + 26 + 19 + 17 = 86 ✓ (matches actual requirement count)
 
 ---
 *Requirements defined: 2026-05-09*
-*Last updated: 2026-05-09 after initial definition (post 7-round convention lock-in)*
+*Last updated: 2026-05-09 — traceability populated by roadmapper (5 phases, 86 requirements, 100% coverage)*

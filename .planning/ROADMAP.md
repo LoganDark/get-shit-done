@@ -1,0 +1,100 @@
+# Roadmap: GSD jj-port
+
+**Mode:** standard
+**Granularity:** coarse (5 phases)
+**Created:** 2026-05-09
+
+## Overview
+
+Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while preserving full upstream feature parity. The roadmap follows a strict horizontal-layers + Branch-by-Abstraction sequence: introduce the `VcsAdapter` seam with a 1:1 git backend first (Phase 1), migrate every existing git call site to that seam while still git-only (Phase 2), then land the jj backend in three layered passes — squash/refs/conflict core (Phase 3), workspaces and hooks (Phase 4), command translations and brownfield validation (Phase 5). Skipping ahead to land jj logic before the seam exists at every call site is the highest-risk anti-pattern called out in PITFALLS.md and ARCHITECTURE.md, so each phase strictly unblocks the next.
+
+## Phases
+
+**Phase Numbering:**
+- Integer phases (1, 2, 3): Planned milestone work
+- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+
+- [ ] **Phase 1: Adapter Foundation + Git Backend** - VcsAdapter interface, git-only 1:1 backend, parameterized test harness, lint guard. No call site changes. No jj code.
+- [ ] **Phase 2: Bulk Call-Site Migration (Still Git-Only)** - Every `execSync('git …')` in `sdk/src/query/*.ts` and `bin/lib/*.cjs` migrated to the adapter; first upstream rebase validates the mechanical-edits hypothesis.
+- [ ] **Phase 3: jj Backend Core — Squash, Refs, Conflict** - `sdk/src/vcs/backends/jj.ts` with squash-based commit model, NDJSON parsing, bookmarks, conflict detection. CI matrix flips on with jj-backend allowed-to-fail.
+- [ ] **Phase 4: Workspaces + Octopus Structure + Hooks** - Orchestrator-creates-heads-and-workspaces flow with lazy octopus structure, auto-abandon empty heads, batch reap; jj-native hooks Tier 1.
+- [ ] **Phase 5: Command Translations + Brownfield Validation + CI Hardening** - Every upstream command verified end-to-end on jj; workflow markdown and agent prompts rewritten; brownfield commands dogfood-validated; CI matrix graduates jj-backend to required-blocking.
+
+## Phase Details
+
+### Phase 1: Adapter Foundation + Git Backend
+**Goal**: Land the `VcsAdapter` seam with a git-only backend and a parameterized test harness — zero behavioral change for existing call sites, zero jj code, but every future migration plugs into a stable contract.
+**Depends on**: Nothing (first phase)
+**Requirements**: VCS-01, VCS-02, VCS-03, VCS-04, VCS-05, VCS-06, VCS-07, GIT-01, GIT-02, GIT-03, TEST-01, TEST-02, TEST-03, TEST-04, TEST-06, TEST-07
+**Success Criteria** (what must be TRUE):
+  1. `createVcsAdapter(cwd, opts)` constructs a frozen plain-object adapter from `sdk/src/vcs/index.ts` with namespaced sub-objects (`vcs.commit`, `vcs.workspace.*`, `vcs.refs.*`, `vcs.hooks.*`, `vcs.gitOnly.*`), and the TS source compiles to `dist-cjs/` consumable from `bin/lib/*.cjs` via plain `require()`.
+  2. The git backend at `sdk/src/vcs/backends/git.ts` answers every adapter contract method with byte-identical `{ exitCode, stdout, stderr }` to the corresponding pre-migration inline `execSync('git …')` call (snapshot diff against pre-migration behavior is empty).
+  3. The `vcsTest(kind)` fixture + `describe.for([...BACKENDS])` harness exists in test helpers and runs the adapter contract suite against the `git` backend; `GSD_TEST_BACKENDS` env var selects backend subsets; CI rule "skipped-test count must not increase from main" is enforced.
+  4. The lint guard "jj-backend never shells out to mutating git verbs" ships with the adapter package and fails CI on violation, even though no jj backend exists yet.
+  5. `vcs.gitOnly.createAnnotatedTag()` (and other git-specific escape hatches) are reachable on the git backend; calls into `vcs.gitOnly.*` are typed such that a future jj backend errors clearly and statically when invoked.
+**Plans**: TBD
+
+### Phase 2: Bulk Call-Site Migration (Still Git-Only)
+**Goal**: Migrate every existing `execSync('git …')` call site in the SDK and CLI runtime to the adapter — still git-only — and verify the "mechanical edits = clean rebase" hypothesis with the first post-migration upstream rebase.
+**Depends on**: Phase 1
+**Requirements**: MIGR-01, MIGR-02, MIGR-03, MIGR-04, TEST-05, UPSTREAM-01, UPSTREAM-02, UPSTREAM-03
+**Success Criteria** (what must be TRUE):
+  1. Zero `execSync('git …')` (or equivalent inline git invocations) remain in non-test source under `sdk/src/query/*.ts` and `get-shit-done/bin/lib/*.cjs` — verified by repo-wide grep audit landing in the lint guard.
+  2. Every existing git-touching test in `tests/` is retargeted onto the `vcs` fixture (no raw git invocations in test setup) and continues to pass against the git backend with no skipped-count regression.
+  3. Each call-site migration is mechanical (Branch-by-Abstraction) — call-by-call diff swaps `execSync('git …')` for the adapter equivalent without changing surrounding logic; reviewed via per-file commit history, not bulk rewrites.
+  4. The first upstream rebase performed after the migration completes with conflict count tracked and recorded in `.planning/intel/rebase-log.md` (or equivalent), and conflicts are concentrated in the adapter call-site layer (mechanical) rather than scattered across surrounding logic.
+  5. `UPSTREAM-01` jj-native rebase workflow is documented in `docs/upstream-rebase.md` (or equivalent), and `sdk/src/vcs/jj/` and `sdk/src/vcs/parse/jj-*.ts` sidecar paths exist as zero-conflict surfaces (even if empty), establishing the convention before Phase 3 lands jj code.
+**Plans**: TBD
+
+### Phase 3: jj Backend Core — Squash, Refs, Conflict
+**Goal**: Land `sdk/src/vcs/backends/jj.ts` implementing the full adapter contract with the squash-based commit model, NDJSON output parsing, bookmark refs, and in-tree conflict detection — the working-copy auto-snapshot is allowed by default and `--ignore-working-copy` is never used by adapter code.
+**Depends on**: Phase 2
+**Requirements**: JJ-01, JJ-02, JJ-03, JJ-04, JJ-05, JJ-06, JJ-07, SQUASH-01, SQUASH-02, SQUASH-03, SQUASH-04, SQUASH-05, SQUASH-06, SQUASH-07, REFS-01, REFS-02, REFS-03, REFS-04, REFS-05, REFS-06, CONFLICT-01, CONFLICT-02, CONFLICT-03, TEST-08, CI-01, CI-02
+**Success Criteria** (what must be TRUE):
+  1. Every adapter call site migrated in Phase 2 passes its full test suite against the jj backend in the parameterized matrix — `vcs.commit({ files, message })` resolves to `jj squash <files> -B @ -k -m '<message>'` (and the no-`files` form to the same minus path filter), `jj commit` is never invoked anywhere in the adapter, and revsets are translated internally so call sites never see jj-specific syntax.
+  2. `vcs.refs.bookmarks.{list,create,move,delete,exists}` and `vcs.refs.{head,parent}` work end-to-end on jj with the `gsd/` namespace prefix on jj bookmarks (mirroring git branch names on the git backend), and `vcs.commit()` auto-advances the active bookmark to the new commit on both backends.
+  3. `vcs.findConflicts({ scope: 'all' })` (via `jj log -r 'conflict()'`) and `{ scope: 'working-copy' }` (via `jj st`-style inspection) correctly surface in-tree conflicts that jj's conflict-tolerant model preserves silently, and the verify gate consumes the `'all'` scope.
+  4. NDJSON output parsing (`-T 'json(self) ++ "\n"' --no-graph`) for `log`, `op log`, `workspace list` is centralized in `sdk/src/vcs/parse/jj-*.ts` with snapshot tests pinned against the supported jj version range; argv-array invocation only (no shell-string concatenation), and `--repository`, `--no-pager`, `--color never`, `--quiet` are passed uniformly.
+  5. CI matrix runs both backends (`git` + `jj-colocated`) with `jj` installed via release-tarball install step; jj-backend tests are gated as allow-failure (graduated to required-blocking in Phase 5); worktree-edge-case bug tests (`bug-2924/2774/3097/3099/2075/2431/2015/2388`) are re-triaged with each test's destination (jj-mapped, git-only with rationale, or carries-verbatim) recorded.
+**Plans**: TBD
+
+### Phase 4: Workspaces + Octopus Structure + Hooks
+**Goal**: Land the orchestrator-creates-heads-and-workspaces flow with lazy octopus-merge structure, batch reap of empty heads, workspace-path-safety guards, and the v1 hook strategy (Tier 1: colocated default + jj-native non-colocated direct trigger). Subagent fan-out works end-to-end on jj, and pre-commit/pre-push hooks fire at the right moments on both backends.
+**Depends on**: Phase 3
+**Requirements**: WS-01, WS-02, WS-03, WS-04, WS-05, WS-06, WS-07, WS-08, WS-09, WS-10, WS-11, WS-12, WS-13, HOOK-01, HOOK-02, HOOK-03, HOOK-04, HOOK-05, CI-04
+**Success Criteria** (what must be TRUE):
+  1. The orchestrator can dispatch a multi-subagent phase on jj where each subagent's head change and workspace are pre-created (`jj new -A parent -B merge -m 'subagent N'` + `jj workspace add -r <head_id>`), the orchestrator's main `@` sits one beyond the merge change during execution, and the `parent + merge` octopus structure is created lazily on first fan-out (single-plan phases without fan-out remain linear chains).
+  2. After phase merge, the adapter automatically inspects each tracked subagent head, `jj abandon`s empty heads, surfaces non-empty heads for review, and `jj workspace forget`s each subagent workspace in a single batch reap; the phase bookmark advances exactly to the `merge` change (not one beyond).
+  3. If a subagent crashes mid-work with uncommitted snapshot content, the adapter squashes the work as `'subagent N: incomplete work'` to preserve files into the head's lineage, then surfaces it for human review (no silent data loss).
+  4. Workspace-path-safety guards (preserving the spirit of `bug-3097/3099`, `bug-2774`, `bug-2075`) pass on jj workspaces, and `vcs.workspace.{add,forget,list}` work uniformly on both backends with the default sibling-path layout.
+  5. `vcs.hooks.fire('pre-commit', ctx)` is invoked after every `jj squash` (the sole jj commit primitive); in colocated mode the call is a no-op because git's `.git/hooks/pre-commit` fires via colocation; in non-colocated mode the adapter triggers `.githooks/pre-commit` directly post-squash; pre-push hook fires on `jj git push` via `acarapetis/jj-pre-push`-style integration; the v1 hook interface is shaped to accommodate a future Tier 2 PATH-shim wrapper without breaking change.
+**UI hint**: no
+**Plans**: TBD
+
+### Phase 5: Command Translations + Brownfield Validation + CI Hardening
+**Goal**: Verify every upstream GSD command end-to-end on jj, rewrite all workflow markdown and agent prompts to be VCS-agnostic (with multi-runtime parity), validate brownfield commands by dogfooding on this very repo, and graduate the CI jj-backend lane from allow-failure to required-blocking. After this phase, the project achieves full feature parity.
+**Depends on**: Phase 4
+**Requirements**: CMD-01, CMD-02, CMD-03, CMD-04, CMD-05, CMD-06, CMD-07, CMD-08, CMD-09, CMD-10, CMD-11, PROMPT-01, PROMPT-02, PROMPT-03, BROWN-01, BROWN-02, CI-03
+**Success Criteria** (what must be TRUE):
+  1. Every CMD-* upstream command runs end-to-end on a jj-only repo with passing integration tests: `/gsd-new-project` initializes jj when `.git` is absent; `/gsd-plan-phase` and `/gsd-execute-phase` exercise the lazy octopus structure; `/gsd-quick` uses single `jj squash -B @ -k -m '…'` on the orchestrator `@` (no phase setup, no workspace, no octopus); `/gsd-undo` translates `git reset` to surgical `jj abandon <change>` per individual commit; `/gsd-pr-branch` filters out `.planning/`-only commits via revset and materializes via `jj duplicate` onto a new bookmark; `/gsd-hotfix` uses `jj new <past-change-id>` then standard squash flow with `gsd/hotfix/<id>` bookmark; `/gsd-ship` performs explicit `vcs.push()` (no auto-push); hotfix/canary/complete-milestone/multi-workspace flows preserved per upstream.
+  2. All workflow markdown files (`get-shit-done/workflows/*.md` — `execute-phase.md`, `quick.md`, `complete-milestone.md`, `undo.md`, `code-review.md`, etc.) and agent definitions (`agents/*.md` — `gsd-code-fixer.md`, `gsd-executor.md`, etc.) that previously instructed shell git invocations are rewritten to use VCS-agnostic helper commands or backend-aware language; multi-runtime variants (Codex / Gemini / OpenCode) are synced in lockstep with Claude variants (no per-runtime drift).
+  3. Brownfield commands (`/gsd-map-codebase`, `/gsd-import`, `/gsd-ingest-docs`, `/gsd-resume-work`, `/gsd-ship`, `/gsd-pr-branch`, `/gsd-undo`) are run end-to-end against this very repo's jj backend (dogfood), and observable behavior matches the equivalent runs against a git-only sibling clone of the same repo (no degradation).
+  4. The first weekly upstream rebase performed after brownfield validation is recorded with conflict count and a brief retro; CI matrix graduates jj-backend tests from allow-failure to required-blocking; GitHub Actions workflows (`canary`, `release-sdk`, `hotfix`, `branch-cleanup`, `auto-branch`, etc.) remain git-side per CI-03 and are explicitly flagged in the docs as "stays on git — GitHub *is* git".
+  5. The full v1 commitment holds: every upstream GSD command works correctly on a jj-only repo without git, with no regression in test coverage on the git side and no `.skip` accumulation on either side.
+**Plans**: TBD
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. Adapter Foundation + Git Backend | 0/TBD | Not started | - |
+| 2. Bulk Call-Site Migration (Still Git-Only) | 0/TBD | Not started | - |
+| 3. jj Backend Core — Squash, Refs, Conflict | 0/TBD | Not started | - |
+| 4. Workspaces + Octopus Structure + Hooks | 0/TBD | Not started | - |
+| 5. Command Translations + Brownfield Validation + CI Hardening | 0/TBD | Not started | - |
+
+---
+*Last updated: 2026-05-09 after roadmap creation*
