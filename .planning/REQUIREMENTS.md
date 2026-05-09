@@ -12,7 +12,7 @@
 - [ ] **VCS-03**: Backend auto-detection at construction (`.jj` first, `.git` fallback, `GSD_VCS` env override)
 - [ ] **VCS-04**: Single spawn wrapper in `sdk/src/vcs/exec.ts` with uniform `{ exitCode, stdout, stderr }` return shape and `VcsExecError` for non-zero exits
 - [ ] **VCS-05**: `RevisionExpr` type as the canonical revset/ref primitive — every backend translates internally (e.g., `HEAD` → `@-` on jj; `origin/main` → `main@origin`)
-- [ ] **VCS-06**: TypeScript-first with CJS build target emitting to `dist-cjs/` for `bin/lib/*.cjs` consumption (no hand-maintained CJS twin)
+- [x] **VCS-06**: TypeScript-first with CJS build target emitting to `dist-cjs/` for `bin/lib/*.cjs` consumption (no hand-maintained CJS twin)
 - [ ] **VCS-07**: Lint guard "jj-backend never shells out to mutating git verbs" ships as part of the adapter package
 
 ### Git Backend (GIT)
@@ -196,7 +196,7 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | VCS-03 | Phase 1 | Pending |
 | VCS-04 | Phase 1 | Pending |
 | VCS-05 | Phase 1 | Pending |
-| VCS-06 | Phase 1 | Pending |
+| VCS-06 | Phase 1 | Complete |
 | VCS-07 | Phase 1 | Pending |
 | GIT-01 | Phase 1 | Pending |
 | GIT-02 | Phase 1 | Pending |
