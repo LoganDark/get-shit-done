@@ -21,6 +21,45 @@ function brand(s: string): RevisionExpr {
   return s as RevisionExpr;
 }
 
+// WR-07: validate against git's refname rules (see git-check-ref-format(1)).
+// The factory is the right place to enforce this so jj and git share the
+// constraint — feeding `expr.bookmark('-D')` to `git branch <name>` would have
+// the worst-case interpretation `git branch -D` (deletes branches).
+//
+// Reject:
+//   - empty string
+//   - any ASCII control byte (0x00-0x1f, 0x7f), space, or one of `~^:?*[\\`
+//   - leading `-` (would be parsed as a flag)
+//   - leading `.` (forbidden by refname rules)
+//   - `..` or `@{` anywhere
+//   - trailing `/` or `.lock`
+//   - any path component (`/`-separated) that starts with `.` or ends with `.lock`
+const REFNAME_FORBIDDEN_BYTE_OR_SET = /[\x00-\x1f\x7f ~^:?*[\\]/;
+function validateBookmarkName(name: string): void {
+  if (!name) throw new Error(`expr.bookmark: empty name`);
+  if (REFNAME_FORBIDDEN_BYTE_OR_SET.test(name)) {
+    throw new Error(`expr.bookmark: invalid name '${name}' (forbidden byte or character)`);
+  }
+  if (name.startsWith('-')) {
+    throw new Error(`expr.bookmark: invalid name '${name}' (leading '-')`);
+  }
+  if (name.startsWith('.') || name.endsWith('/') || name.endsWith('.lock')) {
+    throw new Error(`expr.bookmark: invalid name '${name}' (refname format)`);
+  }
+  if (name.includes('..') || name.includes('@{')) {
+    throw new Error(`expr.bookmark: invalid name '${name}' (forbidden sequence)`);
+  }
+  // Per-component checks for path-shaped names like 'feature/x'.
+  for (const component of name.split('/')) {
+    if (!component) {
+      throw new Error(`expr.bookmark: invalid name '${name}' (empty path component)`);
+    }
+    if (component.startsWith('.') || component.endsWith('.lock')) {
+      throw new Error(`expr.bookmark: invalid name '${name}' (component '${component}')`);
+    }
+  }
+}
+
 export const expr = Object.freeze({
   head(): RevisionExpr {
     return brand('head:');
@@ -29,12 +68,16 @@ export const expr = Object.freeze({
     return brand('parent:');
   },
   bookmark(name: string): RevisionExpr {
-    if (!name || name.includes(':')) throw new Error(`expr.bookmark: invalid name '${name}'`);
+    validateBookmarkName(name);
     return brand(`bookmark:${name}`);
   },
   remote(branch: string, remoteName: string): RevisionExpr {
-    if (!branch || !remoteName || branch.includes(':') || remoteName.includes(':')) {
-      throw new Error(`expr.remote: invalid args branch='${branch}' remote='${remoteName}'`);
+    // Same refname rules apply to the branch component; remoteName accepts the
+    // same constraints minus the path-component rule (remotes don't typically
+    // contain `/`, but `:` and friends are still nonsensical).
+    validateBookmarkName(branch);
+    if (!remoteName || REFNAME_FORBIDDEN_BYTE_OR_SET.test(remoteName) || remoteName.startsWith('-')) {
+      throw new Error(`expr.remote: invalid remote '${remoteName}'`);
     }
     return brand(`remote:${remoteName}:${branch}`);
   },
