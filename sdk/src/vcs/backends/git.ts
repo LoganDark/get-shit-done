@@ -18,13 +18,12 @@
  * D-14:  __vcsTestOnly snapshot/restore implements RESEARCH Pattern 3 (strategy 3).
  */
 
-import { createRequire } from 'node:module';
-
 import { execGit } from '../exec.js';
 import type { ExecResult } from '../exec.js';
 import { fireHook } from '../hook-bridge.js';
 import { expr } from '../expr.js';
 import { toGitRev } from '../parse/git-rev.js';
+import { readWorktreeList } from '../parse/worktree-list.js';
 import { __vcsTestOnly } from '../types.js';
 import type {
   GitVcsAdapter,
@@ -50,75 +49,15 @@ import type {
   VcsTestOnly,
 } from '../types.js';
 
-// ─── CJS interop: load worktree-safety.cjs eagerly via createRequire ─────────
-//
-// W-2 fix (RESEARCH Pitfall 5): worktree-safety.cjs is CommonJS in
-// get-shit-done/bin/lib. The dist-cjs/ build emits CommonJS, so __filename
-// works at runtime; the ESM dist (dist/) uses import.meta.url. Resolve once at
-// module load and stash any error so workspace.list() can surface a clear
-// recovery message instead of a confusing "not available" fallback.
-
-// CJS output (dist-cjs/) has __filename injected by Node as a local; ESM (dist/, vitest)
-// has import.meta.url. Source is dual-compiled. tsconfig.cjs.json sets module=commonjs,
-// which forbids the literal `import.meta` syntax (TS1343). To stay valid under both
-// configs without two source files, use `eval` to defer parsing of the ESM-only form
-// to runtime — and only enter that branch when the CJS-only `__filename` is absent.
-// In CJS, eval'd `import.meta.url` would itself throw a SyntaxError, but we never reach
-// it because `__filename` is defined.
-function getCallerSpecifier(): string {
-  // CJS modules: Node injects `__filename` into the module wrapper. eval sees
-  // lexical scope, so it picks up the wrapper's local. `node -e '…'` evaluation
-  // sets __filename to the literal '[eval]', which createRequire rejects — so
-  // we filter for absolute-path-looking values.
-  try {
-    // eslint-disable-next-line no-eval
-    const v = eval('typeof __filename !== "undefined" ? __filename : null') as string | null;
-    if (v && (v.startsWith('/') || /^[A-Za-z]:[\\/]/.test(v))) return v;
-  } catch {
-    // ignore — fall through to ESM
-  }
-  // ESM: import.meta.url. Defer parsing to runtime via eval. In a CJS host (where
-  // __filename was missing or non-path, e.g. `node -e '…'`), eval'ing `import.meta`
-  // throws SyntaxError; catch and fall back to a process-cwd anchor so createRequire
-  // still gets an absolute path. This is best-effort: relative require() targets that
-  // assume a specific module location may resolve oddly under `node -e` evaluation,
-  // but production CJS loads (any actual file) use the __filename branch above.
-  try {
-    // eslint-disable-next-line no-eval
-    return eval('import.meta.url') as string;
-  } catch {
-    return process.cwd() + '/';
-  }
-}
-const requireCjs = createRequire(getCallerSpecifier());
-
-interface WorktreeSafetyModule {
-  readWorktreeList: (
-    cwd: string,
-    deps?: { execGit?: typeof execGit },
-  ) => {
-    ok: boolean;
-    reason?: string;
-    porcelain?: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    entries: Array<Record<string, any>>;
-  };
-}
-
-let worktreeSafety: WorktreeSafetyModule | null = null;
-let worktreeSafetyLoadError: Error | null = null;
-try {
-  // dist-cjs/vcs/backends/git.js is 4 levels deep from repo root:
-  // sdk/dist-cjs/vcs/backends/git.js → ../../../../get-shit-done/bin/lib/worktree-safety.cjs
-  // For the ESM dist (sdk/dist/vcs/backends/git.js) the relative path is the same.
-  // For tests running from sdk/src/vcs/backends/git.ts (vitest), the same relative path
-  // also resolves correctly because the source layout mirrors dist-cjs.
-  worktreeSafety = requireCjs(
-    '../../../../get-shit-done/bin/lib/worktree-safety.cjs',
-  ) as WorktreeSafetyModule;
-} catch (err) {
-  worktreeSafetyLoadError = err instanceof Error ? err : new Error(String(err));
-}
+// CR-04: previously this module reached out to
+// `../../../../get-shit-done/bin/lib/worktree-safety.cjs` via `createRequire`.
+// That path resolves correctly for in-repo execution but fails for any
+// downstream consumer who installed `@gsd-build/sdk` from npm — the CLI's
+// bin/lib/ tree is not bundled into the SDK package's `files` list. The
+// porcelain parser the adapter needs now lives in `parse/worktree-list.ts`
+// inside the SDK, removing the cross-package seam entirely. ADR-0004 still
+// names worktree-safety.cjs as the policy owner for CLI-side decisions
+// (prune, health, inventory); only the read-only view was duplicated.
 
 // ─── Parse helpers (CR-03) ──────────────────────────────────────────────────
 //
@@ -316,28 +255,14 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
       }
     },
     list: (): WorkspaceInfo[] => {
-      // Pitfall 5: delegate to worktree-safety.cjs (ADR-0004 policy seam) — do NOT duplicate.
-      // W-2 fix: surface the actual load error (with stack) instead of a generic "not available".
-      if (!worktreeSafety || typeof worktreeSafety.readWorktreeList !== 'function') {
-        const detail = worktreeSafetyLoadError
-          ? `: ${worktreeSafetyLoadError.message}`
-          : '';
-        throw new Error(
-          `worktree-safety.cjs unreachable in published mode — workspace.list() unavailable${detail}. ` +
-            `If you see this in a downstream consumer of @gsd-build/get-shit-done, the package layout ` +
-            `does not bundle bin/lib/worktree-safety.cjs alongside dist-cjs/. In-repo execution requires ` +
-            `the file at get-shit-done/bin/lib/worktree-safety.cjs (4 levels up from sdk/dist-cjs/vcs/backends/git.js).`,
-        );
-      }
-      const result = worktreeSafety.readWorktreeList(cwd, { execGit });
+      // CR-04 + WR-03: read+parse `git worktree list --porcelain` via the
+      // SDK-local helper, no cross-package require. WR-03: the parser now
+      // captures `HEAD <sha>` and `locked` lines, so `rev` and `locked`
+      // are populated non-trivially instead of always-empty/always-false.
+      const result = readWorktreeList(cwd);
       if (!result.ok) return [];
       return result.entries.map(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (e: any): WorkspaceInfo => ({
-          path: e.path ?? e.worktree ?? '',
-          rev: e.head ?? e.HEAD ?? e.rev ?? '',
-          locked: !!e.locked,
-        }),
+        (e): WorkspaceInfo => ({ path: e.path, rev: e.head, locked: e.locked }),
       );
     },
   });
