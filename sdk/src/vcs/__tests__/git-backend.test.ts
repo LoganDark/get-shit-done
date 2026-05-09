@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, writeFileSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execSync } from 'node:child_process';
@@ -26,7 +26,10 @@ function initRepo(dir: string): void {
   execSync('git init', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
+  // Disable both commit and tag signing — local user gitconfig may enable them
+  // globally, which would fail in CI / fresh checkouts without secret keys.
   execSync('git config commit.gpgsign false', { cwd: dir, stdio: 'pipe' });
+  execSync('git config tag.gpgsign false', { cwd: dir, stdio: 'pipe' });
   execSync('git commit --allow-empty -m initial', { cwd: dir, stdio: 'pipe' });
 }
 
@@ -140,8 +143,11 @@ describe('createGitAdapter — workspace', () => {
         }
         throw err;
       }
-      const paths = list.map((w) => w.path);
-      expect(paths).toContain(wtPath);
+      // git canonicalizes the worktree path (e.g. macOS /var → /private/var); compare
+      // via realpath on both sides to avoid spurious symlink mismatches in CI/macOS.
+      const expected = realpathSync(wtPath);
+      const paths = list.map((w) => realpathSync(w.path));
+      expect(paths).toContain(expected);
     } finally {
       try {
         vcs.workspace.forget(wtPath);
@@ -173,13 +179,12 @@ describe('createGitAdapter — findConflicts', () => {
     writeFileSync(join(tmpDir, 'conflict.txt'), 'normal\n');
     execSync('git add conflict.txt', { cwd: tmpDir, stdio: 'pipe' });
     execSync('git commit -m add', { cwd: tmpDir, stdio: 'pipe' });
-    // Now insert conflict markers
+    // Now insert conflict markers in the working tree (do NOT stage — `git diff --check`
+    // operates on unstaged working-tree changes against the index).
     writeFileSync(
       join(tmpDir, 'conflict.txt'),
       'a\n<<<<<<< HEAD\nb\n=======\nc\n>>>>>>> branch\n',
     );
-    // Stage so diff --check sees it
-    execSync('git add conflict.txt', { cwd: tmpDir, stdio: 'pipe' });
     const r = vcs.findConflicts({ scope: 'working-copy' });
     expect(r.length).toBeGreaterThanOrEqual(1);
     expect(r[0].paths).toContain('conflict.txt');

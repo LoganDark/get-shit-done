@@ -335,4 +335,8 @@ module.exports = {
   listLinkedWorktreePaths,
   inspectWorktreeHealth,
   snapshotWorktreeInventory,
+  // [Rule 3 — Plan 01-03]: exposed for VcsAdapter.workspace.list (RESEARCH Pitfall 5).
+  // ADR-0004 names this module as the canonical owner of `git worktree` porcelain
+  // parsing; the VCS adapter consumes via DI rather than duplicating the parser.
+  readWorktreeList,
 };
