@@ -32,7 +32,12 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
   3. The `vcsTest(kind)` fixture + `describe.for([...BACKENDS])` harness exists in test helpers and runs the adapter contract suite against the `git` backend; `GSD_TEST_BACKENDS` env var selects backend subsets; CI rule "skipped-test count must not increase from main" is enforced.
   4. The lint guard "jj-backend never shells out to mutating git verbs" ships with the adapter package and fails CI on violation, even though no jj backend exists yet.
   5. `vcs.gitOnly.createAnnotatedTag()` (and other git-specific escape hatches) are reachable on the git backend; calls into `vcs.gitOnly.*` are typed such that a future jj backend errors clearly and statically when invoked.
-**Plans**: TBD
+**Plans**: 5 plans
+- [ ] 01-01-PLAN.md — Build pipeline (sdk/tsconfig.cjs.json, pnpm scripts, pretest hook, dist-cjs files array)
+- [ ] 01-02-PLAN.md — Adapter types, exec, expr, parse/git-rev, parse/jj-rev, backends, hook-bridge, index (factory + auto-detect)
+- [ ] 01-03-PLAN.md — Git backend implementation (sdk/src/vcs/backends/git.ts) + wire into createVcsAdapter + tests/baselines/git-vcs/ scaffold
+- [ ] 01-04-PLAN.md — Test harness (vitest fixture + describe.for contract suite + tests/helpers.cjs vcsTest + node --test variant + skip-count CI guard)
+- [ ] 01-05-PLAN.md — No-raw-git lint guard (whole-repo default-deny scanner + JSON allowlist + CI integration)
 
 ### Phase 2: Bulk Call-Site Migration (Still Git-Only)
 **Goal**: Migrate every existing `execSync('git …')` call site in the SDK and CLI runtime to the adapter — still git-only — and verify the "mechanical edits = clean rebase" hypothesis with the first post-migration upstream rebase.
@@ -90,7 +95,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Adapter Foundation + Git Backend | 0/TBD | Not started | - |
+| 1. Adapter Foundation + Git Backend | 0/5 | Not started | - |
 | 2. Bulk Call-Site Migration (Still Git-Only) | 0/TBD | Not started | - |
 | 3. jj Backend Core — Squash, Refs, Conflict | 0/TBD | Not started | - |
 | 4. Workspaces + Octopus Structure + Hooks | 0/TBD | Not started | - |
