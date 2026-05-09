@@ -49,6 +49,9 @@ jobs:
         run: |
           git fetch origin main --depth=1 || true
           node scripts/check-skip-count.cjs
+      - name: Lint — no raw git in jj-reachable code
+        shell: bash
+        run: node scripts/lint-vcs-no-raw-git.cjs
 
   test:
     runs-on: ${{ matrix.os }}
