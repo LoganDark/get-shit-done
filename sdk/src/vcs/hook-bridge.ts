@@ -5,23 +5,36 @@
  */
 
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { extname, join } from 'node:path';
 import { vcsExec } from './exec.js';
 import type { ExecResult } from './exec.js';
 import type { HookStage, HookContext } from './types.js';
 
+// IN-03: TODO(D-05/HOOK-05) — when the PATH-shim wrapper lands, ctx.env and
+// ctx.stagedFiles will be passed via env. For Phase 1 the hook contract is
+// "fire and surface exit code only". Suppress unused-arg lint in the meantime.
+
 export function fireHook(cwd: string, stage: HookStage, ctx?: HookContext): ExecResult {
+  void ctx;
   const hookPath = join(cwd, '.githooks', stage);
   if (!existsSync(hookPath)) {
     return { exitCode: 0, stdout: '', stderr: '', timedOut: false, error: null };
   }
-  // Execute the hook directly. Pass staged files via env for Phase 4 parity
-  // with git's hook contract (jj non-colocated will rely on this env channel).
-  const _env = { ...process.env, ...(ctx?.env ?? {}) };
-  void _env;
-  const _stagedFiles = ctx?.stagedFiles ?? [];
-  void _stagedFiles;
-  // Placeholder for v2 PATH-shim wrapper (D-05 + HOOK-05); the env stash above
-  // is wired through when the wrapper lands.
+  // WR-04: on Windows, CreateProcessW does not honour `#!/usr/bin/env bash`
+  // shebangs — invoking `spawnSync(hookPath, [])` against a shebang script
+  // returns ENOEXEC. Git's own hook runner shells through `sh.exe` for this
+  // reason. For Phase 1, route through `bash -c "<hookPath>"` on win32 unless
+  // the file is a Windows-native executable (.exe/.cmd/.bat). This keeps the
+  // POSIX path unchanged.
+  if (process.platform === 'win32') {
+    const ext = extname(hookPath).toLowerCase();
+    const isWindowsNative = ext === '.exe' || ext === '.cmd' || ext === '.bat';
+    if (!isWindowsNative) {
+      // Quote the path with single quotes for bash; replace any embedded
+      // single-quote with the standard bash-safe escape.
+      const quoted = hookPath.replace(/'/g, `'\\''`);
+      return vcsExec(cwd, 'bash', ['-c', `'${quoted}'`], { timeout: 60_000 });
+    }
+  }
   return vcsExec(cwd, hookPath, [], { timeout: 60_000 });
 }
