@@ -669,32 +669,39 @@ execFileSync(process.execPath, ['--test', concurrency, ...files], {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+_Each item below is resolved by Phase 1 plans 01-01..01-05; the **RESOLVED:** marker pins the chosen disposition._
 
 1. **`vcs.findConflicts` git semantics — what does "scope: 'all'" mean on git?**
    - What we know: jj backend will use `jj log -r 'conflict()'` (REQUIREMENTS.md CONFLICT-01). git side has no equivalent first-class concept; closest is `git diff --check` or scanning for `<<<<<<<` markers across files.
    - What's unclear: Does Phase 1's git backend need to scan every commit reachable from HEAD (expensive) or only the working copy (cheap, but doesn't match jj's "all" semantics)?
    - Recommendation: Phase 1 git impl returns `[]` for `scope: 'all'` (with a comment "no first-class git equivalent; use `git diff --check` for working-copy scope"). Phase 3 jj impl uses `jj log -r 'conflict()'`. The `verify` gate (CONFLICT-03) will exercise jj-side logic in Phase 3; git-side is a no-op. Plan should document this asymmetry explicitly.
+   - **RESOLVED:** plan 01-03 implements `findConflicts({scope:'all'})` returning `[]` on git with an inline comment documenting the Phase 1 asymmetry; `{scope:'working-copy'}` parses `git diff --check`. Adapter-contract test in plan 01-04 asserts `findConflicts({scope:'all'}).toEqual([])` on git.
 
 2. **`vcs.refs.bookmarks.*` on git — what maps to "bookmark"?**
    - What we know: REFS-04 says "git backend uses unprefixed branch names." So `bookmark create` → `git branch <name>`, `bookmark move` → `git branch -f <name> <rev>`, etc.
    - What's unclear: Does `bookmark.list()` on git return all local branches, or only branches with a specific prefix? jj's bookmark namespace is conceptually flat; git's branches include `main`, `develop`, feature branches.
    - Recommendation: Phase 1 git `bookmark.list()` returns all local branches (`git branch --format='%(refname:short)'`). The `gsd/` prefix (REFS-04) applies on jj, not git. Document.
+   - **RESOLVED:** plan 01-03 `bookmarks.list()` runs `git branch --format=%(refname:short)`, splits stdout, returns `Bookmark[]` with `{name, rev: ''}` (rev unresolved in Phase 1; documented inline).
 
 3. **Phase 1 deliberate scope for `vcs.push` and `vcs.fetch` — git only, no remote required for tests?**
    - What we know: D-04 includes `vcs.push` and `vcs.fetch` in the forward-complete surface.
    - What's unclear: Test harness can't easily exercise these without a remote. Should Phase 1 ship implementations that SHELL out (always succeed in unit tests if there's no remote — but that's not a real test), or stub them with an "always errors in test" guard?
    - Recommendation: Phase 1 ships `vcs.push` and `vcs.fetch` with full implementations (`git push`, `git fetch`); contract suite tests them against a tmp local "remote" repo (same `git init --bare` + `git remote add` pattern). This adds 2 fixture helpers but produces real coverage.
+   - **RESOLVED:** plan 01-03 ships full `push`/`fetch` impls; plan 01-03 git-backend test (`git-backend.test.ts` test #12) sets up a `git init --bare` remote, `git remote add origin`, then asserts `vcs.push({remote:'origin',ref:expr.bookmark('main')})` returns exitCode 0 and the bare repo has the commit.
 
 4. **`vcs.kind` runtime field on the frozen object — type-only or runtime?**
    - What we know: D-06 says "runtime literal field on the frozen adapter object."
    - What's unclear: This is a single property; not a question, just confirming. Discriminated union narrows correctly via `if (vcs.kind === 'git')`.
    - Recommendation: No-op — implement as locked.
+   - **RESOLVED:** plan 01-02 sets `kind: 'git' as const` on the frozen GitVcsAdapter; the JjVcsAdapter type literal `kind: 'jj'` discriminates the union. Plan 01-02 task 1 test `(vcs.kind === 'git')` narrowing verified.
 
 5. **The `BACKENDS` constant — does it ship Phase 1 with `['git', 'jj-colocated', 'jj-native']` populated, or only `['git']`?**
    - What we know: TEST-03 requires the matrix axis to include all three keys.
    - What's unclear: Phase 1 has no jj backend. Listing `jj-colocated` and `jj-native` in `BACKENDS` will cause `describe.for` to attempt to construct a jj adapter and fail.
    - Recommendation: Two constants: `BACKENDS_AVAILABLE` (Phase 1: `['git']`) and `BACKENDS_DECLARED` (`['git', 'jj-colocated', 'jj-native']`). The `vcsTest` fixture iterates `BACKENDS_AVAILABLE` ∩ env-filter. The matrix axis declaration in TEST-03 is satisfied by the type/constant existing. Phase 3 adds `'jj-colocated'` and `'jj-native'` to `BACKENDS_AVAILABLE`.
+   - **RESOLVED:** plan 01-02 ships `BACKENDS_AVAILABLE = ['git']` and `BACKENDS_DECLARED = ['git', 'jj-colocated', 'jj-native']` in `sdk/src/vcs/backends.ts`. Plan 01-01 adds `dist-cjs` to `sdk/package.json` `files` array (downstream npm consumers receive the CJS artifact). `parseBackendsEnv` returns a structured `{available, requested, unavailable}` (per W-6 fix in revision) so the harness can warn when a requested backend is unavailable.
 
 ---
 
