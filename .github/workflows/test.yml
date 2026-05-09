@@ -23,6 +23,12 @@ jobs:
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          # W-3 (plan 01-04): full history so origin/main is reachable for
+          # scripts/check-skip-count.cjs. The script also enforces this under
+          # CI=true (defense in depth — both the workflow YAML and the script
+          # detect a missing baseline non-silently).
+          fetch-depth: 0
       - name: Set up Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
         with:
@@ -33,6 +39,16 @@ jobs:
       - name: Lint — command contract (ADR-0002)
         shell: bash
         run: node scripts/lint-command-contract.cjs
+      - name: Check — skip count must not increase from main
+        # W-3 fix: ensure origin/main is reachable. Two defenses:
+        # (a) the checkout step above uses `fetch-depth: 0` so the full
+        #     history is available;
+        # (b) under CI=true, scripts/check-skip-count.cjs exits 1 if origin/main
+        #     is still unreachable — i.e., if (a) was reverted or the fetch failed.
+        shell: bash
+        run: |
+          git fetch origin main --depth=1 || true
+          node scripts/check-skip-count.cjs
 
   test:
     runs-on: ${{ matrix.os }}
