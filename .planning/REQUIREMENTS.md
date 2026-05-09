@@ -17,9 +17,9 @@
 
 ### Git Backend (GIT)
 
-- [ ] **GIT-01**: `sdk/src/vcs/backends/git.ts` implements every adapter operation behaviorally equivalent to existing inline `execSync('git …')` call sites (1:1 git-only baseline before any jj work)
-- [ ] **GIT-02**: Git backend preserves byte-identical `{ exitCode, stdout, stderr }` for migrated call sites (passes a snapshot diff against pre-migration behavior)
-- [ ] **GIT-03**: `vcs.gitOnly.createAnnotatedTag()` and other git-specific escape hatches available; jj backend errors clearly when called
+- [x] **GIT-01**: `sdk/src/vcs/backends/git.ts` implements every adapter operation behaviorally equivalent to existing inline `execSync('git …')` call sites (1:1 git-only baseline before any jj work)
+- [x] **GIT-02**: Git backend preserves byte-identical `{ exitCode, stdout, stderr }` for migrated call sites (passes a snapshot diff against pre-migration behavior)
+- [x] **GIT-03**: `vcs.gitOnly.createAnnotatedTag()` and other git-specific escape hatches available; jj backend errors clearly when called
 
 ### jj Backend (JJ)
 
@@ -198,9 +198,9 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | VCS-05 | Phase 1 | Complete (01-02) |
 | VCS-06 | Phase 1 | Complete |
 | VCS-07 | Phase 1 | Pending |
-| GIT-01 | Phase 1 | Pending |
-| GIT-02 | Phase 1 | Pending |
-| GIT-03 | Phase 1 | Pending |
+| GIT-01 | Phase 1 | Complete (01-03) |
+| GIT-02 | Phase 1 | Complete (01-03) |
+| GIT-03 | Phase 1 | Complete (01-03) |
 | TEST-01 | Phase 1 | Pending |
 | TEST-02 | Phase 1 | Pending |
 | TEST-03 | Phase 1 | Pending |
