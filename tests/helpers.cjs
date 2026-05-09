@@ -148,7 +148,12 @@ function parseFrontmatter(content) {
   }
   const fields = {};
   for (const line of lines.slice(openIdx + 1, closeIdx)) {
-    const match = line.match(/^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/);
+    // WR-09: widen the leading-char class to include `_` so keys like
+    // `_internal:` are not silently dropped. Numeric leading chars are still
+    // rejected — frontmatter keys starting with a digit are unusual enough
+    // that we want them to surface (a frontmatter line shaped `123: foo`
+    // is more likely a mis-indented list item than a real key).
+    const match = line.match(/^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/);
     if (!match) continue; // skip block-list items, blank lines, comments
     const [, key, rawValue] = match;
     const value = rawValue.trim();
