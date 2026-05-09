@@ -1,13 +1,16 @@
 ---
 phase: 01-adapter-foundation-git-backend
 verified: 2026-05-09T15:55:00Z
-status: human_needed
+resolved: 2026-05-09T16:30:00Z
+status: passed
 score: 5/5 success criteria verified
 overrides_applied: 0
 human_verification:
   - test: "WR-06 sentinel — audit Phase 2/3 callers for prior signal-kill→exitCode:1 collision dependency"
     expected: "No call site relied on the previous `result.status ?? 1` collapsing signal-killed processes to exit code 1; if any did, they should branch on `EXIT_CODE_SIGNAL_KILLED` (-1) explicitly."
     why_human: "Behavior change is semantic, not regex-detectable. All Phase 1 tests pass, but Phase 2 will migrate ~80 git-touching call sites — any one that did `if (result.exitCode === 1)` to mean both 'real exit 1' and 'killed by signal' will now miss the killed case. Flagged by REVIEW-FIX WR-06 as 'Requires human verification'."
+    result: passed
+    audit_notes: "Repo-wide grep confirms every git-spawning caller branches on `exitCode !== 0`, never `=== 1`. Sites audited: get-shit-done/bin/lib/{worktree-safety,graphify,verify,commands}.cjs; sdk/src/vcs/backends/git.ts (15+ sites); sdk/src/query/commit.ts:149,171; sdk/src/vcs/parse/worktree-list.ts:88. Sentinel change is purely additive — both old (status ?? 1 → 1) and new (-1) paths satisfy `!== 0` for signal-killed processes."
 ---
 
 # Phase 1: Adapter Foundation + Git Backend — Verification Report
