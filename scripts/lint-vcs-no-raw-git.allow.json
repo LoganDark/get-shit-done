@@ -38,6 +38,7 @@
     "sdk/src/query/check-ship-ready.ts",
     "sdk/src/query/check-decision-coverage.ts",
     "sdk/src/query/docs-init.ts",
+    "sdk/src/init-runner.ts",
     ".githooks/**",
     "docs/**",
     ".planning/**"

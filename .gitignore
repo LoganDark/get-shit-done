@@ -70,3 +70,8 @@ vendor/
 tmp/
 .worktrees
 .envrc
+
+# Belt-and-suspenders for lint-vcs-no-raw-git fixture tests (Phase 1 plan 05, W-4):
+# fixtures normally live under os.tmpdir() but if a future test mistakenly
+# creates them in the repo root, this prevents accidental tracking.
+__lint-fixture-vcs-*
