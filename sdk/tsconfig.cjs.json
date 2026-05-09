@@ -5,6 +5,7 @@
     "moduleResolution": "node",
     "outDir": "dist-cjs"
   },
-  "include": ["src/vcs/**/*.ts"],
+  "$wr12_comment": "WR-12: list every transitively-required file explicitly. TypeScript will compile transitively-imported files even when they are not in `include`, but the include list is the only self-documenting place that says 'these files are part of the CJS build'. Adding src/errors.ts here makes the dependency visible to the next reader and ensures dist-cjs/errors.js does not silently disappear if the import seam moves.",
+  "include": ["src/vcs/**/*.ts", "src/errors.ts"],
   "exclude": ["src/vcs/**/*.test.ts", "src/vcs/__tests__/**", "dist", "dist-cjs", "node_modules"]
 }
