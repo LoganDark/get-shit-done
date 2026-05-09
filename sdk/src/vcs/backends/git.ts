@@ -78,6 +78,18 @@ export function parseDiffCheckPath(line: string): string | null {
 export function createGitAdapter(cwd: string): GitVcsAdapter {
   // ─── commit ──────────────────────────────────────────────────────────────
   const commit = (input: CommitInput): CommitResult => {
+    // WR-01: explicit `files: []` is ambiguous — the previous behaviour fell
+    // through to `git commit -am` (commit ALL tracked modifications) which
+    // is a data-correctness footgun for any caller that meant "this list of
+    // paths". Reject with a structured error so callers must opt in to one
+    // semantic or the other (`undefined` → `-am`, ≥1 path → `git add` then
+    // `git commit -m`).
+    if (input.files !== undefined && input.files.length === 0) {
+      throw new Error(
+        'commit({files:[]}) is ambiguous; pass files: undefined for `git commit -am`, ' +
+          'or pass at least one path to commit a specific path set.',
+      );
+    }
     if (input.files && input.files.length > 0) {
       const addRes = execGit(cwd, ['add', ...input.files]);
       if (addRes.exitCode !== 0) {

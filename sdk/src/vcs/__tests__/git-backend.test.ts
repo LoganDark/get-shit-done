@@ -65,6 +65,11 @@ describe('createGitAdapter — commit', () => {
     expect(r.exitCode).toBe(0);
     expect(r.hash).toBeTruthy();
   });
+
+  it('commit({files: []}) is rejected as ambiguous (WR-01)', () => {
+    const vcs = createGitAdapter(tmpDir);
+    expect(() => vcs.commit({ files: [], message: 'oops' })).toThrow(/ambiguous/);
+  });
 });
 
 describe('createGitAdapter — log', () => {

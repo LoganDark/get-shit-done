@@ -22,6 +22,15 @@ export type RevisionExpr = string & { readonly [__vcsRevisionBrand]: 'RevisionEx
 // ─── Inputs / outputs ────────────────────────────────────────────────────────
 
 export interface CommitInput {
+  /**
+   * Path set to commit.
+   * - `undefined`: run `git commit -am` (all tracked modifications).
+   * - `[…paths]` (≥1 entry): `git add <paths…>` then `git commit -m`.
+   * - `[]` (empty array): REJECTED with a structured error — see WR-01. Pass
+   *   `undefined` for `-am` semantics, or at least one path for path-set
+   *   semantics. The empty-array case used to silently fall through to `-am`,
+   *   which is a data-correctness footgun.
+   */
   files?: string[];
   message: string;
   allowEmpty?: boolean;
