@@ -31,7 +31,8 @@ function setupFixture(steps) {
   execSync('git config tag.gpgsign false', { cwd: dir, stdio: 'pipe' });
   execSync('git commit --allow-empty -m initial', { cwd: dir, stdio: 'pipe' });
   for (const s of steps || []) {
-    execSync(s, { cwd: dir, stdio: 'pipe', shell: '/bin/sh' });
+    // WR-05: `shell: true` routes through cmd.exe on Windows and /bin/sh elsewhere.
+    execSync(s, { cwd: dir, stdio: 'pipe', shell: true });
   }
   return dir;
 }
