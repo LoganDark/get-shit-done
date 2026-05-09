@@ -85,13 +85,13 @@
 
 ### Test Infrastructure (TEST)
 
-- [ ] **TEST-01**: `vcsTest(kind)` fixture in test helpers parameterizes over backends via vitest's `describe.for([...BACKENDS])`
-- [ ] **TEST-02**: `test.extend({ vcs, cwd })` provides per-test backend instance and isolated tmp working directory
-- [ ] **TEST-03**: Backend matrix axis includes `git`, `jj-colocated`, `jj-native` (latter two are separate environments)
-- [ ] **TEST-04**: `GSD_TEST_BACKENDS` env var selects subset of backends to run (default: all)
+- [x] **TEST-01**: `vcsTest(kind)` fixture in test helpers parameterizes over backends via vitest's `describe.for([...BACKENDS])`
+- [x] **TEST-02**: `test.extend({ vcs, cwd })` provides per-test backend instance and isolated tmp working directory
+- [x] **TEST-03**: Backend matrix axis includes `git`, `jj-colocated`, `jj-native` (latter two are separate environments)
+- [x] **TEST-04**: `GSD_TEST_BACKENDS` env var selects subset of backends to run (default: all)
 - [ ] **TEST-05**: All ~80 git-touching tests in `tests/` migrated to use the `vcs` fixture instead of raw git invocations in test setup
-- [ ] **TEST-06**: CI rule: skip count must not increase from `main` (prevents silent test-skipping under migration pressure)
-- [ ] **TEST-07**: Test fixtures support both git and jj initial states (`tests/helpers.cjs` + a new `tests/helpers-jj.cjs` or unified file)
+- [x] **TEST-06**: CI rule: skip count must not increase from `main` (prevents silent test-skipping under migration pressure)
+- [x] **TEST-07**: Test fixtures support both git and jj initial states (`tests/helpers.cjs` + a new `tests/helpers-jj.cjs` or unified file)
 - [ ] **TEST-08**: Worktree-edge-case tests (`bug-2924/2774/3097/3099/2075/2431/2015/2388`) re-triaged: those that map cleanly to jj workspaces are migrated; those that don't are documented as git-only with rationale
 
 ### Call-Site Migration (MIGR)
@@ -201,12 +201,12 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | GIT-01 | Phase 1 | Complete (01-03) |
 | GIT-02 | Phase 1 | Complete (01-03) |
 | GIT-03 | Phase 1 | Complete (01-03) |
-| TEST-01 | Phase 1 | Pending |
-| TEST-02 | Phase 1 | Pending |
-| TEST-03 | Phase 1 | Pending |
-| TEST-04 | Phase 1 | Pending |
-| TEST-06 | Phase 1 | Pending |
-| TEST-07 | Phase 1 | Pending |
+| TEST-01 | Phase 1 | Complete |
+| TEST-02 | Phase 1 | Complete |
+| TEST-03 | Phase 1 | Complete |
+| TEST-04 | Phase 1 | Complete |
+| TEST-06 | Phase 1 | Complete |
+| TEST-07 | Phase 1 | Complete |
 | MIGR-01 | Phase 2 | Pending |
 | MIGR-02 | Phase 2 | Pending |
 | MIGR-03 | Phase 2 | Pending |

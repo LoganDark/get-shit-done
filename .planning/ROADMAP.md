@@ -36,7 +36,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 - [x] 01-01-PLAN.md — Build pipeline (sdk/tsconfig.cjs.json, pnpm scripts, pretest hook, dist-cjs files array)
 - [x] 01-02-PLAN.md — Adapter types, exec, expr, parse/git-rev, parse/jj-rev, backends, hook-bridge, index (factory + auto-detect)
 - [x] 01-03-PLAN.md — Git backend implementation (sdk/src/vcs/backends/git.ts) + wire into createVcsAdapter + tests/baselines/git-vcs/ scaffold
-- [ ] 01-04-PLAN.md — Test harness (vitest fixture + describe.for contract suite + tests/helpers.cjs vcsTest + node --test variant + skip-count CI guard)
+- [x] 01-04-PLAN.md — Test harness (vitest fixture + describe.for contract suite + tests/helpers.cjs vcsTest + node --test variant + skip-count CI guard)
 - [ ] 01-05-PLAN.md — No-raw-git lint guard (whole-repo default-deny scanner + JSON allowlist + CI integration)
 
 ### Phase 2: Bulk Call-Site Migration (Still Git-Only)
@@ -95,7 +95,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Adapter Foundation + Git Backend | 3/5 | In Progress|  |
+| 1. Adapter Foundation + Git Backend | 4/5 | In Progress|  |
 | 2. Bulk Call-Site Migration (Still Git-Only) | 0/TBD | Not started | - |
 | 3. jj Backend Core — Squash, Refs, Conflict | 0/TBD | Not started | - |
 | 4. Workspaces + Octopus Structure + Hooks | 0/TBD | Not started | - |

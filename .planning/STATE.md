@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: "Completed 01-03 — git backend implementation + byte-identity baselines landed"
-last_updated: "2026-05-09T21:30:09.000Z"
+last_updated: "2026-05-09T21:42:59.867Z"
 last_activity: 2026-05-09
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 3
-  percent: 60
+  completed_plans: 4
+  percent: 80
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 01 (adapter-foundation-git-backend) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-05-09
 
-Progress: [██████░░░░] 60%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
@@ -55,6 +55,7 @@ Progress: [██████░░░░] 60%
 | Phase 01 P01 | 2m49s | 2 tasks | 4 files |
 | Phase 01 P02 | ~12m | 4 tasks | 14 files |
 | Phase 01 P03 | ~12m | 3 tasks | 14 files |
+| Phase 01 P04 | ~10m | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,9 @@ Recent decisions affecting current work:
 - [Phase 01-03]: Plan 01-03: snapshot/restore uses strategy 3 (refs/gsd/test-snapshot + reset --hard + clean -fdx) — only strategy that pins HEAD without touching index/working-tree intermediates, matters for vitest parallel-module fixture restore.
 - [Phase 01-03]: Plan 01-03 [Rule 3]: get-shit-done/bin/lib/worktree-safety.cjs now exports readWorktreeList — promoted from internal helper to module surface so VcsAdapter.workspace.list can DI it (ADR-0004 alignment, RESEARCH Pitfall 5).
 - [Phase 01-03]: Plan 01-03: capture-vcs-baselines.cjs moved to tests/__tools__/ (rather than deleted) — Phase 2 will expand the baseline corpus as it migrates each call site.
+- [Phase ?]: Plan 01-04: vcs-fixture seeds an initial empty commit before snapshotting (W-5) so HEAD~1 / vcs.refs.parent resolves on the first test in any describe block.
+- [Phase ?]: Plan 01-04: tests/helpers.cjs uses Object.defineProperty lazy getters for BACKENDS_AVAILABLE / parseBackendsEnv re-exports — defers dist-cjs require until first access, keeps pre-build guard friendly for non-VCS tests.
+- [Phase ?]: Plan 01-04: skip-count CI guard uses W-3 dual-defense — workflow YAML pins fetch-depth: 0 on lint-tests checkout AND scripts/check-skip-count.cjs hard-fails under CI=true if origin/main is missing.
 
 ### Pending Todos
 
@@ -98,7 +102,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-09T21:30:09.000Z
+Last session: 2026-05-09T21:42:54.429Z
 Stopped at: "Completed 01-03 — git backend implementation + byte-identity baselines landed"
 Resume file: None
 
