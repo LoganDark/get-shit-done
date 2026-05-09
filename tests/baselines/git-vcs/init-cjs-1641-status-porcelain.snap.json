@@ -1,0 +1,31 @@
+{
+  "id": "init-cjs-1641-status-porcelain",
+  "source": "get-shit-done/bin/lib/init.cjs:1641",
+  "captured_at": "2026-05-09",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": []
+  },
+  "command": "git",
+  "args": [
+    "status",
+    "--porcelain"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "exact"
+  }
+}
