@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execSync } from 'node:child_process';
 
-import { createGitAdapter } from '../backends/git.js';
+import { createGitAdapter, parseDiffCheckPath } from '../backends/git.js';
 import { expr } from '../expr.js';
 import { toGitRev } from '../parse/git-rev.js';
 import { __vcsTestOnly } from '../types.js';
@@ -179,6 +179,26 @@ describe('createGitAdapter — hooks', () => {
     const vcs = createGitAdapter(tmpDir);
     const r = vcs.hooks.fire('pre-commit');
     expect(r.exitCode).toBe(0);
+  });
+});
+
+describe('parseDiffCheckPath (CR-03)', () => {
+  it('extracts POSIX path with no embedded colon', () => {
+    expect(parseDiffCheckPath('foo/bar.txt:42: leftover conflict marker')).toBe('foo/bar.txt');
+  });
+  it('preserves Windows drive-letter path (does not truncate at C:)', () => {
+    expect(parseDiffCheckPath('C:\\foo\\bar.txt:42: leftover conflict marker')).toBe(
+      'C:\\foo\\bar.txt',
+    );
+  });
+  it('preserves POSIX path containing a literal colon', () => {
+    expect(parseDiffCheckPath('weird:name.txt:7: leftover conflict marker')).toBe(
+      'weird:name.txt',
+    );
+  });
+  it('returns null on lines without `:line:` pattern', () => {
+    expect(parseDiffCheckPath('')).toBe(null);
+    expect(parseDiffCheckPath('not-a-diagnostic-line')).toBe(null);
   });
 });
 

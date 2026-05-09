@@ -120,6 +120,20 @@ try {
   worktreeSafetyLoadError = err instanceof Error ? err : new Error(String(err));
 }
 
+// ─── Parse helpers (CR-03) ──────────────────────────────────────────────────
+//
+// `git diff --check` emits lines shaped like `path:line: <marker description>`.
+// On Windows, `path` can contain a drive-letter colon (`C:\foo\bar.txt:42: …`),
+// and POSIX filesystems may also contain literal `:` in paths. Splitting at the
+// FIRST colon truncates Windows paths to the drive letter and collapses POSIX
+// paths to their prefix. Match the LAST `:<digits>:` pattern instead.
+//
+// Exported for unit testing — the real call site is local to findConflicts.
+export function parseDiffCheckPath(line: string): string | null {
+  const m = line.match(/^(.*):\d+:\s/);
+  return m && m[1] ? m[1] : null;
+}
+
 // ─── Factory ────────────────────────────────────────────────────────────────
 
 export function createGitAdapter(cwd: string): GitVcsAdapter {
@@ -345,11 +359,10 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     // working-copy scope: `git diff --check` reports leftover conflict markers.
     const r = execGit(cwd, ['diff', '--check']);
     if (r.exitCode === 0) return [];
-    // Output: "path:line: leftover conflict marker"
     const paths = new Set<string>();
     for (const line of r.stdout.split('\n')) {
-      const colon = line.indexOf(':');
-      if (colon > 0) paths.add(line.slice(0, colon));
+      const p = parseDiffCheckPath(line);
+      if (p) paths.add(p);
     }
     return paths.size > 0
       ? [{ rev: 'WORKING-COPY', paths: [...paths], scope: 'working-copy' }]
