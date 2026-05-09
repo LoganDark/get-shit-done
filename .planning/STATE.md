@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-05-09T21:05:01.484Z"
+stopped_at: "Completed 01-02 — VCS adapter contract surface landed"
+last_updated: "2026-05-09T21:13:00.000Z"
 last_activity: 2026-05-09
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
-  percent: 20
+  completed_plans: 2
+  percent: 40
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 01 (adapter-foundation-git-backend) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-05-09
 
-Progress: [██░░░░░░░░] 20%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [██░░░░░░░░] 20%
 
 *Updated after each plan completion*
 | Phase 01 P01 | 2m49s | 2 tasks | 4 files |
+| Phase 01 P02 | ~12m | 4 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,10 @@ Recent decisions affecting current work:
 - Pre-Phase-1: Orchestrator pre-creates each subagent's head change and workspace (octopus structure created lazily on first fan-out).
 - Pre-Phase-1: Hooks Tier 1 only in v1 — colocated default + jj-native non-colocated direct trigger; PATH-shim wrapper deferred to v2.
 - [Phase ?]: Plan 01-01: introduced sdk/src/vcs/_placeholder.ts as a one-line stub to satisfy tsc's empty-include guard (TS18003); plan 01-02 may delete it once real adapter modules land
+- [Phase 01-02]: Plan 01-02: dist-cjs needs `package.json {type:commonjs}` shim — without it Node 25's require(esm) interop loads compiled CJS as null-prototype ESM; build:cjs script writes the shim
+- [Phase 01-02]: Plan 01-02: parseBackendsEnv returns structured `{available, requested, unavailable}` (B-4 shape) so callers can warn instead of silently running zero tests
+- [Phase 01-02]: Plan 01-02: createGitAdapterStub returns a frozen object whose every method throws GSDError('not yet implemented') — plan 03 swaps in real createGitAdapter without changing factory signature
+- [Phase 01-02]: Plan 01-02: deleted sdk/src/vcs/_placeholder.ts (real adapter modules now satisfy tsc empty-include guard)
 
 ### Pending Todos
 
@@ -86,6 +91,13 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-09T21:04:58.040Z
-Stopped at: Phase 1 context gathered
+Last session: 2026-05-09T21:13:00.000Z
+Stopped at: "Completed 01-02 — VCS adapter contract surface landed"
 Resume file: None
+
+## Known Pre-Existing Test Failures (Non-Blocking)
+
+- `sdk/src/query/commit.test.ts:304` — "fatal: failed to write commit object" during git init/commit setup. Not introduced by 01-02; surfaced when running the full unit suite. Out of scope per executor SCOPE BOUNDARY.
+- `sdk/src/query/config-mutation.test.ts:441` — `expect(raw.commit_docs).toBe(true)` failing. Not introduced by 01-02. Out of scope.
+
+These should be triaged in a future maintenance plan.

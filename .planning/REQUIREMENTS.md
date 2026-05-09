@@ -7,11 +7,11 @@
 
 ### Adapter Foundation (VCS)
 
-- [ ] **VCS-01**: `VcsAdapter` interface defined in `sdk/src/vcs/types.ts` with full operation contract (commit, log, status, diff, refs, workspace, hooks, push/fetch, conflict query, raw escape hatch)
-- [ ] **VCS-02**: `createVcsAdapter(cwd, opts)` factory in `sdk/src/vcs/index.ts` returning a frozen plain object with namespaced sub-objects (`vcs.commit`, `vcs.workspace.*`, `vcs.refs.*`, `vcs.hooks.*`, `vcs.gitOnly.*` for backend-specific ops)
-- [ ] **VCS-03**: Backend auto-detection at construction (`.jj` first, `.git` fallback, `GSD_VCS` env override)
-- [ ] **VCS-04**: Single spawn wrapper in `sdk/src/vcs/exec.ts` with uniform `{ exitCode, stdout, stderr }` return shape and `VcsExecError` for non-zero exits
-- [ ] **VCS-05**: `RevisionExpr` type as the canonical revset/ref primitive — every backend translates internally (e.g., `HEAD` → `@-` on jj; `origin/main` → `main@origin`)
+- [x] **VCS-01**: `VcsAdapter` interface defined in `sdk/src/vcs/types.ts` with full operation contract (commit, log, status, diff, refs, workspace, hooks, push/fetch, conflict query, raw escape hatch)
+- [x] **VCS-02**: `createVcsAdapter(cwd, opts)` factory in `sdk/src/vcs/index.ts` returning a frozen plain object with namespaced sub-objects (`vcs.commit`, `vcs.workspace.*`, `vcs.refs.*`, `vcs.hooks.*`, `vcs.gitOnly.*` for backend-specific ops)
+- [x] **VCS-03**: Backend auto-detection at construction (`.jj` first, `.git` fallback, `GSD_VCS` env override)
+- [x] **VCS-04**: Single spawn wrapper in `sdk/src/vcs/exec.ts` with uniform `{ exitCode, stdout, stderr }` return shape and `VcsExecError` for non-zero exits
+- [x] **VCS-05**: `RevisionExpr` type as the canonical revset/ref primitive — every backend translates internally (e.g., `HEAD` → `@-` on jj; `origin/main` → `main@origin`)
 - [x] **VCS-06**: TypeScript-first with CJS build target emitting to `dist-cjs/` for `bin/lib/*.cjs` consumption (no hand-maintained CJS twin)
 - [ ] **VCS-07**: Lint guard "jj-backend never shells out to mutating git verbs" ships as part of the adapter package
 
@@ -191,11 +191,11 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VCS-01 | Phase 1 | Pending |
-| VCS-02 | Phase 1 | Pending |
-| VCS-03 | Phase 1 | Pending |
-| VCS-04 | Phase 1 | Pending |
-| VCS-05 | Phase 1 | Pending |
+| VCS-01 | Phase 1 | Complete (01-02) |
+| VCS-02 | Phase 1 | Complete (01-02; backend impl arrives 01-03) |
+| VCS-03 | Phase 1 | Complete (01-02) |
+| VCS-04 | Phase 1 | Complete (01-02) |
+| VCS-05 | Phase 1 | Complete (01-02) |
 | VCS-06 | Phase 1 | Complete |
 | VCS-07 | Phase 1 | Pending |
 | GIT-01 | Phase 1 | Pending |
