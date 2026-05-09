@@ -331,7 +331,15 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
       }
     },
     version: (): string => {
+      // WR-02: throw on non-zero exit so callers get a loud signal when git is
+      // missing from PATH, instead of an empty-string return that every caller
+      // would have to re-validate. Mirrors the createAnnotatedTag exit-check.
       const r = execGit(cwd, ['--version']);
+      if (r.exitCode !== 0) {
+        throw new Error(
+          `gitOnly.version failed: ${r.stderr || r.error?.message || 'no git on PATH'}`,
+        );
+      }
       return r.stdout;
     },
   });
