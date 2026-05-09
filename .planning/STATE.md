@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: "Completed 01-03 — git backend implementation + byte-identity baselines landed"
-last_updated: "2026-05-09T21:42:59.867Z"
+status: phase-complete
+stopped_at: "Completed 01-05 — no-raw-git lint guard landed; Phase 01 fully complete"
+last_updated: "2026-05-09T22:00:00.000Z"
 last_activity: 2026-05-09
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 4
-  percent: 80
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 
 ## Current Position
 
-Phase: 01 (adapter-foundation-git-backend) — EXECUTING
-Plan: 5 of 5
-Status: Ready to execute
+Phase: 01 (adapter-foundation-git-backend) — COMPLETE
+Plan: 5 of 5 — Complete
+Status: Phase 01 complete; ready to plan Phase 02 (bulk call-site migration)
 Last activity: 2026-05-09
 
-Progress: [████████░░] 80%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Progress: [████████░░] 80%
 | Phase 01 P02 | ~12m | 4 tasks | 14 files |
 | Phase 01 P03 | ~12m | 3 tasks | 14 files |
 | Phase 01 P04 | ~10m | 3 tasks | 6 files |
+| Phase 01 P05 | ~6m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,9 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 01-04: vcs-fixture seeds an initial empty commit before snapshotting (W-5) so HEAD~1 / vcs.refs.parent resolves on the first test in any describe block.
 - [Phase ?]: Plan 01-04: tests/helpers.cjs uses Object.defineProperty lazy getters for BACKENDS_AVAILABLE / parseBackendsEnv re-exports — defers dist-cjs require until first access, keeps pre-build guard friendly for non-VCS tests.
 - [Phase ?]: Plan 01-04: skip-count CI guard uses W-3 dual-defense — workflow YAML pins fetch-depth: 0 on lint-tests checkout AND scripts/check-skip-count.cjs hard-fails under CI=true if origin/main is missing.
+- [Phase 01-05]: Plan 01-05: no-raw-git lint guard uses W-4 isolated-fixture pattern — `--scan-root <dir>` argv lets fixture tests scan os.tmpdir() trees so production-mode and fixture-mode scans cannot collide; `__lint-fixture-vcs-*` in .gitignore is belt-and-suspenders against accidental repo-root pollution.
+- [Phase 01-05]: Plan 01-05 [Rule 2]: extended allowlist to cover sdk/src/init-runner.ts (Phase 2 migration target — sibling to sdk/src/query/init.ts), sdk/src/**/*.integration.test.ts glob (legitimate fixture-seeding sites), and tests/__tools__/capture-vcs-baselines.cjs (plan-03 regenerator helper). Without these, the lint would fire on Phase 1's land state — RESEARCH Pitfall 2.
+- [Phase 01-05]: Plan 01-05: D-17/D-18 (whole-repo default-deny on ALL git invocations, not just mutating verbs) tightens VCS-07's literal wording. REQUIREMENTS.md VCS-07 marked Complete (01-05) with the tightening noted inline.
 
 ### Pending Todos
 
@@ -102,8 +106,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-09T21:42:54.429Z
-Stopped at: "Completed 01-03 — git backend implementation + byte-identity baselines landed"
+Last session: 2026-05-09T22:00:00.000Z
+Stopped at: "Completed 01-05 — no-raw-git lint guard landed; Phase 01 fully complete (5/5)"
 Resume file: None
 
 ## Known Pre-Existing Test Failures (Non-Blocking)

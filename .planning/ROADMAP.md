@@ -14,7 +14,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Adapter Foundation + Git Backend** - VcsAdapter interface, git-only 1:1 backend, parameterized test harness, lint guard. No call site changes. No jj code.
+- [x] **Phase 1: Adapter Foundation + Git Backend** - VcsAdapter interface, git-only 1:1 backend, parameterized test harness, lint guard. No call site changes. No jj code.
 - [ ] **Phase 2: Bulk Call-Site Migration (Still Git-Only)** - Every `execSync('git …')` in `sdk/src/query/*.ts` and `bin/lib/*.cjs` migrated to the adapter; first upstream rebase validates the mechanical-edits hypothesis.
 - [ ] **Phase 3: jj Backend Core — Squash, Refs, Conflict** - `sdk/src/vcs/backends/jj.ts` with squash-based commit model, NDJSON parsing, bookmarks, conflict detection. CI matrix flips on with jj-backend allowed-to-fail.
 - [ ] **Phase 4: Workspaces + Octopus Structure + Hooks** - Orchestrator-creates-heads-and-workspaces flow with lazy octopus structure, auto-abandon empty heads, batch reap; jj-native hooks Tier 1.
@@ -37,7 +37,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 - [x] 01-02-PLAN.md — Adapter types, exec, expr, parse/git-rev, parse/jj-rev, backends, hook-bridge, index (factory + auto-detect)
 - [x] 01-03-PLAN.md — Git backend implementation (sdk/src/vcs/backends/git.ts) + wire into createVcsAdapter + tests/baselines/git-vcs/ scaffold
 - [x] 01-04-PLAN.md — Test harness (vitest fixture + describe.for contract suite + tests/helpers.cjs vcsTest + node --test variant + skip-count CI guard)
-- [ ] 01-05-PLAN.md — No-raw-git lint guard (whole-repo default-deny scanner + JSON allowlist + CI integration)
+- [x] 01-05-PLAN.md — No-raw-git lint guard (whole-repo default-deny scanner + JSON allowlist + CI integration)
 
 ### Phase 2: Bulk Call-Site Migration (Still Git-Only)
 **Goal**: Migrate every existing `execSync('git …')` call site in the SDK and CLI runtime to the adapter — still git-only — and verify the "mechanical edits = clean rebase" hypothesis with the first post-migration upstream rebase.
@@ -95,7 +95,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Adapter Foundation + Git Backend | 4/5 | In Progress|  |
+| 1. Adapter Foundation + Git Backend | 5/5 | Complete | 2026-05-09 |
 | 2. Bulk Call-Site Migration (Still Git-Only) | 0/TBD | Not started | - |
 | 3. jj Backend Core — Squash, Refs, Conflict | 0/TBD | Not started | - |
 | 4. Workspaces + Octopus Structure + Hooks | 0/TBD | Not started | - |
