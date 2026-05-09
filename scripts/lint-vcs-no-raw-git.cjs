@@ -42,12 +42,19 @@ const SCAN_ROOT = ARGV.scanRoot ? path.resolve(ARGV.scanRoot) : REPO_ROOT;
 const ALLOW = require('./lint-vcs-no-raw-git.allow.json');
 const ALLOW_FILES = new Set(ALLOW.files || []);
 const ALLOW_GLOBS = ALLOW.globs || [];
-const ALLOW_LINE_ANNOTATION = /\/\/\s*vcs-lint:allow-git-here\s*\S/;
+// WR-11: support both JS-style (`//`) and shell-style (`#`) line annotations
+// so shell scripts can opt out of the new shell-mode scan with the same
+// `vcs-lint:allow-git-here <reason>` escape hatch.
+const ALLOW_LINE_ANNOTATION = /(?:\/\/|#)\s*vcs-lint:allow-git-here\s*\S/;
 
 const SKIP_DIRS = new Set([
   'node_modules', '.git', '.jj', 'dist', 'dist-cjs', '.pnpm-store',
 ]);
-const SCAN_EXT = /\.(cjs|js|mjs|ts|yml|yaml)$/;
+// WR-11: scan shell scripts too — the policy ("no raw git anywhere")
+// applies to all repo code, not just JS/TS/YAML. `.githooks/` files are
+// already in the allowlist; helper scripts in scripts/*.sh would otherwise
+// invoke `git` undetected.
+const SCAN_EXT = /\.(cjs|js|mjs|ts|yml|yaml|sh|bash)$/;
 
 const GIT_PATTERNS = [
   { re: /spawnSync\s*\(\s*['"]git['"]/, label: "spawnSync('git', …)" },
@@ -60,6 +67,22 @@ const GIT_PATTERNS = [
   { re: /execSync\s*\(\s*['"`]git(?:\s|['"`])/, label: "execSync('git…', …)" },
   { re: /\bexec\s*\(\s*['"`]git(?:\s|['"`])/,   label: "exec('git…', …)" },
 ];
+
+// WR-11: shell-script-only patterns. Bare `git <subcommand>` is too noisy to
+// scan inside JS/TS/YAML where comments and string descriptions routinely
+// reference `git` as English text. In genuine shell-script files (.sh/.bash),
+// match only the start-of-statement form: line start (after optional leading
+// whitespace) or a shell statement separator (`;`, `&&`, `||`, `|`, `(`).
+// Word boundary + the requirement that a real subcommand verb follows
+// (one or more letters) keeps the pattern from triggering on prose like
+// `the git tool` (no `;`/`&&` prefix at column 0) or path-like `git/foo`.
+const SHELL_GIT_PATTERNS = [
+  {
+    re: /(?:^|[ \t;&|(])git[ \t]+[a-zA-Z]/,
+    label: "shell `git <cmd>`",
+  },
+];
+const SHELL_EXT = /\.(sh|bash)$/;
 
 function globToRegExp(glob) {
   // Translate a simple glob (* and **) to a RegExp anchored at start and end.
@@ -136,10 +159,17 @@ function checkFile(filepath) {
   const content = fs.readFileSync(filepath, 'utf-8');
   const lines = content.split('\n');
   const hits = [];
+  // WR-11: in shell-script files, also scan for bare `git <cmd>` invocations.
+  // The shell pattern is too noisy for JS/TS/YAML where prose and comments
+  // reference `git` as English text.
+  const isShell = SHELL_EXT.test(filepath);
+  const patterns = isShell ? GIT_PATTERNS.concat(SHELL_GIT_PATTERNS) : GIT_PATTERNS;
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     if (ALLOW_LINE_ANNOTATION.test(line)) continue;
-    for (const { re, label } of GIT_PATTERNS) {
+    // Skip shell comments (`#`-prefixed) — they routinely reference `git` as text.
+    if (isShell && /^\s*#/.test(line)) continue;
+    for (const { re, label } of patterns) {
       if (re.test(line)) hits.push({ line: i + 1, label, snippet: line.trim().slice(0, 200) });
     }
   }

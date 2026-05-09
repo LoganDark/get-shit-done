@@ -1,5 +1,6 @@
 {
   "$comment": "Phase 1 plan 05 (D-18). Default-deny on git invocations; this file enumerates the exemption set. Phase 2 will REMOVE bin/lib/*.cjs entries as each call site migrates to the adapter.",
+  "$comment_wr_11": "WR-11 widened the scanner to also flag bare `git <cmd>` in shell scripts (.sh/.bash). scripts/{base64,prompt-injection,secret}-scan.sh legitimately need to compute the diff between $base and HEAD via git; their output drives the scan-report-only workflow and cannot use the VcsAdapter (it would be circular — the adapter is JS-side, these are shell pre-commit-style filters).",
   "files": [
     "sdk/src/vcs/exec.ts",
     "sdk/src/vcs/backends/git.ts",
@@ -21,7 +22,10 @@
     "scripts/lint-vcs-no-raw-git.cjs",
     "scripts/check-skip-count.cjs",
     "scripts/run-tests.cjs",
-    "docs/adr/0004-worktree-workstream-seam-module.md"
+    "docs/adr/0004-worktree-workstream-seam-module.md",
+    "scripts/base64-scan.sh",
+    "scripts/prompt-injection-scan.sh",
+    "scripts/secret-scan.sh"
   ],
   "globs": [
     "sdk/src/vcs/__tests__/**",

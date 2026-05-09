@@ -77,6 +77,66 @@ test('lint-vcs-no-raw-git exits 1 on a fixture containing execSync("git") (no tr
   }
 });
 
+test('lint-vcs-no-raw-git scans shell scripts and flags bare `git <cmd>` (WR-11)', () => {
+  const fixDir = fs.mkdtempSync(path.join(os.tmpdir(), '__lint-fixture-vcs-'));
+  const fixFile = path.join(fixDir, 'badscript.sh');
+  try {
+    fs.writeFileSync(
+      fixFile,
+      "#!/usr/bin/env bash\n" +
+      "git status\n"
+    );
+    const r = spawnSync(process.execPath, [SCRIPT, '--scan-root', fixDir], { encoding: 'utf-8' });
+    assert.equal(
+      r.status, 1,
+      'expected exit 1 (violation) but got ' + r.status + '\nstderr: ' + r.stderr
+    );
+    assert.match(r.stderr, /shell `git/);
+  } finally {
+    fs.rmSync(fixDir, { recursive: true, force: true });
+  }
+});
+
+test('shell-mode `# vcs-lint:allow-git-here` exempts a single line (WR-11)', () => {
+  const fixDir = fs.mkdtempSync(path.join(os.tmpdir(), '__lint-fixture-vcs-'));
+  const fixFile = path.join(fixDir, 'annotated.sh');
+  try {
+    fs.writeFileSync(
+      fixFile,
+      "#!/usr/bin/env bash\n" +
+      "git status # vcs-lint:allow-git-here intentional probe\n"
+    );
+    const r = spawnSync(process.execPath, [SCRIPT, '--scan-root', fixDir], { encoding: 'utf-8' });
+    assert.equal(
+      r.status, 0,
+      'expected exit 0 (annotation exempts) but got ' + r.status + '\nstderr: ' + r.stderr
+    );
+  } finally {
+    fs.rmSync(fixDir, { recursive: true, force: true });
+  }
+});
+
+test('lint-vcs-no-raw-git ignores bare `git <cmd>` in JS prose/comments', () => {
+  // The shell pattern is shell-extension-only — a JS file that mentions
+  // `git status` in a comment or a string must not trigger.
+  const fixDir = fs.mkdtempSync(path.join(os.tmpdir(), '__lint-fixture-vcs-'));
+  const fixFile = path.join(fixDir, 'innocent.js');
+  try {
+    fs.writeFileSync(
+      fixFile,
+      "// instructs the user to run: git status\n" +
+      "console.log('Run `git fetch` to update the working copy');\n"
+    );
+    const r = spawnSync(process.execPath, [SCRIPT, '--scan-root', fixDir], { encoding: 'utf-8' });
+    assert.equal(
+      r.status, 0,
+      'expected exit 0 (prose mentions are not invocations) but got ' + r.status + '\nstderr: ' + r.stderr
+    );
+  } finally {
+    fs.rmSync(fixDir, { recursive: true, force: true });
+  }
+});
+
 test('inline annotation `// vcs-lint:allow-git-here` exempts a single line', () => {
   const fixDir = fs.mkdtempSync(path.join(os.tmpdir(), '__lint-fixture-vcs-'));
   const fixFile = path.join(fixDir, 'annotated.cjs');
