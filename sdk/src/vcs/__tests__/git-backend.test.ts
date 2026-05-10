@@ -287,6 +287,154 @@ describe('createGitAdapter — __vcsTestOnly snapshot/restore (D-14, strategy 3)
   });
 });
 
+describe('createGitAdapter — refs.currentBranch (02-03 Task 1)', () => {
+  it('returns the current branch name on a freshly-initialized repo', () => {
+    const vcs = createGitAdapter(tmpDir);
+    const expected = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim();
+    expect(vcs.refs.currentBranch()).toBe(expected);
+  });
+
+  it('returns the new branch name after switching with bookmarks.switch({create:true})', () => {
+    const vcs = createGitAdapter(tmpDir);
+    vcs.refs.bookmarks.switch('feat-cb', { create: true });
+    expect(vcs.refs.currentBranch()).toBe('feat-cb');
+  });
+
+  it('returns null when HEAD is detached', () => {
+    const vcs = createGitAdapter(tmpDir);
+    const sha = execSync('git rev-parse HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
+    execSync(`git checkout ${sha}`, { cwd: tmpDir, stdio: 'pipe' });
+    expect(vcs.refs.currentBranch()).toBe(null);
+  });
+});
+
+describe('createGitAdapter — refs.resolveShort (02-03 Task 1)', () => {
+  it('returns a 7-char hex SHA for refs.head after initial commit', () => {
+    const vcs = createGitAdapter(tmpDir);
+    const short = vcs.refs.resolveShort(vcs.refs.head);
+    expect(short).toMatch(/^[0-9a-f]{7,}$/);
+  });
+});
+
+describe('createGitAdapter — refs.countCommits (02-03 Task 1)', () => {
+  it('returns 3 in a repo with 3 commits', () => {
+    const vcs = createGitAdapter(tmpDir);
+    writeFileSync(join(tmpDir, 'a.txt'), 'a\n');
+    vcs.commit({ files: ['a.txt'], message: 'add a' });
+    writeFileSync(join(tmpDir, 'b.txt'), 'b\n');
+    vcs.commit({ files: ['b.txt'], message: 'add b' });
+    expect(vcs.refs.countCommits({ rev: vcs.refs.head })).toBe(3);
+  });
+});
+
+describe('createGitAdapter — refs.rootCommits (02-03 Task 1)', () => {
+  it('returns exactly one SHA in a linear-history repo', () => {
+    const vcs = createGitAdapter(tmpDir);
+    writeFileSync(join(tmpDir, 'a.txt'), 'a\n');
+    vcs.commit({ files: ['a.txt'], message: 'add a' });
+    const roots = vcs.refs.rootCommits({ rev: vcs.refs.head });
+    expect(roots.length).toBe(1);
+    expect(roots[0]).toMatch(/^[0-9a-f]{40}$/);
+  });
+});
+
+describe('createGitAdapter — refs.exists (02-03 Task 1)', () => {
+  it('returns true for a known-valid bookmark ref', () => {
+    const vcs = createGitAdapter(tmpDir);
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim();
+    expect(vcs.refs.exists(expr.bookmark(branch))).toBe(true);
+  });
+
+  it('returns false for a nonexistent bookmark ref', () => {
+    const vcs = createGitAdapter(tmpDir);
+    expect(vcs.refs.exists(expr.bookmark('definitely-not-a-real-branch-xyz'))).toBe(false);
+  });
+});
+
+describe('createGitAdapter — refs.isIgnored (02-03 Task 1)', () => {
+  it('returns true for a path under a .gitignore-listed directory', () => {
+    const vcs = createGitAdapter(tmpDir);
+    writeFileSync(join(tmpDir, '.gitignore'), 'node_modules/\n');
+    expect(vcs.refs.isIgnored('node_modules/foo')).toBe(true);
+  });
+
+  it('returns false for a tracked path', () => {
+    const vcs = createGitAdapter(tmpDir);
+    writeFileSync(join(tmpDir, 'README.md'), '# readme\n');
+    expect(vcs.refs.isIgnored('README.md')).toBe(false);
+  });
+});
+
+describe('createGitAdapter — refs.remotes (02-03 Task 1)', () => {
+  it('returns [] on a repo with no remotes', () => {
+    const vcs = createGitAdapter(tmpDir);
+    expect(vcs.refs.remotes()).toEqual([]);
+  });
+
+  it('returns ["origin"] after git remote add origin', () => {
+    const vcs = createGitAdapter(tmpDir);
+    execSync('git remote add origin https://example.invalid/repo.git', {
+      cwd: tmpDir,
+      stdio: 'pipe',
+    });
+    expect(vcs.refs.remotes()).toEqual(['origin']);
+  });
+});
+
+describe('createGitAdapter — bookmarks.switch (02-03 Task 1)', () => {
+  it('switch({create:true}) creates and switches to the new branch', () => {
+    const vcs = createGitAdapter(tmpDir);
+    vcs.refs.bookmarks.switch('feature-x', { create: true });
+    const cb = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim();
+    expect(cb).toBe('feature-x');
+  });
+
+  it('switch(name) without create switches to an existing branch', () => {
+    const vcs = createGitAdapter(tmpDir);
+    const original = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim();
+    execSync('git checkout -b temp-branch', { cwd: tmpDir, stdio: 'pipe' });
+    vcs.refs.bookmarks.switch(original);
+    const cb = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim();
+    expect(cb).toBe(original);
+  });
+});
+
+describe('createGitAdapter — stage / unstage (02-03 Task 1)', () => {
+  it('stage([file]) makes file appear in diff({staged:true,nameOnly:true})', () => {
+    const vcs = createGitAdapter(tmpDir);
+    writeFileSync(join(tmpDir, 'foo.txt'), 'x\n');
+    const r = vcs.stage(['foo.txt']);
+    expect(r.exitCode).toBe(0);
+    const d = vcs.diff({ staged: true, nameOnly: true });
+    expect(d.nameOnly).toContain('foo.txt');
+  });
+
+  it('unstage([file]) reverts a previously staged add (rm --cached)', () => {
+    const vcs = createGitAdapter(tmpDir);
+    writeFileSync(join(tmpDir, 'foo.txt'), 'x\n');
+    vcs.stage(['foo.txt']);
+    const r = vcs.unstage(['foo.txt']);
+    expect(r.exitCode).toBe(0);
+    const d = vcs.diff({ staged: true, nameOnly: true });
+    expect(d.nameOnly).not.toContain('foo.txt');
+  });
+});
+
 describe('createGitAdapter — frozen depth', () => {
   it('every nested namespace is frozen', () => {
     const vcs: GitVcsAdapter = createGitAdapter(tmpDir);
