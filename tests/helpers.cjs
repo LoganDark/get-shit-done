@@ -87,6 +87,11 @@ function createTempGitProject(prefix = 'gsd-test-') {
   const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), prefix));
   fs.mkdirSync(path.join(tmpDir, '.planning', 'phases'), { recursive: true });
 
+  // Phase 2 D-09 partial migration: bootstrap (init + config) stays raw-git in
+  // this allowlisted file (D-14 steady-state). The closing migration to
+  // `vcs.gitOnly.init()` + `vcs.gitOnly.configSet(...)` lands in plan 02-03
+  // once those gap-fill verbs exist. Post-init stage+commit migrates now via
+  // the VcsAdapter (Option B from RESEARCH §Helpers Migration).
   execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
   execSync('git config user.email "test@test.com"', { cwd: tmpDir, stdio: 'pipe' });
   execSync('git config user.name "Test"', { cwd: tmpDir, stdio: 'pipe' });
@@ -97,8 +102,12 @@ function createTempGitProject(prefix = 'gsd-test-') {
     '# Project\n\nTest project.\n'
   );
 
-  execSync('git add -A', { cwd: tmpDir, stdio: 'pipe' });
-  execSync('git commit -m "initial commit"', { cwd: tmpDir, stdio: 'pipe' });
+  // Post-init stage + commit via VcsAdapter (D-09). Uses the existing
+  // `_loadVcs` lazy getter so the dist-cjs require is deferred until first
+  // call — keeps the pre-build guard friendly for non-VCS tests.
+  const { vcs: vcsLib } = _loadVcs();
+  const vcs = vcsLib.createVcsAdapter(tmpDir, { kind: 'git' });
+  vcs.commit({ files: ['.'], message: 'initial commit' });
 
   return tmpDir;
 }
