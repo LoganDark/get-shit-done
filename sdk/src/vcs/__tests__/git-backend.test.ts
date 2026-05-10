@@ -435,6 +435,110 @@ describe('createGitAdapter — stage / unstage (02-03 Task 1)', () => {
   });
 });
 
+describe('createGitAdapter — log.allRefs (02-03 Task 2)', () => {
+  it('log({allRefs:true}) returns commits from non-HEAD refs', () => {
+    const vcs = createGitAdapter(tmpDir);
+    // Original branch initial commit already exists; create a separate branch
+    // with a commit, then move HEAD back. log() default sees only HEAD reach;
+    // log({allRefs:true}) sees both.
+    const original = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim();
+    execSync('git checkout -b side-branch', { cwd: tmpDir, stdio: 'pipe' });
+    writeFileSync(join(tmpDir, 'side.txt'), 'side\n');
+    vcs.commit({ files: ['side.txt'], message: 'side branch only' });
+    execSync(`git checkout ${original}`, { cwd: tmpDir, stdio: 'pipe' });
+
+    const subjectsHead = vcs.log({ maxCount: 50 }).map((e) => e.subject);
+    expect(subjectsHead).not.toContain('side branch only');
+
+    const subjectsAll = vcs.log({ allRefs: true, maxCount: 50 }).map((e) => e.subject);
+    expect(subjectsAll).toContain('side branch only');
+  });
+});
+
+describe('createGitAdapter — diff.nameStatus (02-03 Task 2)', () => {
+  it('diff({staged:true,nameStatus:true}) returns nameStatus entries with status letters', () => {
+    const vcs = createGitAdapter(tmpDir);
+    writeFileSync(join(tmpDir, 'newfile.txt'), 'x\n');
+    vcs.stage(['newfile.txt']);
+    const d = vcs.diff({ staged: true, nameStatus: true });
+    expect(d.nameStatus).toBeTruthy();
+    const entry = d.nameStatus!.find((e) => e.path === 'newfile.txt');
+    expect(entry).toBeTruthy();
+    expect(entry!.status).toBe('A');
+  });
+});
+
+describe('createGitAdapter — workspace.context (02-03 Task 2 — Blocker 4)', () => {
+  it('on main repo, returns mode=main, isLinked=false, gitDir===gitCommonDir', () => {
+    const vcs = createGitAdapter(tmpDir);
+    const ctx = vcs.workspace.context();
+    expect(ctx.mode).toBe('main');
+    expect(ctx.isLinked).toBe(false);
+    expect(ctx.gitDir).toBe(ctx.gitCommonDir);
+    // effectiveRoot resolves to the repo root (realpath-equivalent on macOS).
+    expect(realpathSync(ctx.effectiveRoot)).toBe(realpathSync(tmpDir));
+  });
+
+  it('on linked worktree, gitDir !== gitCommonDir, isLinked=true, mode=linked', () => {
+    const vcs = createGitAdapter(tmpDir);
+    const wtPath = join(tmpDir, '..', `wt-ctx-${Date.now()}`);
+    try {
+      execSync(`git worktree add ${wtPath}`, { cwd: tmpDir, stdio: 'pipe' });
+      // Build a separate adapter rooted at the linked worktree path.
+      const wtVcs = createGitAdapter(wtPath);
+      const ctx = wtVcs.workspace.context();
+      expect(ctx.isLinked).toBe(true);
+      expect(ctx.mode).toBe('linked');
+      expect(ctx.gitDir).not.toBe(ctx.gitCommonDir);
+    } finally {
+      try {
+        execSync(`git worktree remove ${wtPath} --force`, { cwd: tmpDir, stdio: 'pipe' });
+      } catch {
+        // best-effort cleanup
+      }
+      rmSync(wtPath, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('createGitAdapter — workspace.prune (02-03 Task 2)', () => {
+  it('returns ExecResult with exitCode 0 on a repo with no stale worktrees', () => {
+    const vcs = createGitAdapter(tmpDir);
+    const r = vcs.workspace.prune();
+    expect(r.exitCode).toBe(0);
+  });
+});
+
+describe('createGitAdapter — gitOnly.init / configGet / configSet (02-03 Task 2)', () => {
+  it('init() makes .git/HEAD exist in a fresh empty dir', () => {
+    const fresh = mkdtempSync(join(tmpdir(), 'gsd-fresh-'));
+    try {
+      // createGitAdapter accepts any dir — no check that .git already exists.
+      const vcs = createGitAdapter(fresh);
+      vcs.gitOnly.init();
+      expect(existsSync(join(fresh, '.git', 'HEAD'))).toBe(true);
+    } finally {
+      rmSync(fresh, { recursive: true, force: true });
+    }
+  });
+
+  it('configGet returns null for an unknown key, value for a known key', () => {
+    const vcs = createGitAdapter(tmpDir);
+    expect(vcs.gitOnly.configGet('this.key.does.not.exist')).toBe(null);
+    execSync('git config foo.bar baz', { cwd: tmpDir, stdio: 'pipe' });
+    expect(vcs.gitOnly.configGet('foo.bar')).toBe('baz');
+  });
+
+  it('configSet round-trips with configGet (W2)', () => {
+    const vcs = createGitAdapter(tmpDir);
+    vcs.gitOnly.configSet('plan0203.test', 'roundtrip');
+    expect(vcs.gitOnly.configGet('plan0203.test')).toBe('roundtrip');
+  });
+});
+
 describe('createGitAdapter — frozen depth', () => {
   it('every nested namespace is frozen', () => {
     const vcs: GitVcsAdapter = createGitAdapter(tmpDir);
