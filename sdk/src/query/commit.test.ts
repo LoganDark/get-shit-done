@@ -21,6 +21,9 @@ beforeEach(async () => {
   execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
   execSync('git config user.email "test@test.com"', { cwd: tmpDir, stdio: 'pipe' });
   execSync('git config user.name "Test User"', { cwd: tmpDir, stdio: 'pipe' });
+  // Phase 2 D-03 fix: isolate fixture from global commit.gpgsign=true
+  execSync('git config commit.gpgsign false', { cwd: tmpDir, stdio: 'pipe' });
+  execSync('git config tag.gpgsign false', { cwd: tmpDir, stdio: 'pipe' });
   // Create .planning directory
   await mkdir(join(tmpDir, '.planning'), { recursive: true });
 });
