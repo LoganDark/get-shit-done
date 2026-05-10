@@ -111,6 +111,24 @@ const baselines = [
     fixture: [],
     args: ['worktree', 'prune'],
   },
+  {
+    id: 'init-ts-1009-status-porcelain',
+    source: 'sdk/src/query/init.ts:1009',
+    fixture: ['echo u > untracked.txt'],
+    args: ['status', '--porcelain'],
+  },
+  {
+    id: 'init-ts-1019-version',
+    source: 'sdk/src/query/init.ts:1019',
+    fixture: [],
+    args: ['--version'],
+  },
+  {
+    id: 'init-ts-1138-status-porcelain',
+    source: 'sdk/src/query/init.ts:1138',
+    fixture: [],
+    args: ['status', '--porcelain'],
+  },
 ];
 
 fs.mkdirSync(OUT, { recursive: true });
