@@ -1,0 +1,35 @@
+{
+  "id": "commands-cjs-339-commit",
+  "source": "get-shit-done/bin/lib/commands.cjs:339",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": [
+      "echo foo > foo.txt",
+      "git add foo.txt"
+    ]
+  },
+  "command": "git",
+  "args": [
+    "commit",
+    "-m",
+    "test"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "[master 6a8c468] test\n 1 file changed, 1 insertion(+)\n create mode 100644 foo.txt",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "regex:^\\[[^ ]+ [0-9a-f]{7,}\\]"
+  }
+}

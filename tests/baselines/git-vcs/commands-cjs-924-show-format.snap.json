@@ -1,0 +1,33 @@
+{
+  "id": "commands-cjs-924-show-format",
+  "source": "get-shit-done/bin/lib/commands.cjs:924",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": []
+  },
+  "command": "git",
+  "args": [
+    "show",
+    "-s",
+    "--format=%as",
+    "HEAD"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "2026-05-09",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "regex:^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+  }
+}

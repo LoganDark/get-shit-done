@@ -317,6 +317,141 @@ const baselines = [
     fixture: ['echo bar > bar.txt', 'git add -- bar.txt', 'git commit -m bar'],
     args: ['rev-parse', '--short', 'HEAD'],
   },
+  // Plan 02-09: get-shit-done/bin/lib/commands.cjs (1,028 LOC, 14 sites — 13
+  // captured here; the 14th at line 994 already has a baseline from Phase 1).
+  // The cmdCommit block (305-352), commitFilesIfDeletion (398-413), and
+  // cmdNewWorkspace (917-924) are the three sub-blocks. Per W1 fix from
+  // iteration 1, baseline capture lands as a SEPARATE pre-stage commit so the
+  // source-migration commit (Task 2) stays under the 15-file threshold.
+  {
+    id: 'commands-cjs-305-current-branch',
+    source: 'get-shit-done/bin/lib/commands.cjs:305',
+    // cmdCommit: `execGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD'])` reads
+    // the current branch name to compare against the desired branchName.
+    // Adapter equivalent: vcs.refs.currentBranch().
+    fixture: [],
+    args: ['rev-parse', '--abbrev-ref', 'HEAD'],
+  },
+  {
+    id: 'commands-cjs-308-checkout-b',
+    source: 'get-shit-done/bin/lib/commands.cjs:308',
+    // cmdCommit: `execGit(cwd, ['checkout', '-b', branchName])` creates and
+    // switches to a new branch when the desired branch doesn't exist.
+    // Adapter equivalent: vcs.refs.bookmarks.switch(name, { create: true }).
+    fixture: [],
+    args: ['checkout', '-b', 'feature'],
+  },
+  {
+    id: 'commands-cjs-310-checkout',
+    source: 'get-shit-done/bin/lib/commands.cjs:310',
+    // cmdCommit: `execGit(cwd, ['checkout', branchName])` switches to an
+    // existing branch (taken when the -b form on line 308 errored because
+    // the branch already existed). Adapter equivalent:
+    // vcs.refs.bookmarks.switch(name).
+    fixture: ['git branch feature'],
+    args: ['checkout', 'feature'],
+  },
+  {
+    id: 'commands-cjs-330-rm-cached',
+    source: 'get-shit-done/bin/lib/commands.cjs:330',
+    // cmdCommit (default mode, missing-file branch): `execGit(cwd, ['rm',
+    // '--cached', '--ignore-unmatch', file])` stages a deletion when the
+    // referenced file is missing on disk. Pitfall 2 / D-08: this stays as
+    // ONE adapter call (vcs.unstage). Adapter equivalent: vcs.unstage([file]).
+    fixture: ['echo foo > foo.txt', 'git add foo.txt', 'rm foo.txt'],
+    args: ['rm', '--cached', '--ignore-unmatch', 'foo.txt'],
+  },
+  {
+    id: 'commands-cjs-332-add',
+    source: 'get-shit-done/bin/lib/commands.cjs:332',
+    // cmdCommit (else branch): `execGit(cwd, ['add', file])` stages an
+    // existing file. Pitfall 2 / D-08: this is the ELSE half of the
+    // if(deletion){rm-cached}else{add} block — stays as a separate adapter
+    // call (vcs.stage), NOT collapsed with the unstage at line 330. Adapter
+    // equivalent: vcs.stage([file]).
+    fixture: ['echo foo > foo.txt'],
+    args: ['add', 'foo.txt'],
+  },
+  {
+    id: 'commands-cjs-339-commit',
+    source: 'get-shit-done/bin/lib/commands.cjs:339',
+    // cmdCommit: `execGit(cwd, commitArgs)` performs the actual commit (with
+    // optional --amend / --no-verify flags assembled inline above). Adapter
+    // equivalent: vcs.commit({message, amend, noVerify}) — consumes the
+    // CommitInput gap-fill landed in plan 02-08. Captured against the
+    // common path (no --amend, no --no-verify) since the flag-set variants
+    // exercise the same git invocation shape minus optional positional args.
+    fixture: ['echo foo > foo.txt', 'git add foo.txt'],
+    args: ['commit', '-m', 'test'],
+  },
+  {
+    id: 'commands-cjs-352-rev-parse-short',
+    source: 'get-shit-done/bin/lib/commands.cjs:352',
+    // cmdCommit: `execGit(cwd, ['rev-parse', '--short', 'HEAD'])` reads the
+    // short SHA of the just-recorded commit for the result payload. Adapter
+    // equivalent: vcs.refs.resolveShort(vcs.refs.head).
+    fixture: [],
+    args: ['rev-parse', '--short', 'HEAD'],
+  },
+  {
+    id: 'commands-cjs-398-add',
+    source: 'get-shit-done/bin/lib/commands.cjs:398',
+    // commitFilesIfDeletion (cmdCommitToSubrepo loop): `execGit(repoCwd,
+    // ['add', relativePath])` stages a single file in a sub-repo. Adapter
+    // equivalent: vcs.stage([relativePath]) on a per-sub-repo adapter
+    // instance (cwd-via-factory pattern from 02-08).
+    fixture: ['echo bar > bar.txt'],
+    args: ['add', 'bar.txt'],
+  },
+  {
+    id: 'commands-cjs-402-commit',
+    source: 'get-shit-done/bin/lib/commands.cjs:402',
+    // commitFilesIfDeletion: `execGit(repoCwd, ['commit', '-m', message])`
+    // performs the commit in the sub-repo. Adapter equivalent:
+    // vcs.commit({message}) on the sub-repo adapter instance.
+    fixture: ['echo bar > bar.txt', 'git add bar.txt'],
+    args: ['commit', '-m', 'msg'],
+  },
+  {
+    id: 'commands-cjs-413-rev-parse-short',
+    source: 'get-shit-done/bin/lib/commands.cjs:413',
+    // commitFilesIfDeletion: `execGit(repoCwd, ['rev-parse', '--short',
+    // 'HEAD'])` reads the short SHA after the sub-repo commit. Adapter
+    // equivalent: vcs.refs.resolveShort(vcs.refs.head).
+    fixture: [],
+    args: ['rev-parse', '--short', 'HEAD'],
+  },
+  {
+    id: 'commands-cjs-917-rev-list-count',
+    source: 'get-shit-done/bin/lib/commands.cjs:917',
+    // cmdStats: `execGit(cwd, ['rev-list', '--count', 'HEAD'])` counts total
+    // commits for the repo statistics report. Adapter equivalent:
+    // vcs.refs.countCommits({rev: vcs.refs.head}).
+    fixture: ['echo a > a.txt', 'git add a.txt', 'git commit -m c1', 'echo b > b.txt', 'git add b.txt', 'git commit -m c2'],
+    args: ['rev-list', '--count', 'HEAD'],
+  },
+  {
+    id: 'commands-cjs-921-rev-list-root',
+    source: 'get-shit-done/bin/lib/commands.cjs:921',
+    // cmdStats: `execGit(cwd, ['rev-list', '--max-parents=0', 'HEAD'])`
+    // resolves the root commit SHA(s) for the first-commit-date probe.
+    // Adapter equivalent: vcs.refs.rootCommits({rev: vcs.refs.head}).
+    fixture: ['echo a > a.txt', 'git add a.txt', 'git commit -m c1'],
+    args: ['rev-list', '--max-parents=0', 'HEAD'],
+  },
+  // Site 924 takes a runtime SHA (resolved from line 921). The args+fixture
+  // below probe `show -s --format=%as HEAD` against the initial commit
+  // (structural baseline); the migrated code path uses
+  // expr.commit(firstCommit) per Blocker 3 from iteration 1 — first
+  // production consumer of expr.commit OUTSIDE the SDK layer (progress.ts
+  // was the first overall, in plan 02-06). Mirrors the
+  // progress-ts-293-show-format baseline shape.
+  {
+    id: 'commands-cjs-924-show-format',
+    source: 'get-shit-done/bin/lib/commands.cjs:924',
+    fixture: [],
+    args: ['show', '-s', '--format=%as', 'HEAD'],
+  },
 ];
 
 fs.mkdirSync(OUT, { recursive: true });
@@ -389,6 +524,44 @@ for (const b of baselines) {
       // and a free-form summary line; non-deterministic. Match the canonical
       // first-line shape (`[<branch> <short-sha>] <message>`) loosely.
       stdoutMatch = 'regex:^\\[[^ ]+ [0-9a-f]{7,}\\]';
+    } else if (
+      b.id === 'commands-cjs-352-rev-parse-short' ||
+      b.id === 'commands-cjs-413-rev-parse-short'
+    ) {
+      // Plan 02-09: `rev-parse --short HEAD` emits a 7+ hex short SHA. The
+      // SHA depends on the initial-commit author timestamp, so capture-time
+      // and replay-time SHAs differ — regex match is the durable assertion.
+      // Mirrors plan 02-08's commit-ts-179 / commit-ts-309 pattern.
+      stdoutMatch = 'regex:^[0-9a-f]{7,}$';
+    } else if (
+      b.id === 'commands-cjs-339-commit' ||
+      b.id === 'commands-cjs-402-commit'
+    ) {
+      // Plan 02-09: `git commit -m <msg>` stdout embeds the auto-generated
+      // short SHA and the branch name; non-deterministic. Match the canonical
+      // first-line shape (`[<branch> <short-sha>] <message>`) loosely. Mirrors
+      // plan 02-08's commit-ts-170 / commit-ts-301 pattern.
+      stdoutMatch = 'regex:^\\[[^ ]+ [0-9a-f]{7,}\\]';
+    } else if (b.id === 'commands-cjs-308-checkout-b') {
+      // Plan 02-09: `git checkout -b <name>` emits its switch confirmation on
+      // stderr (stdout is empty); the stdout assertion is therefore exact-empty.
+      // No regex needed — falls through to the default 'exact' branch.
+      stdoutMatch = 'exact';
+    } else if (b.id === 'commands-cjs-310-checkout') {
+      // Plan 02-09: `git checkout <name>` emits its switch confirmation on
+      // stderr (stdout is empty); falls through to the default 'exact' branch.
+      stdoutMatch = 'exact';
+    } else if (b.id === 'commands-cjs-921-rev-list-root') {
+      // Plan 02-09: `rev-list --max-parents=0 HEAD` emits the root commit SHA
+      // (40 hex). The author timestamp is wall-clock so the SHA is non-
+      // deterministic across captures — regex match is the durable assertion.
+      // Mirrors plan 02-06's progress-ts-290 pattern.
+      stdoutMatch = 'regex:^[0-9a-f]{40}$';
+    } else if (b.id === 'commands-cjs-924-show-format') {
+      // Plan 02-09: `git show -s --format=%as HEAD` returns the commit's
+      // author iso-date (YYYY-MM-DD); the date is the wall-clock capture date
+      // so a regex match is appropriate. Mirrors plan 02-06's progress-ts-293.
+      stdoutMatch = 'regex:^[0-9]{4}-[0-9]{2}-[0-9]{2}$';
     }
     const record = {
       id: b.id,
