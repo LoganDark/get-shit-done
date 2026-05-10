@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 02-07-PLAN.md
-last_updated: "2026-05-10T05:38:23.172Z"
+last_updated: "2026-05-10T06:03:59.206Z"
 last_activity: 2026-05-10
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 17
-  completed_plans: 13
-  percent: 76
+  completed_plans: 14
+  percent: 82
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 02 (bulk-call-site-migration-still-git-only) — EXECUTING
-Plan: 9 of 12
+Plan: 10 of 12
 Status: Ready to execute
 Last activity: 2026-05-10
 
-Progress: [████████░░] 76%
+Progress: [████████░░] 82%
 
 ## Performance Metrics
 
@@ -65,6 +65,7 @@ Progress: [████████░░] 76%
 | Phase 02 P06 | ~6m | 4 tasks | 17 files |
 | Phase 02 P07 | ~10m | 1 tasks | 6 files |
 | Phase 02 P08 | ~25m | 1 tasks | 15 files |
+| Phase 02 P09 | ~30m | 2 tasks tasks | 19 files files |
 
 ## Accumulated Context
 
@@ -115,6 +116,9 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 02-08]: commit.test.ts paired retarget (D-06) — bootstrap via gitOnly.init/configSet; setup via vcs.stage/vcs.commit; post-state probes via vcs.log/vcs.status/vcs.diff; git-rm synthesized via unlink+vcs.stage. Zero raw execSync('git ...') in test bodies.
 - [Phase ?]: [Phase 02-08]: verify.ts 3 dynamic execGit imports retargeted from './commit.js' to '../vcs/index.js' (Rule 3 — preserves existing semantics on the deleted commit.ts re-export); Plan 02-10 owns verify.ts proper migration
 - [Phase ?]: [Phase 02-08]: baseline-parity commit-clause needs fresh fixture (initFixture re-init in dispatch) — canonical execGit upstream call already commits the staged path; rerunning adapter on same fixture hits 'nothing to commit'. Mirrors 02-07's per-fixture re-init pattern for rev-parse HEAD
+- [Phase ?]: [Phase 02-09]: commands.cjs (1028 LOC, 14 sites) migrated to VcsAdapter; W1 split keeps source-migration commit at 5 files; first bin/lib production consumer of expr.commit; Pitfall 2 preserved
+- [Phase ?]: [Phase 02-09]: #2014 invariant safeguard via stagedOrUnstaged tracking — explicit --files with all-missing entries short-circuits to nothing_to_commit BEFORE vcs.commit; naive pathspec migration would record deletions
+- [Phase ?]: [Phase 02-09]: 3 vacuous-paired tests NOT touched per D-08 (no execSync('git ...) matches); workspace.test.cjs's backtick-quoted git worktree add lines NOT migrated per carried Rule 4 (workspace.add(branchCreate) deferred); lint 3→2 violations / 2→1 files
 
 ### Pending Todos
 
@@ -134,7 +138,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-10T05:37:00.088Z
+Last session: 2026-05-10T06:03:23.772Z
 Stopped at: Completed 02-07-PLAN.md
 Resume file: None
 
