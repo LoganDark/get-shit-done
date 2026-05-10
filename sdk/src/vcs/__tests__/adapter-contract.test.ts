@@ -80,6 +80,35 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
     if (vcs.kind !== 'git') return;
     expect(vcs.gitOnly.version()).toMatch(/git version/);
   });
+
+  // Plan 02-03 Task 3 — symmetric contract tests for new verbs.
+  // These properties hold on every backend (git in Phase 1/2; jj added in Phase 3).
+
+  test('vcs.refs.currentBranch returns a non-null string after init', ({ vcs }) => {
+    const cb = vcs.refs.currentBranch();
+    expect(typeof cb).toBe('string');
+    expect(cb && cb.length > 0).toBe(true);
+  });
+
+  test('vcs.refs.countCommits returns a positive integer after a commit', ({ vcs, cwd }) => {
+    writeFileSync(join(cwd, 'cc.txt'), 'cc');
+    vcs.commit({ files: ['cc.txt'], message: 'add cc' });
+    const n = vcs.refs.countCommits({ rev: vcs.refs.head });
+    expect(Number.isInteger(n)).toBe(true);
+    expect(n).toBeGreaterThan(0);
+  });
+
+  test('vcs.refs.exists is true for HEAD, false for an all-zeros SHA', ({ vcs }) => {
+    expect(vcs.refs.exists(vcs.refs.head)).toBe(true);
+    expect(vcs.refs.exists(expr.commit('0000000000000000000000000000000000000000'))).toBe(false);
+  });
+
+  test('vcs.workspace.context on main workspace: mode=main, gitDir===gitCommonDir', ({ vcs }) => {
+    const ctx = vcs.workspace.context();
+    expect(ctx.mode).toBe('main');
+    expect(ctx.isLinked).toBe(false);
+    expect(ctx.gitDir).toBe(ctx.gitCommonDir);
+  });
 });
 
 describe('GSD_TEST_BACKENDS filter sanity', () => {
