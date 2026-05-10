@@ -19,7 +19,8 @@ const os = require('os');
 const path = require('path');
 const { execSync, spawnSync } = require('child_process');
 
-const REPO_ROOT = path.resolve(__dirname, '..');
+// __dirname is tests/__tools__/, so the repo root is two levels up.
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const OUT = path.join(REPO_ROOT, 'tests', 'baselines', 'git-vcs');
 
 function setupFixture(steps) {
@@ -86,6 +87,12 @@ const baselines = [
     fixture: ['echo a > a.txt', 'git add a.txt'],
     args: ['diff', '--cached', '--name-only'],
   },
+  {
+    id: 'worktree-safety-cjs-80-list-porcelain',
+    source: 'get-shit-done/bin/lib/worktree-safety.cjs:80',
+    fixture: [],
+    args: ['worktree', 'list', '--porcelain'],
+  },
 ];
 
 fs.mkdirSync(OUT, { recursive: true });
@@ -108,6 +115,19 @@ for (const b of baselines) {
     // For init-cjs-1538 (`git --version`), stdout differs across hosts; record
     // a regex-friendly placeholder in match.stdout so the parity test compares
     // the exact-text fields exactly and the version string with a regex.
+    // For `worktree list --porcelain`, the stdout embeds the fixture's tmpdir
+    // path and the initial-commit HEAD sha (both non-deterministic); use a
+    // regex that asserts the porcelain shape without pinning the path/sha.
+    let stdoutMatch = 'exact';
+    if (b.id === 'init-cjs-1538-version') {
+      stdoutMatch = 'regex:^git version ';
+    } else if (
+      b.args[0] === 'worktree' &&
+      b.args[1] === 'list' &&
+      b.args.includes('--porcelain')
+    ) {
+      stdoutMatch = 'regex:^worktree [^\\n]+\\nHEAD [0-9a-f]{40}\\nbranch refs/heads/[^\\n]+$';
+    }
     const record = {
       id: b.id,
       source: b.source,
@@ -116,10 +136,7 @@ for (const b of baselines) {
       command: 'git',
       args: b.args,
       expected,
-      match:
-        b.id === 'init-cjs-1538-version'
-          ? { stdout: 'regex:^git version ' }
-          : { stdout: 'exact' },
+      match: { stdout: stdoutMatch },
     };
     fs.writeFileSync(
       path.join(OUT, b.id + '.snap.json'),

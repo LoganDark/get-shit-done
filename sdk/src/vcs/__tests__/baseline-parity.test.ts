@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 
 import { createVcsAdapter } from '../index.js';
 import { execGit } from '../exec.js';
+import { readWorktreeList as readWorktreePorcelain } from '../parse/worktree-list.js';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 // HERE = sdk/src/vcs/__tests__/  → repo root is 4 levels up.
@@ -105,6 +106,19 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
         } else if (args[0] === '--version') {
           const v = vcs.gitOnly.version();
           expect(v).toMatch(/^git version /);
+        } else if (
+          args[0] === 'worktree' &&
+          args.includes('list') &&
+          args.includes('--porcelain')
+        ) {
+          // Plan 02-04 Task 1 (D-01 smoke-test): the SDK-local parser at
+          // sdk/src/vcs/parse/worktree-list.ts is the migration target for
+          // get-shit-done/bin/lib/worktree-safety.cjs:80. Compare its
+          // porcelain output against the captured raw-git baseline.
+          const result = readWorktreePorcelain(cwd);
+          expect(result.ok).toBe(true);
+          // Same regex match as the baseline (path + sha vary across runs).
+          expect(result.porcelain).toMatch(/^worktree [^\n]+\nHEAD [0-9a-f]{40}\nbranch refs\/heads\/[^\n]+$/);
         }
       } finally {
         rmSync(cwd, { recursive: true, force: true });

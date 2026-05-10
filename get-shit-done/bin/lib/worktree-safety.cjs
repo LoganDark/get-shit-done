@@ -7,6 +7,11 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+// Plan 02-04 Task 1 (D-01 smoke-test): consume Phase 1's already-shipped
+// porcelain parser via the dist-cjs bridge from bin/lib/*.cjs. This single
+// require validates the bin/lib → dist-cjs/vcs consumption path; Task 2
+// migrates the remaining sites (lines 122/123/198) using createVcsAdapter.
+const { readWorktreeList: readPorcelainFromSdk } = require('../../../sdk/dist-cjs/vcs/parse/worktree-list.js');
 
 // Default timeout for worktree-related git subprocess calls.
 // 10 s is generous enough for normal git operations on large repos while still
@@ -76,33 +81,22 @@ function parseWorktreeListPaths(porcelain) {
 }
 
 function readWorktreeList(repoRoot, deps = {}) {
-  const execGit = deps.execGit || execGitDefault;
-  const listResult = execGit(repoRoot, ['worktree', 'list', '--porcelain']);
-  if (listResult.timedOut) {
-    // AC2 / AC4: surface timeout as a distinct reason so callers can emit a
-    // structured warning rather than silently treating the failure as a generic
-    // list error (PRED.k302 — error-swallowing-empty-sentinel).
-    return {
-      ok: false,
-      reason: 'git_timed_out',
-      porcelain: '',
-      entries: [],
-    };
+  // Plan 02-04 Task 1 (D-01 smoke-test): consume Phase 1's already-shipped
+  // parser. ADR-0004 seam preserved (W4): deps = {} signature unchanged.
+  // Lines 122, 123, 198 still use execGit (deps.execGit || execGitDefault) —
+  // Task 2 migrates them via createVcsAdapter and unifies the indirection.
+  void deps; // signature preserved for Task 2 (deps.vcs injection); deps.execGit
+             // is no longer consulted here — bug-3281's mock injection sites are
+             // retargeted onto deps.vcs in Task 2 alongside the paired-test rewrite.
+  const result = readPorcelainFromSdk(repoRoot);
+  if (!result.ok) {
+    return { ok: false, reason: result.reason, porcelain: '', entries: [] };
   }
-  if (listResult.exitCode !== 0) {
-    return {
-      ok: false,
-      reason: 'git_list_failed',
-      porcelain: '',
-      entries: [],
-    };
-  }
-
   return {
     ok: true,
     reason: 'ok',
-    porcelain: listResult.stdout,
-    entries: parseWorktreeEntries(listResult.stdout),
+    porcelain: result.porcelain,
+    entries: parseWorktreeEntries(result.porcelain),
   };
 }
 
