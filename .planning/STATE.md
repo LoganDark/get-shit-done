@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 2 context gathered
-last_updated: "2026-05-10T03:05:55.516Z"
+last_updated: "2026-05-10T03:20:12.724Z"
 last_activity: 2026-05-10
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 17
-  completed_plans: 7
-  percent: 41
+  completed_plans: 8
+  percent: 47
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 02 (bulk-call-site-migration-still-git-only) — EXECUTING
-Plan: 3 of 12
+Plan: 4 of 12
 Status: Ready to execute
 Last activity: 2026-05-10
 
-Progress: [████░░░░░░] 41%
+Progress: [█████░░░░░] 47%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [████░░░░░░] 41%
 | Phase 01 P05 | ~6m | 3 tasks | 5 files |
 | Phase 02 P01 | 1m | 1 tasks | 1 files |
 | Phase 02 P02 | 9m | 3 tasks | 3 files |
+| Phase 02 P03 | 7m | 4 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,9 @@ Recent decisions affecting current work:
 - [Phase 02-02]: tests/helpers.cjs createTempGitProject post-init commit migrated to VcsAdapter (D-09 partial); bootstrap stays raw pending plan 02-03 gap-fill
 - [Phase 02-02]: Day-one allowlist shrink: 9 entries removed; lint exits 1 with 14 violations across 8 files on phase/02-migration (D-13 forcing function; main stays green)
 - [Phase 02-02]: sdk/src/vcs/jj/.gitkeep created as zero-conflict sidecar surface (UPSTREAM-02 / D-15)
+- [Phase ?]: [Phase 02-03]: 17 forward-complete adapter gaps closed + Blocker 3 (expr.commit) + Blocker 4 (workspace.context shape with gitDir/gitCommonDir) + W2 (gitOnly.configSet); per-file migration plans 02-04+ now mechanically swappable
+- [Phase ?]: [Phase 02-03]: tests/helpers.cjs::createTempGitProject closing migration — zero raw-git after this plan (D-09 fully holds)
+- [Phase ?]: [Phase 02-03]: range:<encoded>..<encoded> recursive translation in toGitRev/toJjRev avoids extending parseExpr; commit:<sha> emits verbatim; D-12 holds via SHA-shape validation in expr.commit factory
 
 ### Pending Todos
 
@@ -112,7 +116,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-10T03:05:46.935Z
+Last session: 2026-05-10T03:17:29.900Z
 Stopped at: Phase 2 context gathered
 Resume file: None
 

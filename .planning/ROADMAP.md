@@ -52,7 +52,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 **Plans**: 12 plans
 - [x] 02-01-PLAN.md — Triage commit.test.ts:304 (gpgsign fixture fix; opens D-03/D-04 gate)
 - [x] 02-02-PLAN.md — Helpers migration + day-one allowlist shrink + sdk/src/vcs/jj/ sidecar (D-09, D-13, D-15)
-- [ ] 02-03-PLAN.md — Adapter gap-fill: 17 forward-complete verbs + expr.range factory
+- [x] 02-03-PLAN.md — Adapter gap-fill: 17 forward-complete verbs + expr.range factory
 - [ ] 02-04-PLAN.md — Smoke-test (worktree-safety.cjs:80) + complete worktree-safety.cjs migration (D-01, D-02)
 - [ ] 02-05-PLAN.md — Migrate init.cjs + init.ts (byte-symmetric ports; 6 sites)
 - [ ] 02-06-PLAN.md — Migrate progress.ts, check-ship-ready.ts, init-runner.ts (9 sites; async→sync flip)
