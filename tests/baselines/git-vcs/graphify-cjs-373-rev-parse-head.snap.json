@@ -1,0 +1,31 @@
+{
+  "id": "graphify-cjs-373-rev-parse-head",
+  "source": "get-shit-done/bin/lib/graphify.cjs:373",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": []
+  },
+  "command": "git",
+  "args": [
+    "rev-parse",
+    "HEAD"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "bb42b0b73630d89d2bf6569c18e3ff575fc6200d",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "regex:^[0-9a-f]{40}$"
+  }
+}

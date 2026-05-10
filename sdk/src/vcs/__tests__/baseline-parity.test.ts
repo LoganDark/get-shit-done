@@ -195,10 +195,13 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           expect(remoteList.join('\n')).toBe(baseline.expected.stdout);
         } else if (
           args[0] === 'rev-list' &&
-          args.includes('--count')
+          args.includes('--count') &&
+          !args.some((a) => a.includes('..'))
         ) {
           // Plan 02-06 Task 3: vcs.refs.countCommits({rev}) wraps
-          // `git rev-list --count <rev>`.
+          // `git rev-list --count <rev>`. Plan 02-07 disambiguates range
+          // forms (`A..B`) from single-rev forms (`HEAD`) — the range
+          // shape routes through the dedicated dispatch clause below.
           const n = vcs.refs.countCommits({ rev: vcs.refs.head });
           expect(String(n)).toBe(baseline.expected.stdout);
         } else if (
@@ -252,6 +255,45 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           // Behavior assertion is the canonical exit-code check above; the
           // adapter side just confirms init() runs cleanly to completion.
           expect(true).toBe(true);
+        } else if (
+          args[0] === 'rev-parse' &&
+          args.length === 2 &&
+          args[1] === 'HEAD'
+        ) {
+          // Plan 02-07: graphify.cjs:373 wraps `git rev-parse HEAD` via
+          // `vcs.refs.resolveShort(vcs.refs.head)` (full→short SHA shape
+          // change is documented inline at the call site). The adapter call
+          // returns a 7+ hex string; the canonical execGit call (above)
+          // captures the full 40-hex form for the SAME fresh fixture.
+          // Assert the adapter result is a hex prefix of the canonical
+          // run's stdout (not baseline.expected.stdout, which was recorded
+          // against a different fixture instance).
+          const got = execGit(cwd, baseline.args);
+          const fullSha = got.stdout.trim();
+          const short = vcs.refs.resolveShort(vcs.refs.head);
+          expect(short).toMatch(/^[0-9a-f]+$/);
+          expect(fullSha.startsWith(short)).toBe(true);
+        } else if (
+          args[0] === 'rev-list' &&
+          args.includes('--count') &&
+          args.some((a) => a.includes('..'))
+        ) {
+          // Plan 02-07: graphify.cjs:384 wraps `git rev-list --count A..B`
+          // via `vcs.refs.countCommits({rev: expr.range(expr.commit(from),
+          // expr.commit(to))})`. Site 384 is the first production consumer of
+          // the expr.range factory introduced in plan 02-03. The captured
+          // fixture builds 3 commits on top of the initial commit and
+          // probes `HEAD~3..HEAD` (exit 0, stdout "3"). For the adapter
+          // assertion, resolve HEAD and HEAD~3 to full SHAs and pass through
+          // expr.commit + expr.range to exercise the same code path.
+          const headRes = execGit(cwd, ['rev-parse', 'HEAD']);
+          const baseRes = execGit(cwd, ['rev-parse', 'HEAD~3']);
+          const headSha = headRes.stdout.trim();
+          const baseSha = baseRes.stdout.trim();
+          const n = vcs.refs.countCommits({
+            rev: expr.range(expr.commit(baseSha), expr.commit(headSha)),
+          });
+          expect(String(n)).toBe(baseline.expected.stdout);
         } else if (args[0] === 'log' && args.includes('--pretty=%s%n%b')) {
           // Plan 02-06 Task 2 (Blocker-1 fix): check-decision-coverage.ts:385
           // routes through vcs.log({maxCount}) and reconstructs the byte-

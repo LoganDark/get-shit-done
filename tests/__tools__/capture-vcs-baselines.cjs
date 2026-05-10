@@ -213,6 +213,38 @@ const baselines = [
     ],
     args: ['log', '-n', '200', '--pretty=%s%n%b'],
   },
+  // Plan 02-07: graphify.cjs (594 LOC, 2 sites). Site 373 reads HEAD via
+  // `git rev-parse HEAD` for a resolved SHA; site 384 counts commits across
+  // a range expression (`from..to`). Site 384 is the first production
+  // consumer of expr.range (the gap-fill factory from plan 02-03).
+  {
+    id: 'graphify-cjs-373-rev-parse-head',
+    source: 'get-shit-done/bin/lib/graphify.cjs:373',
+    fixture: [],
+    args: ['rev-parse', 'HEAD'],
+  },
+  {
+    id: 'graphify-cjs-384-rev-list-count-range',
+    source: 'get-shit-done/bin/lib/graphify.cjs:384',
+    // Three additional commits on top of the initial-commit fixture so
+    // `main..HEAD` (note: `main` here means the initial commit; we capture
+    // against the initial-commit SHA since that's what `built_at_commit`
+    // would store at first build) yields a non-trivial count. Args use
+    // `HEAD~3..HEAD` so the count is deterministic (= 3) regardless of
+    // commit SHAs.
+    fixture: [
+      'echo a > a.txt',
+      'git add a.txt',
+      'git commit -m c1',
+      'echo b > b.txt',
+      'git add b.txt',
+      'git commit -m c2',
+      'echo c > c.txt',
+      'git add c.txt',
+      'git commit -m c3',
+    ],
+    args: ['rev-list', '--count', 'HEAD~3..HEAD'],
+  },
 ];
 
 fs.mkdirSync(OUT, { recursive: true });
@@ -263,6 +295,11 @@ for (const b of baselines) {
       // Plan 02-06 Task 3: `rev-list --max-parents=0 HEAD` emits the root
       // commit SHA. The author timestamp is wall-clock so the SHA is
       // non-deterministic across captures — a regex is the durable assertion.
+      stdoutMatch = 'regex:^[0-9a-f]{40}$';
+    } else if (b.id === 'graphify-cjs-373-rev-parse-head') {
+      // Plan 02-07: `rev-parse HEAD` emits the full HEAD SHA (40 hex chars).
+      // The SHA is non-deterministic (depends on initial-commit author timestamp);
+      // regex match is the durable assertion.
       stdoutMatch = 'regex:^[0-9a-f]{40}$';
     }
     const record = {
