@@ -558,6 +558,20 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
             expect(reconstructed).toBe(baseline.expected.stdout);
           }
         } else if (
+          args[0] === 'check-ignore' &&
+          args.includes('-q') &&
+          args.includes('--no-index')
+        ) {
+          // Plan 02-11 (CLOSING): vcs.refs.isIgnored(path) wraps
+          // `git check-ignore -q --no-index -- <path>`. Captured for
+          // core.cjs:603. The probe is exit-code-driven (0 = ignored,
+          // non-zero = not ignored / error); stdout/stderr are empty under
+          // `-q`. The adapter returns boolean from r.exitCode === 0.
+          const dashIdx = args.indexOf('--');
+          const targetPath = args[dashIdx + 1];
+          const ignored = vcs.refs.isIgnored(targetPath);
+          expect(ignored).toBe(baseline.expected.exitCode === 0);
+        } else if (
           args[0] === 'diff' &&
           args.includes('--name-status')
         ) {

@@ -531,6 +531,18 @@ const baselines = [
     fixture: [],
     args: ['log', '--oneline', '--all', '-50'],
   },
+  // Plan 02-11 (CLOSING): get-shit-done/bin/lib/core.cjs:603 (isGitIgnored).
+  // The probe is `check-ignore -q --no-index -- <path>`. Adapter equivalent:
+  // `vcs.refs.isIgnored(path)`. The fixture writes a .gitignore that matches
+  // node_modules/ so the probe target `node_modules/foo` exits 0 (ignored);
+  // a separate negative case (untracked but not ignored) is exercised in
+  // adapter-contract tests, not here.
+  {
+    id: 'core-cjs-603-check-ignore',
+    source: 'get-shit-done/bin/lib/core.cjs:603',
+    fixture: ['echo "node_modules/" > .gitignore', 'git add .gitignore', 'git commit -m gitignore'],
+    args: ['check-ignore', '-q', '--no-index', '--', 'node_modules/foo'],
+  },
 ];
 
 fs.mkdirSync(OUT, { recursive: true });

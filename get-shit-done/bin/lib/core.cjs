@@ -6,6 +6,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execSync, execFileSync, spawnSync } = require('child_process');
+// Plan 02-11 (CLOSING): VcsAdapter consumption from bin/lib/*.cjs via the
+// dist-cjs bridge. core.cjs is the LARGEST hotspot (2,036 LOC) and the FINAL
+// production-source file in Phase 2's call-site migration (D-02 smallest-to-
+// largest LOC ordering).
+const { createVcsAdapter } = require('../../../sdk/dist-cjs/vcs/index.js');
 const { MODEL_PROFILES, AGENT_TO_PHASE_TYPE, VALID_PHASE_TYPES, AGENT_DEFAULT_TIERS, VALID_AGENT_TIERS, nextTier } = require('./model-profiles.cjs');
 const { MODEL_ALIAS_MAP, RUNTIME_PROFILE_MAP, KNOWN_RUNTIMES, RUNTIMES_WITH_REASONING_EFFORT } = require('./model-catalog.cjs');
 const {
@@ -594,18 +599,16 @@ function isGitIgnored(cwd, targetPath) {
   const key = cwd + '::' + targetPath;
   if (_gitIgnoredCache.has(key)) return _gitIgnoredCache.get(key);
   try {
-    // --no-index checks .gitignore rules regardless of whether the file is tracked.
-    // Without it, git check-ignore returns "not ignored" for tracked files even when
-    // .gitignore explicitly lists them — a common source of confusion when .planning/
-    // was committed before being added to .gitignore.
-    // Use execFileSync (array args) to prevent shell interpretation of special characters
-    // in file paths — avoids command injection via crafted path names.
-    execFileSync('git', ['check-ignore', '-q', '--no-index', '--', targetPath], {
-      cwd,
-      stdio: 'pipe',
-    });
-    _gitIgnoredCache.set(key, true);
-    return true;
+    // Plan 02-11: vcs.refs.isIgnored(path) wraps `git check-ignore -q --no-index --
+    // <path>`. The adapter routes through execFileSync (no shell interpretation of
+    // special chars), preserving the command-injection guard. The `--no-index` flag
+    // is preserved by the backend implementation: it checks .gitignore rules
+    // regardless of whether the file is tracked, so .planning/ committed before
+    // being added to .gitignore still reports correctly.
+    const vcs = createVcsAdapter(cwd, { kind: 'git' });
+    const ignored = vcs.refs.isIgnored(targetPath);
+    _gitIgnoredCache.set(key, ignored);
+    return ignored;
   } catch {
     _gitIgnoredCache.set(key, false);
     return false;
@@ -722,41 +725,6 @@ function normalizeMd(content) {
   return text;
 }
 
-// Default timeout for worktree-related git subprocess calls (matches worktree-safety.cjs).
-// Prevents `git worktree list --porcelain` and similar calls from blocking the parent
-// process indefinitely when git is stalled (locked index, hung remote, NFS mount freeze).
-// Callers can override via an options bag if needed.
-const DEFAULT_GIT_TIMEOUT_MS = 10000;
-
-/**
- * Execute a git command with a bounded timeout.
- *
- * Return shape: { exitCode, stdout, stderr, timedOut, error }
- *   - timedOut: true when spawnSync reports SIGTERM + ETIMEDOUT — callers must
- *               branch on this to surface a structured warning (PRED.k302).
- *   - error:    spawnSync error object or null
- *
- * Backward-compatible: existing callers that only read exitCode/stdout/stderr
- * continue to work unchanged.
- */
-function execGit(cwd, args, options = {}) {
-  const timeout = options.timeout ?? DEFAULT_GIT_TIMEOUT_MS;
-  const result = spawnSync('git', args, {
-    cwd,
-    stdio: 'pipe',
-    encoding: 'utf-8',
-    timeout,
-  });
-  const timedOut = result.signal === 'SIGTERM' && result.error?.code === 'ETIMEDOUT';
-  return {
-    exitCode: result.status ?? 1,
-    stdout: (result.stdout ?? '').toString().trim(),
-    stderr: (result.stderr ?? '').toString().trim(),
-    timedOut,
-    error: result.error ?? null,
-  };
-}
-
 // ─── Common path helpers ──────────────────────────────────────────────────────
 
 /**
@@ -765,8 +733,11 @@ function execGit(cwd, args, options = {}) {
  * Returns the main worktree path, or cwd if not in a worktree.
  */
 function resolveWorktreeRoot(cwd) {
+  // Plan 02-11 (CLOSING): `deps.execGit` was rendered dead by 02-04's
+  // worktree-safety migration (resolveWorktreeContext now consumes
+  // deps.vcs). The default `vcs` is constructed inside the policy module;
+  // only `existsSync` remains as a test-injectable seam.
   const context = resolveWorktreeContext(cwd, {
-    execGit,
     existsSync: fs.existsSync,
   });
   return context.effectiveRoot;
@@ -795,12 +766,16 @@ function parseWorktreePorcelain(porcelain) {
  */
 function pruneOrphanedWorktrees(repoRoot) {
   try {
+    // Plan 02-11 (CLOSING): `deps.execGit` was rendered dead by 02-04's
+    // worktree-safety migration (planWorktreePrune / executeWorktreePrunePlan
+    // both consume deps.vcs). Only the porcelain parser remains as an
+    // injectable seam.
     const plan = planWorktreePrune(
       repoRoot,
       { allowDestructive: false },
-      { execGit, parseWorktreePorcelain }
+      { parseWorktreePorcelain }
     );
-    const pruneResult = executeWorktreePrunePlan(plan, { execGit });
+    const pruneResult = executeWorktreePrunePlan(plan, {});
     if (pruneResult && pruneResult.timedOut) {
       // AC2: surface structured warning instead of silently swallowing the timeout.
       // Uses process.stderr.write to match the [gsd-tools] WARNING prefix style.
@@ -1980,7 +1955,6 @@ module.exports = {
   safeReadFile,
   loadConfig,
   isGitIgnored,
-  execGit,
   normalizeMd,
   escapeRegex,
   normalizePhaseName,
