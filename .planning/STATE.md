@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 02-07-PLAN.md
-last_updated: "2026-05-10T05:16:55.155Z"
+last_updated: "2026-05-10T05:38:23.172Z"
 last_activity: 2026-05-10
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 17
-  completed_plans: 12
-  percent: 71
+  completed_plans: 13
+  percent: 76
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 02 (bulk-call-site-migration-still-git-only) — EXECUTING
-Plan: 8 of 12
+Plan: 9 of 12
 Status: Ready to execute
 Last activity: 2026-05-10
 
-Progress: [███████░░░] 71%
+Progress: [████████░░] 76%
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Progress: [███████░░░] 71%
 | Phase 02 P05 | 12m | 2 tasks | 8 files |
 | Phase 02 P06 | ~6m | 4 tasks | 17 files |
 | Phase 02 P07 | ~10m | 1 tasks | 6 files |
+| Phase 02 P08 | ~25m | 1 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -110,6 +111,10 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 02-06]: vcs.log() populates LogEntry.body via 'git log -z' format extension; bundled with Task 2 (Rule 3) — required for byte-equivalent reconstruction in check-decision-coverage migration
 - [Phase ?]: [Phase 02-06]: 4-file ascending-LOC migration (check-ship-ready 103 → check-decision-coverage 554 → progress 566 → init-runner 734); 10 sites closed; expr.commit(firstCommit) consumed in production (Blocker-3 closure); init-runner private execGit helper deleted as dead code; lint 7→5 / 5→3
 - [Phase 02-07]: graphify.cjs (594 LOC, 2 sites) migrated; first production consumer of expr.range factory from 02-03 — validates gap-fill end-to-end. Tri-state null preservation via vcs.refs.exists pre-check (Rule 2). Paired test enh-3170 retargeted (real, not vacuous); graphify.test.cjs vacuous (zero git invocations).
+- [Phase ?]: [Phase 02-08]: sdk/src/query/commit.ts migrated; W5 prescriptive imports; CommitInput amend/noVerify/pathspec gap-fill
+- [Phase ?]: [Phase 02-08]: commit.test.ts paired retarget (D-06) — bootstrap via gitOnly.init/configSet; setup via vcs.stage/vcs.commit; post-state probes via vcs.log/vcs.status/vcs.diff; git-rm synthesized via unlink+vcs.stage. Zero raw execSync('git ...') in test bodies.
+- [Phase ?]: [Phase 02-08]: verify.ts 3 dynamic execGit imports retargeted from './commit.js' to '../vcs/index.js' (Rule 3 — preserves existing semantics on the deleted commit.ts re-export); Plan 02-10 owns verify.ts proper migration
+- [Phase ?]: [Phase 02-08]: baseline-parity commit-clause needs fresh fixture (initFixture re-init in dispatch) — canonical execGit upstream call already commits the staged path; rerunning adapter on same fixture hits 'nothing to commit'. Mirrors 02-07's per-fixture re-init pattern for rev-parse HEAD
 
 ### Pending Todos
 
@@ -129,7 +134,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-10T05:16:55.150Z
+Last session: 2026-05-10T05:37:00.088Z
 Stopped at: Completed 02-07-PLAN.md
 Resume file: None
 
