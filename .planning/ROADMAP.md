@@ -49,7 +49,19 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
   3. Each call-site migration is mechanical (Branch-by-Abstraction) — call-by-call diff swaps `execSync('git …')` for the adapter equivalent without changing surrounding logic; reviewed via per-file commit history, not bulk rewrites.
   4. The first upstream rebase performed after the migration completes with conflict count tracked and recorded in `.planning/intel/rebase-log.md` (or equivalent), and conflicts are concentrated in the adapter call-site layer (mechanical) rather than scattered across surrounding logic.
   5. `UPSTREAM-01` jj-native rebase workflow is documented in `docs/upstream-rebase.md` (or equivalent), and `sdk/src/vcs/jj/` and `sdk/src/vcs/parse/jj-*.ts` sidecar paths exist as zero-conflict surfaces (even if empty), establishing the convention before Phase 3 lands jj code.
-**Plans**: TBD
+**Plans**: 12 plans
+- [ ] 02-01-PLAN.md — Triage commit.test.ts:304 (gpgsign fixture fix; opens D-03/D-04 gate)
+- [ ] 02-02-PLAN.md — Helpers migration + day-one allowlist shrink + sdk/src/vcs/jj/ sidecar (D-09, D-13, D-15)
+- [ ] 02-03-PLAN.md — Adapter gap-fill: 17 forward-complete verbs + expr.range factory
+- [ ] 02-04-PLAN.md — Smoke-test (worktree-safety.cjs:80) + complete worktree-safety.cjs migration (D-01, D-02)
+- [ ] 02-05-PLAN.md — Migrate init.cjs + init.ts (byte-symmetric ports; 6 sites)
+- [ ] 02-06-PLAN.md — Migrate progress.ts, check-ship-ready.ts, init-runner.ts (9 sites; async→sync flip)
+- [ ] 02-07-PLAN.md — Migrate graphify.cjs (first expr.range consumer in production)
+- [ ] 02-08-PLAN.md — Migrate commit.ts + commit.test.ts (gate from 02-01 closes)
+- [ ] 02-09-PLAN.md — Migrate commands.cjs (1,028 LOC, 14 sites; 6 paired tests)
+- [ ] 02-10-PLAN.md — Migrate verify.cjs + verify.ts (1,390 + 692 LOC; cat-file/log-all/diff-name-status gap-fills)
+- [ ] 02-11-PLAN.md — Migrate core.cjs (LAST, largest hotspot; delete execGit helper) + UPSTREAM-03 hotspot audit
+- [ ] 02-12-PLAN.md — Deferred-tracker for MIGR-04 + UPSTREAM-01 (deferred to milestone-end per D-17)
 
 ### Phase 3: jj Backend Core — Squash, Refs, Conflict
 **Goal**: Land `sdk/src/vcs/backends/jj.ts` implementing the full adapter contract with the squash-based commit model, NDJSON output parsing, bookmark refs, and in-tree conflict detection — the working-copy auto-snapshot is allowed by default and `--ignore-working-copy` is never used by adapter code.
