@@ -294,6 +294,79 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
             rev: expr.range(expr.commit(baseSha), expr.commit(headSha)),
           });
           expect(String(n)).toBe(baseline.expected.stdout);
+        } else if (
+          args[0] === 'add' &&
+          args.includes('--') &&
+          // Make sure we don't shadow the standard `git add` with rename
+          // markers or status flags — only the bare `add -- <files>` shape.
+          !args.some((a) => a.startsWith('-') && a !== '--')
+        ) {
+          // Plan 02-08: vcs.stage([file]) wraps `git add -- <files>`. Captured
+          // for sites 148 and 294 (commit.ts main flow + commitToSubrepo).
+          const dashIdx = args.indexOf('--');
+          const files = args.slice(dashIdx + 1);
+          const r = vcs.stage(files);
+          expect({
+            exitCode: r.exitCode,
+            stdout: r.stdout,
+            stderr: r.stderr,
+          }).toEqual({
+            exitCode: baseline.expected.exitCode,
+            stdout: baseline.expected.stdout,
+            stderr: baseline.expected.stderr,
+          });
+        } else if (
+          args[0] === 'commit' &&
+          args.includes('-m') &&
+          args.includes('--') &&
+          !args.includes('--amend')
+        ) {
+          // Plan 02-08: vcs.commit({message, pathspec}) wraps the
+          // already-staged-paths `git commit -m <msg> -- <pathspec>` form.
+          // Captured for sites 170 and 301 (commit.ts main flow +
+          // commitToSubrepo). The canonical execGit call above already
+          // performed the commit on this fixture, so the working tree is
+          // now clean — re-create a fresh fixture for the adapter call so
+          // the staged paths still exist. The stdout embeds the auto-
+          // generated short SHA; baseline match.stdout is a regex.
+          const dashIdx = args.indexOf('--');
+          const msgIdx = args.indexOf('-m');
+          const message = args[msgIdx + 1];
+          const pathspec = args.slice(dashIdx + 1);
+          const adapterCwd = initFixture(baseline);
+          try {
+            const adapterVcs = createVcsAdapter(adapterCwd);
+            if (adapterVcs.kind !== 'git') throw new Error('expected git adapter');
+            const r = adapterVcs.commit({ message, pathspec });
+            expect(r.exitCode).toBe(baseline.expected.exitCode);
+            if (baseline.match?.stdout?.startsWith('regex:')) {
+              const re = new RegExp(baseline.match.stdout.slice('regex:'.length));
+              expect(r.stdout).toMatch(re);
+            } else {
+              expect(r.stdout).toBe(baseline.expected.stdout);
+            }
+            expect(r.stderr).toBe(baseline.expected.stderr);
+          } finally {
+            rmSync(adapterCwd, { recursive: true, force: true });
+          }
+        } else if (
+          args[0] === 'rev-parse' &&
+          args.includes('--short') &&
+          args.includes('HEAD')
+        ) {
+          // Plan 02-08: vcs.refs.resolveShort(vcs.refs.head) wraps
+          // `git rev-parse --short HEAD`. Captured for sites 179 and 309
+          // (commit.ts main flow + commitToSubrepo). Short SHA depends on
+          // the wall-clock initial-commit timestamp; baseline match.stdout
+          // is a regex (^[0-9a-f]{7,}$). The adapter result must satisfy
+          // the same regex shape.
+          const short = vcs.refs.resolveShort(vcs.refs.head);
+          if (baseline.match?.stdout?.startsWith('regex:')) {
+            const re = new RegExp(baseline.match.stdout.slice('regex:'.length));
+            expect(short).toMatch(re);
+          } else {
+            expect(short).toBe(baseline.expected.stdout);
+          }
         } else if (args[0] === 'log' && args.includes('--pretty=%s%n%b')) {
           // Plan 02-06 Task 2 (Blocker-1 fix): check-decision-coverage.ts:385
           // routes through vcs.log({maxCount}) and reconstructs the byte-

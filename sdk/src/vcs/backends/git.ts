@@ -102,11 +102,33 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         };
       }
     }
-    const args: string[] =
-      input.files && input.files.length > 0
-        ? ['commit', '-m', input.message]
-        : ['commit', '-am', input.message];
+    // Plan 02-08 gap-fill: amend takes precedence and uses `--amend --no-edit`
+    // (HEAD's message is preserved; input.message is ignored). When not amending
+    // and no `files` were staged, fall through to `-am` for "commit all tracked
+    // modifications" UNLESS a pathspec is set — pathspec callers (e.g. the
+    // commit handler) staged paths explicitly upstream and want only those
+    // staged paths committed, NOT a `-am` sweep over the whole worktree.
+    let args: string[];
+    if (input.amend) {
+      args = ['commit', '--amend', '--no-edit'];
+    } else if (input.files && input.files.length > 0) {
+      args = ['commit', '-m', input.message];
+    } else if (input.pathspec && input.pathspec.length > 0) {
+      // Already-staged-paths path: commit ONLY what is currently staged within
+      // the pathspec, without `-am` (which would auto-stage tracked mods).
+      args = ['commit', '-m', input.message];
+    } else {
+      args = ['commit', '-am', input.message];
+    }
     if (input.allowEmpty) args.push('--allow-empty');
+    if (input.noVerify) args.push('--no-verify');
+    // Plan 02-08 gap-fill: pathspec narrows the commit's scope without staging.
+    // Used by sdk/src/query/commit.ts to guarantee the commit captures only the
+    // paths the handler staged, even when the caller's index had unrelated
+    // entries pre-staged (#3061).
+    if (input.pathspec && input.pathspec.length > 0) {
+      args.push('--', ...input.pathspec);
+    }
     const commitRes = execGit(cwd, args);
     if (commitRes.exitCode !== 0) {
       return {

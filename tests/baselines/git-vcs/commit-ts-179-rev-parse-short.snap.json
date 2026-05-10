@@ -1,0 +1,36 @@
+{
+  "id": "commit-ts-179-rev-parse-short",
+  "source": "sdk/src/query/commit.ts:179",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": [
+      "echo foo > foo.txt",
+      "git add -- foo.txt",
+      "git commit -m foo"
+    ]
+  },
+  "command": "git",
+  "args": [
+    "rev-parse",
+    "--short",
+    "HEAD"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "c9cf61d",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "regex:^[0-9a-f]{7,}$"
+  }
+}

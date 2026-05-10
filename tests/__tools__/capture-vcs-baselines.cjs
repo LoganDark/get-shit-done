@@ -245,6 +245,78 @@ const baselines = [
     ],
     args: ['rev-list', '--count', 'HEAD~3..HEAD'],
   },
+  // Plan 02-08: sdk/src/query/commit.ts (8 sites — 5 in commit/checkCommit
+  // routed through the local execGit shim being deleted, plus the 3 sites in
+  // commitToSubrepo that used `git -C <dir>` invocation form). The migration
+  // moves cwd from `-C` arg position to the createVcsAdapter(projectDir, …)
+  // factory, so baselines capture the normalized args (no `-C` prefix) — the
+  // semantics are byte-identical to running the same command from that cwd.
+  {
+    id: 'commit-ts-148-add',
+    source: 'sdk/src/query/commit.ts:148',
+    // Stage a single file via `git add -- foo`. The `--` separator is the
+    // option-injection guard the migration must preserve via vcs.stage.
+    fixture: ['echo foo > foo.txt'],
+    args: ['add', '--', 'foo.txt'],
+  },
+  {
+    id: 'commit-ts-155-diff-cached',
+    source: 'sdk/src/query/commit.ts:155',
+    // After staging foo, `diff --cached --name-only -- foo` emits "foo".
+    // Adapter equivalent: vcs.diff({staged:true, nameOnly:true, paths:['foo.txt']}).
+    fixture: ['echo foo > foo.txt', 'git add -- foo.txt'],
+    args: ['diff', '--cached', '--name-only', '--', 'foo.txt'],
+  },
+  {
+    id: 'commit-ts-170-commit',
+    source: 'sdk/src/query/commit.ts:170',
+    // After staging foo, `commit -m test -- foo` records the commit. The
+    // baseline captures stderr/exit shape; commit's stdout varies (sha7) so
+    // we use a regex-tolerant match below.
+    fixture: ['echo foo > foo.txt', 'git add -- foo.txt'],
+    args: ['commit', '-m', 'test', '--', 'foo.txt'],
+  },
+  {
+    id: 'commit-ts-179-rev-parse-short',
+    source: 'sdk/src/query/commit.ts:179',
+    // After committing, `rev-parse --short HEAD` emits the short SHA.
+    // Adapter equivalent: vcs.refs.resolveShort(vcs.refs.head).
+    fixture: ['echo foo > foo.txt', 'git add -- foo.txt', 'git commit -m foo'],
+    args: ['rev-parse', '--short', 'HEAD'],
+  },
+  {
+    id: 'commit-ts-211-diff-cached',
+    source: 'sdk/src/query/commit.ts:211',
+    // checkCommit's variant: `diff --cached --name-only` (no pathspec).
+    // Adapter equivalent: vcs.diff({staged:true, nameOnly:true}).
+    fixture: ['echo foo > foo.txt', 'git add -- foo.txt'],
+    args: ['diff', '--cached', '--name-only'],
+  },
+  {
+    id: 'commit-ts-294-add-c-form',
+    source: 'sdk/src/query/commit.ts:294',
+    // commitToSubrepo's `git -C <dir> add -- <files>` becomes
+    // createVcsAdapter(<dir>).stage([files]). The baseline captures the
+    // normalized form (no -C) since the migration moves cwd into the factory.
+    fixture: ['echo bar > bar.txt'],
+    args: ['add', '--', 'bar.txt'],
+  },
+  {
+    id: 'commit-ts-301-commit-c-form',
+    source: 'sdk/src/query/commit.ts:301',
+    // commitToSubrepo's `git -C <dir> commit -m <msg> -- <files>` becomes
+    // createVcsAdapter(<dir>).commit({message, files}). Normalized args drop -C.
+    fixture: ['echo bar > bar.txt', 'git add -- bar.txt'],
+    args: ['commit', '-m', 'sub', '--', 'bar.txt'],
+  },
+  {
+    id: 'commit-ts-309-rev-parse-c-form',
+    source: 'sdk/src/query/commit.ts:309',
+    // commitToSubrepo's `git -C <dir> rev-parse --short HEAD` becomes
+    // createVcsAdapter(<dir>).refs.resolveShort(refs.head). Normalized args drop -C.
+    fixture: ['echo bar > bar.txt', 'git add -- bar.txt', 'git commit -m bar'],
+    args: ['rev-parse', '--short', 'HEAD'],
+  },
 ];
 
 fs.mkdirSync(OUT, { recursive: true });
@@ -301,6 +373,22 @@ for (const b of baselines) {
       // The SHA is non-deterministic (depends on initial-commit author timestamp);
       // regex match is the durable assertion.
       stdoutMatch = 'regex:^[0-9a-f]{40}$';
+    } else if (
+      b.id === 'commit-ts-179-rev-parse-short' ||
+      b.id === 'commit-ts-309-rev-parse-c-form'
+    ) {
+      // Plan 02-08: `rev-parse --short HEAD` emits a 7+ hex short SHA. The
+      // SHA depends on the initial-commit author timestamp, so capture-time
+      // and replay-time SHAs differ — regex match is the durable assertion.
+      stdoutMatch = 'regex:^[0-9a-f]{7,}$';
+    } else if (
+      b.id === 'commit-ts-170-commit' ||
+      b.id === 'commit-ts-301-commit-c-form'
+    ) {
+      // Plan 02-08: `git commit` stdout embeds the auto-generated short SHA
+      // and a free-form summary line; non-deterministic. Match the canonical
+      // first-line shape (`[<branch> <short-sha>] <message>`) loosely.
+      stdoutMatch = 'regex:^\\[[^ ]+ [0-9a-f]{7,}\\]';
     }
     const record = {
       id: b.id,

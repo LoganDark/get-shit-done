@@ -328,7 +328,12 @@ export const verifyCommits: QueryHandler = async (args, projectDir) => {
     throw new GSDError('At least one commit hash required', ErrorClassification.Validation);
   }
 
-  const { execGit } = await import('./commit.js');
+  // Plan 02-08: the local execGit shim in ./commit.js was deleted as part of
+  // the W5 prescriptive-import migration. Route through the canonical re-export
+  // from the VCS module instead. The 5-field ExecResult shape is a strict
+  // superset of the 3-field shape this caller reads (exitCode + stdout).
+  // Plan 02-10 will migrate verify.ts proper to the higher-level adapter API.
+  const { execGit } = await import('../vcs/index.js');
   const valid: string[] = [];
   const invalid: string[] = [];
 
@@ -477,7 +482,12 @@ export const verifySummary: QueryHandler = async (args, projectDir) => {
     }
   }
 
-  const { execGit } = await import('./commit.js');
+  // Plan 02-08: the local execGit shim in ./commit.js was deleted as part of
+  // the W5 prescriptive-import migration. Route through the canonical re-export
+  // from the VCS module instead. The 5-field ExecResult shape is a strict
+  // superset of the 3-field shape this caller reads (exitCode + stdout).
+  // Plan 02-10 will migrate verify.ts proper to the higher-level adapter API.
+  const { execGit } = await import('../vcs/index.js');
   const commitHashPattern = /\b[0-9a-f]{7,40}\b/g;
   const hashes = content.match(commitHashPattern) || [];
   let commitsExist = false;
@@ -564,7 +574,12 @@ export const verifySchemaDrift: QueryHandler = async (args, projectDir, workstre
   }
 
   const { checkSchemaDrift } = await import('./schema-detect.js');
-  const { execGit } = await import('./commit.js');
+  // Plan 02-08: the local execGit shim in ./commit.js was deleted as part of
+  // the W5 prescriptive-import migration. Route through the canonical re-export
+  // from the VCS module instead. The 5-field ExecResult shape is a strict
+  // superset of the 3-field shape this caller reads (exitCode + stdout).
+  // Plan 02-10 will migrate verify.ts proper to the higher-level adapter API.
+  const { execGit } = await import('../vcs/index.js');
 
   const phasesDir = planningPaths(projectDir, workstream).phases;
   if (!existsSync(phasesDir)) {

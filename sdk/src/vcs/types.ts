@@ -34,6 +34,29 @@ export interface CommitInput {
   files?: string[];
   message: string;
   allowEmpty?: boolean;
+  /**
+   * Plan 02-08 gap-fill (Rule 3 — blocking issue closure): when true, the
+   * commit emits `git commit --amend --no-edit` and the `message` field is
+   * IGNORED (HEAD's existing message is preserved). Required by
+   * sdk/src/query/commit.ts's `--amend` code path; without this, the
+   * migration cannot preserve commit handler semantics.
+   */
+  amend?: boolean;
+  /**
+   * Plan 02-08 gap-fill (Rule 3 — blocking issue closure): when true, append
+   * `--no-verify` to the commit invocation, skipping pre-commit/commit-msg
+   * hooks. Required by sdk/src/query/commit.ts's `--no-verify` code path.
+   */
+  noVerify?: boolean;
+  /**
+   * Plan 02-08 gap-fill (Rule 3 — blocking issue closure): when set, append
+   * `-- <paths…>` to the `git commit` invocation so the commit captures only
+   * files within the requested scope, even when the caller's index already
+   * had unrelated entries staged before. Mirrors the pathspec-scope guard
+   * for #3061. Distinct from `files` (which controls staging); pathspec
+   * narrows the commit's scope but does not stage anything.
+   */
+  pathspec?: string[];
 }
 
 export interface CommitResult {
