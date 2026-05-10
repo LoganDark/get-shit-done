@@ -89,7 +89,7 @@
 - [x] **TEST-02**: `test.extend({ vcs, cwd })` provides per-test backend instance and isolated tmp working directory
 - [x] **TEST-03**: Backend matrix axis includes `git`, `jj-colocated`, `jj-native` (latter two are separate environments)
 - [x] **TEST-04**: `GSD_TEST_BACKENDS` env var selects subset of backends to run (default: all)
-- [ ] **TEST-05**: All ~80 git-touching tests in `tests/` migrated to use the `vcs` fixture instead of raw git invocations in test setup
+- [x] **TEST-05**: All ~80 git-touching tests in `tests/` migrated to use the `vcs` fixture instead of raw git invocations in test setup
 - [x] **TEST-06**: CI rule: skip count must not increase from `main` (prevents silent test-skipping under migration pressure)
 - [x] **TEST-07**: Test fixtures support both git and jj initial states (`tests/helpers.cjs` + a new `tests/helpers-jj.cjs` or unified file)
 - [ ] **TEST-08**: Worktree-edge-case tests (`bug-2924/2774/3097/3099/2075/2431/2015/2388`) re-triaged: those that map cleanly to jj workspaces are migrated; those that don't are documented as git-only with rationale
@@ -133,7 +133,7 @@ This fork dogfoods on its own repo (which is jj-colocated). Brownfield workflows
 ### Upstream Tracking (UPSTREAM)
 
 - [ ] **UPSTREAM-01**: jj-native rebase workflow documented for pulling upstream main onto fork commits (live rebase, fork commits stay on top of upstream main)
-- [ ] **UPSTREAM-02**: Fork-specific code organized to minimize merge conflicts: adapter-shaped (mechanical) edits in upstream files; jj-specific code lives in sidecar files (`sdk/src/vcs/jj/`, `sdk/src/vcs/parse/jj-*.ts`) which carry zero conflict surface
+- [x] **UPSTREAM-02**: Fork-specific code organized to minimize merge conflicts: adapter-shaped (mechanical) edits in upstream files; jj-specific code lives in sidecar files (`sdk/src/vcs/jj/`, `sdk/src/vcs/parse/jj-*.ts`) which carry zero conflict surface
 - [ ] **UPSTREAM-03**: Hotspot files (`core.cjs` 2036 LOC, `verify.cjs` 1390, `commands.cjs` 1028) only see adapter call-site swaps inline; no jj-specific logic embedded
 
 ### CI / Release (CI)
@@ -211,9 +211,9 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | MIGR-02 | Phase 2 | Pending |
 | MIGR-03 | Phase 2 | Complete |
 | MIGR-04 | Phase 2 | Pending |
-| TEST-05 | Phase 2 | Pending |
+| TEST-05 | Phase 2 | Complete |
 | UPSTREAM-01 | Phase 2 | Pending |
-| UPSTREAM-02 | Phase 2 | Pending |
+| UPSTREAM-02 | Phase 2 | Complete |
 | UPSTREAM-03 | Phase 2 | Pending |
 | JJ-01 | Phase 3 | Pending |
 | JJ-02 | Phase 3 | Pending |

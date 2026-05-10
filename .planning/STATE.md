@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 2 context gathered
-last_updated: "2026-05-10T02:59:59.126Z"
+last_updated: "2026-05-10T03:05:55.516Z"
 last_activity: 2026-05-10
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 17
-  completed_plans: 6
-  percent: 35
+  completed_plans: 7
+  percent: 41
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 02 (bulk-call-site-migration-still-git-only) — EXECUTING
-Plan: 2 of 12
+Plan: 3 of 12
 Status: Ready to execute
 Last activity: 2026-05-10
 
-Progress: [████░░░░░░] 35%
+Progress: [████░░░░░░] 41%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [████░░░░░░] 35%
 | Phase 01 P04 | ~10m | 3 tasks | 6 files |
 | Phase 01 P05 | ~6m | 3 tasks | 5 files |
 | Phase 02 P01 | 1m | 1 tasks | 1 files |
+| Phase 02 P02 | 9m | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,9 @@ Recent decisions affecting current work:
 - [Phase 01-05]: Plan 01-05 [Rule 2]: extended allowlist to cover sdk/src/init-runner.ts (Phase 2 migration target — sibling to sdk/src/query/init.ts), sdk/src/**/*.integration.test.ts glob (legitimate fixture-seeding sites), and tests/__tools__/capture-vcs-baselines.cjs (plan-03 regenerator helper). Without these, the lint would fire on Phase 1's land state — RESEARCH Pitfall 2.
 - [Phase 01-05]: Plan 01-05: D-17/D-18 (whole-repo default-deny on ALL git invocations, not just mutating verbs) tightens VCS-07's literal wording. REQUIREMENTS.md VCS-07 marked Complete (01-05) with the tightening noted inline.
 - [Phase 02-01]: commit.test.ts:304 triage closed via mechanical 3-line beforeEach fix (commit.gpgsign + tag.gpgsign disablers lifted from git-backend.test.ts:31-32 per D-08) — D-03/D-04 gate now open for plan 02-08 paired commit.ts+commit.test.ts migration (D-06)
+- [Phase 02-02]: tests/helpers.cjs createTempGitProject post-init commit migrated to VcsAdapter (D-09 partial); bootstrap stays raw pending plan 02-03 gap-fill
+- [Phase 02-02]: Day-one allowlist shrink: 9 entries removed; lint exits 1 with 14 violations across 8 files on phase/02-migration (D-13 forcing function; main stays green)
+- [Phase 02-02]: sdk/src/vcs/jj/.gitkeep created as zero-conflict sidecar surface (UPSTREAM-02 / D-15)
 
 ### Pending Todos
 
@@ -108,7 +112,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-10T02:59:26.270Z
+Last session: 2026-05-10T03:05:46.935Z
 Stopped at: Phase 2 context gathered
 Resume file: None
 
