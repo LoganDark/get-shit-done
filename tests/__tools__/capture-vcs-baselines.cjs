@@ -160,6 +160,28 @@ const baselines = [
     args: ['remote'],
   },
   {
+    id: 'progress-ts-286-rev-list-count',
+    source: 'sdk/src/query/progress.ts:286',
+    fixture: ['echo a > a.txt', 'git add a.txt', 'git commit -m c1', 'echo b > b.txt', 'git add b.txt', 'git commit -m c2'],
+    args: ['rev-list', '--count', 'HEAD'],
+  },
+  {
+    id: 'progress-ts-290-rev-list-root',
+    source: 'sdk/src/query/progress.ts:290',
+    fixture: ['echo a > a.txt', 'git add a.txt', 'git commit -m c1'],
+    args: ['rev-list', '--max-parents=0', 'HEAD'],
+  },
+  // Site 293 takes a runtime SHA; the args+fixture below are the structural
+  // baseline (initial-commit SHA fixed, then probe show -s --format=%as on
+  // the root). The baseline's expected.stdout is the iso-date of the initial
+  // commit, which varies per run — match.stdout uses a regex.
+  {
+    id: 'progress-ts-293-show-format',
+    source: 'sdk/src/query/progress.ts:293',
+    fixture: [],
+    args: ['show', '-s', '--format=%as', 'HEAD'],
+  },
+  {
     id: 'check-decision-coverage-ts-385-log-pretty',
     source: 'sdk/src/query/check-decision-coverage.ts:385',
     // Three commits with realistic GSD-shaped subject+body lines so the
@@ -213,6 +235,16 @@ for (const b of baselines) {
       b.args.includes('--porcelain')
     ) {
       stdoutMatch = 'regex:^worktree [^\\n]+\\nHEAD [0-9a-f]{40}\\nbranch refs/heads/[^\\n]+$';
+    } else if (b.id === 'progress-ts-293-show-format') {
+      // Plan 02-06 Task 3: `git show -s --format=%as <sha>` returns the
+      // commit's author iso-date (YYYY-MM-DD); the date is the wall-clock
+      // capture date so a regex match is appropriate.
+      stdoutMatch = 'regex:^[0-9]{4}-[0-9]{2}-[0-9]{2}$';
+    } else if (b.id === 'progress-ts-290-rev-list-root') {
+      // Plan 02-06 Task 3: `rev-list --max-parents=0 HEAD` emits the root
+      // commit SHA. The author timestamp is wall-clock so the SHA is
+      // non-deterministic across captures — a regex is the durable assertion.
+      stdoutMatch = 'regex:^[0-9a-f]{40}$';
     }
     const record = {
       id: b.id,

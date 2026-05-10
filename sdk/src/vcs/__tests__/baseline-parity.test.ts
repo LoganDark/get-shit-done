@@ -21,6 +21,7 @@ import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { createVcsAdapter } from '../index.js';
+import { expr } from '../expr.js';
 import { execGit } from '../exec.js';
 import { readWorktreeList as readWorktreePorcelain } from '../parse/worktree-list.js';
 
@@ -184,6 +185,55 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           // Plan 02-06 Task 1: vcs.refs.remotes() wraps `git remote`.
           const remoteList = vcs.refs.remotes();
           expect(remoteList.join('\n')).toBe(baseline.expected.stdout);
+        } else if (
+          args[0] === 'rev-list' &&
+          args.includes('--count')
+        ) {
+          // Plan 02-06 Task 3: vcs.refs.countCommits({rev}) wraps
+          // `git rev-list --count <rev>`.
+          const n = vcs.refs.countCommits({ rev: vcs.refs.head });
+          expect(String(n)).toBe(baseline.expected.stdout);
+        } else if (
+          args[0] === 'rev-list' &&
+          args.some((a) => a.startsWith('--max-parents='))
+        ) {
+          // Plan 02-06 Task 3: vcs.refs.rootCommits({rev}) wraps
+          // `git rev-list --max-parents=0 <rev>`. Returns a string[] of root
+          // SHAs. Compare the joined newline output against the captured
+          // baseline (or against the regex match for non-deterministic SHAs).
+          const roots = vcs.refs.rootCommits({ rev: vcs.refs.head });
+          const joined = roots.join('\n');
+          if (baseline.match?.stdout?.startsWith('regex:')) {
+            const re = new RegExp(baseline.match.stdout.slice('regex:'.length));
+            expect(joined).toMatch(re);
+          } else {
+            expect(joined).toBe(baseline.expected.stdout);
+          }
+        } else if (
+          args[0] === 'show' &&
+          args.includes('-s') &&
+          args.some((a) => a.startsWith('--format=%as'))
+        ) {
+          // Plan 02-06 Task 3 / Blocker-3 closure: progress.ts:293 wraps
+          // `git show -s --format=%as <sha>` via vcs.log({rev: expr.commit(sha),
+          // maxCount:1}) and slices entries[0].date.slice(0,10). The runtime
+          // SHA target here is HEAD's first parent or the root — for the
+          // baseline, we use HEAD itself (the captured fixture has only the
+          // initial commit). Resolve HEAD's sha via vcs.refs.resolveShort
+          // expanded back to full via the adapter's structured contract.
+          // Match form: regex `^YYYY-MM-DD$` (date drift is wall-clock).
+          // Resolve full HEAD sha via execGit fallback for the lookup target,
+          // wrap as expr.commit, then call vcs.log.
+          const headRes = execGit(cwd, ['rev-parse', 'HEAD']);
+          const fullSha = headRes.stdout.trim();
+          const entries = vcs.log({ rev: expr.commit(fullSha), maxCount: 1 });
+          const date = entries[0]?.date?.slice(0, 10) ?? '';
+          if (baseline.match?.stdout?.startsWith('regex:')) {
+            const re = new RegExp(baseline.match.stdout.slice('regex:'.length));
+            expect(date).toMatch(re);
+          } else {
+            expect(date).toBe(baseline.expected.stdout);
+          }
         } else if (args[0] === 'log' && args.includes('--pretty=%s%n%b')) {
           // Plan 02-06 Task 2 (Blocker-1 fix): check-decision-coverage.ts:385
           // routes through vcs.log({maxCount}) and reconstructs the byte-

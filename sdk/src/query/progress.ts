@@ -18,6 +18,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
+import { createVcsAdapter, expr } from '../vcs/index.js';
 import { comparePhaseNum, normalizePhaseName, planningPaths, toPosixPath } from './helpers.js';
 import { getMilestoneInfo, extractCurrentMilestone, roadmapGetPhase } from './roadmap.js';
 import { getMilestonePhaseFilter } from './state.js';
@@ -280,21 +281,28 @@ export const statsJson: QueryHandler = async (args, projectDir, workstream) => {
     }
   } catch { /* intentionally empty */ }
 
-  const { execGit } = await import('./commit.js');
   let gitCommits = 0;
   let gitFirstCommitDate: string | null = null;
-  const commitCount = execGit(projectDir, ['rev-list', '--count', 'HEAD']);
-  if (commitCount.exitCode === 0) {
-    gitCommits = parseInt(commitCount.stdout, 10) || 0;
-  }
-  const rootHash = execGit(projectDir, ['rev-list', '--max-parents=0', 'HEAD']);
-  if (rootHash.exitCode === 0 && rootHash.stdout) {
-    const firstCommit = rootHash.stdout.split('\n')[0].trim();
-    const firstDate = execGit(projectDir, ['show', '-s', '--format=%as', firstCommit]);
-    if (firstDate.exitCode === 0) {
-      gitFirstCommitDate = firstDate.stdout.trim() || null;
+  try {
+    const vcs = createVcsAdapter(projectDir, { kind: 'git' });
+    gitCommits = vcs.refs.countCommits({ rev: vcs.refs.head });
+    const roots = vcs.refs.rootCommits({ rev: vcs.refs.head });
+    if (roots.length > 0) {
+      const firstCommit = roots[0];
+      // Plan 02-06 Task 3 / iteration-1 Blocker-3 closure: wrap the runtime
+      // SHA via expr.commit() to construct a structured RevisionExpr (D-12 —
+      // no expr.raw() escape hatch). vcs.log() with maxCount:1 + format:'%as'
+      // is the contract path for "show -s --format=%as <sha>"; the date
+      // arrives on LogEntry.date.
+      const entries = vcs.log({ rev: expr.commit(firstCommit), maxCount: 1 });
+      if (entries.length > 0 && entries[0].date) {
+        // LogEntry.date is the iso-date author timestamp (%aI in the
+        // LOG_FORMAT). For the prior `%as` format we only need the date
+        // portion (YYYY-MM-DD); slice the iso-string to match.
+        gitFirstCommitDate = entries[0].date.slice(0, 10) || null;
+      }
     }
-  }
+  } catch { /* not a git repo or adapter failure — leave defaults (0 / null) */ }
 
   const result = {
     milestone_version: milestone.version,
