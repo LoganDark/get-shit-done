@@ -60,6 +60,12 @@ function validateBookmarkName(name: string): void {
   }
 }
 
+// Plan 02-03 Task 2 — expr.commit Blocker 3 SHA validation.
+// Phase 1 D-12 forbids `expr.raw()`. The structured `expr.commit(sha)` factory
+// replaces the forbidden raw passthrough for runtime SHA strings; this regex
+// guards against invalid input shapes (non-hex, non-SHA-length).
+const SHA_HEX_RE = /^[0-9a-fA-F]{4,40}$/;
+
 export const expr = Object.freeze({
   head(): RevisionExpr {
     return brand('head:');
@@ -80,6 +86,21 @@ export const expr = Object.freeze({
       throw new Error(`expr.remote: invalid remote '${remoteName}'`);
     }
     return brand(`remote:${remoteName}:${branch}`);
+  },
+  // Plan 02-03 Task 2 — range factory (RESEARCH §Forward-Complete Gaps Summary).
+  // Encoded form embeds two parsed-encoded substrings separated by '..' so the
+  // per-backend translators can recursively translate each side.
+  range(from: RevisionExpr, to: RevisionExpr): RevisionExpr {
+    return brand(`range:${from as unknown as string}..${to as unknown as string}`);
+  },
+  // Plan 02-03 Task 2 — Blocker 3: structured factory for runtime SHA strings.
+  // D-12 forbids expr.raw(), so call sites that hold a SHA string (e.g. from
+  // a prior log/show output) must wrap via this factory. Validates SHA shape.
+  commit(sha: string): RevisionExpr {
+    if (!SHA_HEX_RE.test(sha)) {
+      throw new Error(`expr.commit: not a SHA-shaped string: '${sha}'`);
+    }
+    return brand(`commit:${sha}`);
   },
 });
 

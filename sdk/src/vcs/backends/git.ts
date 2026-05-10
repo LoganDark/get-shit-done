@@ -18,6 +18,7 @@
  * D-14:  __vcsTestOnly snapshot/restore implements RESEARCH Pattern 3 (strategy 3).
  */
 
+import { resolve as resolvePath } from 'node:path';
 import { execGit } from '../exec.js';
 import type { ExecResult } from '../exec.js';
 import { fireHook } from '../hook-bridge.js';
@@ -130,6 +131,9 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
   const log = (opts: LogOpts = {}): LogEntry[] => {
     const args = ['log', LOG_FORMAT];
     if (opts.maxCount) args.push(`-n${opts.maxCount}`);
+    // Plan 02-03 Task 2 gap-fill: --all surfaces commits reachable from any ref,
+    // not just the current HEAD. Mirrors verify.cjs:1224 / verify.ts:628 usage.
+    if (opts.allRefs) args.push('--all');
     if (opts.rev) args.push(toGitRev(opts.rev));
     if (opts.paths && opts.paths.length > 0) args.push('--', ...opts.paths);
     const r = execGit(cwd, args);
@@ -194,13 +198,36 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     const args = ['diff'];
     if (opts.staged) args.push('--cached');
     if (opts.nameOnly) args.push('--name-only');
+    // Plan 02-03 Task 2 gap-fill: --name-status emits one line per changed
+    // path prefixed by a single status letter (A/M/D/R/C/T/U/X/B). Mirrors
+    // verify.cjs:1309 usage. Mutually exclusive with --name-only at the git
+    // CLI level; if both are set, --name-status wins (callers should pick one).
+    if (opts.nameStatus) args.push('--name-status');
     if (opts.rev) args.push(toGitRev(opts.rev));
     if (opts.paths && opts.paths.length > 0) args.push('--', ...opts.paths);
     const r = execGit(cwd, args);
-    return {
+    const result: DiffResult = {
       raw: r.stdout,
       nameOnly: opts.nameOnly ? r.stdout.split('\n').filter(Boolean) : [],
     };
+    if (opts.nameStatus) {
+      // Format: "<STATUS>\t<path>" per line; rename/copy entries use
+      // "<STATUS><score>\t<oldpath>\t<newpath>" — for rename/copy we report
+      // the new path (post-state), matching what consumers care about.
+      const entries: import('../types.js').DiffNameStatusEntry[] = [];
+      for (const line of r.stdout.split('\n')) {
+        if (!line) continue;
+        const cols = line.split('\t');
+        if (cols.length < 2) continue;
+        const statusRaw = cols[0];
+        const letter = statusRaw[0] as import('../types.js').DiffNameStatusEntry['status'];
+        // Rename/copy: status is "R<score>" or "C<score>", new path is cols[2].
+        const path = (letter === 'R' || letter === 'C') && cols.length >= 3 ? cols[2] : cols[1];
+        entries.push({ path, status: letter });
+      }
+      result.nameStatus = entries;
+    }
+    return result;
   };
 
   // ─── refs.bookmarks ──────────────────────────────────────────────────────
@@ -355,6 +382,37 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         (e): WorkspaceInfo => ({ path: e.path, rev: e.head, locked: e.locked }),
       );
     },
+    // Plan 02-03 Task 2 — Blocker 4: workspace.context returns the same path
+    // strings worktree-safety.cjs:122-123 reads via raw `git rev-parse`. The
+    // gitDir/gitCommonDir distinction is what lets the consumer detect linked
+    // worktrees (gitDir !== gitCommonDir).
+    context: () => {
+      const top = execGit(cwd, ['rev-parse', '--show-toplevel']);
+      const gd = execGit(cwd, ['rev-parse', '--git-dir']);
+      const cd = execGit(cwd, ['rev-parse', '--git-common-dir']);
+      // For a non-repo cwd these calls fail; surface a structured error so
+      // callers don't get a silent empty-string answer that masquerades as
+      // valid path data.
+      if (top.exitCode !== 0 || gd.exitCode !== 0 || cd.exitCode !== 0) {
+        throw new Error(
+          `workspace.context: not a git repo at ${cwd}: ${top.stderr || gd.stderr || cd.stderr}`,
+        );
+      }
+      const effectiveRoot = resolvePath(cwd, top.stdout.trim());
+      const gitDir = resolvePath(cwd, gd.stdout.trim());
+      const gitCommonDir = resolvePath(cwd, cd.stdout.trim());
+      const isLinked = gitDir !== gitCommonDir;
+      return {
+        effectiveRoot,
+        mode: (isLinked ? 'linked' : 'main') as 'main' | 'linked',
+        isLinked,
+        gitDir,
+        gitCommonDir,
+      };
+    },
+    // Plan 02-03 Task 2 gap-fill: `git worktree prune` removes stale
+    // .git/worktrees/<name> entries whose worktree directories no longer exist.
+    prune: (): ExecResult => execGit(cwd, ['worktree', 'prune']),
   });
 
   // ─── hooks ───────────────────────────────────────────────────────────────
@@ -419,6 +477,31 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         );
       }
       return r.stdout;
+    },
+    // Plan 02-03 Task 2 gap-fill: bootstrap-path verbs (init / configGet /
+    // configSet). These exist on the gitOnly branch because the equivalent
+    // jj operations are structurally different (jj git init, jj config get/set
+    // with different namespace semantics) — Phase 3 will add jj-symmetric
+    // shapes when needed.
+    init: (): void => {
+      const r = execGit(cwd, ['init']);
+      if (r.exitCode !== 0) {
+        throw new Error(`gitOnly.init failed: ${r.stderr || r.stdout}`);
+      }
+    },
+    configGet: (key: string): string | null => {
+      // `git config --get <key>` exits 0 with the value, 1 when key is unset,
+      // ≥2 on error. Treat exit 1 as "unset" → null; treat ≥2 as failure.
+      const r = execGit(cwd, ['config', '--get', key]);
+      if (r.exitCode === 0) return r.stdout.trim();
+      if (r.exitCode === 1) return null;
+      throw new Error(`gitOnly.configGet failed: ${r.stderr || r.stdout}`);
+    },
+    configSet: (key: string, value: string): void => {
+      const r = execGit(cwd, ['config', key, value]);
+      if (r.exitCode !== 0) {
+        throw new Error(`gitOnly.configSet failed: ${r.stderr || r.stdout}`);
+      }
     },
   });
 

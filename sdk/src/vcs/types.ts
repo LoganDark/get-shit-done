@@ -48,6 +48,8 @@ export interface LogOpts {
   maxCount?: number;
   paths?: string[];
   format?: 'oneline' | 'full' | 'json';
+  // Plan 02-03 Task 2 gap-fill: emit `git log --all` semantics when true.
+  allRefs?: boolean;
 }
 
 export interface LogEntry {
@@ -78,10 +80,19 @@ export interface DiffOpts {
   nameOnly?: boolean;
   rev?: RevisionExpr;
   paths?: string[];
+  // Plan 02-03 Task 2 gap-fill: emit `git diff --name-status` semantics when true.
+  nameStatus?: boolean;
+}
+export interface DiffNameStatusEntry {
+  path: string;
+  status: 'A' | 'M' | 'D' | 'R' | 'C' | 'T' | 'U' | 'X' | 'B';
 }
 export interface DiffResult {
   raw: string;
   nameOnly: string[];
+  // Populated when DiffOpts.nameStatus is true; undefined otherwise (preserves
+  // existing call-site shape for nameOnly-only consumers).
+  nameStatus?: DiffNameStatusEntry[];
 }
 
 export interface Bookmark {
@@ -165,10 +176,25 @@ export interface VcsBookmarks {
   switch(name: string, opts?: { create?: boolean }): void;
 }
 
+// Plan 02-03 Task 2 — Blocker 4 extension: workspace.context() return shape.
+// gitDir/gitCommonDir let worktree-safety.cjs:122-123 migrate cleanly without
+// semantics drift — they are the raw path strings the underlying
+// `git rev-parse --git-dir` / `--git-common-dir` would have produced.
+export interface WorkspaceContext {
+  effectiveRoot: string;
+  mode: 'main' | 'linked';
+  isLinked: boolean;
+  gitDir: string;        // for main repo == gitCommonDir; for linked worktree == .git/worktrees/<name>
+  gitCommonDir: string;  // absolute path to the main repo's .git directory
+}
+
 export interface VcsWorkspace {
   add(input: WorkspaceAdd): WorkspaceInfo;
   forget(path: string): void;
   list(): WorkspaceInfo[];
+  // Plan 02-03 Task 2 gap-fill (RESEARCH §Forward-Complete Gaps Summary):
+  context(): WorkspaceContext;
+  prune(): ExecResult;
 }
 
 export interface VcsHooks {
@@ -180,6 +206,12 @@ export interface VcsHooks {
 export interface GitOnlyOps {
   createAnnotatedTag(name: string, message: string, rev: RevisionExpr): void;
   version(): string;
+  // Plan 02-03 Task 2 gap-fill (RESEARCH §Forward-Complete Gaps Summary + W2):
+  // bootstrap-path verbs that allow shared test helpers and init-runner.ts to
+  // run on a fresh dir without raw-git fallbacks.
+  init(): void;                                  // git init in cwd
+  configGet(key: string): string | null;         // git config --get; null on exit 1
+  configSet(key: string, value: string): void;   // git config <key> <value>; throw on non-zero
   // D-12: NO `raw` escape hatch in Phase 1. Add specific verbs as Phase 2 migration discovers them.
 }
 

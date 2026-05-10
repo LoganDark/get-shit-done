@@ -94,7 +94,7 @@ describe('expr.range factory (02-03 Task 2)', () => {
 });
 
 describe('expr.commit factory (02-03 Task 2 — Blocker 3)', () => {
-  const SHA = 'abc1234deadbeef0000000000000000000000aaaa';
+  const SHA = 'abc1234deadbeef000000000000000000000aaaa';
   it('round-trips via toGitRev — emits SHA verbatim', () => {
     expect(toGitRev(expr.commit(SHA))).toBe(SHA);
   });
