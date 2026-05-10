@@ -23,8 +23,13 @@ const { execSync, spawnSync } = require('child_process');
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const OUT = path.join(REPO_ROOT, 'tests', 'baselines', 'git-vcs');
 
-function setupFixture(steps) {
+function setupFixture(steps, mode = 'init-with-initial-commit') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-baseline-'));
+  if (mode === 'fresh-dir') {
+    // No git init; the call site itself runs `git init`. Used by
+    // sdk/src/init-runner.ts:139 baseline (Plan 02-06 Task 4).
+    return dir;
+  }
   execSync('git init', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
@@ -160,6 +165,13 @@ const baselines = [
     args: ['remote'],
   },
   {
+    id: 'init-runner-ts-139-init',
+    source: 'sdk/src/init-runner.ts:139',
+    fixture: [],
+    args: ['init'],
+    captureMode: 'fresh-dir', // git init runs in a fresh dir without a prior init
+  },
+  {
     id: 'progress-ts-286-rev-list-count',
     source: 'sdk/src/query/progress.ts:286',
     fixture: ['echo a > a.txt', 'git add a.txt', 'git commit -m c1', 'echo b > b.txt', 'git add b.txt', 'git commit -m c2'],
@@ -206,20 +218,22 @@ const baselines = [
 fs.mkdirSync(OUT, { recursive: true });
 
 for (const b of baselines) {
-  const cwd = setupFixture(b.fixture);
+  const cwd = setupFixture(b.fixture, b.captureMode);
   try {
     const expected = capture5Field(cwd, b.args);
-    const fixtureSpec = {
-      init: 'git init',
-      config: [
-        'user.email=test@test.com',
-        'user.name=Test',
-        'commit.gpgsign=false',
-        'tag.gpgsign=false',
-      ],
-      initial_commit: 'git commit --allow-empty -m initial',
-      setup: b.fixture,
-    };
+    const fixtureSpec = b.captureMode === 'fresh-dir'
+      ? { mode: 'fresh-dir', setup: b.fixture || [] }
+      : {
+          init: 'git init',
+          config: [
+            'user.email=test@test.com',
+            'user.name=Test',
+            'commit.gpgsign=false',
+            'tag.gpgsign=false',
+          ],
+          initial_commit: 'git commit --allow-empty -m initial',
+          setup: b.fixture,
+        };
     // For init-cjs-1538 (`git --version`), stdout differs across hosts; record
     // a regex-friendly placeholder in match.stdout so the parity test compares
     // the exact-text fields exactly and the version string with a regex.
@@ -240,6 +254,11 @@ for (const b of baselines) {
       // commit's author iso-date (YYYY-MM-DD); the date is the wall-clock
       // capture date so a regex match is appropriate.
       stdoutMatch = 'regex:^[0-9]{4}-[0-9]{2}-[0-9]{2}$';
+    } else if (b.id === 'init-runner-ts-139-init') {
+      // Plan 02-06 Task 4: `git init` stdout embeds the tmp-dir path so a
+      // regex match is the durable assertion (matches the format git emits
+      // for both `Initialized empty` and `Reinitialized` cases).
+      stdoutMatch = 'regex:^(Initialized|Reinitialized) (empty )?Git repository in ';
     } else if (b.id === 'progress-ts-290-rev-list-root') {
       // Plan 02-06 Task 3: `rev-list --max-parents=0 HEAD` emits the root
       // commit SHA. The author timestamp is wall-clock so the SHA is

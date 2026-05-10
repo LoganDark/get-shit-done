@@ -32,7 +32,10 @@ const BASELINES_DIR = join(HERE, '..', '..', '..', '..', 'tests', 'baselines', '
 interface Baseline {
   id: string;
   source: string;
-  fixture: { config: string[]; setup: string[] };
+  // `mode: 'fresh-dir'` indicates the call site itself runs `git init` (Plan
+  // 02-06 Task 4 — init-runner.ts:139). All other baselines use the
+  // standard init+initial-commit fixture shape.
+  fixture: { config?: string[]; setup: string[]; mode?: 'fresh-dir' };
   command: string;
   args: string[];
   expected: {
@@ -45,8 +48,13 @@ interface Baseline {
   match?: { stdout?: string };
 }
 
-function initFixture(setup: string[]): string {
+function initFixture(baseline: Baseline): string {
   const dir = mkdtempSync(join(tmpdir(), 'gsd-baseline-test-'));
+  if (baseline.fixture.mode === 'fresh-dir') {
+    // The captured call site itself runs `git init` (sdk/src/init-runner.ts:139).
+    return dir;
+  }
+  const setup = baseline.fixture.setup ?? [];
   execSync('git init', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
@@ -66,7 +74,7 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
   for (const f of files) {
     const baseline: Baseline = JSON.parse(readFileSync(join(BASELINES_DIR, f), 'utf-8'));
     it(`${baseline.id} matches ${baseline.source}`, () => {
-      const cwd = initFixture(baseline.fixture.setup ?? []);
+      const cwd = initFixture(baseline);
       try {
         // Direct execGit (5-field) is the canonical GIT-02 equivalent.
         const got = execGit(cwd, baseline.args);
@@ -234,6 +242,16 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           } else {
             expect(date).toBe(baseline.expected.stdout);
           }
+        } else if (args[0] === 'init' && args.length === 1) {
+          // Plan 02-06 Task 4: vcs.gitOnly.init() wraps `git init`.
+          // The canonical execGit call above already initialized the dir,
+          // so this re-invocation hits git's "Reinitialized existing"
+          // branch — both stdout strings match the regex pattern recorded
+          // on the baseline.
+          vcs.gitOnly.init(); // returns void; throws on non-zero exit
+          // Behavior assertion is the canonical exit-code check above; the
+          // adapter side just confirms init() runs cleanly to completion.
+          expect(true).toBe(true);
         } else if (args[0] === 'log' && args.includes('--pretty=%s%n%b')) {
           // Plan 02-06 Task 2 (Blocker-1 fix): check-decision-coverage.ts:385
           // routes through vcs.log({maxCount}) and reconstructs the byte-

@@ -11,7 +11,8 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFile } from 'node:child_process';
+
+import { createVcsAdapter } from './vcs/index.js';
 
 import type {
   InitConfig,
@@ -134,9 +135,13 @@ export class InitRunner {
 
       // ── Step 2: Config — write config.json and init git ───────────────
       const configResult = await this.runStep('config', async () => {
-        // Ensure git is initialized
+        // Ensure git is initialized.
+        // Plan 02-06 Task 4: flip async `await this.execGit(['init'])`
+        // to sync `vcs.gitOnly.init()` after the git-kind narrow (D-07).
+        // The containing method stays async for its other awaits.
         if (!projectInfo.has_git) {
-          await this.execGit(['init']);
+          const vcs = createVcsAdapter(this.projectDir, { kind: 'git' });
+          if (vcs.kind === 'git') vcs.gitOnly.init();
         }
 
         // Ensure .planning/ directory exists
@@ -663,23 +668,6 @@ export class InitRunner {
     } catch {
       return `(Agent definition not found: ${filename})`;
     }
-  }
-
-  // ─── Git helper ────────────────────────────────────────────────────────────
-
-  /**
-   * Execute a git command in the project directory.
-   */
-  private execGit(args: string[]): Promise<string> {
-    return new Promise((resolve, reject) => {
-      execFile('git', args, { cwd: this.projectDir }, (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(`git ${args.join(' ')} failed: ${stderr || error.message}`));
-          return;
-        }
-        resolve(stdout.toString());
-      });
-    });
   }
 
   // ─── Event helpers ─────────────────────────────────────────────────────────
