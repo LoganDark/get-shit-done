@@ -50,7 +50,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
   4. The first upstream rebase performed after the migration completes with conflict count tracked and recorded in `.planning/intel/rebase-log.md` (or equivalent), and conflicts are concentrated in the adapter call-site layer (mechanical) rather than scattered across surrounding logic.
   5. `UPSTREAM-01` jj-native rebase workflow is documented in `docs/upstream-rebase.md` (or equivalent), and `sdk/src/vcs/jj/` and `sdk/src/vcs/parse/jj-*.ts` sidecar paths exist as zero-conflict surfaces (even if empty), establishing the convention before Phase 3 lands jj code.
 **Plans**: 12 plans
-- [ ] 02-01-PLAN.md — Triage commit.test.ts:304 (gpgsign fixture fix; opens D-03/D-04 gate)
+- [x] 02-01-PLAN.md — Triage commit.test.ts:304 (gpgsign fixture fix; opens D-03/D-04 gate)
 - [ ] 02-02-PLAN.md — Helpers migration + day-one allowlist shrink + sdk/src/vcs/jj/ sidecar (D-09, D-13, D-15)
 - [ ] 02-03-PLAN.md — Adapter gap-fill: 17 forward-complete verbs + expr.range factory
 - [ ] 02-04-PLAN.md — Smoke-test (worktree-safety.cjs:80) + complete worktree-safety.cjs migration (D-01, D-02)
