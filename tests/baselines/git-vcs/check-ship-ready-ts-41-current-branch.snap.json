@@ -1,0 +1,32 @@
+{
+  "id": "check-ship-ready-ts-41-current-branch",
+  "source": "sdk/src/query/check-ship-ready.ts:41",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": []
+  },
+  "command": "git",
+  "args": [
+    "rev-parse",
+    "--abbrev-ref",
+    "HEAD"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "master",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "exact"
+  }
+}

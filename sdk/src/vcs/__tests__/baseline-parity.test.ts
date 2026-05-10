@@ -152,6 +152,38 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
             stderr: baseline.expected.stderr,
             timedOut: baseline.expected.timedOut,
           });
+        } else if (
+          args[0] === 'rev-parse' &&
+          args.includes('--abbrev-ref') &&
+          args.includes('HEAD')
+        ) {
+          // Plan 02-06 Task 1: vcs.refs.currentBranch() wraps
+          // `git rev-parse --abbrev-ref HEAD`, returning string | null.
+          // The baseline records the raw stdout (e.g. "master"); the adapter
+          // returns the same name (or null when detached).
+          const name = vcs.refs.currentBranch();
+          expect(name).toBe(baseline.expected.stdout);
+        } else if (args[0] === 'config' && args.includes('--get')) {
+          // Plan 02-06 Task 1: vcs.gitOnly.configGet returns the value (exit 0)
+          // or null (exit 1). Baseline records exit 0 + value for this shape.
+          const key = args[args.indexOf('--get') + 1];
+          const value = vcs.gitOnly.configGet(key);
+          expect(value).toBe(baseline.expected.stdout);
+        } else if (
+          args[0] === 'rev-parse' &&
+          args.includes('--verify') &&
+          !args.includes('--abbrev-ref')
+        ) {
+          // Plan 02-06 Task 1: vcs.refs.bookmarks.exists wraps
+          // `git rev-parse --verify --quiet <name>`. The baseline captures
+          // either the resolved sha (exit 0) or a fatal stderr (exit 128).
+          const name = args[args.indexOf('--verify') + 1];
+          const exists = vcs.refs.bookmarks.exists(name);
+          expect(exists).toBe(baseline.expected.exitCode === 0);
+        } else if (args[0] === 'remote' && args.length === 1) {
+          // Plan 02-06 Task 1: vcs.refs.remotes() wraps `git remote`.
+          const remoteList = vcs.refs.remotes();
+          expect(remoteList.join('\n')).toBe(baseline.expected.stdout);
         }
       } finally {
         rmSync(cwd, { recursive: true, force: true });

@@ -1,0 +1,33 @@
+{
+  "id": "check-ship-ready-ts-38-status",
+  "source": "sdk/src/query/check-ship-ready.ts:38",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": [
+      "echo u > untracked.txt"
+    ]
+  },
+  "command": "git",
+  "args": [
+    "status",
+    "--porcelain"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "?? untracked.txt",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "exact"
+  }
+}

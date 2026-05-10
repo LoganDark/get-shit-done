@@ -129,6 +129,36 @@ const baselines = [
     fixture: [],
     args: ['status', '--porcelain'],
   },
+  {
+    id: 'check-ship-ready-ts-38-status',
+    source: 'sdk/src/query/check-ship-ready.ts:38',
+    fixture: ['echo u > untracked.txt'],
+    args: ['status', '--porcelain'],
+  },
+  {
+    id: 'check-ship-ready-ts-41-current-branch',
+    source: 'sdk/src/query/check-ship-ready.ts:41',
+    fixture: [],
+    args: ['rev-parse', '--abbrev-ref', 'HEAD'],
+  },
+  {
+    id: 'check-ship-ready-ts-50-config-get',
+    source: 'sdk/src/query/check-ship-ready.ts:50',
+    fixture: ['git config branch.main.merge refs/heads/main'],
+    args: ['config', '--get', 'branch.main.merge'],
+  },
+  {
+    id: 'check-ship-ready-ts-55-verify-ref',
+    source: 'sdk/src/query/check-ship-ready.ts:55',
+    fixture: [],
+    args: ['rev-parse', '--verify', 'main'],
+  },
+  {
+    id: 'check-ship-ready-ts-60-remote',
+    source: 'sdk/src/query/check-ship-ready.ts:60',
+    fixture: ['git remote add origin https://x.invalid/y.git'],
+    args: ['remote'],
+  },
 ];
 
 fs.mkdirSync(OUT, { recursive: true });

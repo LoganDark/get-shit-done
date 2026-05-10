@@ -8,20 +8,18 @@
 
 import { execSync } from 'node:child_process';
 import { GSDError, ErrorClassification } from '../errors.js';
+import { createVcsAdapter } from '../vcs/index.js';
 import { normalizePhaseName } from './helpers.js';
 import { checkVerificationStatus } from './check-verification-status.js';
 import type { QueryHandler } from './utils.js';
 
-function runSyncSafe(cmd: string, cwd: string): string | null {
-  try {
-    return execSync(cmd, { cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
-  } catch {
-    return null;
-  }
-}
-
 function boolSyncSafe(cmd: string, cwd: string): boolean {
-  return runSyncSafe(cmd, cwd) !== null;
+  try {
+    execSync(cmd, { cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export const checkShipReady: QueryHandler = async (args, projectDir) => {
@@ -34,31 +32,46 @@ export const checkShipReady: QueryHandler = async (args, projectDir) => {
 
   const blockers: string[] = [];
 
-  // git checks — all wrapped in try/catch via helpers
-  const porcelain = runSyncSafe('git status --porcelain', projectDir);
-  const clean_tree = porcelain !== null && porcelain === '';
+  // git checks — all wrapped in try/catch (route through VcsAdapter; preserve
+  // null-on-no-git semantics by treating any thrown error as "git unavailable").
+  let clean_tree = false;
+  let current_branch: string | null = null;
+  let base_branch: string | null = null;
+  let remote_configured = false;
+  try {
+    const vcs = createVcsAdapter(projectDir, { kind: 'git' });
+    try {
+      const porcelain = vcs.status({ porcelain: true });
+      clean_tree = porcelain.raw === '';
+    } catch { /* non-git or status failure → leave clean_tree false */ }
 
-  const current_branch = runSyncSafe('git rev-parse --abbrev-ref HEAD', projectDir);
+    try {
+      current_branch = vcs.refs.currentBranch();
+    } catch { /* leave null */ }
+
+    if (current_branch && vcs.kind === 'git') {
+      try {
+        const mergeRef = vcs.gitOnly.configGet(`branch.${current_branch}.merge`);
+        if (mergeRef) {
+          base_branch = mergeRef.replace('refs/heads/', '');
+        } else {
+          // Fallback: check if 'main' branch exists, else 'master'
+          const mainExists = vcs.refs.bookmarks.exists('main');
+          base_branch = mainExists ? 'main' : 'master';
+        }
+      } catch { /* leave null */ }
+    }
+
+    try {
+      const remoteList = vcs.refs.remotes();
+      remote_configured = remoteList.length > 0;
+    } catch { /* leave false */ }
+  } catch { /* createVcsAdapter failure (non-git dir, etc.) — all defaults stand */ }
+
   const on_feature_branch =
     current_branch !== null &&
     current_branch !== 'main' &&
     current_branch !== 'master';
-
-  // Determine base branch
-  let base_branch: string | null = null;
-  if (current_branch) {
-    const mergeRef = runSyncSafe(`git config --get branch.${current_branch}.merge`, projectDir);
-    if (mergeRef) {
-      base_branch = mergeRef.replace('refs/heads/', '');
-    } else {
-      // Fallback: check if 'main' branch exists, else 'master'
-      const mainExists = boolSyncSafe('git rev-parse --verify main', projectDir);
-      base_branch = mainExists ? 'main' : 'master';
-    }
-  }
-
-  const remoteOut = runSyncSafe('git remote', projectDir);
-  const remote_configured = remoteOut !== null && remoteOut.trim().length > 0;
 
   // gh availability
   const gh_available =
