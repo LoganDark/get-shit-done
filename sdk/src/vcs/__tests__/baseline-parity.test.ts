@@ -184,6 +184,19 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           // Plan 02-06 Task 1: vcs.refs.remotes() wraps `git remote`.
           const remoteList = vcs.refs.remotes();
           expect(remoteList.join('\n')).toBe(baseline.expected.stdout);
+        } else if (args[0] === 'log' && args.includes('--pretty=%s%n%b')) {
+          // Plan 02-06 Task 2 (Blocker-1 fix): check-decision-coverage.ts:385
+          // routes through vcs.log({maxCount}) and reconstructs the byte-
+          // equivalent `--pretty=%s%n%b` output as `subject\nbody` per entry,
+          // joined by `\n`, then trimmed to match the captured baseline.
+          // The contract extension landed in this commit populates LogEntry.body.
+          const limit = parseInt(args[args.indexOf('-n') + 1], 10);
+          const entries = vcs.log({ maxCount: limit });
+          const reconstructed = entries
+            .map((e) => `${e.subject}\n${e.body ?? ''}`)
+            .join('\n')
+            .trim();
+          expect(reconstructed).toBe(baseline.expected.stdout);
         }
       } finally {
         rmSync(cwd, { recursive: true, force: true });

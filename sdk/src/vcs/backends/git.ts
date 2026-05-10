@@ -126,10 +126,14 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
   };
 
   // ─── log ─────────────────────────────────────────────────────────────────
-  // %x09 = TAB, used as field separator (subject can contain anything else).
-  const LOG_FORMAT = '--format=%H%x09%P%x09%an%x09%aI%x09%s';
+  // %x09 = TAB, field separator for the structured fields. Subject is on the
+  // first record line; body follows on subsequent lines (may be empty). With
+  // `-z`, each commit record is NUL-terminated, so body's embedded newlines
+  // do not collide with the entry separator (Plan 02-06 Task 2 contract
+  // extension: `body` is now populated whenever the commit has body text).
+  const LOG_FORMAT = '--format=%H%x09%P%x09%an%x09%aI%x09%s%n%b';
   const log = (opts: LogOpts = {}): LogEntry[] => {
-    const args = ['log', LOG_FORMAT];
+    const args = ['log', '-z', LOG_FORMAT];
     if (opts.maxCount) args.push(`-n${opts.maxCount}`);
     // Plan 02-03 Task 2 gap-fill: --all surfaces commits reachable from any ref,
     // not just the current HEAD. Mirrors verify.cjs:1224 / verify.ts:628 usage.
@@ -138,19 +142,30 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     if (opts.paths && opts.paths.length > 0) args.push('--', ...opts.paths);
     const r = execGit(cwd, args);
     if (r.exitCode !== 0) return [];
+    // `-z` uses NUL between records. r.stdout is trimmed by execGit, so the
+    // trailing terminator is gone — split safely on `\x00` and filter empty.
     return r.stdout
-      .split('\n')
+      .split('\x00')
       .filter(Boolean)
-      .map((line): LogEntry => {
-        const parts = line.split('\t');
+      .map((record): LogEntry => {
+        // record = "<hash>\t<parents>\t<author>\t<date>\t<subject>\n<body>"
+        // The first newline divides subject-line from body. Body may be empty.
+        const nlIdx = record.indexOf('\n');
+        const head = nlIdx === -1 ? record : record.slice(0, nlIdx);
+        const body = nlIdx === -1 ? '' : record.slice(nlIdx + 1);
+        const parts = head.split('\t');
         const [hash, parents, author, date, ...subjectParts] = parts;
-        return {
+        const entry: LogEntry = {
           hash: hash ?? '',
           parents: parents ? parents.split(' ').filter(Boolean) : [],
           author: author ?? '',
           date: date ?? '',
           subject: subjectParts.join('\t'),
         };
+        // Populate body only when there is body text (preserves existing
+        // `body?: string` optional shape — no opt-in flag needed).
+        if (body.length > 0) entry.body = body;
+        return entry;
       });
   };
 

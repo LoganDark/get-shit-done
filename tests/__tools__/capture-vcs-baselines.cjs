@@ -159,6 +159,26 @@ const baselines = [
     fixture: ['git remote add origin https://x.invalid/y.git'],
     args: ['remote'],
   },
+  {
+    id: 'check-decision-coverage-ts-385-log-pretty',
+    source: 'sdk/src/query/check-decision-coverage.ts:385',
+    // Three commits with realistic GSD-shaped subject+body lines so the
+    // recorded `--pretty=%s%n%b` byte-output is meaningful for parity
+    // assertions. Initial commit is created by setupFixture; these are
+    // additional commits on top.
+    fixture: [
+      'echo a > a.txt',
+      'git add a.txt',
+      'git commit -m "feat(auth): add login route" -m "Implements D-12 token rotation."',
+      'echo b > b.txt',
+      'git add b.txt',
+      'git commit -m "fix(verify): handle empty hostname" -m "Closes review F7 path traversal guard."',
+      'echo c > c.txt',
+      'git add c.txt',
+      'git commit -m "docs(plan): record D-08 mechanical-only" -m "Body line for D-08 honoring."',
+    ],
+    args: ['log', '-n', '200', '--pretty=%s%n%b'],
+  },
 ];
 
 fs.mkdirSync(OUT, { recursive: true });
