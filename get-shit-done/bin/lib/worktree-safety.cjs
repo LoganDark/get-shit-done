@@ -6,52 +6,15 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
 // Plan 02-04 Task 1 (D-01 smoke-test): consume Phase 1's already-shipped
-// porcelain parser via the dist-cjs bridge from bin/lib/*.cjs. This single
-// require validates the bin/lib → dist-cjs/vcs consumption path; Task 2
-// migrates the remaining sites (lines 122/123/198) using createVcsAdapter.
+// porcelain parser via the dist-cjs bridge from bin/lib/*.cjs.
 const { readWorktreeList: readPorcelainFromSdk } = require('../../../sdk/dist-cjs/vcs/parse/worktree-list.js');
-
-// Default timeout for worktree-related git subprocess calls.
-// 10 s is generous enough for normal git operations on large repos while still
-// providing a deterministic failure path when git stalls (locked index, hung
-// remote, stalled NFS mount, etc.).  Callers can override via deps.timeout.
-const DEFAULT_GIT_TIMEOUT_MS = 10000;
-
-/**
- * Execute a git command with a bounded timeout.
- *
- * Return shape: { exitCode, stdout, stderr, timedOut, error }
- *   - exitCode: process exit status (null when killed by signal)
- *   - timedOut: true when spawnSync reports SIGTERM + ETIMEDOUT — callers must
- *               branch on this to surface a structured warning instead of
- *               silently treating the empty output as success (PRED.k302)
- *   - error:    the Error object from spawnSync when the process could not start
- *               or was killed; null otherwise
- *
- * Backward-compatible: existing callers that only read exitCode/stdout/stderr
- * continue to work unchanged.
- */
-function execGitDefault(cwd, args, options = {}) {
-  const timeout = options.timeout ?? DEFAULT_GIT_TIMEOUT_MS;
-  const result = spawnSync('git', args, {
-    cwd,
-    stdio: 'pipe',
-    encoding: 'utf-8',
-    timeout,
-  });
-  // spawnSync sets signal='SIGTERM' and error.code='ETIMEDOUT' when the timeout
-  // fires and the subprocess is killed.
-  const timedOut = result.signal === 'SIGTERM' && result.error?.code === 'ETIMEDOUT';
-  return {
-    exitCode: result.status ?? 1,
-    stdout: (result.stdout ?? '').toString().trim(),
-    stderr: (result.stderr ?? '').toString().trim(),
-    timedOut,
-    error: result.error ?? null,
-  };
-}
+// Plan 02-04 Task 2: createVcsAdapter is the canonical entry point for
+// workspace.context (lines 122/123 migration) and workspace.prune (line 198
+// migration). ADR-0004 worktree seam is preserved via the deps = {} parameter
+// on readWorktreeList and resolveWorktreeContext: tests inject a fake vcs via
+// deps.vcs the same way they previously injected deps.execGit.
+const { createVcsAdapter } = require('../../../sdk/dist-cjs/vcs/index.js');
 
 function parseWorktreePorcelain(porcelain) {
   return parseWorktreeEntries(porcelain).filter((entry) => entry.branch).map((entry) => ({
@@ -81,14 +44,13 @@ function parseWorktreeListPaths(porcelain) {
 }
 
 function readWorktreeList(repoRoot, deps = {}) {
-  // Plan 02-04 Task 1 (D-01 smoke-test): consume Phase 1's already-shipped
-  // parser. ADR-0004 seam preserved (W4): deps = {} signature unchanged.
-  // Lines 122, 123, 198 still use execGit (deps.execGit || execGitDefault) —
-  // Task 2 migrates them via createVcsAdapter and unifies the indirection.
-  void deps; // signature preserved for Task 2 (deps.vcs injection); deps.execGit
-             // is no longer consulted here — bug-3281's mock injection sites are
-             // retargeted onto deps.vcs in Task 2 alongside the paired-test rewrite.
-  const result = readPorcelainFromSdk(repoRoot);
+  // Plan 02-04 Tasks 1+2: consume Phase 1's already-shipped porcelain parser.
+  // ADR-0004 seam preserved (W4): deps = {} signature unchanged; tests can
+  // inject a fake adapter via deps.vcs whose workspace.list() returns the
+  // structured shape this function expects, OR provide deps.readPorcelain to
+  // override the porcelain reader directly (mirrors bug-3281 timeout mocks).
+  const readPorcelain = deps.readPorcelain || readPorcelainFromSdk;
+  const result = readPorcelain(repoRoot);
   if (!result.ok) {
     return { ok: false, reason: result.reason, porcelain: '', entries: [] };
   }
@@ -101,7 +63,12 @@ function readWorktreeList(repoRoot, deps = {}) {
 }
 
 function resolveWorktreeContext(cwd, deps = {}) {
-  const execGit = deps.execGit || execGitDefault;
+  // Plan 02-04 Task 2: vcs.workspace.context() returns the same gitDir /
+  // gitCommonDir path strings the previous raw `git rev-parse --git-dir` /
+  // `--git-common-dir` calls produced (already path.resolve'd to absolute by
+  // the adapter per Blocker 4). ADR-0004 seam preserved (W4): deps = {}
+  // signature unchanged; deps.vcs supersedes the prior deps.execGit.
+  const vcs = deps.vcs || createVcsAdapter(cwd, { kind: 'git' });
   const existsSync = deps.existsSync || fs.existsSync;
 
   // Local .planning takes precedence over linked-worktree remapping.
@@ -113,9 +80,13 @@ function resolveWorktreeContext(cwd, deps = {}) {
     };
   }
 
-  const gitDir = execGit(cwd, ['rev-parse', '--git-dir']);
-  const commonDir = execGit(cwd, ['rev-parse', '--git-common-dir']);
-  if (gitDir.exitCode !== 0 || commonDir.exitCode !== 0) {
+  let ctx;
+  try {
+    ctx = vcs.workspace.context();
+  } catch {
+    // workspace.context() throws on non-repo cwd or when its underlying
+    // rev-parse calls fail (incl. timeout). Mirrors the prior `exitCode !== 0`
+    // fallback that returned `not_git_repo`.
     return {
       effectiveRoot: cwd,
       mode: 'current_directory',
@@ -123,11 +94,9 @@ function resolveWorktreeContext(cwd, deps = {}) {
     };
   }
 
-  const gitDirResolved = path.resolve(cwd, gitDir.stdout);
-  const commonDirResolved = path.resolve(cwd, commonDir.stdout);
-  if (gitDirResolved !== commonDirResolved) {
+  if (ctx.gitDir !== ctx.gitCommonDir) {
     return {
-      effectiveRoot: path.dirname(commonDirResolved),
+      effectiveRoot: path.dirname(ctx.gitCommonDir),
       mode: 'linked_worktree_root',
       reason: 'linked_worktree',
     };
@@ -170,7 +139,6 @@ function planWorktreePrune(repoRoot, options = {}, deps = {}) {
 }
 
 function executeWorktreePrunePlan(plan, deps = {}) {
-  const execGit = deps.execGit || execGitDefault;
   if (!plan || plan.action === 'skip') {
     return {
       ok: false,
@@ -189,7 +157,11 @@ function executeWorktreePrunePlan(plan, deps = {}) {
     };
   }
 
-  const result = execGit(plan.repoRoot, ['worktree', 'prune']);
+  // Plan 02-04 Task 2: vcs.workspace.prune() runs `git worktree prune`. The
+  // returned ExecResult preserves timedOut as a first-class field for the
+  // bug-3281 AC4 contract (caller must distinguish timeout from generic fail).
+  const vcs = deps.vcs || createVcsAdapter(plan.repoRoot, { kind: 'git' });
+  const result = vcs.workspace.prune();
   if (result.timedOut) {
     // AC4: surface timedOut as a first-class field so callers (e.g.
     // pruneOrphanedWorktrees in core.cjs) can log a structured WARNING rather
@@ -270,7 +242,9 @@ function snapshotWorktreeInventory(repoRoot, options = {}, deps = {}) {
   const statSync = deps.statSync || fs.statSync;
   const staleAfterMs = options.staleAfterMs ?? (60 * 60 * 1000);
   const nowMs = options.nowMs ?? Date.now();
-  const listed = listLinkedWorktreePaths(repoRoot, { execGit: deps.execGit || execGitDefault });
+  // Plan 02-04 Task 2: pass deps through verbatim so deps.vcs / deps.readPorcelain
+  // injection reaches the underlying readWorktreeList.
+  const listed = listLinkedWorktreePaths(repoRoot, deps);
   if (!listed.ok) {
     return {
       ok: false,

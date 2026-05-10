@@ -119,6 +119,39 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           expect(result.ok).toBe(true);
           // Same regex match as the baseline (path + sha vary across runs).
           expect(result.porcelain).toMatch(/^worktree [^\n]+\nHEAD [0-9a-f]{40}\nbranch refs\/heads\/[^\n]+$/);
+        } else if (
+          args[0] === 'rev-parse' &&
+          (args.includes('--git-dir') || args.includes('--git-common-dir'))
+        ) {
+          // Plan 02-04 Task 2: vcs.workspace.context() exposes gitDir and
+          // gitCommonDir as absolute paths (path.resolve'd in the adapter).
+          // The raw baseline is a relative `.git` because cwd IS the repo
+          // root; the adapter's absolute form must end with `/.git` (or its
+          // OS-native equivalent) for a non-linked main worktree.
+          const ctx = vcs.workspace.context();
+          const which = args.includes('--git-dir') ? ctx.gitDir : ctx.gitCommonDir;
+          // Adapter applies path.resolve(cwd, '.git'); equivalent in absolute form.
+          const expectedAbsolute = require('node:path').resolve(cwd, baseline.expected.stdout);
+          expect(which).toBe(expectedAbsolute);
+        } else if (
+          args[0] === 'worktree' &&
+          args.includes('prune')
+        ) {
+          // Plan 02-04 Task 2: vcs.workspace.prune() runs `git worktree prune`
+          // and returns an ExecResult. Compare exitCode/stdout/stderr against
+          // the captured baseline.
+          const r = vcs.workspace.prune();
+          expect({
+            exitCode: r.exitCode,
+            stdout: r.stdout,
+            stderr: r.stderr,
+            timedOut: r.timedOut,
+          }).toEqual({
+            exitCode: baseline.expected.exitCode,
+            stdout: baseline.expected.stdout,
+            stderr: baseline.expected.stderr,
+            timedOut: baseline.expected.timedOut,
+          });
         }
       } finally {
         rmSync(cwd, { recursive: true, force: true });

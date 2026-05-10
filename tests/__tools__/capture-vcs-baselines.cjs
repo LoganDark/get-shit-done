@@ -93,6 +93,24 @@ const baselines = [
     fixture: [],
     args: ['worktree', 'list', '--porcelain'],
   },
+  {
+    id: 'worktree-safety-cjs-122-rev-parse-git-dir',
+    source: 'get-shit-done/bin/lib/worktree-safety.cjs:122',
+    fixture: [],
+    args: ['rev-parse', '--git-dir'],
+  },
+  {
+    id: 'worktree-safety-cjs-123-rev-parse-common-dir',
+    source: 'get-shit-done/bin/lib/worktree-safety.cjs:123',
+    fixture: [],
+    args: ['rev-parse', '--git-common-dir'],
+  },
+  {
+    id: 'worktree-safety-cjs-198-worktree-prune',
+    source: 'get-shit-done/bin/lib/worktree-safety.cjs:198',
+    fixture: [],
+    args: ['worktree', 'prune'],
+  },
 ];
 
 fs.mkdirSync(OUT, { recursive: true });
