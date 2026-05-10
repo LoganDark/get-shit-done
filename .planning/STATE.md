@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-05-10T03:54:22.285Z"
+stopped_at: Completed 02-06-PLAN.md
+last_updated: "2026-05-10T05:00:39.531Z"
 last_activity: 2026-05-10
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 17
-  completed_plans: 10
-  percent: 59
+  completed_plans: 11
+  percent: 65
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 02 (bulk-call-site-migration-still-git-only) — EXECUTING
-Plan: 6 of 12
+Plan: 7 of 12
 Status: Ready to execute
 Last activity: 2026-05-10
 
-Progress: [██████░░░░] 59%
+Progress: [███████░░░] 65%
 
 ## Performance Metrics
 
@@ -62,6 +62,7 @@ Progress: [██████░░░░] 59%
 | Phase 02 P03 | 7m | 4 tasks | 9 files |
 | Phase 02 P04 | 10m | 2 tasks | 8 files |
 | Phase 02 P05 | 12m | 2 tasks | 8 files |
+| Phase 02 P06 | ~6m | 4 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 02-05]: init.cjs (3 sites) and init.ts (3 sites) byte-symmetric migration to VcsAdapter; lint 13→7 / 7→5 files; D-06 paired retarget via gitOnly.init()+configSet()
 - [Phase ?]: [Phase 02-05]: baseline-parity dispatch is args-shape-keyed not id-keyed — adding new baseline files auto-spawns new it() cases without requiring new dispatch clauses (D-08 mechanical-only)
 - [Phase ?]: [Phase 02-05]: init.cjs's detectChildRepos / cmdInitNewWorkspace / cmdInitWorkspaceStatus have no direct test coverage — pre-existing testing gap, surface for future maintenance
+- [Phase ?]: [Phase 02-06]: vcs.log() populates LogEntry.body via 'git log -z' format extension; bundled with Task 2 (Rule 3) — required for byte-equivalent reconstruction in check-decision-coverage migration
+- [Phase ?]: [Phase 02-06]: 4-file ascending-LOC migration (check-ship-ready 103 → check-decision-coverage 554 → progress 566 → init-runner 734); 10 sites closed; expr.commit(firstCommit) consumed in production (Blocker-3 closure); init-runner private execGit helper deleted as dead code; lint 7→5 / 5→3
 
 ### Pending Todos
 
@@ -124,8 +127,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-10T03:53:55.738Z
-Stopped at: Phase 2 context gathered
+Last session: 2026-05-10T05:00:39.525Z
+Stopped at: Completed 02-06-PLAN.md
 Resume file: None
 
 ## Known Pre-Existing Test Failures (Non-Blocking)
