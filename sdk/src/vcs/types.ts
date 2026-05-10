@@ -135,12 +135,24 @@ export interface VcsAdapterCommon {
   findConflicts(opts: { scope: 'all' | 'working-copy' }): ConflictResult[];
   push(opts?: PushOpts): ExecResult;
   fetch(opts?: FetchOpts): ExecResult;
+  // Plan 02-03 Task 1 gap-fill (RESEARCH §Forward-Complete Gaps Summary):
+  // top-level stage / unstage verbs symmetric on git and jj backends.
+  stage(files: string[]): ExecResult;
+  unstage(files: string[]): ExecResult;
 }
 
 export interface VcsRefs {
   readonly head: RevisionExpr;
   readonly parent: RevisionExpr;
   bookmarks: VcsBookmarks;
+  // Plan 02-03 Task 1 gap-fill (RESEARCH §Forward-Complete Gaps Summary):
+  currentBranch(): string | null;
+  resolveShort(rev: RevisionExpr): string;
+  countCommits(opts: { rev?: RevisionExpr }): number;
+  rootCommits(opts: { rev?: RevisionExpr }): string[];
+  exists(rev: RevisionExpr): boolean;
+  isIgnored(path: string): boolean;
+  remotes(): string[];
 }
 
 export interface VcsBookmarks {
@@ -149,6 +161,8 @@ export interface VcsBookmarks {
   move(name: string, rev: RevisionExpr): void;
   delete(name: string): void;
   exists(name: string): boolean;
+  // Plan 02-03 Task 1 gap-fill (RESEARCH §Forward-Complete Gaps Summary):
+  switch(name: string, opts?: { create?: boolean }): void;
 }
 
 export interface VcsWorkspace {

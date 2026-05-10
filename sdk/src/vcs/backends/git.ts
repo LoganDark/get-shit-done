@@ -237,13 +237,91 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
       const r = execGit(cwd, ['rev-parse', '--verify', '--quiet', name]);
       return r.exitCode === 0;
     },
+    // Plan 02-03 Task 1 gap-fill: switch / checkout (with optional create).
+    switch: (name: string, opts: { create?: boolean } = {}): void => {
+      const args = opts.create ? ['checkout', '-b', name] : ['checkout', name];
+      const r = execGit(cwd, args);
+      if (r.exitCode !== 0) {
+        throw new Error(`bookmarks.switch failed: ${r.stderr || r.stdout}`);
+      }
+    },
   });
+
+  // Plan 02-03 Task 1 gap-fill (RESEARCH §Forward-Complete Gaps Summary):
+  // 7 read-only verbs on vcs.refs.* — each mirrors the existing factory shape
+  // (call execGit, parse the standard 5-field result, return typed scalar).
+  const currentBranch = (): string | null => {
+    const r = execGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
+    if (r.exitCode !== 0) return null;
+    const name = r.stdout.trim();
+    if (!name || name === 'HEAD') return null; // detached
+    return name;
+  };
+
+  const resolveShort = (rev: RevisionExpr): string => {
+    const r = execGit(cwd, ['rev-parse', '--short', toGitRev(rev)]);
+    if (r.exitCode !== 0) {
+      throw new Error(`refs.resolveShort failed: ${r.stderr || r.stdout}`);
+    }
+    return r.stdout.trim();
+  };
+
+  const countCommits = (opts: { rev?: RevisionExpr }): number => {
+    const target = opts.rev ? toGitRev(opts.rev) : 'HEAD';
+    const r = execGit(cwd, ['rev-list', '--count', target]);
+    if (r.exitCode !== 0) return 0;
+    const n = parseInt(r.stdout.trim(), 10);
+    return Number.isNaN(n) ? 0 : n;
+  };
+
+  const rootCommits = (opts: { rev?: RevisionExpr }): string[] => {
+    const target = opts.rev ? toGitRev(opts.rev) : 'HEAD';
+    const r = execGit(cwd, ['rev-list', '--max-parents=0', target]);
+    if (r.exitCode !== 0) return [];
+    return r.stdout.split('\n').filter(Boolean).map((s) => s.trim());
+  };
+
+  const refExists = (rev: RevisionExpr): boolean => {
+    // `cat-file -t <rev>` exits 0 with the type when the object exists,
+    // non-zero otherwise. Both outcomes are valid completions; we only need
+    // the exit code as a yes/no probe.
+    const r = execGit(cwd, ['cat-file', '-t', toGitRev(rev)]);
+    return r.exitCode === 0;
+  };
+
+  const isIgnored = (p: string): boolean => {
+    // `--no-index` lets us probe paths that aren't in the index. Exit 0 = ignored,
+    // exit 1 = not ignored, exit ≥128 = error. Treat the 0/1 outcomes only.
+    const r = execGit(cwd, ['check-ignore', '-q', '--no-index', '--', p]);
+    return r.exitCode === 0;
+  };
+
+  const remotes = (): string[] => {
+    const r = execGit(cwd, ['remote']);
+    if (r.exitCode !== 0) return [];
+    return r.stdout.split('\n').filter(Boolean).map((s) => s.trim());
+  };
 
   const refs = Object.freeze({
     head: expr.head(),
     parent: expr.parent(),
     bookmarks,
+    currentBranch,
+    resolveShort,
+    countCommits,
+    rootCommits,
+    exists: refExists,
+    isIgnored,
+    remotes,
   });
+
+  // Plan 02-03 Task 1 gap-fill: top-level stage / unstage verbs.
+  const stage = (files: string[]): ExecResult => {
+    return execGit(cwd, ['add', '--', ...files]);
+  };
+  const unstage = (files: string[]): ExecResult => {
+    return execGit(cwd, ['rm', '--cached', '--ignore-unmatch', '--', ...files]);
+  };
 
   // ─── workspace ───────────────────────────────────────────────────────────
   const workspace = Object.freeze({
@@ -376,6 +454,8 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     findConflicts,
     push,
     fetch,
+    stage,
+    unstage,
     gitOnly,
     [__vcsTestOnly]: testOnly,
   }) as unknown as GitVcsAdapter;
