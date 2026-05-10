@@ -97,7 +97,7 @@
 ### Call-Site Migration (MIGR)
 
 - [ ] **MIGR-01**: All `execSync('git …')` call sites in `sdk/src/query/*.ts` migrated to adapter calls (`commit.ts`, `init.ts`, `verify.ts`, `progress.ts`, `check-ship-ready.ts`, `check-decision-coverage.ts`, `docs-init.ts`, etc.)
-- [ ] **MIGR-02**: All `execSync('git …')` call sites in `get-shit-done/bin/lib/*.cjs` migrated (`core.cjs`, `verify.cjs`, `commands.cjs`, `worktree-safety.cjs`, `init.cjs`, `graphify.cjs`, `drift.cjs`)
+- [ ] **MIGR-02**: All `execSync('git …')` call sites in `get-shit-done/bin/lib/*.cjs` migrated (`core.cjs`, `verify.cjs`, `commands.cjs`, `worktree-safety.cjs`, `init.cjs`, `graphify.cjs`, `drift.cjs`) — *partial: worktree-safety.cjs complete (plan 02-04); 6 files outstanding*
 - [x] **MIGR-03**: Migration is mechanical (Branch-by-Abstraction): each call site swaps `execSync('git …')` for the adapter equivalent without changing surrounding logic
 - [ ] **MIGR-04**: First upstream rebase post-migration verifies the "mechanical edits = clean rebase" hypothesis (track conflict count metric)
 
@@ -208,7 +208,7 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | TEST-06 | Phase 1 | Complete |
 | TEST-07 | Phase 1 | Complete |
 | MIGR-01 | Phase 2 | Pending |
-| MIGR-02 | Phase 2 | Pending |
+| MIGR-02 | Phase 2 | In Progress |
 | MIGR-03 | Phase 2 | Complete |
 | MIGR-04 | Phase 2 | Pending |
 | TEST-05 | Phase 2 | Complete |
