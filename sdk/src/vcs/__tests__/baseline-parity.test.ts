@@ -380,6 +380,141 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
             .join('\n')
             .trim();
           expect(reconstructed).toBe(baseline.expected.stdout);
+        } else if (
+          args[0] === 'checkout' &&
+          args[1] === '-b' &&
+          args.length === 3
+        ) {
+          // Plan 02-09: vcs.refs.bookmarks.switch(name, {create:true}) wraps
+          // `git checkout -b <name>`. Captured for site 308 (cmdCommit). The
+          // canonical execGit call above already created the branch on this
+          // fixture; re-running on the same fixture would error 'already
+          // exists'. Re-create a fresh fixture for the adapter call so the
+          // create-and-switch path executes cleanly. Mirrors the per-fixture
+          // re-init pattern from plan 02-08's commit clause.
+          const branchName = args[2];
+          const adapterCwd = initFixture(baseline);
+          try {
+            const adapterVcs = createVcsAdapter(adapterCwd);
+            if (adapterVcs.kind !== 'git') throw new Error('expected git adapter');
+            adapterVcs.refs.bookmarks.switch(branchName, { create: true });
+            expect(adapterVcs.refs.bookmarks.exists(branchName)).toBe(true);
+            expect(adapterVcs.refs.currentBranch()).toBe(branchName);
+          } finally {
+            rmSync(adapterCwd, { recursive: true, force: true });
+          }
+        } else if (
+          args[0] === 'checkout' &&
+          args.length === 2 &&
+          args[1] !== '-b'
+        ) {
+          // Plan 02-09: vcs.refs.bookmarks.switch(name) wraps
+          // `git checkout <name>` (the plain switch form, taken when -b
+          // failed because the branch already existed). Captured for site
+          // 310 (cmdCommit). The fixture's setup `git branch feature` pre-
+          // creates the branch so the plain switch succeeds. The canonical
+          // run above already switched to the branch; re-create the fixture
+          // so the adapter call exercises the same transition cleanly.
+          const branchName = args[1];
+          const adapterCwd = initFixture(baseline);
+          try {
+            const adapterVcs = createVcsAdapter(adapterCwd);
+            if (adapterVcs.kind !== 'git') throw new Error('expected git adapter');
+            adapterVcs.refs.bookmarks.switch(branchName);
+            expect(adapterVcs.refs.currentBranch()).toBe(branchName);
+          } finally {
+            rmSync(adapterCwd, { recursive: true, force: true });
+          }
+        } else if (
+          args[0] === 'rm' &&
+          args.includes('--cached') &&
+          args.includes('--ignore-unmatch')
+        ) {
+          // Plan 02-09: vcs.unstage([file]) wraps the deletion-staging form
+          // `git rm --cached --ignore-unmatch <file>`. Captured for site 330
+          // (cmdCommit, default-mode missing-file branch). The canonical
+          // execGit call above already removed the path from index; re-
+          // running on the same fixture would yield empty stdout (nothing
+          // to remove). Re-create the fixture for byte-identity assertion.
+          const flagsEnd = args.indexOf('--ignore-unmatch') + 1;
+          const files = args.slice(flagsEnd);
+          const adapterCwd = initFixture(baseline);
+          try {
+            const adapterVcs = createVcsAdapter(adapterCwd);
+            if (adapterVcs.kind !== 'git') throw new Error('expected git adapter');
+            const r = adapterVcs.unstage(files);
+            expect(r.exitCode).toBe(baseline.expected.exitCode);
+            // stdout shape: `rm '<path>'` per file. Byte-identical to the
+            // captured baseline for the single-file fixture captured here.
+            expect(r.stdout).toBe(baseline.expected.stdout);
+          } finally {
+            rmSync(adapterCwd, { recursive: true, force: true });
+          }
+        } else if (
+          args[0] === 'add' &&
+          args.length === 2 &&
+          !args[1].startsWith('-')
+        ) {
+          // Plan 02-09: vcs.stage([file]) wraps the no-pathspec-separator
+          // form `git add <file>`. Captured for sites 332 (cmdCommit) and 398
+          // (commitFilesIfDeletion). The adapter's stage() call adds a `--`
+          // separator internally (git.ts:384), which is byte-identical to
+          // running `git add <file>` for paths that don't start with `-`
+          // (the captured fixture uses `foo.txt` / `bar.txt` — no leading
+          // dashes). Compare exit + std streams.
+          const files = args.slice(1);
+          const r = vcs.stage(files);
+          expect({
+            exitCode: r.exitCode,
+            stdout: r.stdout,
+            stderr: r.stderr,
+          }).toEqual({
+            exitCode: baseline.expected.exitCode,
+            stdout: baseline.expected.stdout,
+            stderr: baseline.expected.stderr,
+          });
+        } else if (
+          args[0] === 'commit' &&
+          args.includes('-m') &&
+          !args.includes('--') &&
+          !args.includes('--amend')
+        ) {
+          // Plan 02-09: vcs.commit({message, pathspec:[]}) wraps the
+          // no-pathspec form `git commit -m <msg>`. Captured for sites 339
+          // (cmdCommit) and 402 (commitFilesIfDeletion). The canonical
+          // execGit call above already commits the staged path, so the
+          // adapter call needs a fresh fixture (mirrors plan 02-08's
+          // commit-clause per-fixture re-init pattern). The migrated
+          // commands.cjs uses pathspec: stagedOrUnstaged for #2014 safety;
+          // for the baseline-parity assertion we route through pathspec
+          // with the staged path so the backend takes the already-staged-
+          // paths branch (commit -m <msg> -- <path>) — byte-identical exit
+          // semantics to the canonical `commit -m <msg>` form on the same
+          // single-file fixture.
+          const msgIdx = args.indexOf('-m');
+          const message = args[msgIdx + 1];
+          const adapterCwd = initFixture(baseline);
+          try {
+            const adapterVcs = createVcsAdapter(adapterCwd);
+            if (adapterVcs.kind !== 'git') throw new Error('expected git adapter');
+            // Fixture's setup staged a single file (foo.txt or bar.txt);
+            // route through pathspec with the same path so the adapter
+            // takes the no-`-am` already-staged branch.
+            const pathspec = baseline.fixture.setup
+              .filter(s => /^git add /.test(s))
+              .map(s => s.replace(/^git add /, '').trim());
+            const r = adapterVcs.commit({ message, pathspec });
+            expect(r.exitCode).toBe(baseline.expected.exitCode);
+            if (baseline.match?.stdout?.startsWith('regex:')) {
+              const re = new RegExp(baseline.match.stdout.slice('regex:'.length));
+              expect(r.stdout).toMatch(re);
+            } else {
+              expect(r.stdout).toBe(baseline.expected.stdout);
+            }
+            expect(r.stderr).toBe(baseline.expected.stderr);
+          } finally {
+            rmSync(adapterCwd, { recursive: true, force: true });
+          }
         }
       } finally {
         rmSync(cwd, { recursive: true, force: true });
