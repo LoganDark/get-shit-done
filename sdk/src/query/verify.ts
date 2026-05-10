@@ -328,18 +328,25 @@ export const verifyCommits: QueryHandler = async (args, projectDir) => {
     throw new GSDError('At least one commit hash required', ErrorClassification.Validation);
   }
 
-  // Plan 02-08: the local execGit shim in ./commit.js was deleted as part of
-  // the W5 prescriptive-import migration. Route through the canonical re-export
-  // from the VCS module instead. The 5-field ExecResult shape is a strict
-  // superset of the 3-field shape this caller reads (exitCode + stdout).
-  // Plan 02-10 will migrate verify.ts proper to the higher-level adapter API.
-  const { execGit } = await import('../vcs/index.js');
+  // Plan 02-10: migrated from execGit shim to VcsAdapter.
+  // Blocker 3 closure — runtime SHA wraps via expr.commit(hash). expr.commit
+  // shape-validates the SHA (4-40 hex chars); inputs that fail validation
+  // throw and route to invalid. Mirrors the verify.cjs:268 semantic shift
+  // (any reachable object — commit/tree/blob/tag — registers as "valid"; in
+  // practice CLI inputs are commit hashes).
+  const { createVcsAdapter, expr } = await import('../vcs/index.js');
+  const vcs = createVcsAdapter(projectDir);
   const valid: string[] = [];
   const invalid: string[] = [];
 
   for (const hash of args) {
-    const result = execGit(projectDir, ['cat-file', '-t', hash]);
-    if (result.exitCode === 0 && result.stdout.trim() === 'commit') {
+    let exists = false;
+    try {
+      exists = vcs.refs.exists(expr.commit(hash));
+    } catch {
+      exists = false; // expr.commit shape-validation throw → invalid
+    }
+    if (exists) {
       valid.push(hash);
     } else {
       invalid.push(hash);
@@ -482,18 +489,25 @@ export const verifySummary: QueryHandler = async (args, projectDir) => {
     }
   }
 
-  // Plan 02-08: the local execGit shim in ./commit.js was deleted as part of
-  // the W5 prescriptive-import migration. Route through the canonical re-export
-  // from the VCS module instead. The 5-field ExecResult shape is a strict
-  // superset of the 3-field shape this caller reads (exitCode + stdout).
-  // Plan 02-10 will migrate verify.ts proper to the higher-level adapter API.
-  const { execGit } = await import('../vcs/index.js');
+  // Plan 02-10: migrated from execGit shim to VcsAdapter.
+  // Blocker 3 closure — runtime SHA wraps via expr.commit(hash). The original
+  // probe also matched stdout==='commit' (vs 'tree'/'blob'/'tag'); for
+  // SUMMARY-mentioned hashes the exit-0 path is dominated by commit objects,
+  // and tree/blob hashes shorter than 4 chars are rejected by expr.commit's
+  // SHA shape validation — preserving the spirit of the existing probe.
+  const { createVcsAdapter, expr } = await import('../vcs/index.js');
+  const vcs = createVcsAdapter(projectDir);
   const commitHashPattern = /\b[0-9a-f]{7,40}\b/g;
   const hashes = content.match(commitHashPattern) || [];
   let commitsExist = false;
   for (const hash of hashes.slice(0, 3)) {
-    const result = execGit(projectDir, ['cat-file', '-t', hash]);
-    if (result.exitCode === 0 && result.stdout.trim() === 'commit') {
+    let exists = false;
+    try {
+      exists = vcs.refs.exists(expr.commit(hash));
+    } catch {
+      exists = false;
+    }
+    if (exists) {
       commitsExist = true;
       break;
     }
@@ -574,12 +588,11 @@ export const verifySchemaDrift: QueryHandler = async (args, projectDir, workstre
   }
 
   const { checkSchemaDrift } = await import('./schema-detect.js');
-  // Plan 02-08: the local execGit shim in ./commit.js was deleted as part of
-  // the W5 prescriptive-import migration. Route through the canonical re-export
-  // from the VCS module instead. The 5-field ExecResult shape is a strict
-  // superset of the 3-field shape this caller reads (exitCode + stdout).
-  // Plan 02-10 will migrate verify.ts proper to the higher-level adapter API.
-  const { execGit } = await import('../vcs/index.js');
+  // Plan 02-10: migrated to VcsAdapter — site 628 uses LogOpts.allRefs
+  // gap-fill from 02-03; LogEntry[] is reconstructed to byte-equivalent
+  // `--oneline` output (short-sha + subject) since the legacy callers
+  // consume the joined stdout as a free-text grep target.
+  const { createVcsAdapter } = await import('../vcs/index.js');
 
   const phasesDir = planningPaths(projectDir, workstream).phases;
   if (!existsSync(phasesDir)) {
@@ -640,9 +653,18 @@ export const verifySchemaDrift: QueryHandler = async (args, projectDir, workstre
     executionLog += readFileSync(join(phaseDir, sf), 'utf-8') + '\n';
   }
 
-  const gitLog = execGit(projectDir, ['log', '--oneline', '--all', '-50']);
-  if (gitLog.exitCode === 0) {
-    executionLog += '\n' + gitLog.stdout;
+  const vcs = createVcsAdapter(projectDir);
+  let logEntries: import('../vcs/types.js').LogEntry[] = [];
+  try {
+    logEntries = vcs.log({ format: 'oneline', maxCount: 50, allRefs: true });
+  } catch {
+    logEntries = [];
+  }
+  if (logEntries.length > 0) {
+    const oneline = logEntries
+      .map((e) => `${(e.hash || '').slice(0, 7)} ${e.subject || ''}`)
+      .join('\n');
+    executionLog += '\n' + oneline;
   }
 
   const result = checkSchemaDrift(allFiles, executionLog, { skipCheck: !!skipFlag });
