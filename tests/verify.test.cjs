@@ -7,7 +7,12 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const { runGsdTools, createTempProject, createTempGitProject, cleanup } = require('./helpers.cjs');
-const { execSync } = require('child_process');
+// Plan 02-10: paired-test retarget per D-06. Replace bespoke execSync('git …')
+// fixture setup with the VcsAdapter (mirrors plan 02-08/02-09 paired-test
+// migrations). The CLI under test (verify-summary, verify-commits) still
+// operates on git internally — these are setup-only adapter calls so the
+// test exercises real commits without raw-git in the test body.
+const { createVcsAdapter } = require('../sdk/dist-cjs/vcs');
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -407,13 +412,14 @@ describe('verify summary command', () => {
   });
 
   test('passes for valid summary with real files and commits', () => {
-    // Create a source file and commit it
+    // Create a source file and commit it (paired-test retarget — plan 02-10).
     fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, 'src', 'app.js'), 'console.log("hello");\n');
-    execSync('git add -A', { cwd: tmpDir, stdio: 'pipe' });
-    execSync('git commit -m "add app.js"', { cwd: tmpDir, stdio: 'pipe' });
+    const vcs = createVcsAdapter(tmpDir);
+    vcs.stage(['src/app.js']);
+    vcs.commit({ message: 'add app.js', files: ['src/app.js'] });
 
-    const hash = execSync('git rev-parse --short HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
+    const hash = vcs.refs.resolveShort(vcs.refs.head);
 
     // Write SUMMARY.md referencing the file and commit hash
     const summaryPath = path.join(tmpDir, '.planning', 'phases', '01-test', '01-01-SUMMARY.md');
@@ -641,7 +647,8 @@ describe('verify commits command', () => {
   });
 
   test('validates real commit hashes', () => {
-    const hash = execSync('git rev-parse --short HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
+    // Paired-test retarget — plan 02-10. Use VcsAdapter to read HEAD's short SHA.
+    const hash = createVcsAdapter(tmpDir).refs.resolveShort(createVcsAdapter(tmpDir).refs.head);
 
     const result = runGsdTools(`verify commits ${hash}`, tmpDir);
     assert.ok(result.success, `Command failed: ${result.error}`);
@@ -664,7 +671,9 @@ describe('verify commits command', () => {
   });
 
   test('handles mixed valid and invalid hashes', () => {
-    const hash = execSync('git rev-parse --short HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
+    // Paired-test retarget — plan 02-10. Use VcsAdapter to read HEAD's short SHA.
+    const vcs = createVcsAdapter(tmpDir);
+    const hash = vcs.refs.resolveShort(vcs.refs.head);
 
     const result = runGsdTools(`verify commits ${hash} abcdef1234567`, tmpDir);
     assert.ok(result.success, `Command failed: ${result.error}`);

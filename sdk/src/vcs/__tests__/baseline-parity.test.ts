@@ -515,6 +515,74 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           } finally {
             rmSync(adapterCwd, { recursive: true, force: true });
           }
+        } else if (
+          args[0] === 'cat-file' &&
+          args[1] === '-t' &&
+          args.length === 3
+        ) {
+          // Plan 02-10: vcs.refs.exists(expr.commit(<sha>)) wraps
+          // `git cat-file -t <sha>`. Captured for verify.cjs sites 71, 268,
+          // 1305 and verify.ts sites 336, 485 (Blocker 3 closure: runtime SHA
+          // wraps via expr.commit factory). The captured fixture's HEAD-token
+          // arg resolves to the initial commit's SHA; we re-resolve via
+          // execGit (a separate plumbing probe), wrap as expr.commit, and
+          // assert the adapter call returns true.
+          const headRes = execGit(cwd, ['rev-parse', 'HEAD']);
+          const fullSha = headRes.stdout.trim();
+          const exists = vcs.refs.exists(expr.commit(fullSha));
+          expect(exists).toBe(true);
+          // Negative: a clearly-bogus SHA must NOT exist.
+          const bogus = vcs.refs.exists(expr.commit('0123456789abcdef0123456789abcdef01234567'));
+          expect(bogus).toBe(false);
+        } else if (
+          args[0] === 'log' &&
+          args.includes('--oneline') &&
+          args.includes('--all')
+        ) {
+          // Plan 02-10: vcs.log({format:'oneline', maxCount:50, allRefs:true})
+          // wraps `git log --oneline --all -50`. Captured for verify.cjs:1224
+          // and verify.ts:628. The adapter returns LogEntry[] with hash +
+          // subject populated; reconstruct the byte-equivalent oneline form
+          // and assert it matches the captured shape (regex due to
+          // wall-clock-derived short SHAs).
+          const limitIdx = args.findIndex((a) => /^-\d+$/.test(a));
+          const limit = limitIdx >= 0 ? Math.abs(parseInt(args[limitIdx], 10)) : 50;
+          const entries = vcs.log({ format: 'oneline', maxCount: limit, allRefs: true });
+          const reconstructed = entries
+            .map((e) => `${(e.hash || '').slice(0, 7)} ${e.subject || ''}`)
+            .join('\n');
+          if (baseline.match?.stdout?.startsWith('regex:')) {
+            const re = new RegExp(baseline.match.stdout.slice('regex:'.length));
+            expect(reconstructed).toMatch(re);
+          } else {
+            expect(reconstructed).toBe(baseline.expected.stdout);
+          }
+        } else if (
+          args[0] === 'diff' &&
+          args.includes('--name-status')
+        ) {
+          // Plan 02-10: vcs.diff({rev: expr.range(...), nameStatus:true})
+          // wraps `git diff --name-status <base> HEAD`. Captured for
+          // verify.cjs:1309. The captured args use `HEAD~1 HEAD` (two-rev
+          // form); the adapter routes through expr.range(from, to) which
+          // emits `<from>..<to>` — semantically equivalent for linear
+          // ancestor relationships. Stage adapter call against the same
+          // fixture and assert raw stdout match.
+          const baseArg = args[args.indexOf('--name-status') + 1];
+          const targetArg = args[args.indexOf('--name-status') + 2];
+          // Resolve baseArg/targetArg to full SHAs via execGit so
+          // expr.commit's shape validation accepts them.
+          const baseRes = execGit(cwd, ['rev-parse', baseArg]);
+          const targetRes = execGit(cwd, ['rev-parse', targetArg]);
+          const baseSha = baseRes.stdout.trim();
+          const targetSha = targetRes.stdout.trim();
+          const result = vcs.diff({
+            rev: expr.range(expr.commit(baseSha), expr.commit(targetSha)),
+            nameStatus: true,
+          });
+          expect(result.raw).toBe(baseline.expected.stdout);
+          // nameStatus entries should also reflect the captured shape.
+          expect(Array.isArray(result.nameStatus)).toBe(true);
         }
       } finally {
         rmSync(cwd, { recursive: true, force: true });

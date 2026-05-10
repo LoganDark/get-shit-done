@@ -452,6 +452,85 @@ const baselines = [
     fixture: [],
     args: ['show', '-s', '--format=%as', 'HEAD'],
   },
+  // Plan 02-10: get-shit-done/bin/lib/verify.cjs (1,390 LOC, 6 sites). The
+  // cat-file -t probes (71/268/1305) take a runtime SHA and route through
+  // vcs.refs.exists(expr.commit(hash)) per Blocker 3 from iteration 1
+  // (structured factory closure). Site 1224 consumes LogOpts.allRefs gap-fill.
+  // Site 1286 is the "is this a git repo" probe via vcs.refs.exists(vcs.refs.head).
+  // Site 1309 consumes DiffOpts.nameStatus gap-fill.
+  {
+    id: 'verify-cjs-71-cat-file',
+    source: 'get-shit-done/bin/lib/verify.cjs:71',
+    // cmdVerifySummary: runtime SHA from a SUMMARY.md probe. Use HEAD's full
+    // sha as a stand-in — the actual call site receives a 7-40 hex string
+    // pattern-matched from arbitrary text. Captured args target HEAD because
+    // capture-time the SHA isn't deterministic; the parity dispatch clause
+    // probes via expr.commit(<full HEAD sha>).
+    fixture: [],
+    args: ['cat-file', '-t', 'HEAD'],
+  },
+  {
+    id: 'verify-cjs-268-cat-file',
+    source: 'get-shit-done/bin/lib/verify.cjs:268',
+    // cmdVerifyCommits: same shape as 71, takes a list of hashes from CLI args.
+    fixture: [],
+    args: ['cat-file', '-t', 'HEAD'],
+  },
+  {
+    id: 'verify-cjs-1224-log-all',
+    source: 'get-shit-done/bin/lib/verify.cjs:1224',
+    // cmdVerifySchemaDrift: walks all refs to check for push commits.
+    // Adapter equivalent: vcs.log({format:'oneline', maxCount:50, allRefs:true}).
+    fixture: [],
+    args: ['log', '--oneline', '--all', '-50'],
+  },
+  {
+    id: 'verify-cjs-1286-rev-parse',
+    source: 'get-shit-done/bin/lib/verify.cjs:1286',
+    // cmdVerifyCodebaseDrift: "is this a git repo" probe. Adapter equivalent:
+    // vcs.refs.exists(vcs.refs.head) → boolean. Full HEAD sha output is
+    // wall-clock dependent; baseline match is regex.
+    fixture: [],
+    args: ['rev-parse', 'HEAD'],
+  },
+  {
+    id: 'verify-cjs-1305-cat-file',
+    source: 'get-shit-done/bin/lib/verify.cjs:1305',
+    // cmdVerifyCodebaseDrift: probe whether a recorded base SHA is reachable
+    // before passing it to diff. Same shape as 71/268; expr.commit wrap.
+    fixture: [],
+    args: ['cat-file', '-t', 'HEAD'],
+  },
+  {
+    id: 'verify-cjs-1309-diff-name-status',
+    source: 'get-shit-done/bin/lib/verify.cjs:1309',
+    // cmdVerifyCodebaseDrift: paired with 1305 (uses the same `base` SHA). The
+    // baseline probes `git diff --name-status <base> HEAD`; for capture we use
+    // HEAD as both ends so output is empty (no changes). Adapter equivalent:
+    // vcs.diff({rev: expr.commit(base), nameStatus: true}).
+    fixture: ['echo a > a.txt', 'git add a.txt', 'git commit -m c1'],
+    args: ['diff', '--name-status', 'HEAD~1', 'HEAD'],
+  },
+  // Plan 02-10: sdk/src/query/verify.ts (692 LOC, 3 sites). Byte-symmetric
+  // port of verify.cjs's 71/268/1224 sites — same gap-fill verbs.
+  {
+    id: 'verify-ts-336-cat-file',
+    source: 'sdk/src/query/verify.ts:336',
+    fixture: [],
+    args: ['cat-file', '-t', 'HEAD'],
+  },
+  {
+    id: 'verify-ts-485-cat-file',
+    source: 'sdk/src/query/verify.ts:485',
+    fixture: [],
+    args: ['cat-file', '-t', 'HEAD'],
+  },
+  {
+    id: 'verify-ts-628-log-all',
+    source: 'sdk/src/query/verify.ts:628',
+    fixture: [],
+    args: ['log', '--oneline', '--all', '-50'],
+  },
 ];
 
 fs.mkdirSync(OUT, { recursive: true });
@@ -562,6 +641,41 @@ for (const b of baselines) {
       // author iso-date (YYYY-MM-DD); the date is the wall-clock capture date
       // so a regex match is appropriate. Mirrors plan 02-06's progress-ts-293.
       stdoutMatch = 'regex:^[0-9]{4}-[0-9]{2}-[0-9]{2}$';
+    } else if (
+      b.id === 'verify-cjs-1286-rev-parse'
+    ) {
+      // Plan 02-10: `rev-parse HEAD` emits the full HEAD SHA (40 hex chars).
+      // The SHA depends on the wall-clock initial-commit timestamp; regex
+      // match is the durable assertion. Mirrors plan 02-07's
+      // graphify-cjs-373-rev-parse-head pattern.
+      stdoutMatch = 'regex:^[0-9a-f]{40}$';
+    } else if (
+      b.id === 'verify-cjs-71-cat-file' ||
+      b.id === 'verify-cjs-268-cat-file' ||
+      b.id === 'verify-cjs-1305-cat-file' ||
+      b.id === 'verify-ts-336-cat-file' ||
+      b.id === 'verify-ts-485-cat-file'
+    ) {
+      // Plan 02-10: `cat-file -t HEAD` emits the constant token "commit". The
+      // probe is exit-code-driven (0 = exists, non-zero = absent), so stdout
+      // is durable across captures.
+      stdoutMatch = 'exact';
+    } else if (
+      b.id === 'verify-cjs-1224-log-all' ||
+      b.id === 'verify-ts-628-log-all'
+    ) {
+      // Plan 02-10: `log --oneline --all -50` emits one line per ref-reachable
+      // commit, each `<short-sha> <subject>`. Short SHAs depend on the
+      // wall-clock initial-commit timestamp; the empty-fixture case yields a
+      // single line for the initial commit. Match the canonical shape loosely.
+      stdoutMatch = 'regex:^[0-9a-f]{7,} initial$';
+    } else if (
+      b.id === 'verify-cjs-1309-diff-name-status'
+    ) {
+      // Plan 02-10: `diff --name-status HEAD~1 HEAD` emits one line per changed
+      // file (`<status>\t<path>`). The fixture creates one new file, so stdout
+      // is the deterministic literal `A\ta.txt`. Use exact match.
+      stdoutMatch = 'exact';
     }
     const record = {
       id: b.id,
