@@ -134,7 +134,7 @@ This fork dogfoods on its own repo (which is jj-colocated). Brownfield workflows
 
 - [ ] **UPSTREAM-01**: jj-native rebase workflow documented for pulling upstream main onto fork commits (live rebase, fork commits stay on top of upstream main)
 - [x] **UPSTREAM-02**: Fork-specific code organized to minimize merge conflicts: adapter-shaped (mechanical) edits in upstream files; jj-specific code lives in sidecar files (`sdk/src/vcs/jj/`, `sdk/src/vcs/parse/jj-*.ts`) which carry zero conflict surface
-- [ ] **UPSTREAM-03**: Hotspot files (`core.cjs` 2036 LOC, `verify.cjs` 1390, `commands.cjs` 1028) only see adapter call-site swaps inline; no jj-specific logic embedded
+- [x] **UPSTREAM-03**: Hotspot files (`core.cjs` 2036 LOC, `verify.cjs` 1390, `commands.cjs` 1028) only see adapter call-site swaps inline; no jj-specific logic embedded
 
 ### CI / Release (CI)
 
@@ -214,7 +214,7 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | TEST-05 | Phase 2 | Complete |
 | UPSTREAM-01 | Phase 2 | Pending |
 | UPSTREAM-02 | Phase 2 | Complete |
-| UPSTREAM-03 | Phase 2 | Pending |
+| UPSTREAM-03 | Phase 2 | Complete |
 | JJ-01 | Phase 3 | Pending |
 | JJ-02 | Phase 3 | Pending |
 | JJ-03 | Phase 3 | Pending |

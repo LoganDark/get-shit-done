@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 02-07-PLAN.md
-last_updated: "2026-05-10T06:18:26.785Z"
+last_updated: "2026-05-10T06:31:33.543Z"
 last_activity: 2026-05-10
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 17
-  completed_plans: 15
-  percent: 88
+  completed_plans: 16
+  percent: 94
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 02 (bulk-call-site-migration-still-git-only) — EXECUTING
-Plan: 11 of 12
+Plan: 12 of 12
 Status: Ready to execute
 Last activity: 2026-05-10
 
-Progress: [█████████░] 88%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -67,6 +67,7 @@ Progress: [█████████░] 88%
 | Phase 02 P08 | ~25m | 1 tasks | 15 files |
 | Phase 02 P09 | ~30m | 2 tasks tasks | 19 files files |
 | Phase 02 P10 | ~11m | 2 tasks | 14 files |
+| Phase 02 P11 | 13m | 2 tasks tasks | 5 files files |
 
 ## Accumulated Context
 
@@ -123,6 +124,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 02-10]: verify.cjs (1,390 LOC, 6 sites) + verify.ts (692 LOC, 3 sites) byte-symmetric migration; first production consumers of LogOpts.allRefs and DiffOpts.nameStatus gap-fills from 02-03; Blocker-3 closure expanded to 9 expr.commit consumers across 5 files
 - [Phase ?]: [Phase 02-10]: verify.cjs:1309 two-rev diff (base..HEAD) routes via expr.range(expr.commit(base), expr.head()); first production consumer of expr.range outside graphify.cjs; range form byte-equivalent to two-rev for linear-ancestor relationship drift detection guarantees
 - [Phase ?]: [Phase 02-10]: cat-file -t probes lose stdout-token discrimination (commit/tree/blob/tag) when migrated to vcs.refs.exists — plan-sanctioned semantic shift; expr.commit shape validation catches malformed inputs; documented at all 5 cat-file probe sites in verify.cjs/verify.ts
+- [Phase ?]: [Phase 02-11]: core.cjs (largest hotspot, 2,036 LOC) site 603 migrated; execGit helper + DEFAULT_GIT_TIMEOUT_MS deleted (every consumer retired by 02-04/02-09/02-10); Phase 2 production-source migration COMPLETE (lint guard exits 0); UPSTREAM-03 hotspot audit verified D-08 mechanical-only across all three hotspots — Phase 2 ready to merge to main
 
 ### Pending Todos
 
@@ -142,7 +144,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-10T06:17:47.293Z
+Last session: 2026-05-10T06:31:33.537Z
 Stopped at: Completed 02-07-PLAN.md
 Resume file: None
 
