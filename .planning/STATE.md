@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 2 context gathered
-last_updated: "2026-05-10T03:35:59.061Z"
+last_updated: "2026-05-10T03:54:22.285Z"
 last_activity: 2026-05-10
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 17
-  completed_plans: 9
-  percent: 53
+  completed_plans: 10
+  percent: 59
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 02 (bulk-call-site-migration-still-git-only) — EXECUTING
-Plan: 5 of 12
+Plan: 6 of 12
 Status: Ready to execute
 Last activity: 2026-05-10
 
-Progress: [█████░░░░░] 53%
+Progress: [██████░░░░] 59%
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [█████░░░░░] 53%
 | Phase 02 P02 | 9m | 3 tasks | 3 files |
 | Phase 02 P03 | 7m | 4 tasks | 9 files |
 | Phase 02 P04 | 10m | 2 tasks | 8 files |
+| Phase 02 P05 | 12m | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -101,6 +102,9 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 02-04]: smoke-test (D-01) confirms relative-path require shape from bin/lib/*.cjs to dist-cjs (../../../sdk/dist-cjs/vcs/...); package-name @gsd-build/sdk does not resolve. Locks pattern for plans 02-05+.
 - [Phase ?]: [Phase 02-04]: worktree-safety.cjs uses two injection seams: deps.readPorcelain (surgical porcelain-reader override for line-80 mocks) + deps.vcs (VcsAdapter mock for context/prune); ADR-0004 deps={} signature preserved (W4).
 - [Phase ?]: [Phase 02-04]: prune-orphaned-worktrees and bug-2774 test files DEFERRED (Rule 4) — need workspace.add(branchCreate), merge, checkout, branch-rename adapter verbs before vcsTest retarget is mechanical; follow-up plan required.
+- [Phase ?]: [Phase 02-05]: init.cjs (3 sites) and init.ts (3 sites) byte-symmetric migration to VcsAdapter; lint 13→7 / 7→5 files; D-06 paired retarget via gitOnly.init()+configSet()
+- [Phase ?]: [Phase 02-05]: baseline-parity dispatch is args-shape-keyed not id-keyed — adding new baseline files auto-spawns new it() cases without requiring new dispatch clauses (D-08 mechanical-only)
+- [Phase ?]: [Phase 02-05]: init.cjs's detectChildRepos / cmdInitNewWorkspace / cmdInitWorkspaceStatus have no direct test coverage — pre-existing testing gap, surface for future maintenance
 
 ### Pending Todos
 
@@ -120,7 +124,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-10T03:35:33.550Z
+Last session: 2026-05-10T03:53:55.738Z
 Stopped at: Phase 2 context gathered
 Resume file: None
 

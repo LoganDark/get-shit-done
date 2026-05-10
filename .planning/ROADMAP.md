@@ -54,7 +54,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 - [x] 02-02-PLAN.md — Helpers migration + day-one allowlist shrink + sdk/src/vcs/jj/ sidecar (D-09, D-13, D-15)
 - [x] 02-03-PLAN.md — Adapter gap-fill: 17 forward-complete verbs + expr.range factory
 - [x] 02-04-PLAN.md — Smoke-test (worktree-safety.cjs:80) + complete worktree-safety.cjs migration (D-01, D-02)
-- [ ] 02-05-PLAN.md — Migrate init.cjs + init.ts (byte-symmetric ports; 6 sites)
+- [x] 02-05-PLAN.md — Migrate init.cjs + init.ts (byte-symmetric ports; 6 sites)
 - [ ] 02-06-PLAN.md — Migrate progress.ts, check-ship-ready.ts, init-runner.ts (9 sites; async→sync flip)
 - [ ] 02-07-PLAN.md — Migrate graphify.cjs (first expr.range consumer in production)
 - [ ] 02-08-PLAN.md — Migrate commit.ts + commit.test.ts (gate from 02-01 closes)
@@ -108,7 +108,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Adapter Foundation + Git Backend | 5/5 | Complete | 2026-05-09 |
-| 2. Bulk Call-Site Migration (Still Git-Only) | 0/TBD | Not started | - |
+| 2. Bulk Call-Site Migration (Still Git-Only) | 5/12 | In Progress|  |
 | 3. jj Backend Core — Squash, Refs, Conflict | 0/TBD | Not started | - |
 | 4. Workspaces + Octopus Structure + Hooks | 0/TBD | Not started | - |
 | 5. Command Translations + Brownfield Validation + CI Hardening | 0/TBD | Not started | - |
