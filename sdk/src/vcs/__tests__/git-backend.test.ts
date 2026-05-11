@@ -251,9 +251,49 @@ describe('parseDiffCheckPath (CR-03 / WR-02)', () => {
 });
 
 describe('createGitAdapter — findConflicts', () => {
-  it('findConflicts({scope: "all"}) returns []', () => {
+  it('findConflicts({scope: "all"}) returns [] on a clean repo (WR-05)', () => {
     const vcs = createGitAdapter(tmpDir);
     expect(vcs.findConflicts({ scope: 'all' })).toEqual([]);
+  });
+
+  it('findConflicts({scope: "all"}) returns INDEX entry when git ls-files --unmerged reports conflicts (WR-05)', () => {
+    // Drive a real two-branch merge that conflicts on a single path. The
+    // failed `git merge` leaves the index with stage 1/2/3 entries for the
+    // conflicted file, which is exactly what `ls-files --unmerged` reports.
+    const vcs = createGitAdapter(tmpDir);
+    const conflictPath = 'merge-me.txt';
+    // Set the initial branch name deterministically (older git defaults to
+    // `master`, newer to `main` depending on init.defaultBranch — pick one).
+    execSync('git checkout -b main', { cwd: tmpDir, stdio: 'pipe' });
+    writeFileSync(join(tmpDir, conflictPath), 'base line\n');
+    execSync(`git add ${conflictPath}`, { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git commit -m base', { cwd: tmpDir, stdio: 'pipe' });
+    // Branch B: our side
+    execSync('git checkout -b ours', { cwd: tmpDir, stdio: 'pipe' });
+    writeFileSync(join(tmpDir, conflictPath), 'ours line\n');
+    execSync(`git add ${conflictPath}`, { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git commit -m ours', { cwd: tmpDir, stdio: 'pipe' });
+    // Branch C: their side (from base again)
+    execSync('git checkout main', { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git checkout -b theirs', { cwd: tmpDir, stdio: 'pipe' });
+    writeFileSync(join(tmpDir, conflictPath), 'theirs line\n');
+    execSync(`git add ${conflictPath}`, { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git commit -m theirs', { cwd: tmpDir, stdio: 'pipe' });
+    // Now merge ours into theirs — conflicts on conflictPath.
+    try {
+      execSync('git merge ours --no-edit', { cwd: tmpDir, stdio: 'pipe' });
+    } catch {
+      // expected — non-zero exit because of conflict
+    }
+
+    const r = vcs.findConflicts({ scope: 'all' });
+    expect(r.length).toBe(1);
+    expect(r[0].rev).toBe('INDEX');
+    expect(r[0].scope).toBe('all');
+    expect(r[0].paths).toContain(conflictPath);
+    // Each path appears once, even though ls-files --unmerged emits three
+    // stage entries (1/2/3) per path.
+    expect(r[0].paths.filter((p) => p === conflictPath).length).toBe(1);
   });
 
   it('findConflicts({scope: "working-copy"}) detects conflict markers in working tree', () => {

@@ -472,10 +472,28 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
   const findConflicts = (opts: { scope: 'all' | 'working-copy' }): ConflictResult[] => {
     if (opts.scope === 'all') {
       // RESEARCH Open Q1: git has no first-class equivalent of `jj log -r 'conflict()'`.
-      // Phase 1 returns []; Phase 3 jj backend implements the real semantics.
-      // The verify gate (CONFLICT-03) consumes 'all' scope and will exercise jj-side
-      // logic in Phase 3.
-      return [];
+      // Phase 3 jj backend implements the real revset semantics; on git we
+      // approximate via `git ls-files --unmerged`, which surfaces index-side
+      // conflict entries (mid-merge / mid-rebase / mid-cherry-pick). WR-05
+      // (Phase 2 review): previously returned `[]` unconditionally, which the
+      // verify gate (CONFLICT-03) interpreted as "no conflicts" — silently
+      // passing on a git repo with actual unmerged entries in the index. We
+      // now fail-closed by returning the populated list when conflicts exist.
+      //
+      // `git ls-files --unmerged` emits one line per stage entry:
+      //   <mode> <sha> <stage>\t<path>
+      // Collect unique paths (a single unmerged file produces multiple stage
+      // entries — base/ours/theirs — and we want one entry per path).
+      const r = execGit(cwd, ['ls-files', '--unmerged']);
+      if (r.exitCode !== 0 || r.stdout.length === 0) return [];
+      const paths = new Set<string>();
+      for (const line of r.stdout.split('\n')) {
+        const tab = line.indexOf('\t');
+        if (tab > 0) paths.add(line.slice(tab + 1));
+      }
+      return paths.size > 0
+        ? [{ rev: 'INDEX', paths: [...paths], scope: 'all' }]
+        : [];
     }
     // working-copy scope: `git diff --check` reports leftover conflict markers.
     const r = execGit(cwd, ['diff', '--check']);
