@@ -63,6 +63,16 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 - [x] 02-11-PLAN.md — Migrate core.cjs (LAST, largest hotspot; delete execGit helper) + UPSTREAM-03 hotspot audit
 - [x] 02-12-PLAN.md — Deferred-tracker for MIGR-04 + UPSTREAM-01 (deferred to milestone-end per D-17); user sign-off 2026-05-11
 
+### Phase 2.1: VCS Abstraction Audit — Drop Git-Only Concepts (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 2
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 2.1 to break down)
+
 ### Phase 3: jj Backend Core — Squash, Refs, Conflict
 **Goal**: Land `sdk/src/vcs/backends/jj.ts` implementing the full adapter contract with the squash-based commit model, NDJSON output parsing, bookmark refs, and in-tree conflict detection — the working-copy auto-snapshot is allowed by default and `--ignore-working-copy` is never used by adapter code.
 **Depends on**: Phase 2
