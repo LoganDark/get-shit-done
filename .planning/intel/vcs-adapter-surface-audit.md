@@ -29,8 +29,8 @@ Legend:
 | `status(opts?: StatusOpts)` | 🔧 KEEP (reshape) | `StatusEntry.index` is git-only (jj has no index). Drop `index` field; keep `path` + `worktree` | many |
 | `diff(opts?: DiffOpts)` | 🔧 KEEP (reshape) | Drop `DiffOpts.staged` (git-only); zero callers use it today | 0 stagedrefs |
 | `findConflicts({scope})` | ✅ KEEP | jj has first-class conflicts; scope distinction maps; document model difference | (in verify) |
-| `push(opts?)` | ➡️ MOVE → gitOnly | git remote concept; jj-git inherits but jj-native has no remotes. User rule: "no operation without a direct jj equivalent" → gitOnly | 1 |
-| `fetch(opts?)` | ➡️ MOVE → gitOnly | Same as push | 0 |
+| `push(opts?)` | ✅ KEEP | `jj git push` exists — jj has full git-remote interop via `jj git *` subcommands | 1 |
+| `fetch(opts?)` | ✅ KEEP | `jj git fetch` exists | 0 |
 | `stage(files)` | 🚫 REMOVE | Git-only (no jj index). Callers refactor onto `vcs.commit({files})` | **34** |
 | `unstage(files)` | 🚫 REMOVE | Git-only. Deletions: caller deletes file in WC, includes path in `commit.files` | **7** |
 | `cwd` (readonly) | ✅ KEEP | Both backends operate in a cwd | — |
@@ -48,7 +48,7 @@ Legend:
 | `rootCommits({rev?})` | ✅ KEEP | Both have root commits; jj has `root()` revset | (few) |
 | `exists(rev)` | ✅ KEEP | Both resolve rev expressions | many (verify.cjs) |
 | `isIgnored(path)` | 🔧 KEEP (or MOVE) | `.gitignore` semantics. jj reads `.gitignore` in colocated mode; jj-native has different model. **Open question for discuss-phase:** keep with documented dual-semantic, or move to gitOnly | **6** |
-| `remotes()` | ➡️ MOVE → gitOnly | Git remote concept; jj-native has no remotes | **5** |
+| `remotes()` | ✅ KEEP | `jj git remote list` exists; revset `remote_bookmarks()` exposes per-remote refs | **5** |
 
 ### `VcsBookmarks`
 
@@ -109,7 +109,7 @@ Changes:
 | `expr.head()` | ✅ KEEP | Both |
 | `expr.parent()` | ✅ KEEP | Both |
 | `expr.bookmark(name)` | ✅ KEEP | Both |
-| `expr.remote(branch, remoteName)` | ➡️ MOVE / RECONSIDER | Remotes are git-flavored. If `vcs.refs.remotes` moves to gitOnly, `expr.remote` likely follows. **Open question for discuss-phase.** |
+| `expr.remote(branch, remoteName)` | ✅ KEEP | jj has the `<bookmark>@<remote>` revset syntax for the same concept (e.g. `main@origin`) — maps cleanly. Translator emits `<remote>/<branch>` for git, `<branch>@<remote>` for jj |
 | `expr.range(from, to)` | ✅ KEEP | Both have ranges |
 | `expr.commit(sha)` | 🔧 KEEP (clarify) | Currently validates 4-40 hex (commit-hash-shape). On jj, `commit_id` is also hex; `change_id` uses different alphabet. Document: this is **commit-hash-shape, not change-id-shape**. **Open question:** should there be a separate `expr.change(changeId)` for jj-flavored callers? Probably defer to Phase 3. |
 
@@ -133,17 +133,14 @@ Refactor scope by verb:
 | `vcs.unstage` | 7 | Fold into `vcs.commit({files})` (delete file in WC + include path) |
 | `vcs.commit({ pathspec })` | 10 | Collapse `pathspec` → `files` |
 | `vcs.refs.currentBranch()` | 10 | Rename to `currentBookmark()` |
-| `vcs.refs.remotes()` | 5 | `vcs.gitOnly.remotes()` (with `vcs.kind === 'git'` narrowing) |
 | `vcs.refs.isIgnored()` | 6 | Open — see discuss-phase question |
 | `vcs.hooks.fire()` | 4 | Open — see discuss-phase question |
-| `vcs.push()` | 1 | `vcs.gitOnly.push()` |
-| `vcs.fetch()` | 0 | (no-op — surface change only) |
 | `WorkspaceContext.gitDir` reads | 5 | `vcs.gitOnly.gitDir()` |
 | `WorkspaceContext.gitCommonDir` reads | 6 | `vcs.gitOnly.gitCommonDir()` |
 | `StatusEntry.index` reads | TBD (audit) | Drop field or move to git-only result variant |
 | `DiffOpts.staged` | 0 | (no-op — surface change only) |
 
-**Total cross-backend → gitOnly migrations:** ~21 call sites (push 1 + remotes 5 + gitDir 5 + gitCommonDir 6 + isIgnored 6 if moved + hooks 4 if moved). Range depends on the four open questions.
+**Total cross-backend → gitOnly migrations:** ~11 call sites firm (gitDir 5 + gitCommonDir 6) + up to 10 more depending on open questions (isIgnored 6, hooks 4).
 
 **Total surface-removal refactors:** ~51 call sites (stage 34 + unstage 7 + commit pathspec 10).
 
@@ -151,12 +148,12 @@ Refactor scope by verb:
 
 ## Open questions for discuss-phase
 
-1. **`vcs.refs.isIgnored`** — keep cross-backend with documented dual-semantic (jj reads .gitignore in colocated mode), or move to gitOnly outright? 6 callers.
-2. **`vcs.hooks.fire`** — move to gitOnly (cleanest per rule), or keep cross-backend as no-op on jj (more ergonomic for callers that defensively call hooks)? 4 callers.
-3. **`CommitInput.noVerify`** — keep cross-backend (no-op-on-jj), or move to gitOnly (e.g. `vcs.gitOnly.commit({noVerify})`)? 4 callers.
-4. **`expr.remote(branch, remoteName)`** — likely follows `vcs.refs.remotes` to gitOnly. Confirm.
-5. **`init` / `configGet` / `configSet`** — promote from gitOnly to cross-backend (`vcs.init()`, etc.) since jj has them too? Or keep gitOnly because the semantics around `jj git init` vs `jj init` (colocated vs native) are different enough to deserve explicit narrowing?
-6. **`StatusEntry.index`** — drop entirely from cross-backend `StatusEntry`, or keep with documented "always empty on jj"? Audit callers first.
+1. **`vcs.refs.isIgnored`** — keep cross-backend with documented dual-semantic (jj reads .gitignore in colocated mode; jj-native has `jj file untrack`), or move to gitOnly outright? 6 callers.
+2. **`vcs.hooks.fire`** — git has pre-commit/pre-push hooks; jj has growing-but-not-equivalent hook support. Move to gitOnly, or keep cross-backend as no-op on jj? 4 callers.
+3. **`CommitInput.noVerify`** — equivalent to "skip hook verification"; depends on the answer to Q2. 4 callers.
+4. **`init` / `configGet` / `configSet`** — promote from gitOnly to cross-backend (`vcs.init()`, etc.) since `jj init` / `jj git init` / `jj config get|set` all exist? Or keep gitOnly because the colocated-vs-native semantics deserve explicit narrowing?
+5. **`StatusEntry.index`** — drop entirely from cross-backend `StatusEntry`, or keep with documented "always empty on jj"? Audit callers first.
+6. **Annotated tags (`vcs.gitOnly.createAnnotatedTag`)** — stays gitOnly because jj doesn't have a native annotated-tag concept (only lightweight tag refs in colocated mode). Confirm.
 
 ## Sequencing & risk notes
 
