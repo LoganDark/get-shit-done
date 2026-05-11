@@ -114,7 +114,15 @@ function createTempGitProject(prefix = 'gsd-test-') {
   );
 
   // Post-init stage + commit via the same VcsAdapter instance (D-09).
-  vcs.commit({ files: ['.'], message: 'initial commit' });
+  // WR-06 (Phase 2 review): split into explicit `vcs.stage(['.'])` + bare
+  // `vcs.commit({message})` rather than `commit({files: ['.']})`. The
+  // `commit({files})` path was the option-injection vector closed by CR-01
+  // (now guarded via `--`); routing through `vcs.stage` instead is
+  // additional defense in depth — `stage` has always passed `--` through to
+  // `git add`, so any future test that drops a `-`-prefixed file into the
+  // temp dir before calling this helper is safe regardless of CR-01 status.
+  vcs.stage(['.']);
+  vcs.commit({ message: 'initial commit' });
 
   return tmpDir;
 }
