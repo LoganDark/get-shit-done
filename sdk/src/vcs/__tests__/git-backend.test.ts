@@ -70,6 +70,33 @@ describe('createGitAdapter — commit', () => {
     const vcs = createGitAdapter(tmpDir);
     expect(() => vcs.commit({ files: [], message: 'oops' })).toThrow(/ambiguous/);
   });
+
+  it('commit({files: [dashName]}) stages a `-`-prefixed filename via `--` separator (CR-01)', () => {
+    // Mirrors the #3061 option-injection fence in commit.test.ts:419-431 but
+    // routes through `vcs.commit({files: [...]})` directly. A filename like
+    // `-A.md` is the canonical option-injection trap: without the `--`
+    // separator, `git add -A.md` would be parsed as the `-A`/`--all` flag.
+    const vcs = createGitAdapter(tmpDir);
+    const dashName = '-A.md';
+    writeFileSync(join(tmpDir, dashName), 'dash content\n');
+    // Also drop a second unrelated tracked-but-unmodified file to detect the
+    // pre-fix behavior: if `git add -A.md` had silently triggered `-A`, then
+    // any other modified worktree file would get staged. With the `--`
+    // separator, ONLY the dashName file is staged.
+    writeFileSync(join(tmpDir, 'sibling.txt'), 'sibling\n');
+    const r = vcs.commit({ files: [dashName], message: 'add dash file' });
+    expect(r.exitCode).toBe(0);
+    expect(r.hash).toBeTruthy();
+    // Confirm dashName was committed.
+    const showRes = execSync(`git show --name-only --format= HEAD`, {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    });
+    expect(showRes.split('\n').filter(Boolean)).toContain(dashName);
+    // And `sibling.txt` was NOT committed (would have been if `-A` had been
+    // misparsed as the all-flag, sweeping the whole worktree).
+    expect(showRes.split('\n').filter(Boolean)).not.toContain('sibling.txt');
+  });
 });
 
 describe('createGitAdapter — log', () => {

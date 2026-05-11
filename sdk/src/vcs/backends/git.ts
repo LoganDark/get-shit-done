@@ -92,7 +92,13 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
       );
     }
     if (input.files && input.files.length > 0) {
-      const addRes = execGit(cwd, ['add', ...input.files]);
+      // CR-01 (Phase 2 review): inject `--` to neutralise filenames that begin
+      // with `-` (the canonical option-injection trap — e.g. `-A.md` would
+      // otherwise be parsed by git as the `-A`/`--all` flag plus a stray
+      // `.md` pathspec, silently staging every tracked modification). The
+      // peer entry points `vcs.stage` / `vcs.unstage` already pass `--`; this
+      // closes the same hole on the `commit({files})` path.
+      const addRes = execGit(cwd, ['add', '--', ...input.files]);
       if (addRes.exitCode !== 0) {
         return {
           exitCode: addRes.exitCode,
