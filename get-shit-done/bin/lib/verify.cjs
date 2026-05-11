@@ -1326,15 +1326,29 @@ function cmdVerifyCodebaseDrift(cwd, raw) {
     const lastMapped = drift.readMappedCommit(structurePath);
 
     // Plan 02-10: VcsAdapter migration. Sites 1286 / 1305 / 1309 share one
-    // adapter instance. Site 1286: vcs.refs.exists(vcs.refs.head) is the
-    // repo-existence probe (boolean return; non-throwing for non-git cwd —
-    // the backend swallows the exit-non-zero into `false`). Site 1305:
+    // adapter instance. Site 1286: vcs.refs.exists(vcs.refs.head). Site 1305:
     // vcs.refs.exists(expr.commit(base)) — Blocker 3 closure for the
     // recorded-mapping reachability check. Site 1309: vcs.diff with the
     // DiffOpts.nameStatus gap-fill from 02-03.
+    //
+    // WR-03 (Phase 2 review): the `vcs.refs.exists(vcs.refs.head)` probe is
+    // NOT a clean "is this a git repo?" predicate — it returns false for
+    // THREE distinct runtime states:
+    //   (a) cwd is not a git repo (`rev-parse HEAD` exits non-zero);
+    //   (b) cwd IS a git repo but HEAD does not yet resolve to a commit
+    //       (e.g. immediately after `git init`, before the first commit);
+    //   (c) the git binary is missing from PATH (vcsExec returns
+    //       non-zero exit).
+    // For codebase-drift detection the conflation is harmless — all three
+    // states deserve to skip the gate. Other callers wanting a TRUE repo
+    // probe should use `vcs.workspace.context()`, which throws cleanly on
+    // non-repo and succeeds for empty-repo OR populated-repo (closer to
+    // the `rev-parse --git-dir` shape).
     const vcs = createVcsAdapter(cwd);
 
-    // Verify we're inside a git repo and resolve the diff range.
+    // Verify we're inside a git repo (or empty-init) and resolve the diff
+    // range. See WR-03 note above re. the three failure modes lumped into
+    // "not-a-git-repo".
     if (!vcs.refs.exists(vcs.refs.head)) {
       emit({
         skipped: true,
