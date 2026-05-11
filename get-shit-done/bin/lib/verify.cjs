@@ -282,6 +282,20 @@ function cmdVerifyCommits(cwd, hashes, raw) {
   // (any reachable object — commit/tree/blob/tag — registers as "valid"; in
   // practice CLI inputs are commit hashes). The expr.commit shape validation
   // catches truly malformed inputs like 'not-a-sha' before reaching git.
+  //
+  // WR-07 (Phase 2 review): the result schema (`all_valid` / `valid` /
+  // `invalid` / `total`) is a vestigial commit-only name. The pre-migration
+  // `cat-file -t <hash>` probe checked `stdout.trim() === 'commit'`, so a
+  // tree/blob/tag hash that exists in the object store was classified
+  // `invalid`. `vcs.refs.exists(expr.commit(hash))` returns true for ANY
+  // reachable object — so a tree SHA hand-cited in a SUMMARY.md (rare but
+  // possible) is now reported `valid` where the old probe reported
+  // `invalid`. The phase context sanctions this shift (CLI inputs are
+  // commit SHAs in practice), but readers should be aware the
+  // `all_valid` / `valid` field names describe REACHABILITY, not
+  // commit-only existence. A future enhancement could add a
+  // `vcs.refs.objectType(rev)` verb and re-tighten the predicate to
+  // commit-only without breaking the JSON contract.
   const vcs = createVcsAdapter(cwd);
   const valid = [];
   const invalid = [];
