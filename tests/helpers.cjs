@@ -100,6 +100,12 @@ function createTempGitProject(prefix = 'gsd-test-') {
     vcs.gitOnly.configSet('user.email', 'test@test.com');
     vcs.gitOnly.configSet('user.name', 'Test');
     vcs.gitOnly.configSet('commit.gpgsign', 'false');
+    // WR-04 (Phase 2 review): mirror the commit.test.ts:beforeEach Phase 2
+    // D-03 fix symmetrically. Any test that creates a temp project via
+    // this helper and exercises `vcs.gitOnly.createAnnotatedTag` would
+    // otherwise fail on developer machines with `tag.gpgsign = true` set
+    // globally (git tag -a refuses to write the tag object without a key).
+    vcs.gitOnly.configSet('tag.gpgsign', 'false');
   }
 
   fs.writeFileSync(
