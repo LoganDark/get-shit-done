@@ -1248,13 +1248,17 @@ function cmdVerifySchemaDrift(cwd, phaseArg, skipFlag, raw) {
 
   // Also check git commit messages for push evidence
   // Plan 02-10: LogOpts.allRefs gap-fill from 02-03. Reconstruct the
-  // `--oneline` byte-equivalent from the structured LogEntry[] (short-sha +
+  // `--oneline`-equivalent from the structured LogEntry[] (short-sha +
   // subject) since the legacy callers consume the joined stdout as a
-  // free-text grep target.
+  // free-text grep target. CR-02 (Phase 2 review): the `format` field was
+  // declared but never honoured by the git backend — removed from LogOpts.
+  // The reconstruction below is NOT byte-identical to `git log --oneline`
+  // (hardcoded 7-char SHA vs `core.abbrev`, no decoration); it is good
+  // enough for substring grep over commit subjects.
   const vcs = createVcsAdapter(cwd);
   let logEntries = [];
   try {
-    logEntries = vcs.log({ format: 'oneline', maxCount: 50, allRefs: true });
+    logEntries = vcs.log({ maxCount: 50, allRefs: true });
   } catch {
     logEntries = [];
   }

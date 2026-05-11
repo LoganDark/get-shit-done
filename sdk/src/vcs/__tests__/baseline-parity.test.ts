@@ -539,15 +539,18 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           args.includes('--oneline') &&
           args.includes('--all')
         ) {
-          // Plan 02-10: vcs.log({format:'oneline', maxCount:50, allRefs:true})
-          // wraps `git log --oneline --all -50`. Captured for verify.cjs:1224
-          // and verify.ts:628. The adapter returns LogEntry[] with hash +
-          // subject populated; reconstruct the byte-equivalent oneline form
+          // Plan 02-10: vcs.log({maxCount:50, allRefs:true}) wraps
+          // `git log --all -50`. Captured for verify.cjs:1224 and
+          // verify.ts:628. The adapter returns LogEntry[] with hash +
+          // subject populated; reconstruct the oneline-equivalent form
           // and assert it matches the captured shape (regex due to
-          // wall-clock-derived short SHAs).
+          // wall-clock-derived short SHAs). CR-02 (Phase 2 review): the
+          // `format` field was declared on LogOpts but never honoured —
+          // removed from the type. The reconstruction below is the
+          // documented shape (NOT byte-identical to `git log --oneline`).
           const limitIdx = args.findIndex((a) => /^-\d+$/.test(a));
           const limit = limitIdx >= 0 ? Math.abs(parseInt(args[limitIdx], 10)) : 50;
-          const entries = vcs.log({ format: 'oneline', maxCount: limit, allRefs: true });
+          const entries = vcs.log({ maxCount: limit, allRefs: true });
           const reconstructed = entries
             .map((e) => `${(e.hash || '').slice(0, 7)} ${e.subject || ''}`)
             .join('\n');

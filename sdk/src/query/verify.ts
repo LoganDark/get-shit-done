@@ -653,10 +653,14 @@ export const verifySchemaDrift: QueryHandler = async (args, projectDir, workstre
     executionLog += readFileSync(join(phaseDir, sf), 'utf-8') + '\n';
   }
 
+  // CR-02 (Phase 2 review): the `format` field was declared on LogOpts but
+  // never honoured — removed from the type. Reconstruct the `--oneline`-
+  // equivalent (NOT byte-identical to `git log --oneline`: hardcoded 7-char
+  // SHA, no decoration) from structured LogEntry[] for free-text grep below.
   const vcs = createVcsAdapter(projectDir);
   let logEntries: import('../vcs/types.js').LogEntry[] = [];
   try {
-    logEntries = vcs.log({ format: 'oneline', maxCount: 50, allRefs: true });
+    logEntries = vcs.log({ maxCount: 50, allRefs: true });
   } catch {
     logEntries = [];
   }
