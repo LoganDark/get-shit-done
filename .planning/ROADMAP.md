@@ -61,7 +61,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 - [x] 02-09-PLAN.md — Migrate commands.cjs (1,028 LOC, 14 sites; 6 paired tests)
 - [x] 02-10-PLAN.md — Migrate verify.cjs + verify.ts (1,390 + 692 LOC; cat-file/log-all/diff-name-status gap-fills)
 - [x] 02-11-PLAN.md — Migrate core.cjs (LAST, largest hotspot; delete execGit helper) + UPSTREAM-03 hotspot audit
-- [ ] 02-12-PLAN.md — Deferred-tracker for MIGR-04 + UPSTREAM-01 (deferred to milestone-end per D-17)
+- [x] 02-12-PLAN.md — Deferred-tracker for MIGR-04 + UPSTREAM-01 (deferred to milestone-end per D-17); user sign-off 2026-05-11
 
 ### Phase 3: jj Backend Core — Squash, Refs, Conflict
 **Goal**: Land `sdk/src/vcs/backends/jj.ts` implementing the full adapter contract with the squash-based commit model, NDJSON output parsing, bookmark refs, and in-tree conflict detection — the working-copy auto-snapshot is allowed by default and `--ignore-working-copy` is never used by adapter code.
@@ -108,10 +108,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Adapter Foundation + Git Backend | 5/5 | Complete | 2026-05-09 |
-| 2. Bulk Call-Site Migration (Still Git-Only) | 5/12 | In Progress|  |
+| 2. Bulk Call-Site Migration (Still Git-Only) | 12/12 | Plans Complete (ready for phase-level verifier) |  |
 | 3. jj Backend Core — Squash, Refs, Conflict | 0/TBD | Not started | - |
 | 4. Workspaces + Octopus Structure + Hooks | 0/TBD | Not started | - |
 | 5. Command Translations + Brownfield Validation + CI Hardening | 0/TBD | Not started | - |
 
 ---
-*Last updated: 2026-05-09 after roadmap creation*
+*Last updated: 2026-05-11 — Phase 2 plan execution complete (12/12). ROADMAP Phase 2 success criteria 4 + 5 reframing is queued in `.planning/phases/02-bulk-call-site-migration-still-git-only/02-12-DEFERRED.md` with verbatim replacement text; the next phase-transition runner applies the splice mechanically per CONTEXT D-17.*

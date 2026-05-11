@@ -99,7 +99,7 @@
 - [x] **MIGR-01**: All `execSync('git …')` call sites in `sdk/src/query/*.ts` migrated to adapter calls (`commit.ts`, `init.ts`, `verify.ts`, `progress.ts`, `check-ship-ready.ts`, `check-decision-coverage.ts`, `docs-init.ts`, etc.)
 - [x] **MIGR-02**: All `execSync('git …')` call sites in `get-shit-done/bin/lib/*.cjs` migrated (`core.cjs`, `verify.cjs`, `commands.cjs`, `worktree-safety.cjs`, `init.cjs`, `graphify.cjs`, `drift.cjs`) — *partial: worktree-safety.cjs complete (plan 02-04); 6 files outstanding*
 - [x] **MIGR-03**: Migration is mechanical (Branch-by-Abstraction): each call site swaps `execSync('git …')` for the adapter equivalent without changing surrounding logic
-- [ ] **MIGR-04**: First upstream rebase post-migration verifies the "mechanical edits = clean rebase" hypothesis (track conflict count metric)
+- [-] **MIGR-04**: First upstream rebase post-migration verifies the "mechanical edits = clean rebase" hypothesis (track conflict count metric) — *Recorded as deferred to milestone-end task (post-Phase-5) per Phase 2 plan 02-12; see `.planning/phases/02-bulk-call-site-migration-still-git-only/02-12-DEFERRED.md`*
 
 ### Workflow + Agent Prompt Rewrites (PROMPT)
 
@@ -132,7 +132,7 @@ This fork dogfoods on its own repo (which is jj-colocated). Brownfield workflows
 
 ### Upstream Tracking (UPSTREAM)
 
-- [ ] **UPSTREAM-01**: jj-native rebase workflow documented for pulling upstream main onto fork commits (live rebase, fork commits stay on top of upstream main)
+- [-] **UPSTREAM-01**: jj-native rebase workflow documented for pulling upstream main onto fork commits (live rebase, fork commits stay on top of upstream main) — *Recorded as deferred to milestone-end task (post-Phase-5) per Phase 2 plan 02-12; see `.planning/phases/02-bulk-call-site-migration-still-git-only/02-12-DEFERRED.md`*
 - [x] **UPSTREAM-02**: Fork-specific code organized to minimize merge conflicts: adapter-shaped (mechanical) edits in upstream files; jj-specific code lives in sidecar files (`sdk/src/vcs/jj/`, `sdk/src/vcs/parse/jj-*.ts`) which carry zero conflict surface
 - [x] **UPSTREAM-03**: Hotspot files (`core.cjs` 2036 LOC, `verify.cjs` 1390, `commands.cjs` 1028) only see adapter call-site swaps inline; no jj-specific logic embedded
 
@@ -210,9 +210,9 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | MIGR-01 | Phase 2 | Complete |
 | MIGR-02 | Phase 2 | In Progress |
 | MIGR-03 | Phase 2 | Complete |
-| MIGR-04 | Phase 2 | Pending |
+| MIGR-04 | Phase 2 | Recorded as deferred to milestone-end task (post-Phase-5) per Phase 2 plan 02-12 |
 | TEST-05 | Phase 2 | Complete |
-| UPSTREAM-01 | Phase 2 | Pending |
+| UPSTREAM-01 | Phase 2 | Recorded as deferred to milestone-end task (post-Phase-5) per Phase 2 plan 02-12 |
 | UPSTREAM-02 | Phase 2 | Complete |
 | UPSTREAM-03 | Phase 2 | Complete |
 | JJ-01 | Phase 3 | Pending |
@@ -294,4 +294,4 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 
 ---
 *Requirements defined: 2026-05-09*
-*Last updated: 2026-05-09 — traceability populated by roadmapper (5 phases, 86 requirements, 100% coverage)*
+*Last updated: 2026-05-11 — Phase 2 plan execution complete (12/12). MIGR-04 and UPSTREAM-01 routed to milestone-end task per Phase 2 plan 02-12 (RECORDED-AS-DEFERRED, not Done). Phase 2 production-source migration delivered: MIGR-01, MIGR-02, MIGR-03, TEST-05, UPSTREAM-02, UPSTREAM-03 complete.*

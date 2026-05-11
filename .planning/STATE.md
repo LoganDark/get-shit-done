@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 02-07-PLAN.md
-last_updated: "2026-05-10T06:31:33.543Z"
-last_activity: 2026-05-10
+status: ready-to-verify
+stopped_at: Completed 02-12-PLAN.md (Phase 2 plan execution complete, 12/12)
+last_updated: "2026-05-11T00:00:00.000Z"
+last_activity: 2026-05-11
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 17
-  completed_plans: 16
-  percent: 94
+  completed_plans: 17
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 
 ## Current Position
 
-Phase: 02 (bulk-call-site-migration-still-git-only) — EXECUTING
-Plan: 12 of 12
-Status: Ready to execute
-Last activity: 2026-05-10
+Phase: 02 (bulk-call-site-migration-still-git-only) — PLAN EXECUTION COMPLETE (ready for phase-level verifier)
+Plan: 12 of 12 complete
+Status: Ready to verify
+Last activity: 2026-05-11
 
-Progress: [█████████░] 94%
+Progress: [██████████] 100% (plan execution; phase-level verify pending)
 
 ## Performance Metrics
 
@@ -68,6 +68,7 @@ Progress: [█████████░] 94%
 | Phase 02 P09 | ~30m | 2 tasks tasks | 19 files files |
 | Phase 02 P10 | ~11m | 2 tasks | 14 files |
 | Phase 02 P11 | 13m | 2 tasks tasks | 5 files files |
+| Phase 02 P12 | ~2m (resume-only) | 1 task | 1 files (+SUMMARY/STATE/ROADMAP/REQUIREMENTS) |
 
 ## Accumulated Context
 
@@ -125,6 +126,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 02-10]: verify.cjs:1309 two-rev diff (base..HEAD) routes via expr.range(expr.commit(base), expr.head()); first production consumer of expr.range outside graphify.cjs; range form byte-equivalent to two-rev for linear-ancestor relationship drift detection guarantees
 - [Phase ?]: [Phase 02-10]: cat-file -t probes lose stdout-token discrimination (commit/tree/blob/tag) when migrated to vcs.refs.exists — plan-sanctioned semantic shift; expr.commit shape validation catches malformed inputs; documented at all 5 cat-file probe sites in verify.cjs/verify.ts
 - [Phase ?]: [Phase 02-11]: core.cjs (largest hotspot, 2,036 LOC) site 603 migrated; execGit helper + DEFAULT_GIT_TIMEOUT_MS deleted (every consumer retired by 02-04/02-09/02-10); Phase 2 production-source migration COMPLETE (lint guard exits 0); UPSTREAM-03 hotspot audit verified D-08 mechanical-only across all three hotspots — Phase 2 ready to merge to main
+- [Phase 02-12]: MIGR-04 + UPSTREAM-01 RECORDED-AS-DEFERRED per user sign-off 2026-05-11 ("Approve as-is" resume-signal); deferred-tracker `02-12-DEFERRED.md` exists at canonical path with verbatim ROADMAP success-criteria 4 + 5 replacement text preserved for the next phase-transition runner; requirements marked "Recorded as deferred to milestone-end task (post-Phase-5) per Phase 2 plan 02-12" in REQUIREMENTS.md (NOT Done); Phase 2 plan execution complete (12/12) — ready for phase-level verifier
 
 ### Pending Todos
 
@@ -144,8 +146,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-10T06:31:33.537Z
-Stopped at: Completed 02-07-PLAN.md
+Last session: 2026-05-11T00:00:00.000Z
+Stopped at: Completed 02-12-PLAN.md (Phase 2 plan execution complete, 12/12; ready for phase-level verifier)
 Resume file: None
 
 ## Known Pre-Existing Test Failures (Non-Blocking)
