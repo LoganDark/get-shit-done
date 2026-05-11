@@ -4,7 +4,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+// Phase 2 review WR-01: `execSync` from `child_process` was destructured here
+// historically but the Phase 2 init.cjs migration retired all call sites.
+// Dropped to close the seam.
 const { createVcsAdapter } = require('../../../sdk/dist-cjs/vcs/index.js');
 const { loadConfig, resolveModelInternal, findPhaseInternal, getRoadmapPhaseInternal, pathExistsInternal, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, normalizePhaseName, toPosixPath, output, error, checkAgentsInstalled, phaseTokenMatches } = require('./core.cjs');
 const { planningPaths, planningDir, planningRoot } = require('./planning-workspace.cjs');
