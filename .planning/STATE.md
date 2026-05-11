@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 02-12-PLAN.md (Phase 2 plan execution complete, 12/12; ready for phase-level verifier)
-last_updated: "2026-05-11T14:12:12.462Z"
+status: planning
+stopped_at: Phase 2.1 context gathered
+last_updated: "2026-05-11T23:16:26.446Z"
 last_activity: 2026-05-11
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 2
   total_plans: 17
   completed_plans: 17
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 
 ## Current Position
 
-Phase: 02 (bulk-call-site-migration-still-git-only) — PLAN EXECUTION COMPLETE (ready for phase-level verifier)
+Phase: 2.1
 Plan: 12 of 12 complete
-Status: Ready to verify
+Status: Ready to plan
 Last activity: 2026-05-11
 
 Progress: [██████████] 100% (plan execution; phase-level verify pending)
@@ -71,6 +71,10 @@ Progress: [██████████] 100% (plan execution; phase-level ver
 | Phase 02 P12 | ~2m (resume-only) | 1 task | 1 files (+SUMMARY/STATE/ROADMAP/REQUIREMENTS) |
 
 ## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 2.1 inserted after Phase 2: VCS Abstraction Audit — Drop Git-Only Concepts (URGENT)
 
 ### Decisions
 
@@ -146,9 +150,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-11T00:00:00.000Z
-Stopped at: Completed 02-12-PLAN.md (Phase 2 plan execution complete, 12/12; ready for phase-level verifier)
-Resume file: None
+Last session: 2026-05-11T23:16:26.440Z
+Stopped at: Phase 2.1 context gathered
+Resume file: .planning/phases/2.1-vcs-abstraction-audit-drop-git-only-concepts/2.1-CONTEXT.md
 
 ## Known Pre-Existing Test Failures (Non-Blocking)
 
