@@ -214,8 +214,8 @@ describe('createGitAdapter — hooks', () => {
   });
 });
 
-describe('parseDiffCheckPath (CR-03)', () => {
-  it('extracts POSIX path with no embedded colon', () => {
+describe('parseDiffCheckPath (CR-03 / WR-02)', () => {
+  it('extracts POSIX path with no embedded colon (pre-2.31 line:line form)', () => {
     expect(parseDiffCheckPath('foo/bar.txt:42: leftover conflict marker')).toBe('foo/bar.txt');
   });
   it('preserves Windows drive-letter path (does not truncate at C:)', () => {
@@ -231,6 +231,22 @@ describe('parseDiffCheckPath (CR-03)', () => {
   it('returns null on lines without `:line:` pattern', () => {
     expect(parseDiffCheckPath('')).toBe(null);
     expect(parseDiffCheckPath('not-a-diagnostic-line')).toBe(null);
+  });
+  // WR-02: git ≥ 2.31 emits `path:line:col: description` (extra column slot).
+  // The pre-fix greedy regex captured `<path>:<line>` instead of `<path>`,
+  // because `.*` consumed `:col:` into the path group.
+  it('extracts POSIX path from git ≥ 2.31 `path:line:col: …` form (WR-02)', () => {
+    expect(parseDiffCheckPath('foo/bar.txt:42:5: leftover conflict marker')).toBe('foo/bar.txt');
+  });
+  it('extracts Windows path from git ≥ 2.31 `path:line:col: …` form (WR-02)', () => {
+    expect(parseDiffCheckPath('C:\\foo\\bar.txt:42:5: leftover conflict marker')).toBe(
+      'C:\\foo\\bar.txt',
+    );
+  });
+  it('extracts POSIX path containing literal colon from `path:line:col: …` form (WR-02)', () => {
+    expect(parseDiffCheckPath('weird:name.txt:7:3: leftover conflict marker')).toBe(
+      'weird:name.txt',
+    );
   });
 });
 

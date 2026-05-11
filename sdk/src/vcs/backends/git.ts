@@ -60,17 +60,22 @@ import type {
 // names worktree-safety.cjs as the policy owner for CLI-side decisions
 // (prune, health, inventory); only the read-only view was duplicated.
 
-// ─── Parse helpers (CR-03) ──────────────────────────────────────────────────
+// ─── Parse helpers (CR-03 / WR-02) ──────────────────────────────────────────
 //
-// `git diff --check` emits lines shaped like `path:line: <marker description>`.
+// `git diff --check` emits lines shaped like `path:line: <marker description>`
+// in pre-2.31 git, and `path:line:col: <marker description>` in git ≥ 2.31.
 // On Windows, `path` can contain a drive-letter colon (`C:\foo\bar.txt:42: …`),
 // and POSIX filesystems may also contain literal `:` in paths. Splitting at the
-// FIRST colon truncates Windows paths to the drive letter and collapses POSIX
-// paths to their prefix. Match the LAST `:<digits>:` pattern instead.
+// FIRST colon truncates Windows paths to the drive letter; matching the LAST
+// `:\d+:\s` with greedy `.*` works for the 2-coord form but breaks the 3-coord
+// (column-included) form because the greedy match consumes `:col:` into the
+// path. Use non-greedy `.+?` so the path stops at the FIRST `:line` slot, and
+// allow an optional `(?::\d+)?` column number.
 //
 // Exported for unit testing — the real call site is local to findConflicts.
 export function parseDiffCheckPath(line: string): string | null {
-  const m = line.match(/^(.*):\d+:\s/);
+  // Format: <path>:<line>[:<col>]: <description>
+  const m = line.match(/^(.+?):\d+(?::\d+)?:\s/);
   return m && m[1] ? m[1] : null;
 }
 
