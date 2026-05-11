@@ -1,0 +1,3 @@
+# UPSTREAM-02 (Phase 2 D-15): zero-conflict sidecar surface.
+# Phase 3 populates with sdk/src/vcs/jj/jj.ts (the jj backend).
+# Delete this file when the first real .ts module lands here.

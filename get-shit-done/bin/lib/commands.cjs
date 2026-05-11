@@ -3,8 +3,11 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
-const { safeReadFile, loadConfig, isGitIgnored, execGit, normalizePhaseName, comparePhaseNum, getArchivedPhaseDirs, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, resolveModelInternal, stripShippedMilestones, extractCurrentMilestone, toPosixPath, output, error, findPhaseInternal, extractOneLinerFromBody, getRoadmapPhaseInternal } = require('./core.cjs');
+const { safeReadFile, loadConfig, isGitIgnored, normalizePhaseName, comparePhaseNum, getArchivedPhaseDirs, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, resolveModelInternal, stripShippedMilestones, extractCurrentMilestone, toPosixPath, output, error, findPhaseInternal, extractOneLinerFromBody, getRoadmapPhaseInternal } = require('./core.cjs');
+// Plan 02-09 (W5 prescriptive imports — pattern from 02-08): consume only the
+// high-level adapter API. createVcsAdapter lands the cwd-via-factory pattern;
+// expr is the structured RevisionExpr namespace (D-12 — no raw escape hatch).
+const { createVcsAdapter, expr } = require('../../../sdk/dist-cjs/vcs/index.js');
 const { planningDir, planningPaths } = require('./planning-workspace.cjs');
 const { extractFrontmatter } = require('./frontmatter.cjs');
 const { MODEL_PROFILES } = require('./model-profiles.cjs');
@@ -301,21 +304,40 @@ function cmdCommit(cwd, message, files, raw, amend, noVerify) {
           .replace('{slug}', generateSlugInternal(milestone.name) || 'milestone');
       }
     }
+    // Plan 02-09: cmdCommit's branching block migrates to vcs.refs adapter.
+    // The cwd-via-factory pattern from 02-08 — adapter scoped to cwd here.
+    const vcs = createVcsAdapter(cwd, { kind: 'git' });
     if (branchName) {
-      const currentBranch = execGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
-      if (currentBranch.exitCode === 0 && currentBranch.stdout.trim() !== branchName) {
-        // Create branch if it doesn't exist, or switch to it if it does
-        const create = execGit(cwd, ['checkout', '-b', branchName]);
-        if (create.exitCode !== 0) {
-          execGit(cwd, ['checkout', branchName]);
+      const currentBranch = vcs.refs.currentBranch();                                  // line 305 (was: rev-parse --abbrev-ref HEAD)
+      if (currentBranch !== null && currentBranch !== branchName) {
+        // Create branch if it doesn't exist, or switch to it if it does.
+        // Mirrors the original "try -b, fall back to plain checkout" shape:
+        // bookmarks.switch({create:true}) throws on already-exists; the catch
+        // falls through to the plain switch — equivalent to the prior
+        // "if create.exitCode !== 0 then run plain checkout" pattern.
+        try {
+          vcs.refs.bookmarks.switch(branchName, { create: true });                     // line 308 (was: checkout -b <name>)
+        } catch {
+          vcs.refs.bookmarks.switch(branchName);                                       // line 310 (was: checkout <name>)
         }
       }
     }
   }
 
+  // Plan 02-09: re-bind the adapter scoped to cwd outside the branching-strategy
+  // block so the staging/commit sites below also use it. The two `vcs` instances
+  // share the same cwd; CommitInput consumes the amend/noVerify gap-fill from 02-08.
+  const vcs = createVcsAdapter(cwd, { kind: 'git' });
+
   // Stage files
   const explicitFiles = files && files.length > 0;
   const filesToStage = explicitFiles ? files : ['.planning/'];
+  // Track which paths were actually touched (staged or unstaged) so the commit
+  // pathspec narrows scope to those paths only. #2014 invariant: when a caller
+  // passes --files for a missing tracked file, the path is SKIPPED from staging
+  // AND from the pathspec — pathspec'ing a missing-file path with no staged
+  // change would still record a deletion via `git commit -- <path>` semantics.
+  const stagedOrUnstaged = [];
   for (const file of filesToStage) {
     const fullPath = path.join(cwd, file);
     if (!fs.existsSync(fullPath)) {
@@ -327,16 +349,39 @@ function cmdCommit(cwd, message, files, raw, amend, noVerify) {
       }
       // Default mode (staging all of .planning/): stage the deletion so
       // removed planning files are not left dangling in the index.
-      execGit(cwd, ['rm', '--cached', '--ignore-unmatch', file]);
+      // Pitfall 2 / D-08: this if/else stays as TWO adapter calls
+      // (vcs.unstage on the deletion branch, vcs.stage on the existing-file
+      // branch). NOT collapsed into a single vcs.commit({files}) call —
+      // even though `vcs.commit({files})` could in principle stage and commit,
+      // the original code separates them and the mechanical-only invariant
+      // requires preserving that shape.
+      vcs.unstage([file]);                                                             // line 330 (was: rm --cached --ignore-unmatch <file>)
+      stagedOrUnstaged.push(file);
     } else {
-      execGit(cwd, ['add', file]);
+      vcs.stage([file]);                                                               // line 332 (was: add <file>)
+      stagedOrUnstaged.push(file);
     }
   }
 
-  // Commit (--no-verify skips pre-commit hooks, used by parallel executor agents)
-  const commitArgs = amend ? ['commit', '--amend', '--no-edit'] : ['commit', '-m', message];
-  if (noVerify) commitArgs.push('--no-verify');
-  const commitResult = execGit(cwd, commitArgs);
+  // Commit (--no-verify skips pre-commit hooks, used by parallel executor agents).
+  // Plan 02-09: vcs.commit consumes amend/noVerify/pathspec gap-fill from 02-08.
+  // Pathspec preserves the prior `git commit -m <msg>` shape (NOT `-am`) by
+  // routing through the backend's already-staged-paths branch — files were
+  // already staged via vcs.unstage / vcs.stage above. For amend mode, the
+  // adapter emits `commit --amend --no-edit` (message field is ignored).
+  // #2014 invariant: when explicit --files were passed but every entry was
+  // skipped (all missing on disk), short-circuit to `nothing_to_commit` to
+  // mirror the original semantics where `git commit -m <msg>` against an
+  // empty index returned that exit. Bypassing vcs.commit avoids the `-am`
+  // fallback (no pathspec/files) which would auto-stage tracked mods.
+  if (!amend && explicitFiles && stagedOrUnstaged.length === 0) {
+    const result = { committed: false, hash: null, reason: 'nothing_to_commit' };
+    output(result, raw, 'nothing');
+    return;
+  }
+  const commitResult = amend
+    ? vcs.commit({ message, amend: true, noVerify })                                   // line 339 (was: commit --amend --no-edit [+ --no-verify])
+    : vcs.commit({ message, pathspec: stagedOrUnstaged, noVerify });                   // line 339 (was: commit -m <msg> [+ --no-verify])
   if (commitResult.exitCode !== 0) {
     if (commitResult.stdout.includes('nothing to commit') || commitResult.stderr.includes('nothing to commit')) {
       const result = { committed: false, hash: null, reason: 'nothing_to_commit' };
@@ -349,8 +394,14 @@ function cmdCommit(cwd, message, files, raw, amend, noVerify) {
   }
 
   // Get short hash
-  const hashResult = execGit(cwd, ['rev-parse', '--short', 'HEAD']);
-  const hash = hashResult.exitCode === 0 ? hashResult.stdout : null;
+  // Plan 02-09: vcs.refs.resolveShort(vcs.refs.head) replaces
+  // `rev-parse --short HEAD`. Mirrors plan 02-08 sites 179/309 closure shape.
+  let hash = null;
+  try {
+    hash = vcs.refs.resolveShort(vcs.refs.head);                                       // line 352 (was: rev-parse --short HEAD)
+  } catch {
+    hash = null;
+  }
   const result = { committed: true, hash, reason: 'committed' };
   output(result, raw, hash || 'committed');
 }
@@ -391,15 +442,30 @@ function cmdCommitToSubrepo(cwd, message, files, raw) {
   const repos = {};
   for (const [repo, repoFiles] of Object.entries(grouped)) {
     const repoCwd = path.join(cwd, repo);
+    // Plan 02-09: cwd-via-factory pattern from 02-08 — adapter scoped to the
+    // sub-repo's cwd. The original code used the cwd-arg form of the local
+    // execGit shim to route commands at that cwd; the adapter parameter
+    // replaces that arg-position routing with a factory parameter
+    // (byte-identical to running the same command from that cwd).
+    const subVcs = createVcsAdapter(repoCwd, { kind: 'git' });
 
     // Stage files (strip sub-repo prefix for paths relative to that repo)
     for (const file of repoFiles) {
       const relativePath = file.slice(repo.length + 1);
-      execGit(repoCwd, ['add', relativePath]);
+      subVcs.stage([relativePath]);                                                    // line 398 (was: add <relativePath>)
     }
 
     // Commit
-    const commitResult = execGit(repoCwd, ['commit', '-m', message]);
+    // Plan 02-09: vcs.commit replaces the prior commit invocation
+    // (commit -m <message> at the sub-repo cwd). No pathspec — files were just staged above
+    // and the original commit had no `-- <pathspec>` argument either, so
+    // pathspec-less + no files arg → backend `commit -am <msg>` path.
+    // BUT the original was `commit -m <msg>` (NOT -am). To preserve the
+    // mechanical shape, route through pathspec with the per-file relative
+    // paths so the backend takes the already-staged-paths branch (commit -m
+    // <msg> -- <pathspec>) — equivalent given the explicit upstream stage.
+    const subPathspec = repoFiles.map(f => f.slice(repo.length + 1));
+    const commitResult = subVcs.commit({ message, pathspec: subPathspec });            // line 402 (was: commit -m <msg>)
     if (commitResult.exitCode !== 0) {
       if (commitResult.stdout.includes('nothing to commit') || commitResult.stderr.includes('nothing to commit')) {
         repos[repo] = { committed: false, hash: null, files: repoFiles, reason: 'nothing_to_commit' };
@@ -410,8 +476,14 @@ function cmdCommitToSubrepo(cwd, message, files, raw) {
     }
 
     // Get hash
-    const hashResult = execGit(repoCwd, ['rev-parse', '--short', 'HEAD']);
-    const hash = hashResult.exitCode === 0 ? hashResult.stdout : null;
+    // Plan 02-09: vcs.refs.resolveShort(refs.head) replaces
+    // `rev-parse --short HEAD`. Mirrors plan 02-08 site 309 closure shape.
+    let hash = null;
+    try {
+      hash = subVcs.refs.resolveShort(subVcs.refs.head);                               // line 413 (was: rev-parse --short HEAD)
+    } catch {
+      hash = null;
+    }
     repos[repo] = { committed: true, hash, files: repoFiles };
   }
 
@@ -912,20 +984,29 @@ function cmdStats(cwd, format, raw) {
   } catch { /* intentionally empty */ }
 
   // Git stats
+  // Plan 02-09: cmdStats's git-touching block migrates to vcs.refs adapter.
+  // Mirrors plan 02-06 progress.ts:285-303 shape (the canonical cookbook for
+  // countCommits / rootCommits / log({rev: expr.commit(<runtime-sha>)}) —
+  // first production consumer of expr.commit per Blocker 3 from iteration 1).
   let gitCommits = 0;
   let gitFirstCommitDate = null;
-  const commitCount = execGit(cwd, ['rev-list', '--count', 'HEAD']);
-  if (commitCount.exitCode === 0) {
-    gitCommits = parseInt(commitCount.stdout, 10) || 0;
-  }
-  const rootHash = execGit(cwd, ['rev-list', '--max-parents=0', 'HEAD']);
-  if (rootHash.exitCode === 0 && rootHash.stdout) {
-    const firstCommit = rootHash.stdout.split('\n')[0].trim();
-    const firstDate = execGit(cwd, ['show', '-s', '--format=%as', firstCommit]);
-    if (firstDate.exitCode === 0) {
-      gitFirstCommitDate = firstDate.stdout || null;
+  try {
+    const statsVcs = createVcsAdapter(cwd, { kind: 'git' });
+    gitCommits = statsVcs.refs.countCommits({ rev: statsVcs.refs.head });              // line 917 (was: rev-list --count HEAD)
+    const roots = statsVcs.refs.rootCommits({ rev: statsVcs.refs.head });              // line 921 (was: rev-list --max-parents=0 HEAD)
+    if (roots.length > 0) {
+      const firstCommit = roots[0];
+      // Plan 02-09 / Blocker-3 closure: wrap the runtime SHA via expr.commit()
+      // to construct a structured RevisionExpr (D-12 — no expr.raw escape
+      // hatch). vcs.log() with maxCount:1 is the contract path for "show -s
+      // --format=%as <sha>"; the date arrives on LogEntry.date as %aI iso
+      // format. Slice [0,10) to match the prior `%as` YYYY-MM-DD shape.
+      const entries = statsVcs.log({ rev: expr.commit(firstCommit), maxCount: 1 });    // line 924 (was: show -s --format=%as <firstCommit>)
+      if (entries.length > 0 && entries[0].date) {
+        gitFirstCommitDate = entries[0].date.slice(0, 10) || null;
+      }
     }
-  }
+  } catch { /* intentionally empty — non-git cwd or empty repo */ }
 
   const result = {
     milestone_version: milestone.version,
@@ -990,8 +1071,14 @@ function cmdCheckCommit(cwd, raw) {
   }
 
   // commit_docs is false — check if any .planning/ files are staged
+  // Plan 02-09: vcs.diff({staged:true, nameOnly:true}) replaces the prior
+  // direct child_process call probing `git diff --cached --name-only`.
+  // Mirrors plan 02-08 sites 155/211 closure shape — same baseline corpus
+  // (commands-cjs-994-diff-cached + commit-ts-211-diff-cached share the
+  // args-shape dispatch clause in baseline-parity.test.ts).
   try {
-    const staged = execSync('git diff --cached --name-only', { cwd, encoding: 'utf-8' }).trim();
+    const checkVcs = createVcsAdapter(cwd, { kind: 'git' });
+    const staged = checkVcs.diff({ staged: true, nameOnly: true }).nameOnly.join('\n').trim(); // line 994 (was: diff --cached --name-only via child_process)
     const planningFiles = staged.split('\n').filter(f => f.startsWith('.planning/') || f.startsWith('.planning\\'));
 
     if (planningFiles.length > 0) {
@@ -1002,7 +1089,7 @@ function cmdCheckCommit(cwd, raw) {
       );
     }
   } catch {
-    // git diff --cached failed (no staged files or not a git repo) — allow
+    // diff failed (not a git repo, etc.) — allow
   }
 
   output({ allowed: true, reason: 'no_planning_files_staged' }, raw, 'allowed');

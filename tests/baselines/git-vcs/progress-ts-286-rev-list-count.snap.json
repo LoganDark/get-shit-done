@@ -1,0 +1,39 @@
+{
+  "id": "progress-ts-286-rev-list-count",
+  "source": "sdk/src/query/progress.ts:286",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": [
+      "echo a > a.txt",
+      "git add a.txt",
+      "git commit -m c1",
+      "echo b > b.txt",
+      "git add b.txt",
+      "git commit -m c2"
+    ]
+  },
+  "command": "git",
+  "args": [
+    "rev-list",
+    "--count",
+    "HEAD"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "3",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "exact"
+  }
+}

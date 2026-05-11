@@ -34,6 +34,29 @@ export interface CommitInput {
   files?: string[];
   message: string;
   allowEmpty?: boolean;
+  /**
+   * Plan 02-08 gap-fill (Rule 3 — blocking issue closure): when true, the
+   * commit emits `git commit --amend --no-edit` and the `message` field is
+   * IGNORED (HEAD's existing message is preserved). Required by
+   * sdk/src/query/commit.ts's `--amend` code path; without this, the
+   * migration cannot preserve commit handler semantics.
+   */
+  amend?: boolean;
+  /**
+   * Plan 02-08 gap-fill (Rule 3 — blocking issue closure): when true, append
+   * `--no-verify` to the commit invocation, skipping pre-commit/commit-msg
+   * hooks. Required by sdk/src/query/commit.ts's `--no-verify` code path.
+   */
+  noVerify?: boolean;
+  /**
+   * Plan 02-08 gap-fill (Rule 3 — blocking issue closure): when set, append
+   * `-- <paths…>` to the `git commit` invocation so the commit captures only
+   * files within the requested scope, even when the caller's index already
+   * had unrelated entries staged before. Mirrors the pathspec-scope guard
+   * for #3061. Distinct from `files` (which controls staging); pathspec
+   * narrows the commit's scope but does not stage anything.
+   */
+  pathspec?: string[];
 }
 
 export interface CommitResult {
@@ -48,6 +71,8 @@ export interface LogOpts {
   maxCount?: number;
   paths?: string[];
   format?: 'oneline' | 'full' | 'json';
+  // Plan 02-03 Task 2 gap-fill: emit `git log --all` semantics when true.
+  allRefs?: boolean;
 }
 
 export interface LogEntry {
@@ -78,10 +103,19 @@ export interface DiffOpts {
   nameOnly?: boolean;
   rev?: RevisionExpr;
   paths?: string[];
+  // Plan 02-03 Task 2 gap-fill: emit `git diff --name-status` semantics when true.
+  nameStatus?: boolean;
+}
+export interface DiffNameStatusEntry {
+  path: string;
+  status: 'A' | 'M' | 'D' | 'R' | 'C' | 'T' | 'U' | 'X' | 'B';
 }
 export interface DiffResult {
   raw: string;
   nameOnly: string[];
+  // Populated when DiffOpts.nameStatus is true; undefined otherwise (preserves
+  // existing call-site shape for nameOnly-only consumers).
+  nameStatus?: DiffNameStatusEntry[];
 }
 
 export interface Bookmark {
@@ -135,12 +169,24 @@ export interface VcsAdapterCommon {
   findConflicts(opts: { scope: 'all' | 'working-copy' }): ConflictResult[];
   push(opts?: PushOpts): ExecResult;
   fetch(opts?: FetchOpts): ExecResult;
+  // Plan 02-03 Task 1 gap-fill (RESEARCH §Forward-Complete Gaps Summary):
+  // top-level stage / unstage verbs symmetric on git and jj backends.
+  stage(files: string[]): ExecResult;
+  unstage(files: string[]): ExecResult;
 }
 
 export interface VcsRefs {
   readonly head: RevisionExpr;
   readonly parent: RevisionExpr;
   bookmarks: VcsBookmarks;
+  // Plan 02-03 Task 1 gap-fill (RESEARCH §Forward-Complete Gaps Summary):
+  currentBranch(): string | null;
+  resolveShort(rev: RevisionExpr): string;
+  countCommits(opts: { rev?: RevisionExpr }): number;
+  rootCommits(opts: { rev?: RevisionExpr }): string[];
+  exists(rev: RevisionExpr): boolean;
+  isIgnored(path: string): boolean;
+  remotes(): string[];
 }
 
 export interface VcsBookmarks {
@@ -149,12 +195,29 @@ export interface VcsBookmarks {
   move(name: string, rev: RevisionExpr): void;
   delete(name: string): void;
   exists(name: string): boolean;
+  // Plan 02-03 Task 1 gap-fill (RESEARCH §Forward-Complete Gaps Summary):
+  switch(name: string, opts?: { create?: boolean }): void;
+}
+
+// Plan 02-03 Task 2 — Blocker 4 extension: workspace.context() return shape.
+// gitDir/gitCommonDir let worktree-safety.cjs:122-123 migrate cleanly without
+// semantics drift — they are the raw path strings the underlying
+// `git rev-parse --git-dir` / `--git-common-dir` would have produced.
+export interface WorkspaceContext {
+  effectiveRoot: string;
+  mode: 'main' | 'linked';
+  isLinked: boolean;
+  gitDir: string;        // for main repo == gitCommonDir; for linked worktree == .git/worktrees/<name>
+  gitCommonDir: string;  // absolute path to the main repo's .git directory
 }
 
 export interface VcsWorkspace {
   add(input: WorkspaceAdd): WorkspaceInfo;
   forget(path: string): void;
   list(): WorkspaceInfo[];
+  // Plan 02-03 Task 2 gap-fill (RESEARCH §Forward-Complete Gaps Summary):
+  context(): WorkspaceContext;
+  prune(): ExecResult;
 }
 
 export interface VcsHooks {
@@ -166,6 +229,12 @@ export interface VcsHooks {
 export interface GitOnlyOps {
   createAnnotatedTag(name: string, message: string, rev: RevisionExpr): void;
   version(): string;
+  // Plan 02-03 Task 2 gap-fill (RESEARCH §Forward-Complete Gaps Summary + W2):
+  // bootstrap-path verbs that allow shared test helpers and init-runner.ts to
+  // run on a fresh dir without raw-git fallbacks.
+  init(): void;                                  // git init in cwd
+  configGet(key: string): string | null;         // git config --get; null on exit 1
+  configSet(key: string, value: string): void;   // git config <key> <value>; throw on non-zero
   // D-12: NO `raw` escape hatch in Phase 1. Add specific verbs as Phase 2 migration discovers them.
 }
 

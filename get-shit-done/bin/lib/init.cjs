@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { createVcsAdapter } = require('../../../sdk/dist-cjs/vcs/index.js');
 const { loadConfig, resolveModelInternal, findPhaseInternal, getRoadmapPhaseInternal, pathExistsInternal, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, normalizePhaseName, toPosixPath, output, error, checkAgentsInstalled, phaseTokenMatches } = require('./core.cjs');
 const { planningPaths, planningDir, planningRoot } = require('./planning-workspace.cjs');
 const { maskIfSecret } = require('./secrets.cjs');
@@ -1516,8 +1517,9 @@ function detectChildRepos(dir) {
     if (fs.existsSync(gitDir)) {
       let hasUncommitted = false;
       try {
-        const status = execSync('git status --porcelain', { cwd: fullPath, encoding: 'utf8', timeout: 5000 });
-        hasUncommitted = status.trim().length > 0;
+        const vcs = createVcsAdapter(fullPath, { kind: 'git' });
+        const status = vcs.status({ porcelain: true });
+        hasUncommitted = status.entries.length > 0;
       } catch { /* best-effort */ }
       repos.push({ name: entry.name, path: fullPath, has_uncommitted: hasUncommitted });
     }
@@ -1535,8 +1537,11 @@ function cmdInitNewWorkspace(cwd, raw) {
   // Check if git worktree is available
   let worktreeAvailable = false;
   try {
-    execSync('git --version', { encoding: 'utf8', timeout: 5000, stdio: 'pipe' });
-    worktreeAvailable = true;
+    const vcs = createVcsAdapter(cwd, { kind: 'git' });
+    if (vcs.kind === 'git') {
+      vcs.gitOnly.version();
+      worktreeAvailable = true;
+    }
   } catch { /* no git at all */ }
 
   const result = {
@@ -1638,8 +1643,9 @@ function cmdInitRemoveWorkspace(cwd, name, raw) {
     const repoPath = path.join(wsPath, repo.name);
     if (!fs.existsSync(repoPath)) continue;
     try {
-      const status = execSync('git status --porcelain', { cwd: repoPath, encoding: 'utf8', timeout: 5000, stdio: 'pipe' });
-      if (status.trim().length > 0) {
+      const vcs = createVcsAdapter(repoPath, { kind: 'git' });
+      const status = vcs.status({ porcelain: true });
+      if (status.entries.length > 0) {
         dirtyRepos.push(repo.name);
       }
     } catch { /* best-effort */ }

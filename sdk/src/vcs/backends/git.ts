@@ -18,6 +18,7 @@
  * D-14:  __vcsTestOnly snapshot/restore implements RESEARCH Pattern 3 (strategy 3).
  */
 
+import { resolve as resolvePath } from 'node:path';
 import { execGit } from '../exec.js';
 import type { ExecResult } from '../exec.js';
 import { fireHook } from '../hook-bridge.js';
@@ -101,11 +102,33 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         };
       }
     }
-    const args: string[] =
-      input.files && input.files.length > 0
-        ? ['commit', '-m', input.message]
-        : ['commit', '-am', input.message];
+    // Plan 02-08 gap-fill: amend takes precedence and uses `--amend --no-edit`
+    // (HEAD's message is preserved; input.message is ignored). When not amending
+    // and no `files` were staged, fall through to `-am` for "commit all tracked
+    // modifications" UNLESS a pathspec is set — pathspec callers (e.g. the
+    // commit handler) staged paths explicitly upstream and want only those
+    // staged paths committed, NOT a `-am` sweep over the whole worktree.
+    let args: string[];
+    if (input.amend) {
+      args = ['commit', '--amend', '--no-edit'];
+    } else if (input.files && input.files.length > 0) {
+      args = ['commit', '-m', input.message];
+    } else if (input.pathspec && input.pathspec.length > 0) {
+      // Already-staged-paths path: commit ONLY what is currently staged within
+      // the pathspec, without `-am` (which would auto-stage tracked mods).
+      args = ['commit', '-m', input.message];
+    } else {
+      args = ['commit', '-am', input.message];
+    }
     if (input.allowEmpty) args.push('--allow-empty');
+    if (input.noVerify) args.push('--no-verify');
+    // Plan 02-08 gap-fill: pathspec narrows the commit's scope without staging.
+    // Used by sdk/src/query/commit.ts to guarantee the commit captures only the
+    // paths the handler staged, even when the caller's index had unrelated
+    // entries pre-staged (#3061).
+    if (input.pathspec && input.pathspec.length > 0) {
+      args.push('--', ...input.pathspec);
+    }
     const commitRes = execGit(cwd, args);
     if (commitRes.exitCode !== 0) {
       return {
@@ -125,28 +148,46 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
   };
 
   // ─── log ─────────────────────────────────────────────────────────────────
-  // %x09 = TAB, used as field separator (subject can contain anything else).
-  const LOG_FORMAT = '--format=%H%x09%P%x09%an%x09%aI%x09%s';
+  // %x09 = TAB, field separator for the structured fields. Subject is on the
+  // first record line; body follows on subsequent lines (may be empty). With
+  // `-z`, each commit record is NUL-terminated, so body's embedded newlines
+  // do not collide with the entry separator (Plan 02-06 Task 2 contract
+  // extension: `body` is now populated whenever the commit has body text).
+  const LOG_FORMAT = '--format=%H%x09%P%x09%an%x09%aI%x09%s%n%b';
   const log = (opts: LogOpts = {}): LogEntry[] => {
-    const args = ['log', LOG_FORMAT];
+    const args = ['log', '-z', LOG_FORMAT];
     if (opts.maxCount) args.push(`-n${opts.maxCount}`);
+    // Plan 02-03 Task 2 gap-fill: --all surfaces commits reachable from any ref,
+    // not just the current HEAD. Mirrors verify.cjs:1224 / verify.ts:628 usage.
+    if (opts.allRefs) args.push('--all');
     if (opts.rev) args.push(toGitRev(opts.rev));
     if (opts.paths && opts.paths.length > 0) args.push('--', ...opts.paths);
     const r = execGit(cwd, args);
     if (r.exitCode !== 0) return [];
+    // `-z` uses NUL between records. r.stdout is trimmed by execGit, so the
+    // trailing terminator is gone — split safely on `\x00` and filter empty.
     return r.stdout
-      .split('\n')
+      .split('\x00')
       .filter(Boolean)
-      .map((line): LogEntry => {
-        const parts = line.split('\t');
+      .map((record): LogEntry => {
+        // record = "<hash>\t<parents>\t<author>\t<date>\t<subject>\n<body>"
+        // The first newline divides subject-line from body. Body may be empty.
+        const nlIdx = record.indexOf('\n');
+        const head = nlIdx === -1 ? record : record.slice(0, nlIdx);
+        const body = nlIdx === -1 ? '' : record.slice(nlIdx + 1);
+        const parts = head.split('\t');
         const [hash, parents, author, date, ...subjectParts] = parts;
-        return {
+        const entry: LogEntry = {
           hash: hash ?? '',
           parents: parents ? parents.split(' ').filter(Boolean) : [],
           author: author ?? '',
           date: date ?? '',
           subject: subjectParts.join('\t'),
         };
+        // Populate body only when there is body text (preserves existing
+        // `body?: string` optional shape — no opt-in flag needed).
+        if (body.length > 0) entry.body = body;
+        return entry;
       });
   };
 
@@ -194,13 +235,36 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     const args = ['diff'];
     if (opts.staged) args.push('--cached');
     if (opts.nameOnly) args.push('--name-only');
+    // Plan 02-03 Task 2 gap-fill: --name-status emits one line per changed
+    // path prefixed by a single status letter (A/M/D/R/C/T/U/X/B). Mirrors
+    // verify.cjs:1309 usage. Mutually exclusive with --name-only at the git
+    // CLI level; if both are set, --name-status wins (callers should pick one).
+    if (opts.nameStatus) args.push('--name-status');
     if (opts.rev) args.push(toGitRev(opts.rev));
     if (opts.paths && opts.paths.length > 0) args.push('--', ...opts.paths);
     const r = execGit(cwd, args);
-    return {
+    const result: DiffResult = {
       raw: r.stdout,
       nameOnly: opts.nameOnly ? r.stdout.split('\n').filter(Boolean) : [],
     };
+    if (opts.nameStatus) {
+      // Format: "<STATUS>\t<path>" per line; rename/copy entries use
+      // "<STATUS><score>\t<oldpath>\t<newpath>" — for rename/copy we report
+      // the new path (post-state), matching what consumers care about.
+      const entries: import('../types.js').DiffNameStatusEntry[] = [];
+      for (const line of r.stdout.split('\n')) {
+        if (!line) continue;
+        const cols = line.split('\t');
+        if (cols.length < 2) continue;
+        const statusRaw = cols[0];
+        const letter = statusRaw[0] as import('../types.js').DiffNameStatusEntry['status'];
+        // Rename/copy: status is "R<score>" or "C<score>", new path is cols[2].
+        const path = (letter === 'R' || letter === 'C') && cols.length >= 3 ? cols[2] : cols[1];
+        entries.push({ path, status: letter });
+      }
+      result.nameStatus = entries;
+    }
+    return result;
   };
 
   // ─── refs.bookmarks ──────────────────────────────────────────────────────
@@ -237,13 +301,91 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
       const r = execGit(cwd, ['rev-parse', '--verify', '--quiet', name]);
       return r.exitCode === 0;
     },
+    // Plan 02-03 Task 1 gap-fill: switch / checkout (with optional create).
+    switch: (name: string, opts: { create?: boolean } = {}): void => {
+      const args = opts.create ? ['checkout', '-b', name] : ['checkout', name];
+      const r = execGit(cwd, args);
+      if (r.exitCode !== 0) {
+        throw new Error(`bookmarks.switch failed: ${r.stderr || r.stdout}`);
+      }
+    },
   });
+
+  // Plan 02-03 Task 1 gap-fill (RESEARCH §Forward-Complete Gaps Summary):
+  // 7 read-only verbs on vcs.refs.* — each mirrors the existing factory shape
+  // (call execGit, parse the standard 5-field result, return typed scalar).
+  const currentBranch = (): string | null => {
+    const r = execGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
+    if (r.exitCode !== 0) return null;
+    const name = r.stdout.trim();
+    if (!name || name === 'HEAD') return null; // detached
+    return name;
+  };
+
+  const resolveShort = (rev: RevisionExpr): string => {
+    const r = execGit(cwd, ['rev-parse', '--short', toGitRev(rev)]);
+    if (r.exitCode !== 0) {
+      throw new Error(`refs.resolveShort failed: ${r.stderr || r.stdout}`);
+    }
+    return r.stdout.trim();
+  };
+
+  const countCommits = (opts: { rev?: RevisionExpr }): number => {
+    const target = opts.rev ? toGitRev(opts.rev) : 'HEAD';
+    const r = execGit(cwd, ['rev-list', '--count', target]);
+    if (r.exitCode !== 0) return 0;
+    const n = parseInt(r.stdout.trim(), 10);
+    return Number.isNaN(n) ? 0 : n;
+  };
+
+  const rootCommits = (opts: { rev?: RevisionExpr }): string[] => {
+    const target = opts.rev ? toGitRev(opts.rev) : 'HEAD';
+    const r = execGit(cwd, ['rev-list', '--max-parents=0', target]);
+    if (r.exitCode !== 0) return [];
+    return r.stdout.split('\n').filter(Boolean).map((s) => s.trim());
+  };
+
+  const refExists = (rev: RevisionExpr): boolean => {
+    // `cat-file -t <rev>` exits 0 with the type when the object exists,
+    // non-zero otherwise. Both outcomes are valid completions; we only need
+    // the exit code as a yes/no probe.
+    const r = execGit(cwd, ['cat-file', '-t', toGitRev(rev)]);
+    return r.exitCode === 0;
+  };
+
+  const isIgnored = (p: string): boolean => {
+    // `--no-index` lets us probe paths that aren't in the index. Exit 0 = ignored,
+    // exit 1 = not ignored, exit ≥128 = error. Treat the 0/1 outcomes only.
+    const r = execGit(cwd, ['check-ignore', '-q', '--no-index', '--', p]);
+    return r.exitCode === 0;
+  };
+
+  const remotes = (): string[] => {
+    const r = execGit(cwd, ['remote']);
+    if (r.exitCode !== 0) return [];
+    return r.stdout.split('\n').filter(Boolean).map((s) => s.trim());
+  };
 
   const refs = Object.freeze({
     head: expr.head(),
     parent: expr.parent(),
     bookmarks,
+    currentBranch,
+    resolveShort,
+    countCommits,
+    rootCommits,
+    exists: refExists,
+    isIgnored,
+    remotes,
   });
+
+  // Plan 02-03 Task 1 gap-fill: top-level stage / unstage verbs.
+  const stage = (files: string[]): ExecResult => {
+    return execGit(cwd, ['add', '--', ...files]);
+  };
+  const unstage = (files: string[]): ExecResult => {
+    return execGit(cwd, ['rm', '--cached', '--ignore-unmatch', '--', ...files]);
+  };
 
   // ─── workspace ───────────────────────────────────────────────────────────
   const workspace = Object.freeze({
@@ -277,6 +419,37 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         (e): WorkspaceInfo => ({ path: e.path, rev: e.head, locked: e.locked }),
       );
     },
+    // Plan 02-03 Task 2 — Blocker 4: workspace.context returns the same path
+    // strings worktree-safety.cjs:122-123 reads via raw `git rev-parse`. The
+    // gitDir/gitCommonDir distinction is what lets the consumer detect linked
+    // worktrees (gitDir !== gitCommonDir).
+    context: () => {
+      const top = execGit(cwd, ['rev-parse', '--show-toplevel']);
+      const gd = execGit(cwd, ['rev-parse', '--git-dir']);
+      const cd = execGit(cwd, ['rev-parse', '--git-common-dir']);
+      // For a non-repo cwd these calls fail; surface a structured error so
+      // callers don't get a silent empty-string answer that masquerades as
+      // valid path data.
+      if (top.exitCode !== 0 || gd.exitCode !== 0 || cd.exitCode !== 0) {
+        throw new Error(
+          `workspace.context: not a git repo at ${cwd}: ${top.stderr || gd.stderr || cd.stderr}`,
+        );
+      }
+      const effectiveRoot = resolvePath(cwd, top.stdout.trim());
+      const gitDir = resolvePath(cwd, gd.stdout.trim());
+      const gitCommonDir = resolvePath(cwd, cd.stdout.trim());
+      const isLinked = gitDir !== gitCommonDir;
+      return {
+        effectiveRoot,
+        mode: (isLinked ? 'linked' : 'main') as 'main' | 'linked',
+        isLinked,
+        gitDir,
+        gitCommonDir,
+      };
+    },
+    // Plan 02-03 Task 2 gap-fill: `git worktree prune` removes stale
+    // .git/worktrees/<name> entries whose worktree directories no longer exist.
+    prune: (): ExecResult => execGit(cwd, ['worktree', 'prune']),
   });
 
   // ─── hooks ───────────────────────────────────────────────────────────────
@@ -342,6 +515,31 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
       }
       return r.stdout;
     },
+    // Plan 02-03 Task 2 gap-fill: bootstrap-path verbs (init / configGet /
+    // configSet). These exist on the gitOnly branch because the equivalent
+    // jj operations are structurally different (jj git init, jj config get/set
+    // with different namespace semantics) — Phase 3 will add jj-symmetric
+    // shapes when needed.
+    init: (): void => {
+      const r = execGit(cwd, ['init']);
+      if (r.exitCode !== 0) {
+        throw new Error(`gitOnly.init failed: ${r.stderr || r.stdout}`);
+      }
+    },
+    configGet: (key: string): string | null => {
+      // `git config --get <key>` exits 0 with the value, 1 when key is unset,
+      // ≥2 on error. Treat exit 1 as "unset" → null; treat ≥2 as failure.
+      const r = execGit(cwd, ['config', '--get', key]);
+      if (r.exitCode === 0) return r.stdout.trim();
+      if (r.exitCode === 1) return null;
+      throw new Error(`gitOnly.configGet failed: ${r.stderr || r.stdout}`);
+    },
+    configSet: (key: string, value: string): void => {
+      const r = execGit(cwd, ['config', key, value]);
+      if (r.exitCode !== 0) {
+        throw new Error(`gitOnly.configSet failed: ${r.stderr || r.stdout}`);
+      }
+    },
   });
 
   // ─── __vcsTestOnly snapshot/restore (D-14, RESEARCH Pattern 3 / strategy 3) ─
@@ -376,6 +574,8 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     findConflicts,
     push,
     fetch,
+    stage,
+    unstage,
     gitOnly,
     [__vcsTestOnly]: testOnly,
   }) as unknown as GitVcsAdapter;

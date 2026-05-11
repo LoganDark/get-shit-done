@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-05-10T02:30:40.571Z"
-last_activity: 2026-05-10 -- Phase 2 planning complete
+status: ready-to-verify
+stopped_at: Completed 02-12-PLAN.md (Phase 2 plan execution complete, 12/12)
+last_updated: "2026-05-11T00:00:00.000Z"
+last_activity: 2026-05-11
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 17
-  completed_plans: 5
-  percent: 29
+  completed_plans: 17
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 01 — adapter-foundation-git-backend
+**Current focus:** Phase 02 — bulk-call-site-migration-still-git-only
 
 ## Current Position
 
-Phase: 2
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-10 -- Phase 2 planning complete
+Phase: 02 (bulk-call-site-migration-still-git-only) — PLAN EXECUTION COMPLETE (ready for phase-level verifier)
+Plan: 12 of 12 complete
+Status: Ready to verify
+Last activity: 2026-05-11
 
-Progress: [██████████] 100%
+Progress: [██████████] 100% (plan execution; phase-level verify pending)
 
 ## Performance Metrics
 
@@ -57,6 +57,18 @@ Progress: [██████████] 100%
 | Phase 01 P03 | ~12m | 3 tasks | 14 files |
 | Phase 01 P04 | ~10m | 3 tasks | 6 files |
 | Phase 01 P05 | ~6m | 3 tasks | 5 files |
+| Phase 02 P01 | 1m | 1 tasks | 1 files |
+| Phase 02 P02 | 9m | 3 tasks | 3 files |
+| Phase 02 P03 | 7m | 4 tasks | 9 files |
+| Phase 02 P04 | 10m | 2 tasks | 8 files |
+| Phase 02 P05 | 12m | 2 tasks | 8 files |
+| Phase 02 P06 | ~6m | 4 tasks | 17 files |
+| Phase 02 P07 | ~10m | 1 tasks | 6 files |
+| Phase 02 P08 | ~25m | 1 tasks | 15 files |
+| Phase 02 P09 | ~30m | 2 tasks tasks | 19 files files |
+| Phase 02 P10 | ~11m | 2 tasks | 14 files |
+| Phase 02 P11 | 13m | 2 tasks tasks | 5 files files |
+| Phase 02 P12 | ~2m (resume-only) | 1 task | 1 files (+SUMMARY/STATE/ROADMAP/REQUIREMENTS) |
 
 ## Accumulated Context
 
@@ -87,6 +99,34 @@ Recent decisions affecting current work:
 - [Phase 01-05]: Plan 01-05: no-raw-git lint guard uses W-4 isolated-fixture pattern — `--scan-root <dir>` argv lets fixture tests scan os.tmpdir() trees so production-mode and fixture-mode scans cannot collide; `__lint-fixture-vcs-*` in .gitignore is belt-and-suspenders against accidental repo-root pollution.
 - [Phase 01-05]: Plan 01-05 [Rule 2]: extended allowlist to cover sdk/src/init-runner.ts (Phase 2 migration target — sibling to sdk/src/query/init.ts), sdk/src/**/*.integration.test.ts glob (legitimate fixture-seeding sites), and tests/__tools__/capture-vcs-baselines.cjs (plan-03 regenerator helper). Without these, the lint would fire on Phase 1's land state — RESEARCH Pitfall 2.
 - [Phase 01-05]: Plan 01-05: D-17/D-18 (whole-repo default-deny on ALL git invocations, not just mutating verbs) tightens VCS-07's literal wording. REQUIREMENTS.md VCS-07 marked Complete (01-05) with the tightening noted inline.
+- [Phase 02-01]: commit.test.ts:304 triage closed via mechanical 3-line beforeEach fix (commit.gpgsign + tag.gpgsign disablers lifted from git-backend.test.ts:31-32 per D-08) — D-03/D-04 gate now open for plan 02-08 paired commit.ts+commit.test.ts migration (D-06)
+- [Phase 02-02]: tests/helpers.cjs createTempGitProject post-init commit migrated to VcsAdapter (D-09 partial); bootstrap stays raw pending plan 02-03 gap-fill
+- [Phase 02-02]: Day-one allowlist shrink: 9 entries removed; lint exits 1 with 14 violations across 8 files on phase/02-migration (D-13 forcing function; main stays green)
+- [Phase 02-02]: sdk/src/vcs/jj/.gitkeep created as zero-conflict sidecar surface (UPSTREAM-02 / D-15)
+- [Phase ?]: [Phase 02-03]: 17 forward-complete adapter gaps closed + Blocker 3 (expr.commit) + Blocker 4 (workspace.context shape with gitDir/gitCommonDir) + W2 (gitOnly.configSet); per-file migration plans 02-04+ now mechanically swappable
+- [Phase ?]: [Phase 02-03]: tests/helpers.cjs::createTempGitProject closing migration — zero raw-git after this plan (D-09 fully holds)
+- [Phase ?]: [Phase 02-03]: range:<encoded>..<encoded> recursive translation in toGitRev/toJjRev avoids extending parseExpr; commit:<sha> emits verbatim; D-12 holds via SHA-shape validation in expr.commit factory
+- [Phase ?]: [Phase 02-04]: smoke-test (D-01) confirms relative-path require shape from bin/lib/*.cjs to dist-cjs (../../../sdk/dist-cjs/vcs/...); package-name @gsd-build/sdk does not resolve. Locks pattern for plans 02-05+.
+- [Phase ?]: [Phase 02-04]: worktree-safety.cjs uses two injection seams: deps.readPorcelain (surgical porcelain-reader override for line-80 mocks) + deps.vcs (VcsAdapter mock for context/prune); ADR-0004 deps={} signature preserved (W4).
+- [Phase ?]: [Phase 02-04]: prune-orphaned-worktrees and bug-2774 test files DEFERRED (Rule 4) — need workspace.add(branchCreate), merge, checkout, branch-rename adapter verbs before vcsTest retarget is mechanical; follow-up plan required.
+- [Phase ?]: [Phase 02-05]: init.cjs (3 sites) and init.ts (3 sites) byte-symmetric migration to VcsAdapter; lint 13→7 / 7→5 files; D-06 paired retarget via gitOnly.init()+configSet()
+- [Phase ?]: [Phase 02-05]: baseline-parity dispatch is args-shape-keyed not id-keyed — adding new baseline files auto-spawns new it() cases without requiring new dispatch clauses (D-08 mechanical-only)
+- [Phase ?]: [Phase 02-05]: init.cjs's detectChildRepos / cmdInitNewWorkspace / cmdInitWorkspaceStatus have no direct test coverage — pre-existing testing gap, surface for future maintenance
+- [Phase ?]: [Phase 02-06]: vcs.log() populates LogEntry.body via 'git log -z' format extension; bundled with Task 2 (Rule 3) — required for byte-equivalent reconstruction in check-decision-coverage migration
+- [Phase ?]: [Phase 02-06]: 4-file ascending-LOC migration (check-ship-ready 103 → check-decision-coverage 554 → progress 566 → init-runner 734); 10 sites closed; expr.commit(firstCommit) consumed in production (Blocker-3 closure); init-runner private execGit helper deleted as dead code; lint 7→5 / 5→3
+- [Phase 02-07]: graphify.cjs (594 LOC, 2 sites) migrated; first production consumer of expr.range factory from 02-03 — validates gap-fill end-to-end. Tri-state null preservation via vcs.refs.exists pre-check (Rule 2). Paired test enh-3170 retargeted (real, not vacuous); graphify.test.cjs vacuous (zero git invocations).
+- [Phase ?]: [Phase 02-08]: sdk/src/query/commit.ts migrated; W5 prescriptive imports; CommitInput amend/noVerify/pathspec gap-fill
+- [Phase ?]: [Phase 02-08]: commit.test.ts paired retarget (D-06) — bootstrap via gitOnly.init/configSet; setup via vcs.stage/vcs.commit; post-state probes via vcs.log/vcs.status/vcs.diff; git-rm synthesized via unlink+vcs.stage. Zero raw execSync('git ...') in test bodies.
+- [Phase ?]: [Phase 02-08]: verify.ts 3 dynamic execGit imports retargeted from './commit.js' to '../vcs/index.js' (Rule 3 — preserves existing semantics on the deleted commit.ts re-export); Plan 02-10 owns verify.ts proper migration
+- [Phase ?]: [Phase 02-08]: baseline-parity commit-clause needs fresh fixture (initFixture re-init in dispatch) — canonical execGit upstream call already commits the staged path; rerunning adapter on same fixture hits 'nothing to commit'. Mirrors 02-07's per-fixture re-init pattern for rev-parse HEAD
+- [Phase ?]: [Phase 02-09]: commands.cjs (1028 LOC, 14 sites) migrated to VcsAdapter; W1 split keeps source-migration commit at 5 files; first bin/lib production consumer of expr.commit; Pitfall 2 preserved
+- [Phase ?]: [Phase 02-09]: #2014 invariant safeguard via stagedOrUnstaged tracking — explicit --files with all-missing entries short-circuits to nothing_to_commit BEFORE vcs.commit; naive pathspec migration would record deletions
+- [Phase ?]: [Phase 02-09]: 3 vacuous-paired tests NOT touched per D-08 (no execSync('git ...) matches); workspace.test.cjs's backtick-quoted git worktree add lines NOT migrated per carried Rule 4 (workspace.add(branchCreate) deferred); lint 3→2 violations / 2→1 files
+- [Phase ?]: [Phase 02-10]: verify.cjs (1,390 LOC, 6 sites) + verify.ts (692 LOC, 3 sites) byte-symmetric migration; first production consumers of LogOpts.allRefs and DiffOpts.nameStatus gap-fills from 02-03; Blocker-3 closure expanded to 9 expr.commit consumers across 5 files
+- [Phase ?]: [Phase 02-10]: verify.cjs:1309 two-rev diff (base..HEAD) routes via expr.range(expr.commit(base), expr.head()); first production consumer of expr.range outside graphify.cjs; range form byte-equivalent to two-rev for linear-ancestor relationship drift detection guarantees
+- [Phase ?]: [Phase 02-10]: cat-file -t probes lose stdout-token discrimination (commit/tree/blob/tag) when migrated to vcs.refs.exists — plan-sanctioned semantic shift; expr.commit shape validation catches malformed inputs; documented at all 5 cat-file probe sites in verify.cjs/verify.ts
+- [Phase ?]: [Phase 02-11]: core.cjs (largest hotspot, 2,036 LOC) site 603 migrated; execGit helper + DEFAULT_GIT_TIMEOUT_MS deleted (every consumer retired by 02-04/02-09/02-10); Phase 2 production-source migration COMPLETE (lint guard exits 0); UPSTREAM-03 hotspot audit verified D-08 mechanical-only across all three hotspots — Phase 2 ready to merge to main
+- [Phase 02-12]: MIGR-04 + UPSTREAM-01 RECORDED-AS-DEFERRED per user sign-off 2026-05-11 ("Approve as-is" resume-signal); deferred-tracker `02-12-DEFERRED.md` exists at canonical path with verbatim ROADMAP success-criteria 4 + 5 replacement text preserved for the next phase-transition runner; requirements marked "Recorded as deferred to milestone-end task (post-Phase-5) per Phase 2 plan 02-12" in REQUIREMENTS.md (NOT Done); Phase 2 plan execution complete (12/12) — ready for phase-level verifier
 
 ### Pending Todos
 
@@ -106,9 +146,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-10T00:57:15.729Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-bulk-call-site-migration-still-git-only/02-CONTEXT.md
+Last session: 2026-05-11T00:00:00.000Z
+Stopped at: Completed 02-12-PLAN.md (Phase 2 plan execution complete, 12/12; ready for phase-level verifier)
+Resume file: None
 
 ## Known Pre-Existing Test Failures (Non-Blocking)
 

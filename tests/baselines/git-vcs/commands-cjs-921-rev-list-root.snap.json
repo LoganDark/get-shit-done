@@ -1,0 +1,36 @@
+{
+  "id": "commands-cjs-921-rev-list-root",
+  "source": "get-shit-done/bin/lib/commands.cjs:921",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": [
+      "echo a > a.txt",
+      "git add a.txt",
+      "git commit -m c1"
+    ]
+  },
+  "command": "git",
+  "args": [
+    "rev-list",
+    "--max-parents=0",
+    "HEAD"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "be55c4c55a5b4707092578d11f46ea37eafcc78e",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "regex:^[0-9a-f]{40}$"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "id": "commit-ts-294-add-c-form",
+  "source": "sdk/src/query/commit.ts:294",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": [
+      "echo bar > bar.txt"
+    ]
+  },
+  "command": "git",
+  "args": [
+    "add",
+    "--",
+    "bar.txt"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "exact"
+  }
+}

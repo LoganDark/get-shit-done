@@ -5,6 +5,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { expr, parseExpr } from '../expr.js';
+import { toGitRev } from '../parse/git-rev.js';
+import { toJjRev } from '../parse/jj-rev.js';
 
 describe('expr factories', () => {
   it('head() round-trips through parseExpr', () => {
@@ -73,5 +75,41 @@ describe('expr.bookmark refname validation (WR-07)', () => {
   it('rejects components starting with "."', () => {
     expect(() => expr.bookmark('.hidden')).toThrow(/refname format/);
     expect(() => expr.bookmark('a/.hidden')).toThrow(/component/);
+  });
+});
+
+describe('expr.range factory (02-03 Task 2)', () => {
+  it('round-trips via toGitRev to A..B form', () => {
+    const r = expr.range(expr.head(), expr.bookmark('main'));
+    expect(toGitRev(r)).toBe('HEAD..main');
+  });
+  it('round-trips via toJjRev (jj also uses .. for ranges)', () => {
+    const r = expr.range(expr.head(), expr.bookmark('main'));
+    expect(toJjRev(r)).toMatch(/\.\./);
+  });
+  it('parent..head translates to git form HEAD~1..HEAD', () => {
+    const r = expr.range(expr.parent(), expr.head());
+    expect(toGitRev(r)).toBe('HEAD~1..HEAD');
+  });
+});
+
+describe('expr.commit factory (02-03 Task 2 — Blocker 3)', () => {
+  const SHA = 'abc1234deadbeef000000000000000000000aaaa';
+  it('round-trips via toGitRev — emits SHA verbatim', () => {
+    expect(toGitRev(expr.commit(SHA))).toBe(SHA);
+  });
+  it('round-trips via toJjRev — emits SHA verbatim', () => {
+    expect(toJjRev(expr.commit(SHA))).toBe(SHA);
+  });
+  it('accepts a 7-char short SHA', () => {
+    expect(toGitRev(expr.commit('abc1234'))).toBe('abc1234');
+  });
+  it('throws on non-SHA input (D-12 — no string passthrough)', () => {
+    expect(() => expr.commit('not-a-sha')).toThrow(/SHA/);
+    expect(() => expr.commit('')).toThrow(/SHA/);
+    expect(() => expr.commit('xyz')).toThrow(/SHA/);
+  });
+  it('throws on too-short input (<4 hex chars)', () => {
+    expect(() => expr.commit('abc')).toThrow(/SHA/);
   });
 });

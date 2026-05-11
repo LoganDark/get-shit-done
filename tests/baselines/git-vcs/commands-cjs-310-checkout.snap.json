@@ -1,0 +1,33 @@
+{
+  "id": "commands-cjs-310-checkout",
+  "source": "get-shit-done/bin/lib/commands.cjs:310",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": [
+      "git branch feature"
+    ]
+  },
+  "command": "git",
+  "args": [
+    "checkout",
+    "feature"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "",
+    "stderr": "Switched to branch 'feature'",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "exact"
+  }
+}

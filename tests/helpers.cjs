@@ -87,18 +87,28 @@ function createTempGitProject(prefix = 'gsd-test-') {
   const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), prefix));
   fs.mkdirSync(path.join(tmpDir, '.planning', 'phases'), { recursive: true });
 
-  execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
-  execSync('git config user.email "test@test.com"', { cwd: tmpDir, stdio: 'pipe' });
-  execSync('git config user.name "Test"', { cwd: tmpDir, stdio: 'pipe' });
-  execSync('git config commit.gpgsign false', { cwd: tmpDir, stdio: 'pipe' });
+  // Phase 2 D-09 closing migration (plan 02-03 Task 4 / W2 fix): bootstrap
+  // (init + 3x config) now routes through `vcs.gitOnly.init()` and
+  // `vcs.gitOnly.configSet(...)`, retiring the last 4 raw-git calls in this
+  // function. After this commit createTempGitProject has zero raw-git
+  // invocations. The lazy `_loadVcs()` getter still defers the dist-cjs
+  // require until first call (pre-build-guard friendly for non-VCS tests).
+  const { vcs: vcsLib } = _loadVcs();
+  const vcs = vcsLib.createVcsAdapter(tmpDir, { kind: 'git' });
+  if (vcs.kind === 'git') {
+    vcs.gitOnly.init();
+    vcs.gitOnly.configSet('user.email', 'test@test.com');
+    vcs.gitOnly.configSet('user.name', 'Test');
+    vcs.gitOnly.configSet('commit.gpgsign', 'false');
+  }
 
   fs.writeFileSync(
     path.join(tmpDir, '.planning', 'PROJECT.md'),
     '# Project\n\nTest project.\n'
   );
 
-  execSync('git add -A', { cwd: tmpDir, stdio: 'pipe' });
-  execSync('git commit -m "initial commit"', { cwd: tmpDir, stdio: 'pipe' });
+  // Post-init stage + commit via the same VcsAdapter instance (D-09).
+  vcs.commit({ files: ['.'], message: 'initial commit' });
 
   return tmpDir;
 }

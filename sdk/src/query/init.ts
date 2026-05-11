@@ -20,8 +20,9 @@
 import { existsSync, readdirSync, readFileSync, statSync, type Dirent } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative, basename } from 'node:path';
-import { execSync } from 'node:child_process';
 import { homedir } from 'node:os';
+
+import { createVcsAdapter } from '../vcs/index.js';
 
 import { loadConfig, type GSDConfig } from '../config.js';
 import { resolveModel, MODEL_PROFILES } from './config-query.js';
@@ -1006,8 +1007,9 @@ export const initNewWorkspace: QueryHandler = async (_args, projectDir) => {
       if (existsSync(join(fullPath, '.git'))) {
         let hasUncommitted = false;
         try {
-          const status = execSync('git status --porcelain', { cwd: fullPath, encoding: 'utf8', timeout: 5000, stdio: 'pipe' });
-          hasUncommitted = status.trim().length > 0;
+          const vcs = createVcsAdapter(fullPath, { kind: 'git' });
+          const status = vcs.status({ porcelain: true });
+          hasUncommitted = status.entries.length > 0;
         } catch { /* best-effort */ }
         childRepos.push({ name: entry.name, path: fullPath, has_uncommitted: hasUncommitted });
       }
@@ -1016,8 +1018,11 @@ export const initNewWorkspace: QueryHandler = async (_args, projectDir) => {
 
   let worktreeAvailable = false;
   try {
-    execSync('git --version', { encoding: 'utf8', timeout: 5000, stdio: 'pipe' });
-    worktreeAvailable = true;
+    const vcs = createVcsAdapter(projectDir, { kind: 'git' });
+    if (vcs.kind === 'git') {
+      vcs.gitOnly.version();
+      worktreeAvailable = true;
+    }
   } catch { /* no git */ }
 
   const result: Record<string, unknown> = {
@@ -1135,8 +1140,9 @@ export const initRemoveWorkspace: QueryHandler = async (args, _projectDir) => {
     const repoPath = join(wsPath, repo.name as string);
     if (!existsSync(repoPath)) continue;
     try {
-      const status = execSync('git status --porcelain', { cwd: repoPath, encoding: 'utf8', timeout: 5000, stdio: 'pipe' });
-      if (status.trim().length > 0) {
+      const vcs = createVcsAdapter(repoPath, { kind: 'git' });
+      const status = vcs.status({ porcelain: true });
+      if (status.entries.length > 0) {
         dirtyRepos.push(repo.name as string);
       }
     } catch { /* best-effort */ }

@@ -1,0 +1,31 @@
+{
+  "id": "worktree-safety-cjs-198-worktree-prune",
+  "source": "get-shit-done/bin/lib/worktree-safety.cjs:198",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": []
+  },
+  "command": "git",
+  "args": [
+    "worktree",
+    "prune"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "exact"
+  }
+}

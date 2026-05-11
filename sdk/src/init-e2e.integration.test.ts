@@ -23,6 +23,7 @@ import { GSDTools, resolveGsdToolsPath } from './gsd-tools.js';
 import { GSDEventStream } from './event-stream.js';
 import { GSDEventType } from './types.js';
 import type { GSDEvent } from './types.js';
+import { createVcsAdapter } from './vcs/index.js';
 
 // ─── CLI availability check ─────────────────────────────────────────────────
 
@@ -51,9 +52,12 @@ describe.skipIf(!cliAvailable || !gsdToolsAvailable || !e2eEnabled)('E2E: InitRu
     tmpDir = await mkdtemp(join(tmpdir(), 'gsd-sdk-init-e2e-'));
 
     // Initialize git in the temp dir (required by InitRunner)
-    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
-    execSync('git config user.email "test@test.com"', { cwd: tmpDir, stdio: 'ignore' });
-    execSync('git config user.name "Test"', { cwd: tmpDir, stdio: 'ignore' });
+    const vcs = createVcsAdapter(tmpDir, { kind: 'git' });
+    if (vcs.kind === 'git') {
+      vcs.gitOnly.init();
+      vcs.gitOnly.configSet('user.email', 'test@test.com');
+      vcs.gitOnly.configSet('user.name', 'Test');
+    }
   }, 30_000);
 
   afterAll(async () => {

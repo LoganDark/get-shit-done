@@ -31,13 +31,10 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
-import { execFile as execFileCb } from 'node:child_process';
-import { promisify } from 'node:util';
+import { createVcsAdapter } from '../vcs/index.js';
 import { loadConfig } from '../config.js';
 import { parseDecisions, type ParsedDecision } from './decisions.js';
 import type { QueryHandler } from './utils.js';
-
-const execFile = promisify(execFileCb);
 
 interface GateUncoveredItem {
   id: string;
@@ -382,11 +379,15 @@ export const checkDecisionCoveragePlan: QueryHandler = async (args, projectDir, 
  */
 async function recentCommitMessages(projectDir: string, limit = 200): Promise<string> {
   try {
-    const { stdout } = await execFile('git', ['log', `-n`, String(limit), '--pretty=%s%n%b'], {
-      cwd: projectDir,
-      maxBuffer: 4 * 1024 * 1024,
-    });
-    return stdout;
+    const vcs = createVcsAdapter(projectDir, { kind: 'git' });
+    const entries = vcs.log({ maxCount: limit });
+    // Reconstruct the byte-equivalent text the prior `git log --pretty=%s%n%b`
+    // call produced: each entry is `subject\nbody` (body may be empty),
+    // entries joined by `\n`. The git backend's `log()` populates `body` from
+    // the same `%b` payload (Plan 02-06 contract extension), and trailing
+    // newlines collapse on `.trim()` to match the historical `execFile`
+    // stdout shape used by callers (substring search — not a parser).
+    return entries.map((e) => `${e.subject}\n${e.body ?? ''}`).join('\n').trim();
   } catch {
     return '';
   }

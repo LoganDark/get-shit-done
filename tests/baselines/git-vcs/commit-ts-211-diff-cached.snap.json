@@ -1,0 +1,35 @@
+{
+  "id": "commit-ts-211-diff-cached",
+  "source": "sdk/src/query/commit.ts:211",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": [
+      "echo foo > foo.txt",
+      "git add -- foo.txt"
+    ]
+  },
+  "command": "git",
+  "args": [
+    "diff",
+    "--cached",
+    "--name-only"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "foo.txt",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "exact"
+  }
+}

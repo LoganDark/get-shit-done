@@ -1,0 +1,32 @@
+{
+  "id": "check-ship-ready-ts-60-remote",
+  "source": "sdk/src/query/check-ship-ready.ts:60",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": [
+      "git remote add origin https://x.invalid/y.git"
+    ]
+  },
+  "command": "git",
+  "args": [
+    "remote"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "origin",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "exact"
+  }
+}

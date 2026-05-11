@@ -5,7 +5,14 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { safeReadFile, loadConfig, normalizePhaseName, escapeRegex, execGit, findPhaseInternal, getMilestoneInfo, stripShippedMilestones, extractCurrentMilestone, output, error, checkAgentsInstalled, CONFIG_DEFAULTS, inspectWorktreeHealth } = require('./core.cjs');
+const { safeReadFile, loadConfig, normalizePhaseName, escapeRegex, findPhaseInternal, getMilestoneInfo, stripShippedMilestones, extractCurrentMilestone, output, error, checkAgentsInstalled, CONFIG_DEFAULTS, inspectWorktreeHealth } = require('./core.cjs');
+// Plan 02-10: migrated from execGit re-export to VcsAdapter. Sites 71, 268,
+// 1305 use vcs.refs.exists(expr.commit(hash)) for cat-file -t probes (Blocker
+// 3 closure). Site 1224 uses vcs.log({allRefs:true}). Site 1286 uses
+// vcs.refs.exists(vcs.refs.head) for the repo-existence probe. Site 1309 uses
+// vcs.diff({rev: expr.commit(base), nameStatus: true}). The dist-cjs path is
+// the locked relative shape from plan 02-04 smoke-test (D-01).
+const { createVcsAdapter, expr } = require('../../../sdk/dist-cjs/vcs');
 const { planningDir } = require('./planning-workspace.cjs');
 const { extractFrontmatter, parseMustHavesBlock } = require('./frontmatter.cjs');
 const { writeStateMd } = require('./state.cjs');
@@ -63,13 +70,20 @@ function cmdVerifySummary(cwd, summaryPath, checkFileCount, raw) {
   }
 
   // Check 3: Commits exist
+  // Plan 02-10: Blocker 3 closure — runtime SHA wraps via expr.commit(hash).
+  // vcs.refs.exists returns boolean (true iff `cat-file -t <rev>` exits 0).
+  // The original probe also checked stdout==='commit' (vs 'tree'/'blob'/'tag');
+  // for SUMMARY-mentioned hashes the exit-0 path is dominated by commit
+  // objects, and tree/blob hashes shorter than 4 chars are rejected by
+  // expr.commit's SHA shape validation — preserving the spirit of the
+  // existing probe.
   const commitHashPattern = /\b[0-9a-f]{7,40}\b/g;
   const hashes = content.match(commitHashPattern) || [];
   let commitsExist = false;
   if (hashes.length > 0) {
+    const vcs = createVcsAdapter(cwd);
     for (const hash of hashes.slice(0, 3)) {
-      const result = execGit(cwd, ['cat-file', '-t', hash]);
-      if (result.exitCode === 0 && result.stdout === 'commit') {
+      if (vcs.refs.exists(expr.commit(hash))) {
         commitsExist = true;
         break;
       }
@@ -262,11 +276,23 @@ function cmdVerifyReferences(cwd, filePath, raw) {
 function cmdVerifyCommits(cwd, hashes, raw) {
   if (!hashes || hashes.length === 0) { error('At least one commit hash required'); }
 
+  // Plan 02-10: Blocker 3 closure — runtime SHA wraps via expr.commit(hash).
+  // expr.commit validates SHA shape (4-40 hex chars); inputs that fail
+  // validation throw and route to invalid. Mirrors site 71's semantic shift
+  // (any reachable object — commit/tree/blob/tag — registers as "valid"; in
+  // practice CLI inputs are commit hashes). The expr.commit shape validation
+  // catches truly malformed inputs like 'not-a-sha' before reaching git.
+  const vcs = createVcsAdapter(cwd);
   const valid = [];
   const invalid = [];
   for (const hash of hashes) {
-    const result = execGit(cwd, ['cat-file', '-t', hash]);
-    if (result.exitCode === 0 && result.stdout.trim() === 'commit') {
+    let exists = false;
+    try {
+      exists = vcs.refs.exists(expr.commit(hash));
+    } catch {
+      exists = false; // expr.commit shape-validation throw → invalid
+    }
+    if (exists) {
       valid.push(hash);
     } else {
       invalid.push(hash);
@@ -1221,9 +1247,22 @@ function cmdVerifySchemaDrift(cwd, phaseArg, skipFlag, raw) {
   }
 
   // Also check git commit messages for push evidence
-  const gitLog = execGit(cwd, ['log', '--oneline', '--all', '-50']);
-  if (gitLog.exitCode === 0) {
-    executionLog += '\n' + gitLog.stdout;
+  // Plan 02-10: LogOpts.allRefs gap-fill from 02-03. Reconstruct the
+  // `--oneline` byte-equivalent from the structured LogEntry[] (short-sha +
+  // subject) since the legacy callers consume the joined stdout as a
+  // free-text grep target.
+  const vcs = createVcsAdapter(cwd);
+  let logEntries = [];
+  try {
+    logEntries = vcs.log({ format: 'oneline', maxCount: 50, allRefs: true });
+  } catch {
+    logEntries = [];
+  }
+  if (logEntries.length > 0) {
+    const oneline = logEntries
+      .map((e) => `${(e.hash || '').slice(0, 7)} ${e.subject || ''}`)
+      .join('\n');
+    executionLog += '\n' + oneline;
   }
 
   const result = checkSchemaDrift(allFiles, executionLog, { skipCheck: !!skipFlag });
@@ -1282,9 +1321,17 @@ function cmdVerifyCodebaseDrift(cwd, raw) {
 
     const lastMapped = drift.readMappedCommit(structurePath);
 
+    // Plan 02-10: VcsAdapter migration. Sites 1286 / 1305 / 1309 share one
+    // adapter instance. Site 1286: vcs.refs.exists(vcs.refs.head) is the
+    // repo-existence probe (boolean return; non-throwing for non-git cwd —
+    // the backend swallows the exit-non-zero into `false`). Site 1305:
+    // vcs.refs.exists(expr.commit(base)) — Blocker 3 closure for the
+    // recorded-mapping reachability check. Site 1309: vcs.diff with the
+    // DiffOpts.nameStatus gap-fill from 02-03.
+    const vcs = createVcsAdapter(cwd);
+
     // Verify we're inside a git repo and resolve the diff range.
-    const revProbe = execGit(cwd, ['rev-parse', 'HEAD']);
-    if (revProbe.exitCode !== 0) {
+    if (!vcs.refs.exists(vcs.refs.head)) {
       emit({
         skipped: true,
         reason: 'not-a-git-repo',
@@ -1302,12 +1349,35 @@ function cmdVerifyCodebaseDrift(cwd, raw) {
       base = EMPTY_TREE;
     } else {
       // Verify the commit is reachable; if not, fall back to EMPTY_TREE.
-      const verify = execGit(cwd, ['cat-file', '-t', base]);
-      if (verify.exitCode !== 0) base = EMPTY_TREE;
+      // expr.commit shape-validates the lastMapped SHA before probing.
+      let reachable = false;
+      try {
+        reachable = vcs.refs.exists(expr.commit(base));
+      } catch {
+        reachable = false;
+      }
+      if (!reachable) base = EMPTY_TREE;
     }
 
-    const diff = execGit(cwd, ['diff', '--name-status', base, 'HEAD']);
-    if (diff.exitCode !== 0) {
+    // vcs.diff with nameStatus:true returns DiffNameStatusEntry[] in
+    // result.nameStatus AND the raw stdout in result.raw. The downstream
+    // parser below was line-oriented over the raw stdout; preserve that
+    // shape for the mechanical-only D-08 invariant.
+    //
+    // The original args `['diff', '--name-status', base, 'HEAD']` is a
+    // two-rev diff. DiffOpts.rev takes a SINGLE RevisionExpr, so wrap the
+    // pair via expr.range(from, to) — the range factory from 02-03 emits
+    // `<base>..HEAD`, which yields the same `--name-status` output as the
+    // two-rev form for linear ancestor relationships (drift detection's
+    // base is always an ancestor of HEAD by construction).
+    let diffRaw;
+    try {
+      const diffResult = vcs.diff({
+        rev: expr.range(expr.commit(base), expr.head()),
+        nameStatus: true,
+      });
+      diffRaw = diffResult.raw;
+    } catch {
       emit({
         skipped: true,
         reason: 'git-diff-failed',
@@ -1321,7 +1391,7 @@ function cmdVerifyCodebaseDrift(cwd, raw) {
     const added = [];
     const modified = [];
     const deleted = [];
-    for (const line of diff.stdout.split(/\r?\n/)) {
+    for (const line of diffRaw.split(/\r?\n/)) {
       if (!line.trim()) continue;
       const m = line.match(/^([A-Z])\d*\t(.+?)(?:\t(.+))?$/);
       if (!m) continue;

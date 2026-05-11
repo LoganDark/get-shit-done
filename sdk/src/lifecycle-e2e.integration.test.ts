@@ -25,6 +25,7 @@ import { GSDTools, resolveGsdToolsPath } from './gsd-tools.js';
 import { GSDEventStream } from './event-stream.js';
 import { GSDEventType, PhaseStepType } from './types.js';
 import type { GSDEvent, PhaseRunnerResult, RoadmapAnalysis } from './types.js';
+import { createVcsAdapter } from './vcs/index.js';
 
 // ─── CLI availability check ─────────────────────────────────────────────────
 
@@ -66,9 +67,12 @@ describe.skipIf(!cliAvailable || !gsdToolsAvailable)('E2E Lifecycle: InitRunner 
     tmpDir = await mkdtemp(join(tmpdir(), 'gsd-sdk-lifecycle-e2e-'));
 
     // Git init (required by InitRunner and phase lifecycle)
-    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
-    execSync('git config user.email "test@test.com"', { cwd: tmpDir, stdio: 'ignore' });
-    execSync('git config user.name "Test"', { cwd: tmpDir, stdio: 'ignore' });
+    const vcs = createVcsAdapter(tmpDir, { kind: 'git' });
+    if (vcs.kind === 'git') {
+      vcs.gitOnly.init();
+      vcs.gitOnly.configSet('user.email', 'test@test.com');
+      vcs.gitOnly.configSet('user.name', 'Test');
+    }
 
     tools = new GSDTools({
       projectDir: tmpDir,

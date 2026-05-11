@@ -287,6 +287,258 @@ describe('createGitAdapter — __vcsTestOnly snapshot/restore (D-14, strategy 3)
   });
 });
 
+describe('createGitAdapter — refs.currentBranch (02-03 Task 1)', () => {
+  it('returns the current branch name on a freshly-initialized repo', () => {
+    const vcs = createGitAdapter(tmpDir);
+    const expected = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim();
+    expect(vcs.refs.currentBranch()).toBe(expected);
+  });
+
+  it('returns the new branch name after switching with bookmarks.switch({create:true})', () => {
+    const vcs = createGitAdapter(tmpDir);
+    vcs.refs.bookmarks.switch('feat-cb', { create: true });
+    expect(vcs.refs.currentBranch()).toBe('feat-cb');
+  });
+
+  it('returns null when HEAD is detached', () => {
+    const vcs = createGitAdapter(tmpDir);
+    const sha = execSync('git rev-parse HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
+    execSync(`git checkout ${sha}`, { cwd: tmpDir, stdio: 'pipe' });
+    expect(vcs.refs.currentBranch()).toBe(null);
+  });
+});
+
+describe('createGitAdapter — refs.resolveShort (02-03 Task 1)', () => {
+  it('returns a 7-char hex SHA for refs.head after initial commit', () => {
+    const vcs = createGitAdapter(tmpDir);
+    const short = vcs.refs.resolveShort(vcs.refs.head);
+    expect(short).toMatch(/^[0-9a-f]{7,}$/);
+  });
+});
+
+describe('createGitAdapter — refs.countCommits (02-03 Task 1)', () => {
+  it('returns 3 in a repo with 3 commits', () => {
+    const vcs = createGitAdapter(tmpDir);
+    writeFileSync(join(tmpDir, 'a.txt'), 'a\n');
+    vcs.commit({ files: ['a.txt'], message: 'add a' });
+    writeFileSync(join(tmpDir, 'b.txt'), 'b\n');
+    vcs.commit({ files: ['b.txt'], message: 'add b' });
+    expect(vcs.refs.countCommits({ rev: vcs.refs.head })).toBe(3);
+  });
+});
+
+describe('createGitAdapter — refs.rootCommits (02-03 Task 1)', () => {
+  it('returns exactly one SHA in a linear-history repo', () => {
+    const vcs = createGitAdapter(tmpDir);
+    writeFileSync(join(tmpDir, 'a.txt'), 'a\n');
+    vcs.commit({ files: ['a.txt'], message: 'add a' });
+    const roots = vcs.refs.rootCommits({ rev: vcs.refs.head });
+    expect(roots.length).toBe(1);
+    expect(roots[0]).toMatch(/^[0-9a-f]{40}$/);
+  });
+});
+
+describe('createGitAdapter — refs.exists (02-03 Task 1)', () => {
+  it('returns true for a known-valid bookmark ref', () => {
+    const vcs = createGitAdapter(tmpDir);
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim();
+    expect(vcs.refs.exists(expr.bookmark(branch))).toBe(true);
+  });
+
+  it('returns false for a nonexistent bookmark ref', () => {
+    const vcs = createGitAdapter(tmpDir);
+    expect(vcs.refs.exists(expr.bookmark('definitely-not-a-real-branch-xyz'))).toBe(false);
+  });
+});
+
+describe('createGitAdapter — refs.isIgnored (02-03 Task 1)', () => {
+  it('returns true for a path under a .gitignore-listed directory', () => {
+    const vcs = createGitAdapter(tmpDir);
+    writeFileSync(join(tmpDir, '.gitignore'), 'node_modules/\n');
+    expect(vcs.refs.isIgnored('node_modules/foo')).toBe(true);
+  });
+
+  it('returns false for a tracked path', () => {
+    const vcs = createGitAdapter(tmpDir);
+    writeFileSync(join(tmpDir, 'README.md'), '# readme\n');
+    expect(vcs.refs.isIgnored('README.md')).toBe(false);
+  });
+});
+
+describe('createGitAdapter — refs.remotes (02-03 Task 1)', () => {
+  it('returns [] on a repo with no remotes', () => {
+    const vcs = createGitAdapter(tmpDir);
+    expect(vcs.refs.remotes()).toEqual([]);
+  });
+
+  it('returns ["origin"] after git remote add origin', () => {
+    const vcs = createGitAdapter(tmpDir);
+    execSync('git remote add origin https://example.invalid/repo.git', {
+      cwd: tmpDir,
+      stdio: 'pipe',
+    });
+    expect(vcs.refs.remotes()).toEqual(['origin']);
+  });
+});
+
+describe('createGitAdapter — bookmarks.switch (02-03 Task 1)', () => {
+  it('switch({create:true}) creates and switches to the new branch', () => {
+    const vcs = createGitAdapter(tmpDir);
+    vcs.refs.bookmarks.switch('feature-x', { create: true });
+    const cb = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim();
+    expect(cb).toBe('feature-x');
+  });
+
+  it('switch(name) without create switches to an existing branch', () => {
+    const vcs = createGitAdapter(tmpDir);
+    const original = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim();
+    execSync('git checkout -b temp-branch', { cwd: tmpDir, stdio: 'pipe' });
+    vcs.refs.bookmarks.switch(original);
+    const cb = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim();
+    expect(cb).toBe(original);
+  });
+});
+
+describe('createGitAdapter — stage / unstage (02-03 Task 1)', () => {
+  it('stage([file]) makes file appear in diff({staged:true,nameOnly:true})', () => {
+    const vcs = createGitAdapter(tmpDir);
+    writeFileSync(join(tmpDir, 'foo.txt'), 'x\n');
+    const r = vcs.stage(['foo.txt']);
+    expect(r.exitCode).toBe(0);
+    const d = vcs.diff({ staged: true, nameOnly: true });
+    expect(d.nameOnly).toContain('foo.txt');
+  });
+
+  it('unstage([file]) reverts a previously staged add (rm --cached)', () => {
+    const vcs = createGitAdapter(tmpDir);
+    writeFileSync(join(tmpDir, 'foo.txt'), 'x\n');
+    vcs.stage(['foo.txt']);
+    const r = vcs.unstage(['foo.txt']);
+    expect(r.exitCode).toBe(0);
+    const d = vcs.diff({ staged: true, nameOnly: true });
+    expect(d.nameOnly).not.toContain('foo.txt');
+  });
+});
+
+describe('createGitAdapter — log.allRefs (02-03 Task 2)', () => {
+  it('log({allRefs:true}) returns commits from non-HEAD refs', () => {
+    const vcs = createGitAdapter(tmpDir);
+    // Original branch initial commit already exists; create a separate branch
+    // with a commit, then move HEAD back. log() default sees only HEAD reach;
+    // log({allRefs:true}) sees both.
+    const original = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim();
+    execSync('git checkout -b side-branch', { cwd: tmpDir, stdio: 'pipe' });
+    writeFileSync(join(tmpDir, 'side.txt'), 'side\n');
+    vcs.commit({ files: ['side.txt'], message: 'side branch only' });
+    execSync(`git checkout ${original}`, { cwd: tmpDir, stdio: 'pipe' });
+
+    const subjectsHead = vcs.log({ maxCount: 50 }).map((e) => e.subject);
+    expect(subjectsHead).not.toContain('side branch only');
+
+    const subjectsAll = vcs.log({ allRefs: true, maxCount: 50 }).map((e) => e.subject);
+    expect(subjectsAll).toContain('side branch only');
+  });
+});
+
+describe('createGitAdapter — diff.nameStatus (02-03 Task 2)', () => {
+  it('diff({staged:true,nameStatus:true}) returns nameStatus entries with status letters', () => {
+    const vcs = createGitAdapter(tmpDir);
+    writeFileSync(join(tmpDir, 'newfile.txt'), 'x\n');
+    vcs.stage(['newfile.txt']);
+    const d = vcs.diff({ staged: true, nameStatus: true });
+    expect(d.nameStatus).toBeTruthy();
+    const entry = d.nameStatus!.find((e) => e.path === 'newfile.txt');
+    expect(entry).toBeTruthy();
+    expect(entry!.status).toBe('A');
+  });
+});
+
+describe('createGitAdapter — workspace.context (02-03 Task 2 — Blocker 4)', () => {
+  it('on main repo, returns mode=main, isLinked=false, gitDir===gitCommonDir', () => {
+    const vcs = createGitAdapter(tmpDir);
+    const ctx = vcs.workspace.context();
+    expect(ctx.mode).toBe('main');
+    expect(ctx.isLinked).toBe(false);
+    expect(ctx.gitDir).toBe(ctx.gitCommonDir);
+    // effectiveRoot resolves to the repo root (realpath-equivalent on macOS).
+    expect(realpathSync(ctx.effectiveRoot)).toBe(realpathSync(tmpDir));
+  });
+
+  it('on linked worktree, gitDir !== gitCommonDir, isLinked=true, mode=linked', () => {
+    const vcs = createGitAdapter(tmpDir);
+    const wtPath = join(tmpDir, '..', `wt-ctx-${Date.now()}`);
+    try {
+      execSync(`git worktree add ${wtPath}`, { cwd: tmpDir, stdio: 'pipe' });
+      // Build a separate adapter rooted at the linked worktree path.
+      const wtVcs = createGitAdapter(wtPath);
+      const ctx = wtVcs.workspace.context();
+      expect(ctx.isLinked).toBe(true);
+      expect(ctx.mode).toBe('linked');
+      expect(ctx.gitDir).not.toBe(ctx.gitCommonDir);
+    } finally {
+      try {
+        execSync(`git worktree remove ${wtPath} --force`, { cwd: tmpDir, stdio: 'pipe' });
+      } catch {
+        // best-effort cleanup
+      }
+      rmSync(wtPath, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('createGitAdapter — workspace.prune (02-03 Task 2)', () => {
+  it('returns ExecResult with exitCode 0 on a repo with no stale worktrees', () => {
+    const vcs = createGitAdapter(tmpDir);
+    const r = vcs.workspace.prune();
+    expect(r.exitCode).toBe(0);
+  });
+});
+
+describe('createGitAdapter — gitOnly.init / configGet / configSet (02-03 Task 2)', () => {
+  it('init() makes .git/HEAD exist in a fresh empty dir', () => {
+    const fresh = mkdtempSync(join(tmpdir(), 'gsd-fresh-'));
+    try {
+      // createGitAdapter accepts any dir — no check that .git already exists.
+      const vcs = createGitAdapter(fresh);
+      vcs.gitOnly.init();
+      expect(existsSync(join(fresh, '.git', 'HEAD'))).toBe(true);
+    } finally {
+      rmSync(fresh, { recursive: true, force: true });
+    }
+  });
+
+  it('configGet returns null for an unknown key, value for a known key', () => {
+    const vcs = createGitAdapter(tmpDir);
+    expect(vcs.gitOnly.configGet('this.key.does.not.exist')).toBe(null);
+    execSync('git config foo.bar baz', { cwd: tmpDir, stdio: 'pipe' });
+    expect(vcs.gitOnly.configGet('foo.bar')).toBe('baz');
+  });
+
+  it('configSet round-trips with configGet (W2)', () => {
+    const vcs = createGitAdapter(tmpDir);
+    vcs.gitOnly.configSet('plan0203.test', 'roundtrip');
+    expect(vcs.gitOnly.configGet('plan0203.test')).toBe('roundtrip');
+  });
+});
+
 describe('createGitAdapter — frozen depth', () => {
   it('every nested namespace is frozen', () => {
     const vcs: GitVcsAdapter = createGitAdapter(tmpDir);
