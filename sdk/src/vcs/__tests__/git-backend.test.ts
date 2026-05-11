@@ -70,6 +70,33 @@ describe('createGitAdapter — commit', () => {
     const vcs = createGitAdapter(tmpDir);
     expect(() => vcs.commit({ files: [], message: 'oops' })).toThrow(/ambiguous/);
   });
+
+  it('commit({files: [dashName]}) stages a `-`-prefixed filename via `--` separator (CR-01)', () => {
+    // Mirrors the #3061 option-injection fence in commit.test.ts:419-431 but
+    // routes through `vcs.commit({files: [...]})` directly. A filename like
+    // `-A.md` is the canonical option-injection trap: without the `--`
+    // separator, `git add -A.md` would be parsed as the `-A`/`--all` flag.
+    const vcs = createGitAdapter(tmpDir);
+    const dashName = '-A.md';
+    writeFileSync(join(tmpDir, dashName), 'dash content\n');
+    // Also drop a second unrelated tracked-but-unmodified file to detect the
+    // pre-fix behavior: if `git add -A.md` had silently triggered `-A`, then
+    // any other modified worktree file would get staged. With the `--`
+    // separator, ONLY the dashName file is staged.
+    writeFileSync(join(tmpDir, 'sibling.txt'), 'sibling\n');
+    const r = vcs.commit({ files: [dashName], message: 'add dash file' });
+    expect(r.exitCode).toBe(0);
+    expect(r.hash).toBeTruthy();
+    // Confirm dashName was committed.
+    const showRes = execSync(`git show --name-only --format= HEAD`, {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    });
+    expect(showRes.split('\n').filter(Boolean)).toContain(dashName);
+    // And `sibling.txt` was NOT committed (would have been if `-A` had been
+    // misparsed as the all-flag, sweeping the whole worktree).
+    expect(showRes.split('\n').filter(Boolean)).not.toContain('sibling.txt');
+  });
 });
 
 describe('createGitAdapter — log', () => {
@@ -187,8 +214,8 @@ describe('createGitAdapter — hooks', () => {
   });
 });
 
-describe('parseDiffCheckPath (CR-03)', () => {
-  it('extracts POSIX path with no embedded colon', () => {
+describe('parseDiffCheckPath (CR-03 / WR-02)', () => {
+  it('extracts POSIX path with no embedded colon (pre-2.31 line:line form)', () => {
     expect(parseDiffCheckPath('foo/bar.txt:42: leftover conflict marker')).toBe('foo/bar.txt');
   });
   it('preserves Windows drive-letter path (does not truncate at C:)', () => {
@@ -205,12 +232,68 @@ describe('parseDiffCheckPath (CR-03)', () => {
     expect(parseDiffCheckPath('')).toBe(null);
     expect(parseDiffCheckPath('not-a-diagnostic-line')).toBe(null);
   });
+  // WR-02: git ≥ 2.31 emits `path:line:col: description` (extra column slot).
+  // The pre-fix greedy regex captured `<path>:<line>` instead of `<path>`,
+  // because `.*` consumed `:col:` into the path group.
+  it('extracts POSIX path from git ≥ 2.31 `path:line:col: …` form (WR-02)', () => {
+    expect(parseDiffCheckPath('foo/bar.txt:42:5: leftover conflict marker')).toBe('foo/bar.txt');
+  });
+  it('extracts Windows path from git ≥ 2.31 `path:line:col: …` form (WR-02)', () => {
+    expect(parseDiffCheckPath('C:\\foo\\bar.txt:42:5: leftover conflict marker')).toBe(
+      'C:\\foo\\bar.txt',
+    );
+  });
+  it('extracts POSIX path containing literal colon from `path:line:col: …` form (WR-02)', () => {
+    expect(parseDiffCheckPath('weird:name.txt:7:3: leftover conflict marker')).toBe(
+      'weird:name.txt',
+    );
+  });
 });
 
 describe('createGitAdapter — findConflicts', () => {
-  it('findConflicts({scope: "all"}) returns []', () => {
+  it('findConflicts({scope: "all"}) returns [] on a clean repo (WR-05)', () => {
     const vcs = createGitAdapter(tmpDir);
     expect(vcs.findConflicts({ scope: 'all' })).toEqual([]);
+  });
+
+  it('findConflicts({scope: "all"}) returns INDEX entry when git ls-files --unmerged reports conflicts (WR-05)', () => {
+    // Drive a real two-branch merge that conflicts on a single path. The
+    // failed `git merge` leaves the index with stage 1/2/3 entries for the
+    // conflicted file, which is exactly what `ls-files --unmerged` reports.
+    const vcs = createGitAdapter(tmpDir);
+    const conflictPath = 'merge-me.txt';
+    // Set the initial branch name deterministically (older git defaults to
+    // `master`, newer to `main` depending on init.defaultBranch — pick one).
+    execSync('git checkout -b main', { cwd: tmpDir, stdio: 'pipe' });
+    writeFileSync(join(tmpDir, conflictPath), 'base line\n');
+    execSync(`git add ${conflictPath}`, { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git commit -m base', { cwd: tmpDir, stdio: 'pipe' });
+    // Branch B: our side
+    execSync('git checkout -b ours', { cwd: tmpDir, stdio: 'pipe' });
+    writeFileSync(join(tmpDir, conflictPath), 'ours line\n');
+    execSync(`git add ${conflictPath}`, { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git commit -m ours', { cwd: tmpDir, stdio: 'pipe' });
+    // Branch C: their side (from base again)
+    execSync('git checkout main', { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git checkout -b theirs', { cwd: tmpDir, stdio: 'pipe' });
+    writeFileSync(join(tmpDir, conflictPath), 'theirs line\n');
+    execSync(`git add ${conflictPath}`, { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git commit -m theirs', { cwd: tmpDir, stdio: 'pipe' });
+    // Now merge ours into theirs — conflicts on conflictPath.
+    try {
+      execSync('git merge ours --no-edit', { cwd: tmpDir, stdio: 'pipe' });
+    } catch {
+      // expected — non-zero exit because of conflict
+    }
+
+    const r = vcs.findConflicts({ scope: 'all' });
+    expect(r.length).toBe(1);
+    expect(r[0].rev).toBe('INDEX');
+    expect(r[0].scope).toBe('all');
+    expect(r[0].paths).toContain(conflictPath);
+    // Each path appears once, even though ls-files --unmerged emits three
+    // stage entries (1/2/3) per path.
+    expect(r[0].paths.filter((p) => p === conflictPath).length).toBe(1);
   });
 
   it('findConflicts({scope: "working-copy"}) detects conflict markers in working tree', () => {

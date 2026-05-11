@@ -70,9 +70,15 @@ export interface LogOpts {
   rev?: RevisionExpr;
   maxCount?: number;
   paths?: string[];
-  format?: 'oneline' | 'full' | 'json';
   // Plan 02-03 Task 2 gap-fill: emit `git log --all` semantics when true.
   allRefs?: boolean;
+  // NOTE (Phase 2 CR-02): `format?: 'oneline' | 'full' | 'json'` was declared
+  // here historically but never honoured by the git backend (the implementation
+  // unconditionally used the structured `LOG_FORMAT`). Removed to narrow the
+  // public contract to what is actually implemented. Callers that previously
+  // passed `format: 'oneline'` already reconstructed an "oneline-equivalent"
+  // from structured LogEntry[] (slice(0,7) of hash + subject); that
+  // reconstruction is now the documented shape.
 }
 
 export interface LogEntry {

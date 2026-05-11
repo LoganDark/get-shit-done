@@ -60,17 +60,22 @@ import type {
 // names worktree-safety.cjs as the policy owner for CLI-side decisions
 // (prune, health, inventory); only the read-only view was duplicated.
 
-// ─── Parse helpers (CR-03) ──────────────────────────────────────────────────
+// ─── Parse helpers (CR-03 / WR-02) ──────────────────────────────────────────
 //
-// `git diff --check` emits lines shaped like `path:line: <marker description>`.
+// `git diff --check` emits lines shaped like `path:line: <marker description>`
+// in pre-2.31 git, and `path:line:col: <marker description>` in git ≥ 2.31.
 // On Windows, `path` can contain a drive-letter colon (`C:\foo\bar.txt:42: …`),
 // and POSIX filesystems may also contain literal `:` in paths. Splitting at the
-// FIRST colon truncates Windows paths to the drive letter and collapses POSIX
-// paths to their prefix. Match the LAST `:<digits>:` pattern instead.
+// FIRST colon truncates Windows paths to the drive letter; matching the LAST
+// `:\d+:\s` with greedy `.*` works for the 2-coord form but breaks the 3-coord
+// (column-included) form because the greedy match consumes `:col:` into the
+// path. Use non-greedy `.+?` so the path stops at the FIRST `:line` slot, and
+// allow an optional `(?::\d+)?` column number.
 //
 // Exported for unit testing — the real call site is local to findConflicts.
 export function parseDiffCheckPath(line: string): string | null {
-  const m = line.match(/^(.*):\d+:\s/);
+  // Format: <path>:<line>[:<col>]: <description>
+  const m = line.match(/^(.+?):\d+(?::\d+)?:\s/);
   return m && m[1] ? m[1] : null;
 }
 
@@ -92,7 +97,13 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
       );
     }
     if (input.files && input.files.length > 0) {
-      const addRes = execGit(cwd, ['add', ...input.files]);
+      // CR-01 (Phase 2 review): inject `--` to neutralise filenames that begin
+      // with `-` (the canonical option-injection trap — e.g. `-A.md` would
+      // otherwise be parsed by git as the `-A`/`--all` flag plus a stray
+      // `.md` pathspec, silently staging every tracked modification). The
+      // peer entry points `vcs.stage` / `vcs.unstage` already pass `--`; this
+      // closes the same hole on the `commit({files})` path.
+      const addRes = execGit(cwd, ['add', '--', ...input.files]);
       if (addRes.exitCode !== 0) {
         return {
           exitCode: addRes.exitCode,
@@ -461,10 +472,28 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
   const findConflicts = (opts: { scope: 'all' | 'working-copy' }): ConflictResult[] => {
     if (opts.scope === 'all') {
       // RESEARCH Open Q1: git has no first-class equivalent of `jj log -r 'conflict()'`.
-      // Phase 1 returns []; Phase 3 jj backend implements the real semantics.
-      // The verify gate (CONFLICT-03) consumes 'all' scope and will exercise jj-side
-      // logic in Phase 3.
-      return [];
+      // Phase 3 jj backend implements the real revset semantics; on git we
+      // approximate via `git ls-files --unmerged`, which surfaces index-side
+      // conflict entries (mid-merge / mid-rebase / mid-cherry-pick). WR-05
+      // (Phase 2 review): previously returned `[]` unconditionally, which the
+      // verify gate (CONFLICT-03) interpreted as "no conflicts" — silently
+      // passing on a git repo with actual unmerged entries in the index. We
+      // now fail-closed by returning the populated list when conflicts exist.
+      //
+      // `git ls-files --unmerged` emits one line per stage entry:
+      //   <mode> <sha> <stage>\t<path>
+      // Collect unique paths (a single unmerged file produces multiple stage
+      // entries — base/ours/theirs — and we want one entry per path).
+      const r = execGit(cwd, ['ls-files', '--unmerged']);
+      if (r.exitCode !== 0 || r.stdout.length === 0) return [];
+      const paths = new Set<string>();
+      for (const line of r.stdout.split('\n')) {
+        const tab = line.indexOf('\t');
+        if (tab > 0) paths.add(line.slice(tab + 1));
+      }
+      return paths.size > 0
+        ? [{ rev: 'INDEX', paths: [...paths], scope: 'all' }]
+        : [];
     }
     // working-copy scope: `git diff --check` reports leftover conflict markers.
     const r = execGit(cwd, ['diff', '--check']);

@@ -282,6 +282,20 @@ function cmdVerifyCommits(cwd, hashes, raw) {
   // (any reachable object — commit/tree/blob/tag — registers as "valid"; in
   // practice CLI inputs are commit hashes). The expr.commit shape validation
   // catches truly malformed inputs like 'not-a-sha' before reaching git.
+  //
+  // WR-07 (Phase 2 review): the result schema (`all_valid` / `valid` /
+  // `invalid` / `total`) is a vestigial commit-only name. The pre-migration
+  // `cat-file -t <hash>` probe checked `stdout.trim() === 'commit'`, so a
+  // tree/blob/tag hash that exists in the object store was classified
+  // `invalid`. `vcs.refs.exists(expr.commit(hash))` returns true for ANY
+  // reachable object — so a tree SHA hand-cited in a SUMMARY.md (rare but
+  // possible) is now reported `valid` where the old probe reported
+  // `invalid`. The phase context sanctions this shift (CLI inputs are
+  // commit SHAs in practice), but readers should be aware the
+  // `all_valid` / `valid` field names describe REACHABILITY, not
+  // commit-only existence. A future enhancement could add a
+  // `vcs.refs.objectType(rev)` verb and re-tighten the predicate to
+  // commit-only without breaking the JSON contract.
   const vcs = createVcsAdapter(cwd);
   const valid = [];
   const invalid = [];
@@ -1248,13 +1262,17 @@ function cmdVerifySchemaDrift(cwd, phaseArg, skipFlag, raw) {
 
   // Also check git commit messages for push evidence
   // Plan 02-10: LogOpts.allRefs gap-fill from 02-03. Reconstruct the
-  // `--oneline` byte-equivalent from the structured LogEntry[] (short-sha +
+  // `--oneline`-equivalent from the structured LogEntry[] (short-sha +
   // subject) since the legacy callers consume the joined stdout as a
-  // free-text grep target.
+  // free-text grep target. CR-02 (Phase 2 review): the `format` field was
+  // declared but never honoured by the git backend — removed from LogOpts.
+  // The reconstruction below is NOT byte-identical to `git log --oneline`
+  // (hardcoded 7-char SHA vs `core.abbrev`, no decoration); it is good
+  // enough for substring grep over commit subjects.
   const vcs = createVcsAdapter(cwd);
   let logEntries = [];
   try {
-    logEntries = vcs.log({ format: 'oneline', maxCount: 50, allRefs: true });
+    logEntries = vcs.log({ maxCount: 50, allRefs: true });
   } catch {
     logEntries = [];
   }
@@ -1322,15 +1340,29 @@ function cmdVerifyCodebaseDrift(cwd, raw) {
     const lastMapped = drift.readMappedCommit(structurePath);
 
     // Plan 02-10: VcsAdapter migration. Sites 1286 / 1305 / 1309 share one
-    // adapter instance. Site 1286: vcs.refs.exists(vcs.refs.head) is the
-    // repo-existence probe (boolean return; non-throwing for non-git cwd —
-    // the backend swallows the exit-non-zero into `false`). Site 1305:
+    // adapter instance. Site 1286: vcs.refs.exists(vcs.refs.head). Site 1305:
     // vcs.refs.exists(expr.commit(base)) — Blocker 3 closure for the
     // recorded-mapping reachability check. Site 1309: vcs.diff with the
     // DiffOpts.nameStatus gap-fill from 02-03.
+    //
+    // WR-03 (Phase 2 review): the `vcs.refs.exists(vcs.refs.head)` probe is
+    // NOT a clean "is this a git repo?" predicate — it returns false for
+    // THREE distinct runtime states:
+    //   (a) cwd is not a git repo (`rev-parse HEAD` exits non-zero);
+    //   (b) cwd IS a git repo but HEAD does not yet resolve to a commit
+    //       (e.g. immediately after `git init`, before the first commit);
+    //   (c) the git binary is missing from PATH (vcsExec returns
+    //       non-zero exit).
+    // For codebase-drift detection the conflation is harmless — all three
+    // states deserve to skip the gate. Other callers wanting a TRUE repo
+    // probe should use `vcs.workspace.context()`, which throws cleanly on
+    // non-repo and succeeds for empty-repo OR populated-repo (closer to
+    // the `rev-parse --git-dir` shape).
     const vcs = createVcsAdapter(cwd);
 
-    // Verify we're inside a git repo and resolve the diff range.
+    // Verify we're inside a git repo (or empty-init) and resolve the diff
+    // range. See WR-03 note above re. the three failure modes lumped into
+    // "not-a-git-repo".
     if (!vcs.refs.exists(vcs.refs.head)) {
       emit({
         skipped: true,

@@ -5,7 +5,11 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execSync, execFileSync, spawnSync } = require('child_process');
+// Phase 2 review WR-01: `execSync` / `execFileSync` / `spawnSync` from
+// `child_process` were destructured here historically but the Phase 2 CLOSING
+// migration retired the last call sites in this file. Leaving the import open
+// kept a seam for future drift to reintroduce raw-git calls that the
+// `lint-vcs-no-raw-git` scanner (string-based) might not catch. Dropped.
 // Plan 02-11 (CLOSING): VcsAdapter consumption from bin/lib/*.cjs via the
 // dist-cjs bridge. core.cjs is the LARGEST hotspot (2,036 LOC) and the FINAL
 // production-source file in Phase 2's call-site migration (D-02 smallest-to-
