@@ -88,6 +88,20 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
   const stripPrefix = (name: string): string =>
     name.startsWith('gsd/') ? name.slice('gsd/'.length) : name;
 
+  /**
+   * Phase 3 JJ-07: propagate `JJ_USER` / `JJ_EMAIL` from the calling
+   * process env down into the spawned jj invocation when set. Returns
+   * `undefined` (instead of an empty `{ env: {} }` object) when no env
+   * vars are set, so vcsExec inherits process.env unchanged via spawnSync's
+   * default behavior. Pinned by `exec-env-passthrough.test.ts` (Task 1).
+   */
+  const envOpts = (): { env?: Record<string, string> } | undefined => {
+    const env: Record<string, string> = {};
+    if (process.env.JJ_USER) env.JJ_USER = process.env.JJ_USER;
+    if (process.env.JJ_EMAIL) env.JJ_EMAIL = process.env.JJ_EMAIL;
+    return Object.keys(env).length > 0 ? { env } : undefined;
+  };
+
   // ─── stub helper ────────────────────────────────────────────────────────
   const notImpl = (verb: string): never => {
     throw new VcsNotImplementedError(
@@ -96,7 +110,103 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
   };
 
   // ─── commit (plan 03-04) ────────────────────────────────────────────────
-  const commit = (_input: CommitInput): CommitResult => notImpl('commit');
+  /**
+   * Squash-based commit: snapshot the working copy (jj's natural pre-command
+   * behavior, NEVER suppressed per D-05), then squash `@`'s content into a
+   * new commit between `@-` and `@` (effectively at `@-` after `-B @`).
+   *
+   * - SQUASH-01: `commit({files, message})` → `jj squash <files> -B @ -k -m '<msg>'`
+   * - SQUASH-02: `commit({message})` (no files) → same minus path args.
+   * - SQUASH-03: paths with no WC changes are accepted (jj is path-agnostic).
+   * - SQUASH-04: `@` description is preserved (jj-native behavior).
+   * - SQUASH-05: `jj commit` is NEVER invoked — squash is the sole primitive.
+   * - SQUASH-06: conflicted-state commits surface via CommitResult.hash; the
+   *   adapter does NOT auto-resolve. Phase 3 plan 05 wires findConflicts.
+   * - SQUASH-07: code paths + `.planning/*` paths squashable in a single call.
+   * - REFS-05 + D-01: `input.bookmark` triggers `jj bookmark set gsd/<name>
+   *   -r @- -B` after the squash succeeds.
+   * - D-04: `input.bookmarkRaw` triggers the same advance without the
+   *   `gsd/` prefix (for upstream-tracking `main`/`trunk`).
+   * - JJ-07: `JJ_USER` / `JJ_EMAIL` env propagated through `envOpts()`.
+   * - WR-01: `commit({files:[]})` throws the same ambiguity error as the
+   *   git backend (cross-backend invariant — copied verbatim from git.ts).
+   * - `amend: true`: throws `VcsNotImplementedError` (RESEARCH Q5 — deferred
+   *   to Phase 4/5 if a real caller emerges).
+   * - `allowEmpty`: no-op on jj (squash naturally produces empty source =
+   *   no-change, jj does not error). Field accepted and ignored.
+   * - `noVerify`: no-op in Phase 3; Phase 4 owns hook firing internally.
+   */
+  const commit = (input: CommitInput): CommitResult => {
+    // WR-01 verbatim from git.ts:106-110 (cross-backend ambiguity rule).
+    if (input.files !== undefined && input.files.length === 0) {
+      throw new Error(
+        'commit({files:[]}) is ambiguous; pass files: undefined for the all-changes form, ' +
+          'or pass at least one path to commit a specific path set.',
+      );
+    }
+    if (input.amend) {
+      throw new VcsNotImplementedError(
+        'amend: not yet supported on jj backend (deferred per Phase 3 RESEARCH §Q5)',
+      );
+    }
+    // allowEmpty / noVerify: documented no-ops on jj. See JSDoc above.
+
+    // SQUASH-01 / SQUASH-02: argv-array invocation; files trail as positional
+    // [FILESETS]... per `jj squash --help`. `-B @` places the new commit
+    // BEFORE @ (i.e. between @- and @); `-k` keeps change_ids stable across
+    // the operation so the orchestrator's tracked head ids remain valid.
+    const squashArgs = jjArgv('squash', '-B', '@', '-k', '-m', input.message);
+    if (input.files && input.files.length > 0) {
+      squashArgs.push(...input.files);
+    }
+    const squashRes = vcsExec(cwd, 'jj', squashArgs, envOpts());
+    if (squashRes.exitCode !== 0) {
+      return {
+        exitCode: squashRes.exitCode,
+        stdout: squashRes.stdout,
+        stderr: squashRes.stderr,
+        hash: null,
+      };
+    }
+
+    // Hash resolution: after `jj squash -B @ -k`, the new commit sits at @-
+    // (the orchestrator's tracked WC `@` change-id is unchanged thanks to
+    // `-k`, but its parent is now the newly-created squash commit).
+    // Parsing the `Created new commit ...` stdout text is fragile across
+    // jj versions; a second `jj log -r @- -T commit_id -n 1` call is the
+    // deterministic form per RESEARCH §commit().
+    const hashArgs = jjArgv(
+      'log', '-r', '@-', '-T', 'commit_id', '--no-graph', '-n', '1',
+    );
+    const hashRes = vcsExec(cwd, 'jj', hashArgs);
+    const hash = hashRes.exitCode === 0 ? hashRes.stdout.trim() : null;
+
+    // D-01 / D-04: bookmark advance. The squash already succeeded; an
+    // advance failure here is reported via merged stderr (never silently
+    // swallowed — T-03.04-03 mitigation).
+    if (input.bookmark !== undefined || input.bookmarkRaw !== undefined) {
+      const bmName = input.bookmarkRaw !== undefined
+        ? input.bookmarkRaw
+        : addPrefix(input.bookmark!);
+      const advArgs = jjArgv('bookmark', 'set', bmName, '-r', '@-', '-B');
+      const advRes = vcsExec(cwd, 'jj', advArgs);
+      if (advRes.exitCode !== 0) {
+        return {
+          exitCode: squashRes.exitCode,
+          stdout: squashRes.stdout,
+          stderr: `${squashRes.stderr}\n[bookmark advance failed]: ${advRes.stderr || advRes.stdout}`,
+          hash,
+        };
+      }
+    }
+
+    return {
+      exitCode: squashRes.exitCode,
+      stdout: squashRes.stdout,
+      stderr: squashRes.stderr,
+      hash,
+    };
+  };
 
   // ─── log / status / diff / findConflicts (plan 03-05) ───────────────────
   const log = (_opts: LogOpts = {}): LogEntry[] => notImpl('log');

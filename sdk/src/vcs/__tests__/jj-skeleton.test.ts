@@ -39,8 +39,19 @@ describe('Phase 3 plan 03-01: jj.ts skeleton', () => {
   });
 
   // Top-level verbs
-  it('commit() throws VcsNotImplementedError', () => {
-    expect(() => vcs.commit({ message: 'x' })).toThrow(VcsNotImplementedError);
+  // Phase 3 plan 03-04 landed the real squash-based commit body. Against a
+  // non-existent cwd (`/tmp/never-exists`) it no longer throws
+  // VcsNotImplementedError — it spawns jj which returns a non-zero exitCode.
+  // The integration suite in jj-commit.test.ts covers the happy path.
+  it('commit() does not throw VcsNotImplementedError (wired in plan 03-04)', () => {
+    // amend: true still throws VcsNotImplementedError per RESEARCH §Q5; the
+    // default (non-amend) path must not.
+    expect(() => vcs.commit({ message: 'x' })).not.toThrow(VcsNotImplementedError);
+  });
+  it('commit({amend:true}) still throws VcsNotImplementedError (deferred per RESEARCH §Q5)', () => {
+    expect(() => vcs.commit({ message: 'x', amend: true })).toThrow(
+      VcsNotImplementedError,
+    );
   });
   it('log() throws VcsNotImplementedError', () => {
     expect(() => vcs.log()).toThrow(VcsNotImplementedError);

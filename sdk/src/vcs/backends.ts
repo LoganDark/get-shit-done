@@ -42,7 +42,10 @@ export const BACKENDS_AVAILABLE_FOR_VERB: Readonly<
   Record<string, readonly VcsBackendKey[]>
 > = Object.freeze({
   // VcsAdapterCommon top-level verbs
-  commit: Object.freeze(['git'] as const),
+  // Phase 3 plan 03-04 flipped `commit` to admit 'jj-colocated' — the
+  // squash-based commit body (SQUASH-01..07) + bookmark advance (D-01/D-04)
+  // + JJ-07 env propagation now live in backends/jj.ts.
+  commit: Object.freeze(['git', 'jj-colocated'] as const),
   log: Object.freeze(['git'] as const),
   status: Object.freeze(['git'] as const),
   diff: Object.freeze(['git'] as const),
