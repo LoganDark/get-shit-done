@@ -79,7 +79,7 @@ Plans:
 - [x] 2.1-PLAN-06.md — Move gitDir/gitCommonDir to vcs.gitOnly (D-18); worktree-safety.cjs primary consumer
 - [x] 2.1-PLAN-07.md — Remove vcs.hooks public surface test consumers (D-07; cosmetic — Phase 4 owns internal invocation)
 - [x] 2.1-PLAN-08.md — Hard-remove vcs.stage and vcs.unstage callers via Pattern E (D-03)
-- [ ] 2.1-PLAN-09.md — Baseline-parity sweep + allowlist re-tighten + 2.1-LEARNINGS.md (D-22, phase close)
+- [x] 2.1-PLAN-09.md — Baseline-parity sweep + allowlist re-tighten + 2.1-LEARNINGS.md (D-22, phase close)
 
 ### Phase 3: jj Backend Core — Squash, Refs, Conflict
 **Goal**: Land `sdk/src/vcs/backends/jj.ts` implementing the full adapter contract with the squash-based commit model, NDJSON output parsing, bookmark refs, and in-tree conflict detection — the working-copy auto-snapshot is allowed by default and `--ignore-working-copy` is never used by adapter code.

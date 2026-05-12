@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 2.1
-Plan: 8 of 9 complete
-Status: Executing (plan 09 next — final)
-Last activity: 2026-05-12 -- Phase 2.1 plan 08 vcs.stage/unstage hard-removal (378241e9; 9→0 sites)
+Plan: 9 of 9 complete
+Status: All plans complete; phase-level verification pending
+Last activity: 2026-05-12 -- Phase 2.1 plan 09 phase-close (c4ac977e); 1283/1298 tests pass, 15 pre-existing main failures carried forward
 
-Progress: [████████··] ~89% (plan execution; phase-level verify pending)
+Progress: [██████████] 100% (plan execution; phase-level verify pending)
 
 ## Performance Metrics
 
