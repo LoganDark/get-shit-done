@@ -212,7 +212,10 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       const bmName = input.bookmarkRaw !== undefined
         ? input.bookmarkRaw
         : addPrefix(input.bookmark!);
-      const advArgs = jjArgv('bookmark', 'set', bmName, '-r', '@-', '-B');
+      // IN-03: long form `--allow-backwards` (verified on jj 0.41) so a
+      // Renovate bump past 0.41 — where the short `-B` may be retired
+      // for the canonical spelling — remains in-place compatible.
+      const advArgs = jjArgv('bookmark', 'set', bmName, '-r', '@-', '--allow-backwards');
       const advRes = vcsExec(cwd, 'jj', advArgs);
       if (advRes.exitCode !== 0) {
         return {
