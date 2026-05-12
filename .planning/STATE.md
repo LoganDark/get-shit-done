@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 2.1
-Plan: 5 of 9 complete (#3061 deferred decision resolved in 7f4c8ffa)
-Status: Executing (plan 06 next)
-Last activity: 2026-05-12 -- Phase 2.1 plan 05 StatusEntry.index closure (no-op; 7d5b18a5)
+Plan: 6 of 9 complete
+Status: Executing (plan 07 next)
+Last activity: 2026-05-12 -- Phase 2.1 plan 06 gitDir/gitCommonDir → vcs.gitOnly (a889444e; 6→0 sites)
 
-Progress: [█████·····] ~56% (plan execution; phase-level verify pending)
+Progress: [██████····] ~67% (plan execution; phase-level verify pending)
 
 ## Performance Metrics
 
