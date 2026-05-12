@@ -206,13 +206,11 @@ describe('createGitAdapter — workspace', () => {
   });
 });
 
-describe('createGitAdapter — hooks', () => {
-  it('hooks.fire returns ExecResult with exitCode 0 when no hook installed', () => {
-    const vcs = createGitAdapter(tmpDir);
-    const r = vcs.hooks.fire('pre-commit');
-    expect(r.exitCode).toBe(0);
-  });
-});
+// 2.1 D-07 + RESEARCH Open Q1: vcs.hooks public surface removed.
+// The fireHook helper stays private in hook-bridge.ts; Phase 4 (HOOK-01..05)
+// wires the internal invocation from commit() / push(). Re-introduce hook-
+// firing observability tests there via side-effect assertion (e.g., a hook
+// script that touches a file).
 
 describe('parseDiffCheckPath (CR-03 / WR-02)', () => {
   it('extracts POSIX path with no embedded colon (pre-2.31 line:line form)', () => {
@@ -370,27 +368,27 @@ describe('createGitAdapter — __vcsTestOnly snapshot/restore (D-14, strategy 3)
   });
 });
 
-describe('createGitAdapter — refs.currentBranch (02-03 Task 1)', () => {
-  it('returns the current branch name on a freshly-initialized repo', () => {
+describe('createGitAdapter — refs.currentBookmarks (2.1-03)', () => {
+  it('returns the current bookmark name on a freshly-initialized repo', () => {
     const vcs = createGitAdapter(tmpDir);
     const expected = execSync('git rev-parse --abbrev-ref HEAD', {
       cwd: tmpDir,
       encoding: 'utf-8',
     }).trim();
-    expect(vcs.refs.currentBranch()).toBe(expected);
+    expect(vcs.refs.currentBookmarks()).toEqual([expected]);
   });
 
-  it('returns the new branch name after switching with bookmarks.switch({create:true})', () => {
+  it('returns the new bookmark name after switching with bookmarks.switch({create:true})', () => {
     const vcs = createGitAdapter(tmpDir);
     vcs.refs.bookmarks.switch('feat-cb', { create: true });
-    expect(vcs.refs.currentBranch()).toBe('feat-cb');
+    expect(vcs.refs.currentBookmarks()).toEqual(['feat-cb']);
   });
 
-  it('returns null when HEAD is detached', () => {
+  it('returns [] when HEAD is detached', () => {
     const vcs = createGitAdapter(tmpDir);
     const sha = execSync('git rev-parse HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
     execSync(`git checkout ${sha}`, { cwd: tmpDir, stdio: 'pipe' });
-    expect(vcs.refs.currentBranch()).toBe(null);
+    expect(vcs.refs.currentBookmarks()).toEqual([]);
   });
 });
 
@@ -497,26 +495,13 @@ describe('createGitAdapter — bookmarks.switch (02-03 Task 1)', () => {
   });
 });
 
-describe('createGitAdapter — stage / unstage (02-03 Task 1)', () => {
-  it('stage([file]) makes file appear in diff({staged:true,nameOnly:true})', () => {
-    const vcs = createGitAdapter(tmpDir);
-    writeFileSync(join(tmpDir, 'foo.txt'), 'x\n');
-    const r = vcs.stage(['foo.txt']);
-    expect(r.exitCode).toBe(0);
-    const d = vcs.diff({ staged: true, nameOnly: true });
-    expect(d.nameOnly).toContain('foo.txt');
-  });
-
-  it('unstage([file]) reverts a previously staged add (rm --cached)', () => {
-    const vcs = createGitAdapter(tmpDir);
-    writeFileSync(join(tmpDir, 'foo.txt'), 'x\n');
-    vcs.stage(['foo.txt']);
-    const r = vcs.unstage(['foo.txt']);
-    expect(r.exitCode).toBe(0);
-    const d = vcs.diff({ staged: true, nameOnly: true });
-    expect(d.nameOnly).not.toContain('foo.txt');
-  });
-});
+// 2.1 D-03: `describe('createGitAdapter — stage / unstage (02-03 Task 1)')`
+// deleted in full. vcs.stage and vcs.unstage are hard-removed from the adapter
+// surface — staging is git-only and not a cross-backend concept. The two it()
+// blocks here were contract probes for verbs that no longer exist on the
+// adapter; there is no D-04 / WC-state-capture replacement assertion that
+// belongs in the cross-backend block (the equivalent assertions live in the
+// `commit` describe block above and exercise vcs.commit({files,message})).
 
 describe('createGitAdapter — log.allRefs (02-03 Task 2)', () => {
   it('log({allRefs:true}) returns commits from non-HEAD refs', () => {
@@ -545,7 +530,11 @@ describe('createGitAdapter — diff.nameStatus (02-03 Task 2)', () => {
   it('diff({staged:true,nameStatus:true}) returns nameStatus entries with status letters', () => {
     const vcs = createGitAdapter(tmpDir);
     writeFileSync(join(tmpDir, 'newfile.txt'), 'x\n');
-    vcs.stage(['newfile.txt']);
+    // 2.1 D-03: vcs.stage hard-removed. Synthesize pre-staged state via raw
+    // `git add` (this file is on the no-raw-git lint allowlist per plan 01-05).
+    // The probe under test is the staged-diff side of vcs.diff — there is no
+    // adapter verb that puts a path into the index without committing.
+    execSync('git add -- newfile.txt', { cwd: tmpDir, stdio: 'pipe' });
     const d = vcs.diff({ staged: true, nameStatus: true });
     expect(d.nameStatus).toBeTruthy();
     const entry = d.nameStatus!.find((e) => e.path === 'newfile.txt');
@@ -556,11 +545,14 @@ describe('createGitAdapter — diff.nameStatus (02-03 Task 2)', () => {
 
 describe('createGitAdapter — workspace.context (02-03 Task 2 — Blocker 4)', () => {
   it('on main repo, returns mode=main, isLinked=false, gitDir===gitCommonDir', () => {
+    // 2.1 D-18: WorkspaceContext.{gitDir,gitCommonDir} moved to GitOnlyOps;
+    // narrow on vcs.kind === 'git' to access. createGitAdapter returns
+    // GitVcsAdapter directly, so vcs.gitOnly is accessible without narrowing.
     const vcs = createGitAdapter(tmpDir);
     const ctx = vcs.workspace.context();
     expect(ctx.mode).toBe('main');
     expect(ctx.isLinked).toBe(false);
-    expect(ctx.gitDir).toBe(ctx.gitCommonDir);
+    expect(vcs.gitOnly.gitDir()).toBe(vcs.gitOnly.gitCommonDir());
     // effectiveRoot resolves to the repo root (realpath-equivalent on macOS).
     expect(realpathSync(ctx.effectiveRoot)).toBe(realpathSync(tmpDir));
   });
@@ -575,7 +567,8 @@ describe('createGitAdapter — workspace.context (02-03 Task 2 — Blocker 4)', 
       const ctx = wtVcs.workspace.context();
       expect(ctx.isLinked).toBe(true);
       expect(ctx.mode).toBe('linked');
-      expect(ctx.gitDir).not.toBe(ctx.gitCommonDir);
+      // 2.1 D-18: linked-worktree predicate now via vcs.gitOnly methods.
+      expect(wtVcs.gitOnly.gitDir()).not.toBe(wtVcs.gitOnly.gitCommonDir());
     } finally {
       try {
         execSync(`git worktree remove ${wtPath} --force`, { cwd: tmpDir, stdio: 'pipe' });
@@ -623,13 +616,14 @@ describe('createGitAdapter — gitOnly.init / configGet / configSet (02-03 Task 
 });
 
 describe('createGitAdapter — frozen depth', () => {
+  // 2.1 D-07: vcs.hooks removed from public surface; frozen-depth probe no longer
+  // covers a hooks namespace because there is no hooks namespace on the adapter.
   it('every nested namespace is frozen', () => {
     const vcs: GitVcsAdapter = createGitAdapter(tmpDir);
     expect(Object.isFrozen(vcs)).toBe(true);
     expect(Object.isFrozen(vcs.refs)).toBe(true);
     expect(Object.isFrozen(vcs.refs.bookmarks)).toBe(true);
     expect(Object.isFrozen(vcs.workspace)).toBe(true);
-    expect(Object.isFrozen(vcs.hooks)).toBe(true);
     expect(Object.isFrozen(vcs.gitOnly)).toBe(true);
   });
 });

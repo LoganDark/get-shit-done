@@ -113,16 +113,14 @@ function createTempGitProject(prefix = 'gsd-test-') {
     '# Project\n\nTest project.\n'
   );
 
-  // Post-init stage + commit via the same VcsAdapter instance (D-09).
-  // WR-06 (Phase 2 review): split into explicit `vcs.stage(['.'])` + bare
-  // `vcs.commit({message})` rather than `commit({files: ['.']})`. The
-  // `commit({files})` path was the option-injection vector closed by CR-01
-  // (now guarded via `--`); routing through `vcs.stage` instead is
-  // additional defense in depth — `stage` has always passed `--` through to
-  // `git add`, so any future test that drops a `-`-prefixed file into the
-  // temp dir before calling this helper is safe regardless of CR-01 status.
-  vcs.stage(['.']);
-  vcs.commit({ message: 'initial commit' });
+  // Post-init commit via the same VcsAdapter instance (D-09 + Plan 2.1-04
+  // D-02/D-04). Plan 2.1-04 (D-03): the vcs.stage adapter verb is gone;
+  // vcs.commit({files: ['.']}) captures WC state via `git add -A -- .`
+  // (CR-01 `--` separator preserved inside the backend) then `git commit -m`.
+  // The prior WR-06 defense-in-depth split (explicit stage + bare commit)
+  // is no longer expressible; CR-01's `--` guard remains the option-injection
+  // safety for any `-`-prefixed file dropped before this helper runs.
+  vcs.commit({ message: 'initial commit', files: ['.'] });
 
   return tmpDir;
 }

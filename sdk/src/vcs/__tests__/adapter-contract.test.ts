@@ -71,10 +71,11 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
     expect(vcs.findConflicts({ scope: 'working-copy' })).toEqual([]);
   });
 
-  test('vcs.hooks.fire(no hook installed) is a no-op', ({ vcs }) => {
-    const r = vcs.hooks.fire('pre-commit');
-    expect(r.exitCode).toBe(0);
-  });
+  // 2.1 D-07 + RESEARCH Open Q1: vcs.hooks public surface removed.
+  // The fireHook helper stays private in hook-bridge.ts; Phase 4 (HOOK-01..05)
+  // wires the internal invocation from commit() / push(). Re-introduce hook-
+  // firing observability tests there via side-effect assertion (e.g., a hook
+  // script that touches a file).
 
   test('vcs.gitOnly.version returns a real git version', ({ vcs }) => {
     if (vcs.kind !== 'git') return;
@@ -84,10 +85,12 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
   // Plan 02-03 Task 3 — symmetric contract tests for new verbs.
   // These properties hold on every backend (git in Phase 1/2; jj added in Phase 3).
 
-  test('vcs.refs.currentBranch returns a non-null string after init', ({ vcs }) => {
-    const cb = vcs.refs.currentBranch();
-    expect(typeof cb).toBe('string');
-    expect(cb && cb.length > 0).toBe(true);
+  test('vcs.refs.currentBookmarks returns a non-empty string[] after init', ({ vcs }) => {
+    const cb = vcs.refs.currentBookmarks();
+    expect(Array.isArray(cb)).toBe(true);
+    expect(cb.length).toBeGreaterThan(0);
+    expect(typeof cb[0]).toBe('string');
+    expect(cb[0]!.length).toBeGreaterThan(0);
   });
 
   test('vcs.refs.countCommits returns a positive integer after a commit', ({ vcs, cwd }) => {
@@ -100,14 +103,21 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
 
   test('vcs.refs.exists is true for HEAD, false for an all-zeros SHA', ({ vcs }) => {
     expect(vcs.refs.exists(vcs.refs.head)).toBe(true);
-    expect(vcs.refs.exists(expr.commit('0000000000000000000000000000000000000000'))).toBe(false);
+    expect(vcs.refs.exists(expr.rev('0000000000000000000000000000000000000000'))).toBe(false);
   });
 
   test('vcs.workspace.context on main workspace: mode=main, gitDir===gitCommonDir', ({ vcs }) => {
     const ctx = vcs.workspace.context();
     expect(ctx.mode).toBe('main');
     expect(ctx.isLinked).toBe(false);
-    expect(ctx.gitDir).toBe(ctx.gitCommonDir);
+    // 2.1 D-18: WorkspaceContext.{gitDir,gitCommonDir} moved to GitOnlyOps;
+    // narrow on vcs.kind === 'git' to access. On jj backend the equivalent
+    // semantic check is workspace.context()'s mode/isLinked assertion above —
+    // the underlying .git directory layout is not part of the cross-backend
+    // contract surface.
+    if (vcs.kind === 'git') {
+      expect(vcs.gitOnly.gitDir()).toBe(vcs.gitOnly.gitCommonDir());
+    }
   });
 });
 

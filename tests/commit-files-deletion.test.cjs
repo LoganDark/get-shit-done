@@ -28,8 +28,11 @@ describe('commit --files: missing files must not stage deletions (#2014)', () =>
     // Commit STATE.md so it exists in git history
     fs.writeFileSync(path.join(tmpDir, '.planning', 'STATE.md'), '# State\n\nInitial state.\n');
     const vcs = createVcsAdapter(tmpDir, { kind: 'git' });
-    vcs.stage(['.planning/STATE.md']);
-    vcs.commit({ message: 'add STATE.md', pathspec: ['.planning/STATE.md'] });
+    // Plan 2.1-04: vcs.commit({files}) captures WC state via `git add -A --
+    // <files>` then `git commit -m`; the upstream stage is no longer required.
+    // The #2014 invariant under test (caller-side pre-probe in cmdCommit)
+    // remains intact — see assertions below.
+    vcs.commit({ message: 'add STATE.md', files: ['.planning/STATE.md'] });
     // Delete STATE.md from disk -- now missing but tracked in git
     fs.unlinkSync(path.join(tmpDir, '.planning', 'STATE.md'));
   });

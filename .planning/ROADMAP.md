@@ -71,15 +71,15 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 **Plans:** 9 plans
 
 Plans:
-- [ ] 2.1-PLAN-01.md — Shape commit: types.ts + expr.ts + parse/{git,jj}-rev.ts + backends/git.ts + hook-bridge.ts atomic (D-01..D-22)
-- [ ] 2.1-PLAN-02.md — Rename expr.commit → expr.rev across 46 consumer sites (D-13)
-- [ ] 2.1-PLAN-03.md — Rename currentBranch → currentBookmarks (string|null → string[]) across 11 sites (D-15)
-- [ ] 2.1-PLAN-04.md — Collapse CommitInput.pathspec onto files (WC-state-capture) + caller-side #2014 pre-probe (D-02/D-04/D-06)
-- [ ] 2.1-PLAN-05.md — Drop StatusEntry.index from test assertions (D-16)
-- [ ] 2.1-PLAN-06.md — Move gitDir/gitCommonDir to vcs.gitOnly (D-18); worktree-safety.cjs primary consumer
-- [ ] 2.1-PLAN-07.md — Remove vcs.hooks public surface test consumers (D-07; cosmetic — Phase 4 owns internal invocation)
-- [ ] 2.1-PLAN-08.md — Hard-remove vcs.stage and vcs.unstage callers via Pattern E (D-03)
-- [ ] 2.1-PLAN-09.md — Baseline-parity sweep + allowlist re-tighten + 2.1-LEARNINGS.md (D-22, phase close)
+- [x] 2.1-PLAN-01.md — Shape commit: types.ts + expr.ts + parse/{git,jj}-rev.ts + backends/git.ts + hook-bridge.ts atomic (D-01..D-22)
+- [x] 2.1-PLAN-02.md — Rename expr.commit → expr.rev across 46 consumer sites (D-13)
+- [x] 2.1-PLAN-03.md — Rename currentBranch → currentBookmarks (string|null → string[]) across 11 sites (D-15)
+- [x] 2.1-PLAN-04.md — Collapse CommitInput.pathspec onto files (WC-state-capture) + caller-side #2014 pre-probe (D-02/D-04/D-06)
+- [x] 2.1-PLAN-05.md — Drop StatusEntry.index from test assertions (D-16) (no-op closure — plan 01 already removed type field, no consumers)
+- [x] 2.1-PLAN-06.md — Move gitDir/gitCommonDir to vcs.gitOnly (D-18); worktree-safety.cjs primary consumer
+- [x] 2.1-PLAN-07.md — Remove vcs.hooks public surface test consumers (D-07; cosmetic — Phase 4 owns internal invocation)
+- [x] 2.1-PLAN-08.md — Hard-remove vcs.stage and vcs.unstage callers via Pattern E (D-03)
+- [x] 2.1-PLAN-09.md — Baseline-parity sweep + allowlist re-tighten + 2.1-LEARNINGS.md (D-22, phase close)
 
 ### Phase 3: jj Backend Core — Squash, Refs, Conflict
 **Goal**: Land `sdk/src/vcs/backends/jj.ts` implementing the full adapter contract with the squash-based commit model, NDJSON output parsing, bookmark refs, and in-tree conflict detection — the working-copy auto-snapshot is allowed by default and `--ignore-working-copy` is never used by adapter code.

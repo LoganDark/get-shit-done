@@ -30,13 +30,14 @@ describe('createVcsAdapter — git backend (real, plan 03)', () => {
     expect(vcs.cwd).toBe(tmpDir);
   });
 
-  it('the returned adapter is deeply frozen (refs/refs.bookmarks/workspace/hooks/gitOnly)', () => {
+  // 2.1 D-07: vcs.hooks removed from public surface; frozen-depth probe no longer
+  // covers a hooks namespace. Phase 4 (HOOK-01..05) wires hook firing internally.
+  it('the returned adapter is deeply frozen (refs/refs.bookmarks/workspace/gitOnly)', () => {
     const vcs = createVcsAdapter(tmpDir);
     expect(Object.isFrozen(vcs)).toBe(true);
     expect(Object.isFrozen(vcs.refs)).toBe(true);
     expect(Object.isFrozen(vcs.refs.bookmarks)).toBe(true);
     expect(Object.isFrozen(vcs.workspace)).toBe(true);
-    expect(Object.isFrozen(vcs.hooks)).toBe(true);
     if (vcs.kind === 'git') {
       expect(Object.isFrozen(vcs.gitOnly)).toBe(true);
     }

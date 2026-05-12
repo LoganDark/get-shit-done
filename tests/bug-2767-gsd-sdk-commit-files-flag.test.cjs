@@ -142,7 +142,7 @@ describe('bug #2767 (behavioral): gsd-sdk query commit --files', () => {
       `foo.md/bar.md should remain unstaged under the buggy form, got:\n${dirty}`);
   });
 
-  test('positional form with no .planning/ change: returns "nothing staged"', () => {
+  test('positional form with no .planning/ change: returns "nothing to commit"', () => {
     // Reset the .planning/STATE.md change so the fallback has nothing to stage.
     fs.rmSync(path.join(tmpDir, '.planning', 'STATE.md'), { force: true });
 
@@ -150,7 +150,11 @@ describe('bug #2767 (behavioral): gsd-sdk query commit --files', () => {
     assert.equal(result.exitCode, 0);
     assert.ok(result.json, `expected JSON body, got:\n${result.stdout}`);
     assert.equal(result.json.committed, false);
-    assert.equal(result.json.reason, 'nothing staged',
+    // Phase 2.1 plan 04 (D-02 + D-04 + D-06): the legacy "staged but uncommitted"
+    // distinction is gone — `vcs.commit({files})` runs `git add -A -- <files>`
+    // and captures WC state directly, so the handler reports `nothing to commit`
+    // (no separate "nothing staged" branch). See commit.ts:139-141 comment block.
+    assert.equal(result.json.reason, 'nothing to commit',
       'positional form ignores foo.md and finds nothing under .planning/ to fall back to');
   });
 });

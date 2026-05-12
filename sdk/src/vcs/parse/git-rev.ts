@@ -7,9 +7,10 @@ import type { RevisionExpr } from '../types.js';
 import { parseExpr } from '../expr.js';
 
 export function toGitRev(rev: RevisionExpr): string {
-  // Plan 02-03 Task 2 — handle range/commit prefixes BEFORE parseExpr, since
+  // Plan 02-03 Task 2 — handle range/rev prefixes BEFORE parseExpr, since
   // parseExpr only recognizes the Phase 1 head/parent/bookmark/remote kinds.
   // The range form embeds two encoded RevisionExpr strings separated by '..'.
+  // Phase 2.1 D-13: `commit:` brand prefix renamed to `rev:`.
   const encoded = rev as unknown as string;
   if (encoded.startsWith('range:')) {
     const inner = encoded.slice('range:'.length);
@@ -19,8 +20,8 @@ export function toGitRev(rev: RevisionExpr): string {
     const toEnc = inner.slice(sepIdx + 2) as unknown as RevisionExpr;
     return `${toGitRev(fromEnc)}..${toGitRev(toEnc)}`;
   }
-  if (encoded.startsWith('commit:')) {
-    return encoded.slice('commit:'.length); // emit SHA verbatim
+  if (encoded.startsWith('rev:')) {
+    return encoded.slice('rev:'.length); // emit SHA / change_id prefix verbatim
   }
   const p = parseExpr(rev);
   switch (p.kind) {

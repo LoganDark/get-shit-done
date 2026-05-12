@@ -63,11 +63,14 @@ function readWorktreeList(repoRoot, deps = {}) {
 }
 
 function resolveWorktreeContext(cwd, deps = {}) {
-  // Plan 02-04 Task 2: vcs.workspace.context() returns the same gitDir /
-  // gitCommonDir path strings the previous raw `git rev-parse --git-dir` /
-  // `--git-common-dir` calls produced (already path.resolve'd to absolute by
-  // the adapter per Blocker 4). ADR-0004 seam preserved (W4): deps = {}
-  // signature unchanged; deps.vcs supersedes the prior deps.execGit.
+  // Plan 02-04 Task 2: vcs.workspace.context() previously returned gitDir /
+  // gitCommonDir as path strings. Phase 2.1 D-18 moved those to GitOnlyOps:
+  // consumers now narrow on `vcs.kind === 'git'` and call
+  // vcs.gitOnly.gitDir() / vcs.gitOnly.gitCommonDir(). ADR-0004 seam preserved
+  // (W4): deps = {} signature unchanged; deps.vcs supersedes the prior
+  // deps.execGit. The narrow always succeeds at runtime because
+  // createVcsAdapter is pinned to kind:'git'; it exists for static
+  // type-checking against the VcsAdapter discriminated union.
   const vcs = deps.vcs || createVcsAdapter(cwd, { kind: 'git' });
   const existsSync = deps.existsSync || fs.existsSync;
 
@@ -80,9 +83,12 @@ function resolveWorktreeContext(cwd, deps = {}) {
     };
   }
 
-  let ctx;
   try {
-    ctx = vcs.workspace.context();
+    // 2.1 D-18: workspace.context() is called to surface the not-a-repo error
+    // path (formerly via gitDir/gitCommonDir rev-parse failure). The returned
+    // ctx is no longer needed for gitDir/gitCommonDir; only its throw behavior
+    // gates the not_git_repo short-circuit below.
+    vcs.workspace.context();
   } catch {
     // workspace.context() throws on non-repo cwd or when its underlying
     // rev-parse calls fail (incl. timeout). Mirrors the prior `exitCode !== 0`
@@ -94,12 +100,19 @@ function resolveWorktreeContext(cwd, deps = {}) {
     };
   }
 
-  if (ctx.gitDir !== ctx.gitCommonDir) {
-    return {
-      effectiveRoot: path.dirname(ctx.gitCommonDir),
-      mode: 'linked_worktree_root',
-      reason: 'linked_worktree',
-    };
+  // 2.1 D-18: WorkspaceContext.{gitDir,gitCommonDir} moved to GitOnlyOps;
+  // narrow on vcs.kind === 'git' to access. The narrow is statically required
+  // and always succeeds at runtime (createVcsAdapter pinned to kind:'git').
+  if (vcs.kind === 'git') {
+    const gitDir = vcs.gitOnly.gitDir();
+    const gitCommonDir = vcs.gitOnly.gitCommonDir();
+    if (gitDir !== gitCommonDir) {
+      return {
+        effectiveRoot: path.dirname(gitCommonDir),
+        mode: 'linked_worktree_root',
+        reason: 'linked_worktree',
+      };
+    }
   }
 
   return {

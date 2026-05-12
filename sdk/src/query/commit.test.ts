@@ -25,10 +25,13 @@
  *                                          nameOnly:true}).nameOnly.join('\\n')
  *
  * The `git rm` semantics required by the #3061 regression tests (pre-stage
- * a deletion against HEAD before invoking the commit handler) are now
- * synthesized via `unlink(file)` + `vcs.stage([file])` — git records the
- * deletion in the index when the worktree file is gone. After this plan,
- * NO `execSync('git ...')` invocations remain in the test bodies.
+ * a deletion against HEAD before invoking the commit handler) are
+ * synthesized via `unlink(file)` + `execGit(cwd, ['add', '-A', '--', file])`
+ * — git records the deletion in the index when the worktree file is gone.
+ * Plan 2.1-04 (D-03): the vcs.stage / vcs.unstage adapter verbs are gone;
+ * test-only index-state synthesis routes through `execGit` directly (this
+ * file is on the no-raw-git lint allowlist via globs `sdk/src/query/** /
+ * *.test.ts`).
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -186,22 +189,29 @@ describe('commit', () => {
     expect(entries[0]?.subject).toBe('docs: update state');
   });
 
-  it('returns nothing staged when no files match', async () => {
+  it('returns nothing to commit when no files match', async () => {
     const { commit } = await import('./commit.js');
     await writeFile(
       join(tmpDir, '.planning', 'config.json'),
       JSON.stringify({ commit_docs: true }),
     );
-    // Stage config.json first then commit it so .planning/ has no unstaged
-    // changes. Setup uses the VcsAdapter (Plan 02-08 D-06) so there is no raw
-    // `execSync('git add ...')` here.
+    // Commit config.json so .planning/ has no uncommitted changes. Setup uses
+    // the VcsAdapter (Plan 02-08 D-06) so there is no raw `execSync('git
+    // add ...')` here. Plan 2.1-04: vcs.commit({files}) captures WC state of
+    // the listed paths (`git add -A -- <files>` + `git commit -m`), so the
+    // upstream explicit stage is unnecessary.
     const setupVcs = createVcsAdapter(tmpDir, { kind: 'git' });
-    setupVcs.stage(['.planning/config.json']);
-    setupVcs.commit({ message: 'init', pathspec: ['.planning/config.json'] });
+    setupVcs.commit({ message: 'init', files: ['.planning/config.json'] });
     // Now commit with specific nonexistent file (--files separates message from paths, matching CJS argv)
+    // Plan 2.1-04 (D-06): WC-state-capture semantic shift — when the named
+    // file is missing AND not tracked, the vcs.status pre-probe surfaces no
+    // matching entry and the handler short-circuits with `nothing to commit`.
+    // (Prior shape: vcs.stage would have failed with stderr referencing the
+    // path; D-02 collapses stage onto WC-state-capture commit, so the
+    // diagnostic shifts to the pre-probe's empty-scope reason.)
     const result = await commit(['test msg', '--files', 'nonexistent-file.txt'], tmpDir);
     expect((result.data as { committed: boolean }).committed).toBe(false);
-    expect((result.data as { reason: string }).reason).toContain('nonexistent-file.txt');
+    expect((result.data as { reason: string }).reason).toBe('nothing to commit');
   });
 
   it('commits specific files when provided', async () => {
@@ -253,8 +263,9 @@ describe('checkCommit', () => {
       JSON.stringify({ commit_docs: false }),
     );
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), '# State\n');
-    // Stage via the VcsAdapter (Plan 02-08 D-06).
-    createVcsAdapter(tmpDir, { kind: 'git' }).stage(['.planning/STATE.md']);
+    // Plan 2.1-04 (D-03): vcs.stage is gone; stage via execGit (lint-allowed
+    // in *.test.ts globs) to set up the staged-state checkCommit probes.
+    execGit(tmpDir, ['add', '--', '.planning/STATE.md']);
     const result = await checkCommit([], tmpDir);
     expect((result.data as { can_commit: boolean }).can_commit).toBe(false);
   });
@@ -270,21 +281,23 @@ describe('checkCommit', () => {
   });
 });
 
-// ─── pathspec scope regression (#3061) ────────────────────────────────────
+// ─── named-files scope regression (#3061) ─────────────────────────────────
 //
-// The handler must commit only the paths it staged itself, even when the
+// The handler must commit only the paths the caller named, even when the
 // caller's git index already had unrelated entries staged before the call.
-// Before the fix, `git commit` ran without a pathspec and swept those
-// pre-staged entries into the commit alongside the requested files.
+// Before the fix, `git commit` ran without a path scope and swept those
+// pre-staged entries into the commit alongside the requested files. Plan
+// 2.1-04 enforces this via vcs.commit({files}) WC-state-capture: only the
+// listed files are added (-A) and committed, so pre-staged unrelated index
+// entries do not leak in.
 
-describe('commit pathspec scope (#3061)', () => {
+describe('commit named-files scope (#3061)', () => {
   // Each test needs an existing HEAD so we can pre-stage a deletion against it.
   beforeEach(async () => {
     await writeFile(join(tmpDir, 'README.md'), 'init\n');
     // Setup via VcsAdapter (Plan 02-08 D-06).
     const setupVcs = createVcsAdapter(tmpDir, { kind: 'git' });
-    setupVcs.stage(['README.md']);
-    setupVcs.commit({ message: 'init', pathspec: ['README.md'] });
+    setupVcs.commit({ message: 'init', files: ['README.md'] });
     await writeFile(
       join(tmpDir, '.planning', 'config.json'),
       JSON.stringify({ commit_docs: true }),
@@ -299,12 +312,14 @@ describe('commit pathspec scope (#3061)', () => {
     // before the workflow's commit step runs. The adapter has no first-class
     // `rm` verb; this is git's pre-existing-state setup, NOT SDK code under
     // test, so the raw invocation stays per D-08 (test-file allowlist covers).
-    // `git rm` semantics via VcsAdapter (Plan 02-08 D-06): unlink the file
-    // and then `vcs.stage` it — git records the deletion in the index. This
-    // is byte-equivalent to `git rm <file>` (remove from both worktree and
-    // index), without needing a dedicated `vcs.removeStaged` adapter verb.
+    // `git rm` synthesis (Plan 2.1-04 D-03): unlink the file and then route
+    // through execGit to stage the deletion — git records the deletion in
+    // the index when the worktree file is gone. Equivalent to `git rm <file>`
+    // (remove from both worktree and index). Routed through execGit because
+    // the vcs.stage adapter verb is removed; this file is on the no-raw-git
+    // lint allowlist via the `sdk/src/query/** / *.test.ts` glob.
     await unlink(join(tmpDir, 'README.md'));
-    createVcsAdapter(tmpDir, { kind: 'git' }).stage(['README.md']);
+    execGit(tmpDir, ['add', '-A', '--', 'README.md']);
 
     const result = await commit(['docs: state only', '--files', '.planning/STATE.md'], tmpDir);
     expect((result.data as { committed: boolean }).committed).toBe(true);
@@ -313,23 +328,28 @@ describe('commit pathspec scope (#3061)', () => {
     expect(committed).toContain('.planning/STATE.md');
     expect(committed).not.toContain('README.md');
 
-    // The pre-staged deletion must remain staged-but-uncommitted.
+    // The pre-staged deletion is preserved as a worktree-only deletion after
+    // the named-files commit (Phase 2.1 #3061: the backend's pre-add index
+    // reset converts pre-staged unrelated entries into worktree-only changes,
+    // matching jj's index-less semantics — see 2.1-04-SUMMARY.md).
     // Status probe via VcsAdapter (Plan 02-08 D-06): vcs.status({porcelain:
     // true}).raw is byte-equivalent to `git status --porcelain` stdout.
     const status = createVcsAdapter(tmpDir, { kind: 'git' }).status({ porcelain: true }).raw;
-    expect(status).toMatch(/^D {2}README\.md/m);
+    expect(status).toMatch(/^ D README\.md/m);
   });
 
   it('.planning/ fallback commits only planning paths when an unrelated change is pre-staged', async () => {
     const { commit } = await import('./commit.js');
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), '# State\n');
 
-    // `git rm` semantics via VcsAdapter (Plan 02-08 D-06): unlink the file
-    // and then `vcs.stage` it — git records the deletion in the index. This
-    // is byte-equivalent to `git rm <file>` (remove from both worktree and
-    // index), without needing a dedicated `vcs.removeStaged` adapter verb.
+    // `git rm` synthesis (Plan 2.1-04 D-03): unlink the file and then route
+    // through execGit to stage the deletion — git records the deletion in
+    // the index when the worktree file is gone. Equivalent to `git rm <file>`
+    // (remove from both worktree and index). Routed through execGit because
+    // the vcs.stage adapter verb is removed; this file is on the no-raw-git
+    // lint allowlist via the `sdk/src/query/** / *.test.ts` glob.
     await unlink(join(tmpDir, 'README.md'));
-    createVcsAdapter(tmpDir, { kind: 'git' }).stage(['README.md']);
+    execGit(tmpDir, ['add', '-A', '--', 'README.md']);
 
     const result = await commit(['docs: planning'], tmpDir);
     expect((result.data as { committed: boolean }).committed).toBe(true);
@@ -338,13 +358,13 @@ describe('commit pathspec scope (#3061)', () => {
     expect(committed).not.toContain('README.md');
     expect(committed.some(f => f.startsWith('.planning/'))).toBe(true);
 
-    // Status probe via VcsAdapter (Plan 02-08 D-06): vcs.status({porcelain:
-    // true}).raw is byte-equivalent to `git status --porcelain` stdout.
+    // Pre-staged deletion → worktree-only deletion after named-files commit
+    // (Phase 2.1 #3061: backend pre-add index reset).
     const status = createVcsAdapter(tmpDir, { kind: 'git' }).status({ porcelain: true }).raw;
-    expect(status).toMatch(/^D {2}README\.md/m);
+    expect(status).toMatch(/^ D README\.md/m);
   });
 
-  it('--amend with --files keeps the amend within the named pathspec', async () => {
+  it('--amend with --files keeps the amend within the named-file scope', async () => {
     const { commit } = await import('./commit.js');
 
     // Land an initial planning commit to amend, and assert the setup landed.
@@ -356,12 +376,14 @@ describe('commit pathspec scope (#3061)', () => {
 
     // Modify STATE.md, then pre-stage an unrelated change before amending.
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), '# State v2\n');
-    // `git rm` semantics via VcsAdapter (Plan 02-08 D-06): unlink the file
-    // and then `vcs.stage` it — git records the deletion in the index. This
-    // is byte-equivalent to `git rm <file>` (remove from both worktree and
-    // index), without needing a dedicated `vcs.removeStaged` adapter verb.
+    // `git rm` synthesis (Plan 2.1-04 D-03): unlink the file and then route
+    // through execGit to stage the deletion — git records the deletion in
+    // the index when the worktree file is gone. Equivalent to `git rm <file>`
+    // (remove from both worktree and index). Routed through execGit because
+    // the vcs.stage adapter verb is removed; this file is on the no-raw-git
+    // lint allowlist via the `sdk/src/query/** / *.test.ts` glob.
     await unlink(join(tmpDir, 'README.md'));
-    createVcsAdapter(tmpDir, { kind: 'git' }).stage(['README.md']);
+    execGit(tmpDir, ['add', '-A', '--', 'README.md']);
 
     const result = await commit(['docs: amended', '--amend', '--files', '.planning/STATE.md'], tmpDir);
     expect((result.data as { committed: boolean }).committed).toBe(true);
@@ -370,28 +392,27 @@ describe('commit pathspec scope (#3061)', () => {
     expect(committed).toContain('.planning/STATE.md');
     expect(committed).not.toContain('README.md');
 
-    // Status probe via VcsAdapter (Plan 02-08 D-06): vcs.status({porcelain:
-    // true}).raw is byte-equivalent to `git status --porcelain` stdout.
+    // Pre-staged deletion → worktree-only deletion after named-files commit
+    // (Phase 2.1 #3061: backend pre-add index reset).
     const status = createVcsAdapter(tmpDir, { kind: 'git' }).status({ porcelain: true }).raw;
-    expect(status).toMatch(/^D {2}README\.md/m);
+    expect(status).toMatch(/^ D README\.md/m);
   });
 });
 
 // ─── input validation and option-injection safety (#3061 follow-ups) ──────
 //
-// Two guards that travel with the pathspec rewrite:
+// Two guards that travel with the named-files scope rewrite:
 //   1. --files with no usable paths fails fast instead of falling back to
 //      .planning/, which would silently swap the caller's intended scope.
 //   2. Every git add invocation uses the `--` separator so a path that
-//      starts with `-` is treated as a pathspec rather than an option.
+//      starts with `-` is treated as a path argument rather than an option.
 
 describe('commit input validation and option safety (#3061)', () => {
   beforeEach(async () => {
     await writeFile(join(tmpDir, 'README.md'), 'init\n');
     // Setup via VcsAdapter (Plan 02-08 D-06).
     const setupVcs = createVcsAdapter(tmpDir, { kind: 'git' });
-    setupVcs.stage(['README.md']);
-    setupVcs.commit({ message: 'init', pathspec: ['README.md'] });
+    setupVcs.commit({ message: 'init', files: ['README.md'] });
     await writeFile(
       join(tmpDir, '.planning', 'config.json'),
       JSON.stringify({ commit_docs: true }),

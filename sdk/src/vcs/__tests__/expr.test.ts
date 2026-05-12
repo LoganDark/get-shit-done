@@ -93,23 +93,26 @@ describe('expr.range factory (02-03 Task 2)', () => {
   });
 });
 
-describe('expr.commit factory (02-03 Task 2 — Blocker 3)', () => {
+describe('expr.rev factory (02-03 Task 2 — Blocker 3; 2.1-01 widened to accept jj change_id)', () => {
   const SHA = 'abc1234deadbeef000000000000000000000aaaa';
   it('round-trips via toGitRev — emits SHA verbatim', () => {
-    expect(toGitRev(expr.commit(SHA))).toBe(SHA);
+    expect(toGitRev(expr.rev(SHA))).toBe(SHA);
   });
   it('round-trips via toJjRev — emits SHA verbatim', () => {
-    expect(toJjRev(expr.commit(SHA))).toBe(SHA);
+    expect(toJjRev(expr.rev(SHA))).toBe(SHA);
   });
   it('accepts a 7-char short SHA', () => {
-    expect(toGitRev(expr.commit('abc1234'))).toBe('abc1234');
+    expect(toGitRev(expr.rev('abc1234'))).toBe('abc1234');
   });
   it('throws on non-SHA input (D-12 — no string passthrough)', () => {
-    expect(() => expr.commit('not-a-sha')).toThrow(/SHA/);
-    expect(() => expr.commit('')).toThrow(/SHA/);
-    expect(() => expr.commit('xyz')).toThrow(/SHA/);
+    expect(() => expr.rev('not-a-sha')).toThrow(/hex-SHA or change-id shaped string/);
+    expect(() => expr.rev('')).toThrow(/hex-SHA or change-id shaped string/);
+    expect(() => expr.rev('xyz')).toThrow(/hex-SHA or change-id shaped string/);
   });
   it('throws on too-short input (<4 hex chars)', () => {
-    expect(() => expr.commit('abc')).toThrow(/SHA/);
+    expect(() => expr.rev('abc')).toThrow(/hex-SHA or change-id shaped string/);
+  });
+  it('accepts jj change_id alphabet shape', () => {
+    expect(() => expr.rev('kxnvqropmlkz')).not.toThrow();
   });
 });

@@ -416,7 +416,10 @@ describe('verify summary command', () => {
     fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, 'src', 'app.js'), 'console.log("hello");\n');
     const vcs = createVcsAdapter(tmpDir);
-    vcs.stage(['src/app.js']);
+    // 2.1 D-03: vcs.stage hard-removed; staging is git-only and not a cross-
+    // backend concept. The vcs.commit({files}) call below already performs the
+    // WC-state-capture (D-04) for src/app.js — the prior vcs.stage line was a
+    // pre-D-04 leftover that became redundant once `files` shifted semantics.
     vcs.commit({ message: 'add app.js', files: ['src/app.js'] });
 
     const hash = vcs.refs.resolveShort(vcs.refs.head);

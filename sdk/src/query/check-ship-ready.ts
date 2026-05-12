@@ -46,7 +46,8 @@ export const checkShipReady: QueryHandler = async (args, projectDir) => {
     } catch { /* non-git or status failure → leave clean_tree false */ }
 
     try {
-      current_branch = vcs.refs.currentBranch();
+      const bookmarks = vcs.refs.currentBookmarks();
+      current_branch = bookmarks[0] ?? null;
     } catch { /* leave null */ }
 
     if (current_branch && vcs.kind === 'git') {

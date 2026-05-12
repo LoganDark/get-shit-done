@@ -7,10 +7,10 @@ const path = require('path');
 const os = require('os');
 const { safeReadFile, loadConfig, normalizePhaseName, escapeRegex, findPhaseInternal, getMilestoneInfo, stripShippedMilestones, extractCurrentMilestone, output, error, checkAgentsInstalled, CONFIG_DEFAULTS, inspectWorktreeHealth } = require('./core.cjs');
 // Plan 02-10: migrated from execGit re-export to VcsAdapter. Sites 71, 268,
-// 1305 use vcs.refs.exists(expr.commit(hash)) for cat-file -t probes (Blocker
+// 1305 use vcs.refs.exists(expr.rev(hash)) for cat-file -t probes (Blocker
 // 3 closure). Site 1224 uses vcs.log({allRefs:true}). Site 1286 uses
 // vcs.refs.exists(vcs.refs.head) for the repo-existence probe. Site 1309 uses
-// vcs.diff({rev: expr.commit(base), nameStatus: true}). The dist-cjs path is
+// vcs.diff({rev: expr.rev(base), nameStatus: true}). The dist-cjs path is
 // the locked relative shape from plan 02-04 smoke-test (D-01).
 const { createVcsAdapter, expr } = require('../../../sdk/dist-cjs/vcs');
 const { planningDir } = require('./planning-workspace.cjs');
@@ -70,7 +70,7 @@ function cmdVerifySummary(cwd, summaryPath, checkFileCount, raw) {
   }
 
   // Check 3: Commits exist
-  // Plan 02-10: Blocker 3 closure — runtime SHA wraps via expr.commit(hash).
+  // Plan 02-10: Blocker 3 closure — runtime SHA wraps via expr.rev(hash).
   // vcs.refs.exists returns boolean (true iff `cat-file -t <rev>` exits 0).
   // The original probe also checked stdout==='commit' (vs 'tree'/'blob'/'tag');
   // for SUMMARY-mentioned hashes the exit-0 path is dominated by commit
@@ -83,7 +83,7 @@ function cmdVerifySummary(cwd, summaryPath, checkFileCount, raw) {
   if (hashes.length > 0) {
     const vcs = createVcsAdapter(cwd);
     for (const hash of hashes.slice(0, 3)) {
-      if (vcs.refs.exists(expr.commit(hash))) {
+      if (vcs.refs.exists(expr.rev(hash))) {
         commitsExist = true;
         break;
       }
@@ -276,7 +276,7 @@ function cmdVerifyReferences(cwd, filePath, raw) {
 function cmdVerifyCommits(cwd, hashes, raw) {
   if (!hashes || hashes.length === 0) { error('At least one commit hash required'); }
 
-  // Plan 02-10: Blocker 3 closure — runtime SHA wraps via expr.commit(hash).
+  // Plan 02-10: Blocker 3 closure — runtime SHA wraps via expr.rev(hash).
   // expr.commit validates SHA shape (4-40 hex chars); inputs that fail
   // validation throw and route to invalid. Mirrors site 71's semantic shift
   // (any reachable object — commit/tree/blob/tag — registers as "valid"; in
@@ -287,7 +287,7 @@ function cmdVerifyCommits(cwd, hashes, raw) {
   // `invalid` / `total`) is a vestigial commit-only name. The pre-migration
   // `cat-file -t <hash>` probe checked `stdout.trim() === 'commit'`, so a
   // tree/blob/tag hash that exists in the object store was classified
-  // `invalid`. `vcs.refs.exists(expr.commit(hash))` returns true for ANY
+  // `invalid`. `vcs.refs.exists(expr.rev(hash))` returns true for ANY
   // reachable object — so a tree SHA hand-cited in a SUMMARY.md (rare but
   // possible) is now reported `valid` where the old probe reported
   // `invalid`. The phase context sanctions this shift (CLI inputs are
@@ -302,7 +302,7 @@ function cmdVerifyCommits(cwd, hashes, raw) {
   for (const hash of hashes) {
     let exists = false;
     try {
-      exists = vcs.refs.exists(expr.commit(hash));
+      exists = vcs.refs.exists(expr.rev(hash));
     } catch {
       exists = false; // expr.commit shape-validation throw → invalid
     }
@@ -1341,7 +1341,7 @@ function cmdVerifyCodebaseDrift(cwd, raw) {
 
     // Plan 02-10: VcsAdapter migration. Sites 1286 / 1305 / 1309 share one
     // adapter instance. Site 1286: vcs.refs.exists(vcs.refs.head). Site 1305:
-    // vcs.refs.exists(expr.commit(base)) — Blocker 3 closure for the
+    // vcs.refs.exists(expr.rev(base)) — Blocker 3 closure for the
     // recorded-mapping reachability check. Site 1309: vcs.diff with the
     // DiffOpts.nameStatus gap-fill from 02-03.
     //
@@ -1384,7 +1384,7 @@ function cmdVerifyCodebaseDrift(cwd, raw) {
       // expr.commit shape-validates the lastMapped SHA before probing.
       let reachable = false;
       try {
-        reachable = vcs.refs.exists(expr.commit(base));
+        reachable = vcs.refs.exists(expr.rev(base));
       } catch {
         reachable = false;
       }
@@ -1405,7 +1405,7 @@ function cmdVerifyCodebaseDrift(cwd, raw) {
     let diffRaw;
     try {
       const diffResult = vcs.diff({
-        rev: expr.range(expr.commit(base), expr.head()),
+        rev: expr.range(expr.rev(base), expr.head()),
         nameStatus: true,
       });
       diffRaw = diffResult.raw;

@@ -290,11 +290,11 @@ export const statsJson: QueryHandler = async (args, projectDir, workstream) => {
     if (roots.length > 0) {
       const firstCommit = roots[0];
       // Plan 02-06 Task 3 / iteration-1 Blocker-3 closure: wrap the runtime
-      // SHA via expr.commit() to construct a structured RevisionExpr (D-12 —
+      // SHA via expr.rev() to construct a structured RevisionExpr (D-12 —
       // no expr.raw() escape hatch). vcs.log() with maxCount:1 + format:'%as'
       // is the contract path for "show -s --format=%as <sha>"; the date
       // arrives on LogEntry.date.
-      const entries = vcs.log({ rev: expr.commit(firstCommit), maxCount: 1 });
+      const entries = vcs.log({ rev: expr.rev(firstCommit), maxCount: 1 });
       if (entries.length > 0 && entries[0].date) {
         // LogEntry.date is the iso-date author timestamp (%aI in the
         // LOG_FORMAT). For the prior `%as` format we only need the date

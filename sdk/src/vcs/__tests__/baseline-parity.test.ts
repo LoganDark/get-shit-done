@@ -99,6 +99,17 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
         }
 
         // Adapter-level equivalence (the actual GIT-02 SC: the adapter's API surface).
+        //
+        // 2.1 D-03 (plan 08): three dispatch clauses removed —
+        //   - `args[0]==='add' && args.includes('--')`        (was vcs.stage; services commit-ts-148-add, commit-ts-294-add-c-form)
+        //   - `args[0]==='rm' && args.includes('--cached')`   (was vcs.unstage; services commands-cjs-330-rm-cached)
+        //   - `args[0]==='add' && args.length===2`            (was vcs.stage; services commands-cjs-332-add, commands-cjs-398-add)
+        // The corresponding 5 baseline JSON files become orphaned and are
+        // deleted by plan 09's baseline-parity sweep. Baselines that fall
+        // through to no dispatch clause are silently skipped by the existing
+        // chain; plan 09 also removes the orphan capture-definitions from
+        // tests/__tools__/capture-vcs-baselines.cjs to keep them out of any
+        // re-capture run.
         const vcs = createVcsAdapter(cwd);
         if (vcs.kind !== 'git') throw new Error('expected git adapter');
         const args = baseline.args;
@@ -132,13 +143,16 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           args[0] === 'rev-parse' &&
           (args.includes('--git-dir') || args.includes('--git-common-dir'))
         ) {
-          // Plan 02-04 Task 2: vcs.workspace.context() exposes gitDir and
-          // gitCommonDir as absolute paths (path.resolve'd in the adapter).
-          // The raw baseline is a relative `.git` because cwd IS the repo
-          // root; the adapter's absolute form must end with `/.git` (or its
-          // OS-native equivalent) for a non-linked main worktree.
-          const ctx = vcs.workspace.context();
-          const which = args.includes('--git-dir') ? ctx.gitDir : ctx.gitCommonDir;
+          // 2.1 D-18: WorkspaceContext.{gitDir,gitCommonDir} moved to GitOnlyOps;
+          // narrow on vcs.kind === 'git' to access. The narrow at line ~103
+          // (`if (vcs.kind !== 'git') throw …`) already typed vcs as
+          // GitVcsAdapter, so vcs.gitOnly is accessible here without re-narrow.
+          // The path-resolution semantics are unchanged: gitOnly.gitDir() and
+          // gitOnly.gitCommonDir() apply the same resolvePath(cwd, …) the
+          // adapter's workspace.context() body did pre-D-18.
+          const which = args.includes('--git-dir')
+            ? vcs.gitOnly.gitDir()
+            : vcs.gitOnly.gitCommonDir();
           // Adapter applies path.resolve(cwd, '.git'); equivalent in absolute form.
           const expectedAbsolute = require('node:path').resolve(cwd, baseline.expected.stdout);
           expect(which).toBe(expectedAbsolute);
@@ -166,12 +180,21 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           args.includes('--abbrev-ref') &&
           args.includes('HEAD')
         ) {
-          // Plan 02-06 Task 1: vcs.refs.currentBranch() wraps
-          // `git rev-parse --abbrev-ref HEAD`, returning string | null.
+          // Plan 2.1-03 (was Plan 02-06): vcs.refs.currentBookmarks() wraps
+          // `git rev-parse --abbrev-ref HEAD`, returning string[].
           // The baseline records the raw stdout (e.g. "master"); the adapter
-          // returns the same name (or null when detached).
-          const name = vcs.refs.currentBranch();
-          expect(name).toBe(baseline.expected.stdout);
+          // returns the same name wrapped in [name] (or [] when detached/
+          // anonymous head). Per D-15, [] is observationally equivalent to
+          // the prior null at consumer sites that use `[0] ?? null`.
+          const bookmarks = vcs.refs.currentBookmarks();
+          const expectedStdout = baseline.expected.stdout;
+          // Empty stdout or "HEAD" indicates detached HEAD → adapter returns [].
+          // Non-empty branch name → adapter returns [name].
+          if (expectedStdout === '' || expectedStdout === 'HEAD') {
+            expect(bookmarks).toEqual([]);
+          } else {
+            expect(bookmarks).toEqual([expectedStdout]);
+          }
         } else if (args[0] === 'config' && args.includes('--get')) {
           // Plan 02-06 Task 1: vcs.gitOnly.configGet returns the value (exit 0)
           // or null (exit 1). Baseline records exit 0 + value for this shape.
@@ -226,7 +249,7 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           args.some((a) => a.startsWith('--format=%as'))
         ) {
           // Plan 02-06 Task 3 / Blocker-3 closure: progress.ts:293 wraps
-          // `git show -s --format=%as <sha>` via vcs.log({rev: expr.commit(sha),
+          // `git show -s --format=%as <sha>` via vcs.log({rev: expr.rev(sha),
           // maxCount:1}) and slices entries[0].date.slice(0,10). The runtime
           // SHA target here is HEAD's first parent or the root — for the
           // baseline, we use HEAD itself (the captured fixture has only the
@@ -237,7 +260,7 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           // wrap as expr.commit, then call vcs.log.
           const headRes = execGit(cwd, ['rev-parse', 'HEAD']);
           const fullSha = headRes.stdout.trim();
-          const entries = vcs.log({ rev: expr.commit(fullSha), maxCount: 1 });
+          const entries = vcs.log({ rev: expr.rev(fullSha), maxCount: 1 });
           const date = entries[0]?.date?.slice(0, 10) ?? '';
           if (baseline.match?.stdout?.startsWith('regex:')) {
             const re = new RegExp(baseline.match.stdout.slice('regex:'.length));
@@ -279,8 +302,8 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           args.some((a) => a.includes('..'))
         ) {
           // Plan 02-07: graphify.cjs:384 wraps `git rev-list --count A..B`
-          // via `vcs.refs.countCommits({rev: expr.range(expr.commit(from),
-          // expr.commit(to))})`. Site 384 is the first production consumer of
+          // via `vcs.refs.countCommits({rev: expr.range(expr.rev(from),
+          // expr.rev(to))})`. Site 384 is the first production consumer of
           // the expr.range factory introduced in plan 02-03. The captured
           // fixture builds 3 commits on top of the initial commit and
           // probes `HEAD~3..HEAD` (exit 0, stdout "3"). For the adapter
@@ -291,53 +314,32 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           const headSha = headRes.stdout.trim();
           const baseSha = baseRes.stdout.trim();
           const n = vcs.refs.countCommits({
-            rev: expr.range(expr.commit(baseSha), expr.commit(headSha)),
+            rev: expr.range(expr.rev(baseSha), expr.rev(headSha)),
           });
           expect(String(n)).toBe(baseline.expected.stdout);
-        } else if (
-          args[0] === 'add' &&
-          args.includes('--') &&
-          // Make sure we don't shadow the standard `git add` with rename
-          // markers or status flags — only the bare `add -- <files>` shape.
-          !args.some((a) => a.startsWith('-') && a !== '--')
-        ) {
-          // Plan 02-08: vcs.stage([file]) wraps `git add -- <files>`. Captured
-          // for sites 148 and 294 (commit.ts main flow + commitToSubrepo).
-          const dashIdx = args.indexOf('--');
-          const files = args.slice(dashIdx + 1);
-          const r = vcs.stage(files);
-          expect({
-            exitCode: r.exitCode,
-            stdout: r.stdout,
-            stderr: r.stderr,
-          }).toEqual({
-            exitCode: baseline.expected.exitCode,
-            stdout: baseline.expected.stdout,
-            stderr: baseline.expected.stderr,
-          });
         } else if (
           args[0] === 'commit' &&
           args.includes('-m') &&
           args.includes('--') &&
           !args.includes('--amend')
         ) {
-          // Plan 02-08: vcs.commit({message, pathspec}) wraps the
-          // already-staged-paths `git commit -m <msg> -- <pathspec>` form.
-          // Captured for sites 170 and 301 (commit.ts main flow +
-          // commitToSubrepo). The canonical execGit call above already
-          // performed the commit on this fixture, so the working tree is
-          // now clean — re-create a fresh fixture for the adapter call so
-          // the staged paths still exist. The stdout embeds the auto-
+          // Plan 02-08 / 2.1-04: vcs.commit({message, files}) wraps the
+          // WC-state-capture form `git add -A -- <files>` + `git commit -m
+          // <msg>` (no -a). Captured for sites 170 and 301 (commit.ts main
+          // flow + commitToSubrepo). The canonical execGit call above
+          // already performed the commit on this fixture, so the working
+          // tree is now clean — re-create a fresh fixture for the adapter
+          // call so the paths still exist. The stdout embeds the auto-
           // generated short SHA; baseline match.stdout is a regex.
           const dashIdx = args.indexOf('--');
           const msgIdx = args.indexOf('-m');
           const message = args[msgIdx + 1];
-          const pathspec = args.slice(dashIdx + 1);
+          const scopedFiles = args.slice(dashIdx + 1);
           const adapterCwd = initFixture(baseline);
           try {
             const adapterVcs = createVcsAdapter(adapterCwd);
             if (adapterVcs.kind !== 'git') throw new Error('expected git adapter');
-            const r = adapterVcs.commit({ message, pathspec });
+            const r = adapterVcs.commit({ message, files: scopedFiles });
             expect(r.exitCode).toBe(baseline.expected.exitCode);
             if (baseline.match?.stdout?.startsWith('regex:')) {
               const re = new RegExp(baseline.match.stdout.slice('regex:'.length));
@@ -399,7 +401,7 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
             if (adapterVcs.kind !== 'git') throw new Error('expected git adapter');
             adapterVcs.refs.bookmarks.switch(branchName, { create: true });
             expect(adapterVcs.refs.bookmarks.exists(branchName)).toBe(true);
-            expect(adapterVcs.refs.currentBranch()).toBe(branchName);
+            expect(adapterVcs.refs.currentBookmarks()).toEqual([branchName]);
           } finally {
             rmSync(adapterCwd, { recursive: true, force: true });
           }
@@ -421,76 +423,27 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
             const adapterVcs = createVcsAdapter(adapterCwd);
             if (adapterVcs.kind !== 'git') throw new Error('expected git adapter');
             adapterVcs.refs.bookmarks.switch(branchName);
-            expect(adapterVcs.refs.currentBranch()).toBe(branchName);
+            expect(adapterVcs.refs.currentBookmarks()).toEqual([branchName]);
           } finally {
             rmSync(adapterCwd, { recursive: true, force: true });
           }
-        } else if (
-          args[0] === 'rm' &&
-          args.includes('--cached') &&
-          args.includes('--ignore-unmatch')
-        ) {
-          // Plan 02-09: vcs.unstage([file]) wraps the deletion-staging form
-          // `git rm --cached --ignore-unmatch <file>`. Captured for site 330
-          // (cmdCommit, default-mode missing-file branch). The canonical
-          // execGit call above already removed the path from index; re-
-          // running on the same fixture would yield empty stdout (nothing
-          // to remove). Re-create the fixture for byte-identity assertion.
-          const flagsEnd = args.indexOf('--ignore-unmatch') + 1;
-          const files = args.slice(flagsEnd);
-          const adapterCwd = initFixture(baseline);
-          try {
-            const adapterVcs = createVcsAdapter(adapterCwd);
-            if (adapterVcs.kind !== 'git') throw new Error('expected git adapter');
-            const r = adapterVcs.unstage(files);
-            expect(r.exitCode).toBe(baseline.expected.exitCode);
-            // stdout shape: `rm '<path>'` per file. Byte-identical to the
-            // captured baseline for the single-file fixture captured here.
-            expect(r.stdout).toBe(baseline.expected.stdout);
-          } finally {
-            rmSync(adapterCwd, { recursive: true, force: true });
-          }
-        } else if (
-          args[0] === 'add' &&
-          args.length === 2 &&
-          !args[1].startsWith('-')
-        ) {
-          // Plan 02-09: vcs.stage([file]) wraps the no-pathspec-separator
-          // form `git add <file>`. Captured for sites 332 (cmdCommit) and 398
-          // (commitFilesIfDeletion). The adapter's stage() call adds a `--`
-          // separator internally (git.ts:384), which is byte-identical to
-          // running `git add <file>` for paths that don't start with `-`
-          // (the captured fixture uses `foo.txt` / `bar.txt` — no leading
-          // dashes). Compare exit + std streams.
-          const files = args.slice(1);
-          const r = vcs.stage(files);
-          expect({
-            exitCode: r.exitCode,
-            stdout: r.stdout,
-            stderr: r.stderr,
-          }).toEqual({
-            exitCode: baseline.expected.exitCode,
-            stdout: baseline.expected.stdout,
-            stderr: baseline.expected.stderr,
-          });
         } else if (
           args[0] === 'commit' &&
           args.includes('-m') &&
           !args.includes('--') &&
           !args.includes('--amend')
         ) {
-          // Plan 02-09: vcs.commit({message, pathspec:[]}) wraps the
-          // no-pathspec form `git commit -m <msg>`. Captured for sites 339
-          // (cmdCommit) and 402 (commitFilesIfDeletion). The canonical
+          // Plan 02-09 / 2.1-04: vcs.commit({message, files}) wraps the
+          // no-explicit-`--` form `git commit -m <msg>`. Captured for sites
+          // 339 (cmdCommit) and 402 (commitFilesIfDeletion). The canonical
           // execGit call above already commits the staged path, so the
           // adapter call needs a fresh fixture (mirrors plan 02-08's
           // commit-clause per-fixture re-init pattern). The migrated
-          // commands.cjs uses pathspec: stagedOrUnstaged for #2014 safety;
-          // for the baseline-parity assertion we route through pathspec
-          // with the staged path so the backend takes the already-staged-
-          // paths branch (commit -m <msg> -- <path>) — byte-identical exit
-          // semantics to the canonical `commit -m <msg>` form on the same
-          // single-file fixture.
+          // commands.cjs uses files: filesToCommit for #2014 safety; for the
+          // baseline-parity assertion we route through `files` with the
+          // pre-staged path so the backend's WC-state-capture re-adds (-A)
+          // and commits that path — byte-identical exit semantics to the
+          // canonical `commit -m <msg>` form on the same single-file fixture.
           const msgIdx = args.indexOf('-m');
           const message = args[msgIdx + 1];
           const adapterCwd = initFixture(baseline);
@@ -498,12 +451,12 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
             const adapterVcs = createVcsAdapter(adapterCwd);
             if (adapterVcs.kind !== 'git') throw new Error('expected git adapter');
             // Fixture's setup staged a single file (foo.txt or bar.txt);
-            // route through pathspec with the same path so the adapter
-            // takes the no-`-am` already-staged branch.
-            const pathspec = baseline.fixture.setup
+            // route through `files` with the same path so the adapter
+            // captures its WC state and commits exactly that path.
+            const scopedFiles = baseline.fixture.setup
               .filter(s => /^git add /.test(s))
               .map(s => s.replace(/^git add /, '').trim());
-            const r = adapterVcs.commit({ message, pathspec });
+            const r = adapterVcs.commit({ message, files: scopedFiles });
             expect(r.exitCode).toBe(baseline.expected.exitCode);
             if (baseline.match?.stdout?.startsWith('regex:')) {
               const re = new RegExp(baseline.match.stdout.slice('regex:'.length));
@@ -520,7 +473,7 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           args[1] === '-t' &&
           args.length === 3
         ) {
-          // Plan 02-10: vcs.refs.exists(expr.commit(<sha>)) wraps
+          // Plan 02-10: vcs.refs.exists(expr.rev(<sha>)) wraps
           // `git cat-file -t <sha>`. Captured for verify.cjs sites 71, 268,
           // 1305 and verify.ts sites 336, 485 (Blocker 3 closure: runtime SHA
           // wraps via expr.commit factory). The captured fixture's HEAD-token
@@ -529,10 +482,10 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           // assert the adapter call returns true.
           const headRes = execGit(cwd, ['rev-parse', 'HEAD']);
           const fullSha = headRes.stdout.trim();
-          const exists = vcs.refs.exists(expr.commit(fullSha));
+          const exists = vcs.refs.exists(expr.rev(fullSha));
           expect(exists).toBe(true);
           // Negative: a clearly-bogus SHA must NOT exist.
-          const bogus = vcs.refs.exists(expr.commit('0123456789abcdef0123456789abcdef01234567'));
+          const bogus = vcs.refs.exists(expr.rev('0123456789abcdef0123456789abcdef01234567'));
           expect(bogus).toBe(false);
         } else if (
           args[0] === 'log' &&
@@ -594,7 +547,7 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           const baseSha = baseRes.stdout.trim();
           const targetSha = targetRes.stdout.trim();
           const result = vcs.diff({
-            rev: expr.range(expr.commit(baseSha), expr.commit(targetSha)),
+            rev: expr.range(expr.rev(baseSha), expr.rev(targetSha)),
             nameStatus: true,
           });
           expect(result.raw).toBe(baseline.expected.stdout);
