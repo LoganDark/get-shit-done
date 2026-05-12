@@ -337,9 +337,104 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     return result;
   };
 
+  /**
+   * Phase 3 RESEARCH A3 (medium-risk → empirically resolved during plan
+   * 03-05 execution): enumerate conflicted paths for a given revision.
+   *
+   * **PRIMARY form** (verified working on jj 0.41.0 locally during plan
+   * execution): `jj resolve --list -r <rev>`. Output is one line per
+   * conflicted path with the conflict description after several spaces:
+   *
+   *     f.txt    2-sided conflict
+   *     other.md 3-sided conflict
+   *
+   * The regex `/^(\S+)/` extracts only the path token, discarding the
+   * trailing diagnostic prose.
+   *
+   * **Fallback** (kept for resilience against future jj output reshaping):
+   * `jj diff -r <rev> --summary` filtered for lines starting with `C` or
+   * `U` (jj's conflict / unmerged status letters). On jj 0.41 the primary
+   * form succeeded for every probe, so this branch is dormant in practice
+   * but provides soft-degradation against contract drift.
+   *
+   * If both paths fail, returns `[]` — the conflict-detection itself
+   * already succeeded via the `conflicts()` revset query upstream, so
+   * paths-empty is a soft degradation, not a wrong-answer.
+   */
+  const enumerateConflictedPaths = (rev: string): string[] => {
+    // Primary: jj resolve --list -r <rev>
+    const primaryArgs = jjArgv('resolve', '--list', '-r', rev);
+    const primary = vcsExec(cwd, 'jj', primaryArgs);
+    if (primary.exitCode === 0 && primary.stdout.trim().length > 0) {
+      return primary.stdout
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((line) => {
+          // Output: `<path>   <conflict description>` — extract path only.
+          const m = /^(\S+)/.exec(line);
+          return m ? m[1] : line;
+        });
+    }
+    // Fallback: jj diff -r <rev> --summary, filter for C / U status letters.
+    const fallbackArgs = jjArgv('diff', '-r', rev, '--summary');
+    const fallback = vcsExec(cwd, 'jj', fallbackArgs);
+    if (fallback.exitCode !== 0) return [];
+    return fallback.stdout
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const m = /^[CU] (.+)$/.exec(line);
+        return m ? m[1] : '';
+      })
+      .filter(Boolean);
+  };
+
+  /**
+   * `vcs.findConflicts({scope})` — surfaces in-tree conflicted commits.
+   *
+   * ⚠️ **CRITICAL: jj's revset function is `conflicts()` PLURAL, not
+   * `conflict()`.** All upstream docs (CONTEXT.md, REQUIREMENTS.md,
+   * ROADMAP.md) currently say singular `conflict()`; the doc-fix is
+   * scheduled for plan 03-07 wrap-up. Implementation here uses the correct
+   * plural form from day one. See 03-RESEARCH.md §"Open Question Q1" for
+   * the verification record.
+   *
+   * - `scope: 'all'` → revset `conflicts()` (every in-tree conflicted commit)
+   * - `scope: 'working-copy'` → revset `conflicts() & @` (filter to @)
+   *
+   * Path enumeration uses `enumerateConflictedPaths(rev)` which dispatches
+   * `jj resolve --list -r <rev>` (primary) with a `--summary`-based fallback.
+   *
+   * CONFLICT-03: the verify-gate caller invokes `findConflicts({scope:'all'})`
+   * — already wired on the git backend (git.ts:520); flipping the allowlist
+   * entry below makes the jj backend reachable through it without further
+   * call-site change.
+   */
   const findConflicts = (
-    _opts: { scope: 'all' | 'working-copy' }
-  ): ConflictResult[] => notImpl('findConflicts');
+    opts: { scope: 'all' | 'working-copy' }
+  ): ConflictResult[] => {
+    const revset = opts.scope === 'working-copy'
+      ? 'conflicts() & @'
+      : 'conflicts()';
+    const logArgs = jjArgv(
+      'log',
+      '-r', revset,
+      '-T', 'json(self) ++ "\\n"',
+      '--no-graph',
+    );
+    const r = vcsExec(cwd, 'jj', logArgs);
+    if (r.exitCode !== 0) return [];
+    const entries = parseJjLog(r.stdout);
+    if (entries.length === 0) return [];
+
+    const results: ConflictResult[] = [];
+    for (const entry of entries) {
+      const paths = enumerateConflictedPaths(entry.hash);
+      results.push({ rev: entry.hash, paths, scope: opts.scope });
+    }
+    return results;
+  };
 
   // ─── push / fetch (plan 03-06) ──────────────────────────────────────────
   const push = (_opts: PushOpts = {}): ExecResult => notImpl('push');

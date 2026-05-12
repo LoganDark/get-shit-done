@@ -80,8 +80,12 @@ describe('Phase 3 plan 03-01: jj.ts skeleton', () => {
       }
     }).not.toThrow(VcsNotImplementedError);
   });
-  it('findConflicts() throws VcsNotImplementedError', () => {
-    expect(() => vcs.findConflicts({ scope: 'all' })).toThrow(VcsNotImplementedError);
+  it('findConflicts() does not throw VcsNotImplementedError (wired in plan 03-05)', () => {
+    expect(() => {
+      try { vcs.findConflicts({ scope: 'all' }); } catch (e) {
+        if (e instanceof VcsNotImplementedError) throw e;
+      }
+    }).not.toThrow(VcsNotImplementedError);
   });
   it('push() throws VcsNotImplementedError', () => {
     expect(() => vcs.push()).toThrow(VcsNotImplementedError);

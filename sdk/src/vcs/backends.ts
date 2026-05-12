@@ -53,7 +53,13 @@ export const BACKENDS_AVAILABLE_FOR_VERB: Readonly<
   log: Object.freeze(['git', 'jj-colocated'] as const),
   status: Object.freeze(['git', 'jj-colocated'] as const),
   diff: Object.freeze(['git', 'jj-colocated'] as const),
-  findConflicts: Object.freeze(['git'] as const),
+  // Phase 3 plan 03-05 Task 2 flipped findConflicts to admit 'jj-colocated':
+  // uses jj's `conflicts()` PLURAL revset (RESEARCH Q1 correction;
+  // CONTEXT/REQUIREMENTS/ROADMAP still say singular `conflict()`, doc-fix
+  // deferred to plan 03-07 wrap-up). Path enumeration via `jj resolve --list
+  // -r <rev>` (primary, empirically verified on jj 0.41) with `jj diff
+  // --summary` fallback.
+  findConflicts: Object.freeze(['git', 'jj-colocated'] as const),
   push: Object.freeze(['git'] as const),
   fetch: Object.freeze(['git'] as const),
   // VcsRefs — plan 03-03 flipped every verb with a real body to admit
