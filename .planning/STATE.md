@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_plan
-stopped_at: Phase 3 complete (Completed 03-07-PLAN.md — CI matrix activation + conflict()→conflicts() doc-fix + phase-close invariants)
-last_updated: "2026-05-12T15:20:00.000Z"
-last_activity: 2026-05-12 -- Phase 3 jj backend core complete; conflict() → conflicts() doc-fix landed; bug-triage finalized; CI matrix has jj-colocated allow-failure lane
+status: planning
+stopped_at: Phase 3 complete (Completed 03-07-PLAN.md — phase wrap-up)
+last_updated: "2026-05-12T17:50:56.258Z"
+last_activity: 2026-05-12
 progress:
-  total_phases: 7
-  completed_phases: 5
+  total_phases: 8
+  completed_phases: 4
   total_plans: 33
   completed_plans: 33
-  percent: 71
+  percent: 100
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 
 ## Current Position
 
-Phase: 06
+Phase: 03.1
 Plan: Not started
 Status: Ready to plan
 Last activity: 2026-05-12
@@ -84,6 +84,7 @@ Progress: [██████████] 100%
 
 - Phase 2.1 inserted after Phase 2: VCS Abstraction Audit — Drop Git-Only Concepts (URGENT)
 - Phase 6 added: Brownfield jj Migration — sticky vcs.adapter flip (Phase 3 D-17) + .planning SHA→change_id rewriter (Phase 3 D-19 tracker consumer)
+- Phase 03.1 inserted after Phase 3: make tests run faster (URGENT)
 
 ### Decisions
 

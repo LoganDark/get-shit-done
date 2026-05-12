@@ -100,6 +100,16 @@ Plans:
 - [x] 03-06-PLAN.md — Push/fetch + workspace stubs + TEST-08 bug-test triage execution (TEST-08)
 - [x] 03-07-PLAN.md — Wrap-up: CI matrix activation + conflict()→conflicts() doc-fix + phase-close invariants (CI-01, CI-02)
 
+### Phase 03.1: make tests run faster (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 3
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 03.1 to break down)
+
 ### Phase 4: Workspaces + Octopus Structure + Hooks
 **Goal**: Land the orchestrator-creates-heads-and-workspaces flow with lazy octopus-merge structure, batch reap of empty heads, workspace-path-safety guards, and the v1 hook strategy (Tier 1: colocated default + jj-native non-colocated direct trigger). Subagent fan-out works end-to-end on jj, and pre-commit/pre-push hooks fire at the right moments on both backends.
 **Depends on**: Phase 3
