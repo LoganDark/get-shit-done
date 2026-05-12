@@ -151,6 +151,17 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
         'amend: not yet supported on jj backend (deferred per Phase 3 RESEARCH §Q5)',
       );
     }
+    // WR-07: D-01 (`bookmark`, prefixed via addPrefix) and D-04
+    // (`bookmarkRaw`, no prefix) are mutually exclusive — they advance
+    // the same bookmark slot under different prefix discipline. Today
+    // both-set silently picks `bookmarkRaw`, which lets a caller-side
+    // bug (one code path forgets to clear the other field) advance the
+    // wrong bookmark without warning. Fail loudly instead.
+    if (input.bookmark !== undefined && input.bookmarkRaw !== undefined) {
+      throw new Error(
+        'commit(): pass at most one of {bookmark, bookmarkRaw} — D-01 and D-04 are mutually exclusive.',
+      );
+    }
     // allowEmpty / noVerify: documented no-ops on jj. See JSDoc above.
 
     // SQUASH-01 / SQUASH-02: argv-array invocation; files trail as positional
