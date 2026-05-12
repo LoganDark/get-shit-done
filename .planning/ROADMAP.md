@@ -71,7 +71,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 **Plans:** 9 plans
 
 Plans:
-- [ ] 2.1-PLAN-01.md — Shape commit: types.ts + expr.ts + parse/{git,jj}-rev.ts + backends/git.ts + hook-bridge.ts atomic (D-01..D-22)
+- [x] 2.1-PLAN-01.md — Shape commit: types.ts + expr.ts + parse/{git,jj}-rev.ts + backends/git.ts + hook-bridge.ts atomic (D-01..D-22)
 - [ ] 2.1-PLAN-02.md — Rename expr.commit → expr.rev across 46 consumer sites (D-13)
 - [ ] 2.1-PLAN-03.md — Rename currentBranch → currentBookmarks (string|null → string[]) across 11 sites (D-15)
 - [ ] 2.1-PLAN-04.md — Collapse CommitInput.pathspec onto files (WC-state-capture) + caller-side #2014 pre-probe (D-02/D-04/D-06)

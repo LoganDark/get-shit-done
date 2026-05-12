@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 2.1
-Plan: 12 of 12 complete
-Status: Ready to execute
-Last activity: 2026-05-12 -- Phase 2.1 planning complete
+Plan: 1 of 9 complete
+Status: Executing (plan 02 next)
+Last activity: 2026-05-12 -- Phase 2.1 plan 01 shape-commit landed on phase/2.1-audit (commits 3acf0aa7 + 877cf457)
 
-Progress: [██████████] 100% (plan execution; phase-level verify pending)
+Progress: [█·········] ~11% (plan execution; phase-level verify pending)
 
 ## Performance Metrics
 
