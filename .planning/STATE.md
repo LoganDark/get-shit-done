@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 3 context gathered
-last_updated: "2026-05-12T05:53:32.611Z"
-last_activity: 2026-05-12 -- Phase 03 planning complete
+last_updated: "2026-05-12T06:01:42.762Z"
+last_activity: 2026-05-12 -- Phase 03 execution started
 progress:
   total_phases: 7
   completed_phases: 3
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 02 — bulk-call-site-migration-still-git-only
+**Current focus:** Phase 03 — jj-backend-core-squash-refs-conflict
 
 ## Current Position
 
-Phase: 2.1 (complete + UAT passed + merged) — next: Phase 3 (jj Backend Core)
-Plan: 9 of 9 complete
-Status: Ready to execute
-Last activity: 2026-05-12 -- Phase 03 planning complete
+Phase: 03 (jj-backend-core-squash-refs-conflict) — EXECUTING
+Plan: 1 of 7
+Status: Executing Phase 03
+Last activity: 2026-05-12 -- Phase 03 execution started
 
 Progress: [██████████] 100% — phase complete
 
