@@ -92,7 +92,7 @@
 - [x] **TEST-05**: All ~80 git-touching tests in `tests/` migrated to use the `vcs` fixture instead of raw git invocations in test setup
 - [x] **TEST-06**: CI rule: skip count must not increase from `main` (prevents silent test-skipping under migration pressure)
 - [x] **TEST-07**: Test fixtures support both git and jj initial states (`tests/helpers.cjs` + a new `tests/helpers-jj.cjs` or unified file)
-- [ ] **TEST-08**: Worktree-edge-case tests (`bug-2924/2774/3097/3099/2075/2431/2015/2388`) re-triaged: those that map cleanly to jj workspaces are migrated; those that don't are documented as git-only with rationale
+- [x] **TEST-08**: Worktree-edge-case tests (`bug-2924/2774/3097/3099/2075/2431/2015/2388`) re-triaged: those that map cleanly to jj workspaces are migrated; those that don't are documented as git-only with rationale
 
 ### Call-Site Migration (MIGR)
 
@@ -238,7 +238,7 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | CONFLICT-01 | Phase 3 | Complete |
 | CONFLICT-02 | Phase 3 | Complete |
 | CONFLICT-03 | Phase 3 | Complete |
-| TEST-08 | Phase 3 | Pending |
+| TEST-08 | Phase 3 | Complete |
 | CI-01 | Phase 3 | Pending |
 | CI-02 | Phase 3 | Pending |
 | WS-01 | Phase 4 | Pending |
