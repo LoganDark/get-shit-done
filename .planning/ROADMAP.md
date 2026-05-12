@@ -77,7 +77,7 @@ Plans:
 - [x] 2.1-PLAN-04.md — Collapse CommitInput.pathspec onto files (WC-state-capture) + caller-side #2014 pre-probe (D-02/D-04/D-06)
 - [x] 2.1-PLAN-05.md — Drop StatusEntry.index from test assertions (D-16) (no-op closure — plan 01 already removed type field, no consumers)
 - [x] 2.1-PLAN-06.md — Move gitDir/gitCommonDir to vcs.gitOnly (D-18); worktree-safety.cjs primary consumer
-- [ ] 2.1-PLAN-07.md — Remove vcs.hooks public surface test consumers (D-07; cosmetic — Phase 4 owns internal invocation)
+- [x] 2.1-PLAN-07.md — Remove vcs.hooks public surface test consumers (D-07; cosmetic — Phase 4 owns internal invocation)
 - [ ] 2.1-PLAN-08.md — Hard-remove vcs.stage and vcs.unstage callers via Pattern E (D-03)
 - [ ] 2.1-PLAN-09.md — Baseline-parity sweep + allowlist re-tighten + 2.1-LEARNINGS.md (D-22, phase close)
 
