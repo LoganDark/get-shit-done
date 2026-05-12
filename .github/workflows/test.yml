@@ -57,15 +57,31 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
 
+    # Phase 3 plan 03-07 (CI-01): the jj-colocated lane is allowed to fail —
+    # CI-01 graduates to required-blocking in Phase 5 (per D-11). The matrix-
+    # level `continue-on-error` below absorbs per-cell failures so the git
+    # lane doesn't get masked when a jj-side test surfaces drift.
+    continue-on-error: ${{ matrix.backend == 'jj-colocated' }}
+
     strategy:
-      fail-fast: true
+      # Phase 3 plan 03-07 (CI-01 D-11): fail-fast disabled so a jj-colocated
+      # cell failure does NOT abort the git lane. The matrix
+      # `continue-on-error` flag above keeps the workflow green on jj-only
+      # failures while still reporting per-cell status.
+      fail-fast: false
       matrix:
         os: [ubuntu-latest]
         node-version: [22, 24]
+        # Phase 3 plan 03-07 (CI-01): jj-colocated backend lane added to the
+        # ubuntu-latest matrix. macOS stays git-only via the `include:` shape
+        # below — the jj install step targets `unknown-linux-musl` tarballs
+        # and would fail on the macOS runner.
+        backend: [git, jj-colocated]
         include:
           # Single macOS runner — verifies platform compatibility on the standard version
           - os: macos-latest
             node-version: 24
+            backend: git
           # Windows path/separator coverage is handled by hardcoded-paths.test.cjs
           # and windows-robustness.test.cjs (static analysis, runs on all platforms).
           # A dedicated windows-compat workflow runs on a weekly schedule.
@@ -104,6 +120,24 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
+      # Phase 3 plan 03-07 (CI-02 + D-14 + D-15): install jj 0.41.0 via the
+      # official GitHub release tarball when the matrix cell targets the
+      # jj-colocated backend. Pinned version is Renovate-bumpable; no
+      # `cargo install` (too slow, requires Rust toolchain). ubuntu-latest
+      # resolves `uname -m` to `x86_64`; the tarball provides a static
+      # `unknown-linux-musl` build that runs on any Linux distro.
+      - name: Install jj
+        if: matrix.backend == 'jj-colocated'
+        shell: bash
+        run: |
+          set -euo pipefail
+          JJ_VERSION=v0.41.0
+          JJ_ARCH=$(uname -m)
+          curl -fsSL "https://github.com/jj-vcs/jj/releases/download/${JJ_VERSION}/jj-${JJ_VERSION#v}-${JJ_ARCH}-unknown-linux-musl.tar.gz" \
+            | tar xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/jj" --version
+
       - name: Install dependencies
         run: npm ci
 
@@ -112,16 +146,25 @@ jobs:
 
       # Seam contract gate: keep manifest -> generated aliases -> registry/CJS adapters aligned.
       # Run once per workflow on the primary Linux node to avoid redundant matrix cost.
+      # Phase 3 plan 03-07: also gate on `backend == 'git'` so the jj-colocated
+      # cell at ubuntu-latest@24 does not re-run this seam check (it's a
+      # file-content gate; backend-independent).
       - name: SDK seam coverage tests
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == 24
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == 24 && matrix.backend == 'git'
         shell: bash
         run: cd sdk && npx vitest run src/query/command-seam-coverage.test.ts
 
       - name: SDK generated alias artifact drift check
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == 24
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == 24 && matrix.backend == 'git'
         shell: bash
         run: node sdk/scripts/check-command-aliases-fresh.mjs
 
       - name: Run tests with coverage
         shell: bash
+        # Phase 3 plan 03-07 (CI-01): GSD_TEST_BACKENDS filters the vcsTest
+        # matrix to the current cell's backend. Already plumbed through
+        # `parseBackendsEnv` in sdk/src/vcs/backends.ts (Phase 1 plan 01-02);
+        # no SDK change needed.
+        env:
+          GSD_TEST_BACKENDS: ${{ matrix.backend }}
         run: npm run test:coverage
