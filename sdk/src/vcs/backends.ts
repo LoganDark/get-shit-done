@@ -46,9 +46,13 @@ export const BACKENDS_AVAILABLE_FOR_VERB: Readonly<
   // squash-based commit body (SQUASH-01..07) + bookmark advance (D-01/D-04)
   // + JJ-07 env propagation now live in backends/jj.ts.
   commit: Object.freeze(['git', 'jj-colocated'] as const),
-  log: Object.freeze(['git'] as const),
-  status: Object.freeze(['git'] as const),
-  diff: Object.freeze(['git'] as const),
+  // Phase 3 plan 03-05 Task 1 flipped log/status/diff to admit 'jj-colocated':
+  // log delegates to parseJjLog (plan 03-02); status hand-parses `jj status`
+  // human-readable output (per RESEARCH §status()); diff wraps `jj diff` +
+  // `--summary` parser. opts.staged is a documented no-op on jj (no index).
+  log: Object.freeze(['git', 'jj-colocated'] as const),
+  status: Object.freeze(['git', 'jj-colocated'] as const),
+  diff: Object.freeze(['git', 'jj-colocated'] as const),
   findConflicts: Object.freeze(['git'] as const),
   push: Object.freeze(['git'] as const),
   fetch: Object.freeze(['git'] as const),

@@ -53,14 +53,32 @@ describe('Phase 3 plan 03-01: jj.ts skeleton', () => {
       VcsNotImplementedError,
     );
   });
-  it('log() throws VcsNotImplementedError', () => {
-    expect(() => vcs.log()).toThrow(VcsNotImplementedError);
+  // Phase 3 plan 03-05 Task 1 landed log/status/diff bodies — the verbs no
+  // longer throw VcsNotImplementedError. They may throw VcsExecError when the
+  // spawned `jj` binary fails (e.g., cwd /tmp/never-exists), but that's a
+  // different class. Mirrors the not-throw-VcsNotImplementedError pattern
+  // from plan 03-04's commit-wired test.
+  it('log() does not throw VcsNotImplementedError (wired in plan 03-05)', () => {
+    expect(() => {
+      try { vcs.log(); } catch (e) {
+        if (e instanceof VcsNotImplementedError) throw e;
+        // Any other error (e.g. VcsExecError from a missing-jj path) is fine.
+      }
+    }).not.toThrow(VcsNotImplementedError);
   });
-  it('status() throws VcsNotImplementedError', () => {
-    expect(() => vcs.status()).toThrow(VcsNotImplementedError);
+  it('status() does not throw VcsNotImplementedError (wired in plan 03-05)', () => {
+    expect(() => {
+      try { vcs.status(); } catch (e) {
+        if (e instanceof VcsNotImplementedError) throw e;
+      }
+    }).not.toThrow(VcsNotImplementedError);
   });
-  it('diff() throws VcsNotImplementedError', () => {
-    expect(() => vcs.diff()).toThrow(VcsNotImplementedError);
+  it('diff() does not throw VcsNotImplementedError (wired in plan 03-05)', () => {
+    expect(() => {
+      try { vcs.diff(); } catch (e) {
+        if (e instanceof VcsNotImplementedError) throw e;
+      }
+    }).not.toThrow(VcsNotImplementedError);
   });
   it('findConflicts() throws VcsNotImplementedError', () => {
     expect(() => vcs.findConflicts({ scope: 'all' })).toThrow(VcsNotImplementedError);

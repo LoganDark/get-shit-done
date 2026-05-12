@@ -24,11 +24,16 @@ describe('BACKENDS constants', () => {
 });
 
 describe('BACKENDS_AVAILABLE_FOR_VERB (Phase 3 D-12 per-verb allowlist)', () => {
-  it('plan 03-04 flipped commit to admit jj-colocated; log/status/diff still pending in plan 03-05', () => {
-    // Plan 03-04 flipped `commit` to admit jj-colocated (squash body landed):
+  it('plan 03-05 flipped log/status/diff to admit jj-colocated; findConflicts/push/fetch/workspace still pending', () => {
+    // Plan 03-04 flipped `commit`; plan 03-05 Task 1 flipped log/status/diff;
+    // plan 03-05 Task 2 flips findConflicts:
     expect(BACKENDS_AVAILABLE_FOR_VERB.commit).toEqual(['git', 'jj-colocated']);
-    // Verbs still pending body in plans 03-05/03-06 stay [git]-only:
-    expect(BACKENDS_AVAILABLE_FOR_VERB.log).toEqual(['git']);
+    expect(BACKENDS_AVAILABLE_FOR_VERB.log).toEqual(['git', 'jj-colocated']);
+    expect(BACKENDS_AVAILABLE_FOR_VERB.status).toEqual(['git', 'jj-colocated']);
+    expect(BACKENDS_AVAILABLE_FOR_VERB.diff).toEqual(['git', 'jj-colocated']);
+    // Verbs still pending body in plan 03-06 stay [git]-only:
+    expect(BACKENDS_AVAILABLE_FOR_VERB.push).toEqual(['git']);
+    expect(BACKENDS_AVAILABLE_FOR_VERB.fetch).toEqual(['git']);
     // Plan 03-03 flipped refs.bookmarks.list to admit jj-colocated:
     expect(BACKENDS_AVAILABLE_FOR_VERB['refs.bookmarks.list']).toEqual([
       'git',

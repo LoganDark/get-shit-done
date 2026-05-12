@@ -32,6 +32,7 @@ import type {
   CommitInput,
   CommitResult,
   ConflictResult,
+  DiffNameStatusEntry,
   DiffOpts,
   DiffResult,
   FetchOpts,
@@ -41,6 +42,7 @@ import type {
   PushOpts,
   RevisionExpr,
   SnapshotHandle,
+  StatusEntry,
   StatusOpts,
   StatusResult,
   VcsBookmarks,
@@ -209,9 +211,132 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
   };
 
   // ─── log / status / diff / findConflicts (plan 03-05) ───────────────────
-  const log = (_opts: LogOpts = {}): LogEntry[] => notImpl('log');
-  const status = (_opts: StatusOpts = {}): StatusResult => notImpl('status');
-  const diff = (_opts: DiffOpts = {}): DiffResult => notImpl('diff');
+
+  /**
+   * `vcs.log(opts)` — emits commits as `LogEntry[]` via the NDJSON parser
+   * (`parseJjLog`, production from plan 03-02). Argv shape per RESEARCH
+   * §`log()`:
+   *  - `opts.maxCount` → `-n N`
+   *  - `opts.allRefs` → `-r 'all()'`
+   *  - `opts.rev` → `-r toJjRev(rev)`
+   *  - `opts.paths` → trailing positional path filter (jj has no `--`
+   *    separator like git uses; paths follow the rev args)
+   * PITFALL 1: `LogEntry.hash` is `commit_id` (40-char hex), NEVER
+   * `change_id` — pinned by `parseJjLog`.
+   */
+  const log = (opts: LogOpts = {}): LogEntry[] => {
+    const args: string[] = ['log', '-T', 'json(self) ++ "\\n"', '--no-graph'];
+    if (opts.maxCount) args.push('-n', String(opts.maxCount));
+    if (opts.allRefs) args.push('-r', 'all()');
+    if (opts.rev) args.push('-r', toJjRev(opts.rev));
+    if (opts.paths && opts.paths.length > 0) args.push(...opts.paths);
+    const r = vcsExec(cwd, 'jj', jjArgv(...args));
+    if (r.exitCode !== 0) return [];
+    return parseJjLog(r.stdout);
+  };
+
+  /**
+   * Parse `jj status` human-readable output into `StatusEntry[]`.
+   *
+   * Phase 2.1 D-16: `StatusEntry` has NO `index` field — jj has no index.
+   * The `worktree` letter is whatever jj prints (A/M/D/R/C).
+   *
+   * Output sample (jj 0.41):
+   *   Working copy changes:
+   *   A a.txt
+   *   M b.txt
+   *   Working copy  (@) : wttxkypv e4595a81 (no description set)
+   *   Parent commit (@-): ...
+   *
+   * RESEARCH §`status()`: jj has no structured `--porcelain` analog; the
+   * parser hand-rolls the human-readable lines starting with A/M/D/R/C
+   * between the `Working copy changes:` header and the `Working copy  (@)`
+   * (or `Parent commit`) separator.
+   */
+  const parseJjStatus = (raw: string): StatusEntry[] => {
+    const lines = raw.split('\n');
+    const entries: StatusEntry[] = [];
+    let inSection = false;
+    for (const line of lines) {
+      if (line.startsWith('Working copy changes:')) {
+        inSection = true;
+        continue;
+      }
+      if (line.startsWith('Working copy  (@)') || line.startsWith('Parent commit')) break;
+      if (!inSection) continue;
+      const m = /^([AMDRC]) (.+)$/.exec(line);
+      if (m) entries.push({ path: m[2], worktree: m[1] });
+    }
+    return entries;
+  };
+
+  /**
+   * `vcs.status(opts)` — parses `jj st` text output. Per git-backend parity,
+   * `opts.porcelain === false` returns `{entries: [], raw: stdout}` so
+   * callers wanting the raw human-readable form can read `.raw` without
+   * entry parsing.
+   */
+  const status = (opts: StatusOpts = {}): StatusResult => {
+    const r = vcsExec(cwd, 'jj', jjArgv('status'));
+    if (r.exitCode !== 0) return { entries: [], raw: r.stderr || r.stdout };
+    if (opts.porcelain === false) {
+      return { entries: [], raw: r.stdout };
+    }
+    return { entries: parseJjStatus(r.stdout), raw: r.stdout };
+  };
+
+  /**
+   * Parse `jj diff --summary` line-by-line into `DiffNameStatusEntry[]`.
+   * Output sample: `M path/to/file.ts`, `A other.txt`, etc. The letter set
+   * matches `DiffNameStatusEntry.status` (`A|M|D|R|C|T|U|X|B`).
+   */
+  const parseDiffSummary = (raw: string): DiffNameStatusEntry[] => {
+    const entries: DiffNameStatusEntry[] = [];
+    for (const line of raw.split('\n')) {
+      const m = /^([AMDRCTUXB]) (.+)$/.exec(line);
+      if (m) {
+        entries.push({ path: m[2], status: m[1] as DiffNameStatusEntry['status'] });
+      }
+    }
+    return entries;
+  };
+
+  /**
+   * Phase 2.1 / Phase 3: `opts.staged` is a git-only concept (the index).
+   * On jj there is no index — `opts.staged === true` is a documented no-op
+   * (returns the same WC diff). Callers should narrow on `vcs.kind === 'git'`
+   * before relying on staged-specific behavior. No Phase 3 caller exercises
+   * this option against a jj backend (audit recorded in 03-05-AUDIT.md).
+   *
+   * Argv per RESEARCH §`diff()`:
+   *  - `opts.nameOnly` → `--name-only`
+   *  - `opts.nameStatus` → `--summary` (jj's name-status equivalent)
+   *  - `opts.rev` → `-r toJjRev(rev)`
+   *  - `opts.paths` → trailing positional (jj has no `--` separator)
+   */
+  const diff = (opts: DiffOpts = {}): DiffResult => {
+    const args: string[] = ['diff'];
+    if (opts.nameOnly) args.push('--name-only');
+    if (opts.nameStatus) args.push('--summary');
+    if (opts.rev) args.push('-r', toJjRev(opts.rev));
+    if (opts.paths && opts.paths.length > 0) args.push(...opts.paths);
+    // opts.staged: no-op on jj (no index concept). See JSDoc above.
+    const r = vcsExec(cwd, 'jj', jjArgv(...args));
+    if (r.exitCode !== 0) {
+      return { raw: r.stderr || r.stdout, nameOnly: [] };
+    }
+    const result: DiffResult = {
+      raw: r.stdout,
+      nameOnly: opts.nameOnly
+        ? r.stdout.split('\n').map((s) => s.trim()).filter(Boolean)
+        : [],
+    };
+    if (opts.nameStatus) {
+      result.nameStatus = parseDiffSummary(r.stdout);
+    }
+    return result;
+  };
+
   const findConflicts = (
     _opts: { scope: 'all' | 'working-copy' }
   ): ConflictResult[] => notImpl('findConflicts');
@@ -472,12 +597,9 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     },
   });
 
-  // Mark imports used (silence TS unused warnings — these become real in
-  // verb-group plans 03-04..03-05). `addPrefix`, `stripPrefix`, `toJjRev`,
-  // `jjArgv`, and `vcsExec` are now actively used by the refs.* + bookmarks
-  // implementations landed in plan 03-03. The two remaining void shims cover
-  // parsers consumed by plans 03-05 (log) and 03-06 (workspace).
-  void parseJjLog;
+  // Mark imports used (silence TS unused warnings). `parseJjLog` is now
+  // actively consumed by `log()` (plan 03-05) — the prior void-shim was
+  // dropped. `parseJjWorkspaceList` is still pending plan 03-06.
   void parseJjWorkspaceList;
 
   return Object.freeze({
