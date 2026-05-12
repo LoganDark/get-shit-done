@@ -166,12 +166,21 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           args.includes('--abbrev-ref') &&
           args.includes('HEAD')
         ) {
-          // Plan 02-06 Task 1: vcs.refs.currentBranch() wraps
-          // `git rev-parse --abbrev-ref HEAD`, returning string | null.
+          // Plan 2.1-03 (was Plan 02-06): vcs.refs.currentBookmarks() wraps
+          // `git rev-parse --abbrev-ref HEAD`, returning string[].
           // The baseline records the raw stdout (e.g. "master"); the adapter
-          // returns the same name (or null when detached).
-          const name = vcs.refs.currentBranch();
-          expect(name).toBe(baseline.expected.stdout);
+          // returns the same name wrapped in [name] (or [] when detached/
+          // anonymous head). Per D-15, [] is observationally equivalent to
+          // the prior null at consumer sites that use `[0] ?? null`.
+          const bookmarks = vcs.refs.currentBookmarks();
+          const expectedStdout = baseline.expected.stdout;
+          // Empty stdout or "HEAD" indicates detached HEAD → adapter returns [].
+          // Non-empty branch name → adapter returns [name].
+          if (expectedStdout === '' || expectedStdout === 'HEAD') {
+            expect(bookmarks).toEqual([]);
+          } else {
+            expect(bookmarks).toEqual([expectedStdout]);
+          }
         } else if (args[0] === 'config' && args.includes('--get')) {
           // Plan 02-06 Task 1: vcs.gitOnly.configGet returns the value (exit 0)
           // or null (exit 1). Baseline records exit 0 + value for this shape.
@@ -399,7 +408,7 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
             if (adapterVcs.kind !== 'git') throw new Error('expected git adapter');
             adapterVcs.refs.bookmarks.switch(branchName, { create: true });
             expect(adapterVcs.refs.bookmarks.exists(branchName)).toBe(true);
-            expect(adapterVcs.refs.currentBranch()).toBe(branchName);
+            expect(adapterVcs.refs.currentBookmarks()).toEqual([branchName]);
           } finally {
             rmSync(adapterCwd, { recursive: true, force: true });
           }
@@ -421,7 +430,7 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
             const adapterVcs = createVcsAdapter(adapterCwd);
             if (adapterVcs.kind !== 'git') throw new Error('expected git adapter');
             adapterVcs.refs.bookmarks.switch(branchName);
-            expect(adapterVcs.refs.currentBranch()).toBe(branchName);
+            expect(adapterVcs.refs.currentBookmarks()).toEqual([branchName]);
           } finally {
             rmSync(adapterCwd, { recursive: true, force: true });
           }

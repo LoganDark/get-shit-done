@@ -308,7 +308,7 @@ function cmdCommit(cwd, message, files, raw, amend, noVerify) {
     // The cwd-via-factory pattern from 02-08 — adapter scoped to cwd here.
     const vcs = createVcsAdapter(cwd, { kind: 'git' });
     if (branchName) {
-      const currentBranch = vcs.refs.currentBranch();                                  // line 305 (was: rev-parse --abbrev-ref HEAD)
+      const currentBranch = vcs.refs.currentBookmarks()[0] ?? null;                    // line 305 (was: rev-parse --abbrev-ref HEAD)
       if (currentBranch !== null && currentBranch !== branchName) {
         // Create branch if it doesn't exist, or switch to it if it does.
         // Mirrors the original "try -b, fall back to plain checkout" shape:

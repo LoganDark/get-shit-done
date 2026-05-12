@@ -370,27 +370,27 @@ describe('createGitAdapter — __vcsTestOnly snapshot/restore (D-14, strategy 3)
   });
 });
 
-describe('createGitAdapter — refs.currentBranch (02-03 Task 1)', () => {
-  it('returns the current branch name on a freshly-initialized repo', () => {
+describe('createGitAdapter — refs.currentBookmarks (2.1-03)', () => {
+  it('returns the current bookmark name on a freshly-initialized repo', () => {
     const vcs = createGitAdapter(tmpDir);
     const expected = execSync('git rev-parse --abbrev-ref HEAD', {
       cwd: tmpDir,
       encoding: 'utf-8',
     }).trim();
-    expect(vcs.refs.currentBranch()).toBe(expected);
+    expect(vcs.refs.currentBookmarks()).toEqual([expected]);
   });
 
-  it('returns the new branch name after switching with bookmarks.switch({create:true})', () => {
+  it('returns the new bookmark name after switching with bookmarks.switch({create:true})', () => {
     const vcs = createGitAdapter(tmpDir);
     vcs.refs.bookmarks.switch('feat-cb', { create: true });
-    expect(vcs.refs.currentBranch()).toBe('feat-cb');
+    expect(vcs.refs.currentBookmarks()).toEqual(['feat-cb']);
   });
 
-  it('returns null when HEAD is detached', () => {
+  it('returns [] when HEAD is detached', () => {
     const vcs = createGitAdapter(tmpDir);
     const sha = execSync('git rev-parse HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
     execSync(`git checkout ${sha}`, { cwd: tmpDir, stdio: 'pipe' });
-    expect(vcs.refs.currentBranch()).toBe(null);
+    expect(vcs.refs.currentBookmarks()).toEqual([]);
   });
 });
 

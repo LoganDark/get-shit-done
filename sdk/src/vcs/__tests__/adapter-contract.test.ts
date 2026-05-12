@@ -84,10 +84,12 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
   // Plan 02-03 Task 3 — symmetric contract tests for new verbs.
   // These properties hold on every backend (git in Phase 1/2; jj added in Phase 3).
 
-  test('vcs.refs.currentBranch returns a non-null string after init', ({ vcs }) => {
-    const cb = vcs.refs.currentBranch();
-    expect(typeof cb).toBe('string');
-    expect(cb && cb.length > 0).toBe(true);
+  test('vcs.refs.currentBookmarks returns a non-empty string[] after init', ({ vcs }) => {
+    const cb = vcs.refs.currentBookmarks();
+    expect(Array.isArray(cb)).toBe(true);
+    expect(cb.length).toBeGreaterThan(0);
+    expect(typeof cb[0]).toBe('string');
+    expect(cb[0]!.length).toBeGreaterThan(0);
   });
 
   test('vcs.refs.countCommits returns a positive integer after a commit', ({ vcs, cwd }) => {

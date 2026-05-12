@@ -328,7 +328,7 @@ const baselines = [
     source: 'get-shit-done/bin/lib/commands.cjs:305',
     // cmdCommit: `execGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD'])` reads
     // the current branch name to compare against the desired branchName.
-    // Adapter equivalent: vcs.refs.currentBranch().
+    // Adapter equivalent: vcs.refs.currentBookmarks()[0] ?? null.
     fixture: [],
     args: ['rev-parse', '--abbrev-ref', 'HEAD'],
   },
