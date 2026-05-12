@@ -7,12 +7,18 @@
  * `vcs.jjOnly.commitIdOf` helper (Phase 2.1 D-14 deferred placement).
  *
  * Mirrors the single-stateless-string-mapper shape of `parse/jj-rev.ts`.
- * Plan 03-01: stub. Plan 03-02: real implementation + tests.
+ *
+ * Both probes use `jj log -r <input> -T '<field>' --no-graph -n 1`, going
+ * through the JJ-02 jjArgv prefix (--repository, --no-pager, --color never,
+ * --quiet). D-05: never `--ignore-working-copy`.
+ *
+ * On non-zero exit, throws `VcsExecError` (typed; callers can
+ * `instanceof`-check) — NOT a plain Error.
  */
 
-import { vcsExec } from '../exec.js';
+import { vcsExec, VcsExecError } from '../exec.js';
 
-function jjArgv(cwd: string, ...subcommand: string[]): string[] {
+function jjIdArgv(cwd: string, ...subcommand: string[]): string[] {
   return [
     '--repository',
     cwd,
@@ -25,28 +31,36 @@ function jjArgv(cwd: string, ...subcommand: string[]): string[] {
 }
 
 export function commitIdOf(cwd: string, changeId: string): string {
-  const r = vcsExec(
-    cwd,
-    'jj',
-    jjArgv(cwd, 'log', '-r', changeId, '-T', 'commit_id', '--no-graph', '-n', '1')
-  );
+  const args = jjIdArgv(cwd, 'log', '-r', changeId, '-T', 'commit_id', '--no-graph', '-n', '1');
+  const r = vcsExec(cwd, 'jj', args);
   if (r.exitCode !== 0) {
-    throw new Error(
-      `jj-id.commitIdOf failed for change ${changeId}: ${r.stderr || r.stdout}`
+    throw new VcsExecError(
+      `jj-id.commitIdOf failed for change ${changeId}: ${r.stderr || r.stdout}`,
+      {
+        exitCode: r.exitCode,
+        stdout: r.stdout,
+        stderr: r.stderr,
+        timedOut: r.timedOut,
+        args,
+      }
     );
   }
   return r.stdout.trim();
 }
 
 export function changeIdOf(cwd: string, commitId: string): string {
-  const r = vcsExec(
-    cwd,
-    'jj',
-    jjArgv(cwd, 'log', '-r', commitId, '-T', 'change_id', '--no-graph', '-n', '1')
-  );
+  const args = jjIdArgv(cwd, 'log', '-r', commitId, '-T', 'change_id', '--no-graph', '-n', '1');
+  const r = vcsExec(cwd, 'jj', args);
   if (r.exitCode !== 0) {
-    throw new Error(
-      `jj-id.changeIdOf failed for commit ${commitId}: ${r.stderr || r.stdout}`
+    throw new VcsExecError(
+      `jj-id.changeIdOf failed for commit ${commitId}: ${r.stderr || r.stdout}`,
+      {
+        exitCode: r.exitCode,
+        stdout: r.stdout,
+        stderr: r.stderr,
+        timedOut: r.timedOut,
+        args,
+      }
     );
   }
   return r.stdout.trim();
