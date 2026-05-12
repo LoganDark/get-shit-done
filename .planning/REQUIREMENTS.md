@@ -215,32 +215,32 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | UPSTREAM-01 | Phase 2 | Recorded as deferred to milestone-end task (post-Phase-5) per Phase 2 plan 02-12 |
 | UPSTREAM-02 | Phase 2 | Complete |
 | UPSTREAM-03 | Phase 2 | Complete |
-| JJ-01 | Phase 3 | Complete |
-| JJ-02 | Phase 3 | Complete |
-| JJ-03 | Phase 3 | Complete |
-| JJ-04 | Phase 3 | Complete |
-| JJ-05 | Phase 3 | Complete |
-| JJ-06 | Phase 3 | Complete |
-| JJ-07 | Phase 3 | Complete |
-| SQUASH-01 | Phase 3 | Complete |
-| SQUASH-02 | Phase 3 | Complete |
-| SQUASH-03 | Phase 3 | Complete |
-| SQUASH-04 | Phase 3 | Complete |
-| SQUASH-05 | Phase 3 | Complete |
-| SQUASH-06 | Phase 3 | Complete |
-| SQUASH-07 | Phase 3 | Complete |
-| REFS-01 | Phase 3 | Complete |
-| REFS-02 | Phase 3 | Complete |
-| REFS-03 | Phase 3 | Complete |
-| REFS-04 | Phase 3 | Complete |
-| REFS-05 | Phase 3 | Complete |
-| REFS-06 | Phase 3 | Complete |
-| CONFLICT-01 | Phase 3 | Complete |
-| CONFLICT-02 | Phase 3 | Complete |
-| CONFLICT-03 | Phase 3 | Complete |
-| TEST-08 | Phase 3 | Complete |
-| CI-01 | Phase 3 | Pending |
-| CI-02 | Phase 3 | Pending |
+| JJ-01 | Phase 3 | Complete (03-01) |
+| JJ-02 | Phase 3 | Complete (03-01) |
+| JJ-03 | Phase 3 | Complete (03-01) |
+| JJ-04 | Phase 3 | Complete (03-02) |
+| JJ-05 | Phase 3 | Complete (03-01) |
+| JJ-06 | Phase 3 | Complete (03-01) |
+| JJ-07 | Phase 3 | Complete (03-04) |
+| SQUASH-01 | Phase 3 | Complete (03-04) |
+| SQUASH-02 | Phase 3 | Complete (03-04) |
+| SQUASH-03 | Phase 3 | Complete (03-04) |
+| SQUASH-04 | Phase 3 | Complete (03-04) |
+| SQUASH-05 | Phase 3 | Complete (03-01, re-verified 03-04 + 03-07) |
+| SQUASH-06 | Phase 3 | Complete (03-04) |
+| SQUASH-07 | Phase 3 | Complete (03-04) |
+| REFS-01 | Phase 3 | Complete (03-03) |
+| REFS-02 | Phase 3 | Complete (03-03) |
+| REFS-03 | Phase 3 | Complete (03-03) |
+| REFS-04 | Phase 3 | Complete (03-03) |
+| REFS-05 | Phase 3 | Complete (03-04) |
+| REFS-06 | Phase 3 | Complete (03-03) |
+| CONFLICT-01 | Phase 3 | Complete (03-05; doc-fix conflict()→conflicts() landed 03-07) |
+| CONFLICT-02 | Phase 3 | Complete (03-05) |
+| CONFLICT-03 | Phase 3 | Complete (03-05) |
+| TEST-08 | Phase 3 | Complete (03-06 — all 7 bug tests carries-verbatim verdict) |
+| CI-01 | Phase 3 | Complete (03-07; jj-colocated lane allow-failure — graduates to required-blocking in Phase 5) |
+| CI-02 | Phase 3 | Complete (03-07; jj 0.41.0 release-tarball install) |
 | WS-01 | Phase 4 | Pending |
 | WS-02 | Phase 4 | Pending |
 | WS-03 | Phase 4 | Pending |
@@ -294,4 +294,5 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 
 ---
 *Requirements defined: 2026-05-09*
+*Last updated: 2026-05-12 — Phase 3 plan execution complete (7/7). All 26 Phase 3 requirement IDs marked Complete: JJ-01..07, SQUASH-01..07, REFS-01..06, CONFLICT-01..03, TEST-08, CI-01, CI-02. jj-colocated backend lane shipped as CI allow-failure (D-11; graduates to required-blocking in Phase 5). conflict() → conflicts() revset doc-bug fixed across REQUIREMENTS / ROADMAP / 03-CONTEXT (RESEARCH Q1 correction landed in plan 03-07).*
 *Last updated: 2026-05-11 — Phase 2 plan execution complete (12/12). MIGR-04 and UPSTREAM-01 routed to milestone-end task per Phase 2 plan 02-12 (RECORDED-AS-DEFERRED, not Done). Phase 2 production-source migration delivered: MIGR-01, MIGR-02, MIGR-03, TEST-05, UPSTREAM-02, UPSTREAM-03 complete.*

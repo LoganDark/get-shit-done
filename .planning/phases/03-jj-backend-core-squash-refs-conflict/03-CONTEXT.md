@@ -96,9 +96,13 @@ Land `sdk/src/vcs/backends/jj.ts` implementing the full adapter contract against
 - `.planning/intel/*.md` — prose mentions only where SHAs are referenced as historical context (e.g., `intel/git-touchpoints.md` may cite git's pnpm-migration commit `ae56863a`); regex-pluck during migration.
 - `.planning/research/*.md` — prose mentions only (Phase 0 research artifacts); regex-pluck during migration.
 
-### Net-new surfaces introduced in Phase 3 (logged as plans land)
+### Net-new surfaces introduced in Phase 3 (finalized at phase close — 2026-05-12)
 
-*(Empty at phase start. Each Phase 3 plan that introduces a new artifact encoding a revision ID appends an entry here as part of the plan's commit. Plan-checker / verifier asserts this section is non-empty for any plan that touches `.planning/` write paths.)*
+*Empty. Phase 3 plans 03-01..03-07 each verified that no new `.planning/` revision-ID-encoding format was introduced. Per-plan SUMMARY footers (03-01 through 03-06) explicitly recorded "Format-migration tracker (D-19) — no entries appended"; plan 03-07 re-verified at phase close. The pre-existing surfaces in the "Existing surfaces" section above are the complete Phase-6 (`/gsd-migrate-to-jj`) work backlog.*
+
+*Note: docs/test-triage/jj-bugs.md (introduced by plan 03-01, populated by 03-06) lives OUTSIDE `.planning/` and contains no revision IDs (commits referenced only as prose in Rationale columns when relevant) — D-19 does not apply.*
+
+*Note: `sdk/src/vcs/backends/jj.ts` and `sdk/src/vcs/parse/jj-*.ts` ship runtime translators (change_id ↔ commit_id) but write nothing to `.planning/`; they're consumed by future migration code, not persisted state.*
 
 </format_migration_tracker>
 

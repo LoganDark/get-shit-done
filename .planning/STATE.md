@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 03-04-PLAN.md (commit squash body + bookmark advance + JJ-07 env propagation)
-last_updated: "2026-05-12T14:52:54.684Z"
-last_activity: 2026-05-12
+status: Phase 3 complete (7/7 plans); jj-colocated lane active as CI allow-failure; ready for Phase 4
+stopped_at: Phase 3 complete (Completed 03-07-PLAN.md — CI matrix activation + conflict()→conflicts() doc-fix + phase-close invariants)
+last_updated: "2026-05-12T15:20:00.000Z"
+last_activity: 2026-05-12 -- Phase 3 jj backend core complete; conflict() → conflicts() doc-fix landed; bug-triage finalized; CI matrix has jj-colocated allow-failure lane
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 33
-  completed_plans: 32
-  percent: 97
+  completed_plans: 33
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 
 ## Current Position
 
-Phase: 03 (jj-backend-core-squash-refs-conflict) — EXECUTING
-Plan: 7 of 7
-Status: Ready to execute
+Phase: 03 (jj-backend-core-squash-refs-conflict) — COMPLETE
+Plan: 7 of 7 complete
+Status: Phase 3 complete; ready for Phase 4 (Workspaces + Octopus + Hooks)
 Last activity: 2026-05-12
 
-Progress: [██████████] 97%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -75,6 +75,7 @@ Progress: [██████████] 97%
 | Phase 03 P04 | ~7min | 2 tasks tasks | 7 files files |
 | Phase 03 P05 | 11m | - tasks | - files |
 | Phase 03 P06 | ~25m | 2 tasks | 7 files |
+| Phase 03 P07 | ~30m | 3 tasks | 5 files (workflow + REQUIREMENTS + ROADMAP + CONTEXT + STATE) |
 
 ## Accumulated Context
 
@@ -167,6 +168,10 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 03-06: opts.ref on jj fetch is a documented no-op per RESEARCH A6; 03-06-AUDIT.md confirms zero production callers of vcs.fetch — silent-drop is safe in Phase 3
 - [Phase ?]: Plan 03-06: workspace.context returns Phase 3 literal stub {effectiveRoot:cwd, mode:'main', isLinked:false}; workspace.add/forget/prune throw VcsNotImplementedError (Phase 4 owns WS-*)
 - [Phase ?]: Plan 03-06: TEST-08 triage complete — all 7 worktree-bug tests carries-verbatim (markdown-structural, no vcsTest fixture); all pass under GSD_TEST_BACKENDS=jj-colocated; no ESCALATIONS
+- [Phase 03-07]: Plan 03-07: CI matrix activated with `backend: [git, jj-colocated]` axis on ubuntu-latest; jj install step pins v0.41.0 (D-14) via release tarball from github.com/jj-vcs/jj/releases (D-15 / CI-02); job-level `continue-on-error: ${{ matrix.backend == 'jj-colocated' }}` + `fail-fast: false` absorbs Phase-3 allow-failure window (D-11); GSD_TEST_BACKENDS env wired through; macos lane stays git-only (unknown-linux-musl tarball would fail on macOS); seam-coverage + alias-drift checks pinned to backend==git so jj-colocated cell on ubuntu-latest@24 doesn't re-run backend-independent gates.
+- [Phase 03-07]: Plan 03-07: conflict() → conflicts() revset doc-bug fixed in 3 primary doc surfaces (REQUIREMENTS.md CONFLICT-01, ROADMAP.md Phase 3 success criteria #3, 03-CONTEXT.md §Domain); historical artifacts in research/, intel/, prior-phase SUMMARYs left as-is (record of research-time hypothesis); the impl in jj.ts has used the plural since plan 03-05 — only the planning prose lagged.
+- [Phase 03-07]: Plan 03-07: phase-close invariant battery green: JJ-03 (0 --ignore-working-copy in jj backend), SQUASH-05 (no jj commit invocation), conflicts() plural present + singular absent in jj.ts, lint-vcs-no-raw-git 0 violations on 908 files, skip-count 18 = baseline (no regression), bug-triage doc has 0 TODO rows, every allowlist entry that should admit jj-colocated does, every entry that should stay git-only does (refs.isIgnored, refs.bookmarks.switch, workspace.add/forget/prune).
+- [Phase 03-07]: Plan 03-07: format-migration tracker (CONTEXT.md `<format_migration_tracker>` D-19) Net-new-surfaces section finalized empty — all 7 Phase-3 plans verified zero new revision-id-encoding `.planning/` formats introduced; Phase 6 inherits the tracker populated with only pre-existing surfaces (STATE/SUMMARY/LEARNINGS/REVIEW prose, SDK phase manifests, query commit output).
 
 ### Pending Todos
 
@@ -186,8 +191,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-12T14:52:10.412Z
-Stopped at: Completed 03-04-PLAN.md (commit squash body + bookmark advance + JJ-07 env propagation)
+Last session: 2026-05-12T15:20:00.000Z
+Stopped at: Phase 3 complete (Completed 03-07-PLAN.md — phase wrap-up)
 Resume file: None
 
 ## Known Pre-Existing Test Failures (Non-Blocking)

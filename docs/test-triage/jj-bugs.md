@@ -44,3 +44,12 @@ rows. No ESCALATIONS surfaced — no test revealed an adapter bug.
 *Populated: Phase 3 plan 03-06 (D-16). Verdicts finalized by plan 03-06;
 plan 03-07 wrap-up asserts every row has a non-TODO verdict before phase
 close.*
+
+---
+*Finalized: Phase 3 plan 03-07 close (2026-05-12). All 7 verdicts populated
+by plan 03-06; phase-close invariant check confirms no TODO rows remain
+(`grep -c '| TODO |' docs/test-triage/jj-bugs.md` = 0). Phase 4 follow-ups
+(WS-13: jj-native sentinel using `jj workspace root`, jj-side
+destructive-command deny-list, jj-native branch-base recovery, no-silent-
+bookmark-move analog) filed inline in the "Follow-up phase" column. No
+ESCALATIONS — no test surfaced an adapter bug under the jj-colocated lane.*

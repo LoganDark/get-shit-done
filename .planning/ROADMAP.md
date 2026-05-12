@@ -16,7 +16,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 
 - [x] **Phase 1: Adapter Foundation + Git Backend** - VcsAdapter interface, git-only 1:1 backend, parameterized test harness, lint guard. No call site changes. No jj code.
 - [ ] **Phase 2: Bulk Call-Site Migration (Still Git-Only)** - Every `execSync('git …')` in `sdk/src/query/*.ts` and `bin/lib/*.cjs` migrated to the adapter; first upstream rebase validates the mechanical-edits hypothesis.
-- [ ] **Phase 3: jj Backend Core — Squash, Refs, Conflict** - `sdk/src/vcs/backends/jj.ts` with squash-based commit model, NDJSON parsing, bookmarks, conflict detection. CI matrix flips on with jj-backend allowed-to-fail.
+- [x] **Phase 3: jj Backend Core — Squash, Refs, Conflict** - Complete: 7 plans landed; jj-colocated CI lane active as allow-failure (CI-01); jj 0.41.0 backend implements every adapter contract verb (JJ-01..07, SQUASH-01..07, REFS-01..06, CONFLICT-01..03, TEST-08, CI-01..02 all Complete).
 - [ ] **Phase 4: Workspaces + Octopus Structure + Hooks** - Orchestrator-creates-heads-and-workspaces flow with lazy octopus structure, auto-abandon empty heads, batch reap; jj-native hooks Tier 1.
 - [ ] **Phase 5: Command Translations + Brownfield Validation + CI Hardening** - Every upstream command verified end-to-end on jj; workflow markdown and agent prompts rewritten; brownfield commands dogfood-validated; CI matrix graduates jj-backend to required-blocking.
 
@@ -98,7 +98,7 @@ Plans:
 - [x] 03-04-PLAN.md — Squash commit + bookmark advance + JJ-07 env (SQUASH-01..07, REFS-05, JJ-07)
 - [x] 03-05-PLAN.md — Status, log, diff, findConflicts (conflicts() plural) (CONFLICT-01..03)
 - [x] 03-06-PLAN.md — Push/fetch + workspace stubs + TEST-08 bug-test triage execution (TEST-08)
-- [ ] 03-07-PLAN.md — Wrap-up: CI matrix activation + conflict()→conflicts() doc-fix + phase-close invariants (CI-01, CI-02)
+- [x] 03-07-PLAN.md — Wrap-up: CI matrix activation + conflict()→conflicts() doc-fix + phase-close invariants (CI-01, CI-02)
 
 ### Phase 4: Workspaces + Octopus Structure + Hooks
 **Goal**: Land the orchestrator-creates-heads-and-workspaces flow with lazy octopus-merge structure, batch reap of empty heads, workspace-path-safety guards, and the v1 hook strategy (Tier 1: colocated default + jj-native non-colocated direct trigger). Subagent fan-out works end-to-end on jj, and pre-commit/pre-push hooks fire at the right moments on both backends.
@@ -134,7 +134,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Adapter Foundation + Git Backend | 5/5 | Complete | 2026-05-09 |
 | 2. Bulk Call-Site Migration (Still Git-Only) | 12/12 | Plans Complete (ready for phase-level verifier) |  |
-| 3. jj Backend Core — Squash, Refs, Conflict | 6/7 | In Progress|  |
+| 3. jj Backend Core — Squash, Refs, Conflict | 7/7 | Complete | 2026-05-12 |
 | 4. Workspaces + Octopus Structure + Hooks | 0/TBD | Not started | - |
 | 5. Command Translations + Brownfield Validation + CI Hardening | 0/TBD | Not started | - |
 
@@ -149,4 +149,5 @@ Plans:
 - [ ] TBD (run /gsd-plan-phase 6 to break down)
 
 ---
+*Last updated: 2026-05-12 — Phase 3 plan execution complete (7/7). jj-colocated backend shipped: every adapter contract verb implemented; CI matrix lane active as allow-failure (CI-01 graduates to required-blocking in Phase 5); conflict()→conflicts() revset doc-bug fixed; bug-triage finalized (all 7 worktree-bug tests carries-verbatim). Format-migration tracker (03-CONTEXT.md) handed off to Phase 6.*
 *Last updated: 2026-05-11 — Phase 2 plan execution complete (12/12). ROADMAP Phase 2 success criteria 4 + 5 reframing is queued in `.planning/phases/02-bulk-call-site-migration-still-git-only/02-12-DEFERRED.md` with verbatim replacement text; the next phase-transition runner applies the splice mechanically per CONTEXT D-17.*
