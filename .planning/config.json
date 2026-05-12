@@ -38,5 +38,8 @@
   "agent_skills": {},
   "features": {},
   "mode": "yolo",
-  "granularity": "coarse"
+  "granularity": "coarse",
+  "vcs": {
+    "adapter": "auto"
+  }
 }
