@@ -26,7 +26,7 @@ import { toJjRev } from '../parse/jj-rev.js';
 import { parseJjLog } from '../parse/jj-log.js';
 import { parseJjWorkspaceList } from '../parse/jj-workspace-list.js';
 import { parseJjBookmarkRecord } from '../parse/jj-bookmark.js';
-import { __vcsTestOnly, VcsNotImplementedError } from '../types.js';
+import { __vcsTestOnly, VcsNotImplementedError, VcsBookmarkDivergentError } from '../types.js';
 import type {
   Bookmark,
   CommitInput,
@@ -599,9 +599,37 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
         .split('\n')
         .map((s) => s.trim())
         .filter(Boolean)
-        // jj appends `*` to a bookmark name when the local bookmark is ahead
-        // of its remote-tracking counterpart. Strip for caller-visible name.
-        .map((s) => s.replace(/\*$/, ''))
+        .map((s) => {
+          // WR-02 (D-02 enforcement on this read path): jj renders
+          // divergent bookmarks with a trailing `??` suffix in template
+          // output. Surface as `VcsBookmarkDivergentError` rather than
+          // letting `feature??` masquerade as a regular bookmark name
+          // after stripPrefix. `divergentTargets` is left empty here
+          // because the template form doesn't expose the targets; callers
+          // who need them can re-query through `bookmarks.list()`.
+          if (s.endsWith('??')) {
+            throw new VcsBookmarkDivergentError({
+              bookmarkName: stripPrefix(s.slice(0, -2)),
+              divergentTargets: [],
+            });
+          }
+          // WR-08: jj's `bookmarks` template appends `*` when the local
+          // bookmark is ahead of its remote-tracking counterpart. Strip
+          // only this known marker; any other non-refname suffix is
+          // contract drift and surfaces as a typed error so a future jj
+          // template reshape can't silently leak state markers into
+          // caller-visible names.
+          const stripped = s.replace(/\*$/, '');
+          // Refname grammar (the conservative slice we admit on this
+          // template-driven read path): leading alnum, then
+          // `[A-Za-z0-9._/-]*`. Anything else signals template drift.
+          if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(stripped)) {
+            throw new Error(
+              `currentBookmarks: template contract drift — '${s}' has an unrecognized suffix or shape (expected refname after '*'/'??' marker strip)`,
+            );
+          }
+          return stripped;
+        })
         .map(stripPrefix);
     },
 
