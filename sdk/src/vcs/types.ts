@@ -56,6 +56,19 @@ export interface CommitInput {
    * (Phase 3): skips internal `fireHook` invocation post-squash.
    */
   noVerify?: boolean;
+  /**
+   * Phase 3 D-01: when set, the jj backend advances exactly this bookmark to
+   * the new commit via `jj bookmark set gsd/<name> -r <new> -B` after squash.
+   * Git backend: ignored (git's `commit` on a checked-out branch auto-advances
+   * natively). Caller passes unprefixed name; adapter adds `gsd/`.
+   */
+  bookmark?: string;
+  /**
+   * Phase 3 D-04: raw-name escape — same as `bookmark` but adapter does NOT
+   * add the `gsd/` prefix. For upstream-tracking bookmarks (main, trunk).
+   * Git backend: ignored.
+   */
+  bookmarkRaw?: string;
 }
 
 export interface CommitResult {
@@ -292,4 +305,49 @@ export interface SnapshotHandle {
 export interface VcsTestOnly {
   snapshot(): SnapshotHandle;
   restore(handle: SnapshotHandle): void;
+}
+
+// ─── Error classes (Phase 3 D-02 + planner's-discretion) ────────────────────
+
+/**
+ * Phase 3 D-02: jj's `name??` divergent-bookmark state surfaces as this typed
+ * error rather than being swallowed by `bookmark set`. Thrown from any read
+ * or write touching bookmarks when `jj bookmark list` reports a multi-element
+ * `target` array. Without this, concurrent op-log updates in multi-workspace
+ * flows become invisible corruption.
+ */
+export class VcsBookmarkDivergentError extends Error {
+  readonly name = 'VcsBookmarkDivergentError';
+  readonly bookmarkName: string;
+  readonly divergentTargets: readonly string[];
+  readonly hint?: string;
+
+  constructor(fields: {
+    bookmarkName: string;
+    divergentTargets: readonly string[];
+    hint?: string;
+  }) {
+    super(
+      `bookmark '${fields.bookmarkName}' is divergent across ${fields.divergentTargets.length} targets`
+    );
+    this.bookmarkName = fields.bookmarkName;
+    this.divergentTargets = fields.divergentTargets;
+    this.hint = fields.hint;
+  }
+}
+
+/**
+ * Phase 3 D-08 + D-12: thrown by a JjVcsAdapter verb whose body has not yet
+ * landed (per the D-10 verb-group ordering). The per-verb allowlist
+ * (`BACKENDS_AVAILABLE_FOR_VERB` in backends.ts) gates fixture access
+ * throw-not-skip, so a verb absent from the allowlist throws this typed
+ * error rather than silently skipping (TEST-06 skip-count guard).
+ *
+ * Distinct from VcsExecError (which is for non-zero exit-code shell-outs).
+ */
+export class VcsNotImplementedError extends Error {
+  readonly name = 'VcsNotImplementedError';
+  constructor(message: string) {
+    super(message);
+  }
 }
