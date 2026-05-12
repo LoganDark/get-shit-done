@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 2.1
-Plan: 3 of 9 complete
-Status: Executing (plan 04 next)
-Last activity: 2026-05-12 -- Phase 2.1 plan 03 currentBranch→currentBookmarks (11 sites; 9b7ee091)
+Plan: 4 of 9 complete (with 1 deferred design decision)
+Status: Executing (plan 05 next)
+Last activity: 2026-05-12 -- Phase 2.1 plan 04 pathspec→files + #2014 pre-probe (69406e45); 3 #3061 tests deferred pending backend-behavior decision
 
-Progress: [███·······] ~33% (plan execution; phase-level verify pending)
+Progress: [████······] ~44% (plan execution; phase-level verify pending)
 
 ## Performance Metrics
 

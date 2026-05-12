@@ -74,7 +74,7 @@ Plans:
 - [x] 2.1-PLAN-01.md — Shape commit: types.ts + expr.ts + parse/{git,jj}-rev.ts + backends/git.ts + hook-bridge.ts atomic (D-01..D-22)
 - [x] 2.1-PLAN-02.md — Rename expr.commit → expr.rev across 46 consumer sites (D-13)
 - [x] 2.1-PLAN-03.md — Rename currentBranch → currentBookmarks (string|null → string[]) across 11 sites (D-15)
-- [ ] 2.1-PLAN-04.md — Collapse CommitInput.pathspec onto files (WC-state-capture) + caller-side #2014 pre-probe (D-02/D-04/D-06)
+- [x] 2.1-PLAN-04.md — Collapse CommitInput.pathspec onto files (WC-state-capture) + caller-side #2014 pre-probe (D-02/D-04/D-06)
 - [ ] 2.1-PLAN-05.md — Drop StatusEntry.index from test assertions (D-16)
 - [ ] 2.1-PLAN-06.md — Move gitDir/gitCommonDir to vcs.gitOnly (D-18); worktree-safety.cjs primary consumer
 - [ ] 2.1-PLAN-07.md — Remove vcs.hooks public surface test consumers (D-07; cosmetic — Phase 4 owns internal invocation)
