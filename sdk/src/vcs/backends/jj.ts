@@ -367,14 +367,19 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
    * trailing diagnostic prose.
    *
    * **Fallback** (kept for resilience against future jj output reshaping):
-   * `jj diff -r <rev> --summary` filtered for lines starting with `C` or
-   * `U` (jj's conflict / unmerged status letters). On jj 0.41 the primary
-   * form succeeded for every probe, so this branch is dormant in practice
-   * but provides soft-degradation against contract drift.
+   * `jj diff -r <rev> --summary` filtered for lines starting with `C`.
+   * (IN-04: `U` was dropped from the regex — `jj diff --summary` on jj
+   * 0.41 emits only `A/M/D/R/C/T/X/B`; the `U` branch was dead.) On jj
+   * 0.41 the primary form succeeded for every probe, so this branch is
+   * dormant in practice but provides soft-degradation against contract
+   * drift.
    *
-   * If both paths fail, returns `[]` — the conflict-detection itself
-   * already succeeded via the `conflicts()` revset query upstream, so
-   * paths-empty is a soft degradation, not a wrong-answer.
+   * WR-04: the sentinel `'<UNRESOLVABLE>'` is returned when the
+   * `conflicts()` revset flagged this rev but neither enumeration form
+   * yielded paths. CONFLICT-03 (verify gate) thus cannot mistake an
+   * empty array for "no conflicts" when the upstream revset clearly
+   * said the commit IS conflicted — surface drift instead of silently
+   * passing.
    */
   const enumerateConflictedPaths = (rev: string): string[] => {
     // Primary: jj resolve --list -r <rev>
@@ -391,18 +396,24 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
           return m ? m[1] : line;
         });
     }
-    // Fallback: jj diff -r <rev> --summary, filter for C / U status letters.
+    // Fallback: jj diff -r <rev> --summary, filter for the C status
+    // letter. IN-04: `U` removed — jj 0.41 never emits it on `diff
+    // --summary`.
     const fallbackArgs = jjArgv('diff', '-r', rev, '--summary');
     const fallback = vcsExec(cwd, 'jj', fallbackArgs);
-    if (fallback.exitCode !== 0) return [];
-    return fallback.stdout
+    if (fallback.exitCode !== 0) return ['<UNRESOLVABLE>'];
+    const paths = fallback.stdout
       .split('\n')
       .filter(Boolean)
       .map((line) => {
-        const m = /^[CU] (.+)$/.exec(line);
+        const m = /^C (.+)$/.exec(line);
         return m ? m[1] : '';
       })
       .filter(Boolean);
+    // WR-04: conflicts() flagged this rev but no enumeration form
+    // yielded anything — surface the drift rather than silently
+    // passing [] through to the verify gate.
+    return paths.length > 0 ? paths : ['<UNRESOLVABLE>'];
   };
 
   /**
