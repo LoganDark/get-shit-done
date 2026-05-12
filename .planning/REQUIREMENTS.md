@@ -23,12 +23,12 @@
 
 ### jj Backend (JJ)
 
-- [ ] **JJ-01**: `sdk/src/vcs/backends/jj.ts` implements every adapter operation against the `jj` binary
-- [ ] **JJ-02**: jj invocations always pass `--repository <path>`, `--no-pager`, `--color never`, `--quiet` for parsed output paths; argv-array invocation only (no shell-string concatenation, since revsets contain `()`, `::`, `&`, `~`, `"`)
-- [ ] **JJ-03**: jj backend defaults to **allowing** working-copy auto-snapshot — `--ignore-working-copy` is **never** passed by adapter code (locked decision: snapshot is required to keep WC fresh; skipping causes stale-WC headaches)
+- [x] **JJ-01**: `sdk/src/vcs/backends/jj.ts` implements every adapter operation against the `jj` binary
+- [x] **JJ-02**: jj invocations always pass `--repository <path>`, `--no-pager`, `--color never`, `--quiet` for parsed output paths; argv-array invocation only (no shell-string concatenation, since revsets contain `()`, `::`, `&`, `~`, `"`)
+- [x] **JJ-03**: jj backend defaults to **allowing** working-copy auto-snapshot — `--ignore-working-copy` is **never** passed by adapter code (locked decision: snapshot is required to keep WC fresh; skipping causes stale-WC headaches)
 - [ ] **JJ-04**: Output parsing uses `-T 'json(self) ++ "\n"' --no-graph` NDJSON format for `log`, `op log`, `workspace list`; per-backend parsers in `sdk/src/vcs/parse/`
-- [ ] **JJ-05**: jj binary discovery at adapter construction (`which jj`); explicit error with install instructions when missing
-- [ ] **JJ-06**: jj version is "track latest, no floor" — adapter doesn't enforce a min version; errors clearly when an op behaves unexpectedly
+- [x] **JJ-05**: jj binary discovery at adapter construction (`which jj`); explicit error with install instructions when missing
+- [x] **JJ-06**: jj version is "track latest, no floor" — adapter doesn't enforce a min version; errors clearly when an op behaves unexpectedly
 - [ ] **JJ-07**: `JJ_USER` / `JJ_EMAIL` env propagated when scripting commits
 
 ### Squash Commit Model (SQUASH)
@@ -37,7 +37,7 @@
 - [ ] **SQUASH-02**: `vcs.commit({ message })` (no `files`) on jj implements as `jj squash -B @ -k -m '<message>'` with no path filter — squashes all current `@` content into a new commit before `@`
 - [ ] **SQUASH-03**: When `files` includes paths that are unchanged in `@`, jj backend faithfully includes them in the squash (no error, no filtering)
 - [ ] **SQUASH-04**: After squash, `@`'s description is preserved (jj-native behavior; adapter does not clear it)
-- [ ] **SQUASH-05**: `jj commit` is **never** used by the adapter — squash is the sole commit primitive
+- [x] **SQUASH-05**: `jj commit` is **never** used by the adapter — squash is the sole commit primitive
 - [ ] **SQUASH-06**: When squash produces a conflicted state, adapter surfaces it via the return value (no auto-resolve, no auto-undo); caller decides how to handle
 - [ ] **SQUASH-07**: `.planning/*` and code paths can be squashed together in a single commit (same lineage); per-path filtering happens at PR-branch time, not at commit time
 
@@ -215,18 +215,18 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | UPSTREAM-01 | Phase 2 | Recorded as deferred to milestone-end task (post-Phase-5) per Phase 2 plan 02-12 |
 | UPSTREAM-02 | Phase 2 | Complete |
 | UPSTREAM-03 | Phase 2 | Complete |
-| JJ-01 | Phase 3 | Pending |
-| JJ-02 | Phase 3 | Pending |
-| JJ-03 | Phase 3 | Pending |
+| JJ-01 | Phase 3 | Complete |
+| JJ-02 | Phase 3 | Complete |
+| JJ-03 | Phase 3 | Complete |
 | JJ-04 | Phase 3 | Pending |
-| JJ-05 | Phase 3 | Pending |
-| JJ-06 | Phase 3 | Pending |
+| JJ-05 | Phase 3 | Complete |
+| JJ-06 | Phase 3 | Complete |
 | JJ-07 | Phase 3 | Pending |
 | SQUASH-01 | Phase 3 | Pending |
 | SQUASH-02 | Phase 3 | Pending |
 | SQUASH-03 | Phase 3 | Pending |
 | SQUASH-04 | Phase 3 | Pending |
-| SQUASH-05 | Phase 3 | Pending |
+| SQUASH-05 | Phase 3 | Complete |
 | SQUASH-06 | Phase 3 | Pending |
 | SQUASH-07 | Phase 3 | Pending |
 | REFS-01 | Phase 3 | Pending |

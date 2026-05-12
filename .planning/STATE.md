@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-05-12T06:01:42.762Z"
-last_activity: 2026-05-12 -- Phase 03 execution started
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-05-12T06:45:35.405Z"
+last_activity: 2026-05-12
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 33
-  completed_plans: 26
-  percent: 79
+  completed_plans: 27
+  percent: 82
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 03 (jj-backend-core-squash-refs-conflict) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 03
-Last activity: 2026-05-12 -- Phase 03 execution started
+Plan: 2 of 7
+Status: Ready to execute
+Last activity: 2026-05-12
 
-Progress: [██████████] 100% — phase complete
+Progress: [████████░░] 82%
 
 ## Performance Metrics
 
@@ -69,6 +69,7 @@ Progress: [██████████] 100% — phase complete
 | Phase 02 P10 | ~11m | 2 tasks | 14 files |
 | Phase 02 P11 | 13m | 2 tasks tasks | 5 files files |
 | Phase 02 P12 | ~2m (resume-only) | 1 task | 1 files (+SUMMARY/STATE/ROADMAP/REQUIREMENTS) |
+| Phase 03 P01 | 22m | 5 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -132,6 +133,12 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 02-10]: cat-file -t probes lose stdout-token discrimination (commit/tree/blob/tag) when migrated to vcs.refs.exists — plan-sanctioned semantic shift; expr.commit shape validation catches malformed inputs; documented at all 5 cat-file probe sites in verify.cjs/verify.ts
 - [Phase ?]: [Phase 02-11]: core.cjs (largest hotspot, 2,036 LOC) site 603 migrated; execGit helper + DEFAULT_GIT_TIMEOUT_MS deleted (every consumer retired by 02-04/02-09/02-10); Phase 2 production-source migration COMPLETE (lint guard exits 0); UPSTREAM-03 hotspot audit verified D-08 mechanical-only across all three hotspots — Phase 2 ready to merge to main
 - [Phase 02-12]: MIGR-04 + UPSTREAM-01 RECORDED-AS-DEFERRED per user sign-off 2026-05-11 ("Approve as-is" resume-signal); deferred-tracker `02-12-DEFERRED.md` exists at canonical path with verbatim ROADMAP success-criteria 4 + 5 replacement text preserved for the next phase-transition runner; requirements marked "Recorded as deferred to milestone-end task (post-Phase-5) per Phase 2 plan 02-12" in REQUIREMENTS.md (NOT Done); Phase 2 plan execution complete (12/12) — ready for phase-level verifier
+- [Phase 03]: Plan 03-01: notImpl(verb) indirect stub helper threads 27 verb stubs through one auditable choke point in jj.ts
+- [Phase 03]: Plan 03-01: test.skipIf(!ready(verb)) chosen over it.skip for D-12 per-verb gating; vitest runtime conditional is NOT counted by check-skip-count.cjs
+- [Phase 03]: Plan 03-01: BACKENDS_AVAILABLE_FOR_VERB.__vcsTestOnly.snapshot/restore gated separately from production verbs so plan-01 stub-throwing snapshot doesn't break the contract suite beforeAll teardown
+- [Phase 03]: Plan 03-01: jj-colocated tmp init uses 'jj git init --colocate' + 'jj config set --repo' — never raw git (preserves no-raw-git invariant)
+- [Phase 03]: Plan 03-01: sticky vcs.adapter lives in .planning/config.json (D-17 storage location); 4-level priority opts.kind > GSD_VCS > sticky > detect-with-git-wins-ties
+- [Phase 03]: Plan 03-01: format-migration tracker (D-19) has zero new entries — scaffolding plan introduces no .planning/ revision-id-encoding format
 
 ### Pending Todos
 
@@ -151,9 +158,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-12T05:08:21.284Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-jj-backend-core-squash-refs-conflict/03-CONTEXT.md
+Last session: 2026-05-12T06:45:35.394Z
+Stopped at: Completed 03-01-PLAN.md
+Resume file: None
 
 ## Known Pre-Existing Test Failures (Non-Blocking)
 
