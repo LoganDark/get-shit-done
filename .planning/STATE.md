@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-05-12T06:45:35.405Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-05-12T08:07:32.671Z"
 last_activity: 2026-05-12
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 33
-  completed_plans: 27
-  percent: 82
+  completed_plans: 28
+  percent: 85
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 03 (jj-backend-core-squash-refs-conflict) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-05-12
 
-Progress: [████████░░] 82%
+Progress: [█████████░] 85%
 
 ## Performance Metrics
 
@@ -70,6 +70,7 @@ Progress: [████████░░] 82%
 | Phase 02 P11 | 13m | 2 tasks tasks | 5 files files |
 | Phase 02 P12 | ~2m (resume-only) | 1 task | 1 files (+SUMMARY/STATE/ROADMAP/REQUIREMENTS) |
 | Phase 03 P01 | 22m | 5 tasks | 19 files |
+| Phase 03 P02 | fork-constrained | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -139,6 +140,17 @@ Recent decisions affecting current work:
 - [Phase 03]: Plan 03-01: jj-colocated tmp init uses 'jj git init --colocate' + 'jj config set --repo' — never raw git (preserves no-raw-git invariant)
 - [Phase 03]: Plan 03-01: sticky vcs.adapter lives in .planning/config.json (D-17 storage location); 4-level priority opts.kind > GSD_VCS > sticky > detect-with-git-wins-ties
 - [Phase 03]: Plan 03-01: format-migration tracker (D-19) has zero new entries — scaffolding plan introduces no .planning/ revision-id-encoding format
+- [Phase ?]: [Phase 03]: Plan 03-02: production jj NDJSON parsers + jj op log/restore body for __vcsTestOnly; allowlist flipped for jj-colocated unlocks contract-test fixture lane for plans 03-03..03-06
+- [Phase ?]: [Phase 03]: Plan 03-02: production jj NDJSON parsers + jj op log/restore body for __vcsTestOnly; allowlist flipped for jj-colocated unlocks contract-test fixture lane for plans 03-03..03-06
+- [Phase ?]: [Phase 03]: Plan 03-02: production jj NDJSON parsers + jj op log/restore body for __vcsTestOnly; allowlist flipped for jj-colocated unlocks contract-test fixture lane for plans 03-03..03-06
+- [Phase ?]: Plan 03-02: production jj NDJSON parsers + jj op log/restore for testOnly; allowlist flipped
+- [Phase ?]: Plan 03-02: production jj NDJSON parsers + jj op log/restore for testOnly; allowlist flipped
+- [Phase ?]: Plan 03-02: production jj NDJSON parsers + jj op log/restore for testOnly; allowlist flipped
+- [Phase ?]: Plan 03-02: production jj NDJSON parsers
+- [Phase ?]: Plan 03-02: production jj NDJSON parsers
+- [Phase ?]: Plan 03-02: production jj NDJSON parsers + jj op log/restore for testOnly; allowlist flipped for jj-colocated
+- [Phase ?]: Plan 03-02: VcsExecError constructor uses (message, fields) signature per exec.ts:51-76
+- [Phase ?]: Plan 03-02: inline snapshots (toMatchInlineSnapshot) used over external .snap files due to fork-constrained execution environment; hand-verified via node -e direct invocation
 
 ### Pending Todos
 
@@ -158,8 +170,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-12T06:45:35.394Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-05-12T08:07:32.647Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
 
 ## Known Pre-Existing Test Failures (Non-Blocking)

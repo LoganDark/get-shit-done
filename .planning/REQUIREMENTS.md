@@ -26,7 +26,7 @@
 - [x] **JJ-01**: `sdk/src/vcs/backends/jj.ts` implements every adapter operation against the `jj` binary
 - [x] **JJ-02**: jj invocations always pass `--repository <path>`, `--no-pager`, `--color never`, `--quiet` for parsed output paths; argv-array invocation only (no shell-string concatenation, since revsets contain `()`, `::`, `&`, `~`, `"`)
 - [x] **JJ-03**: jj backend defaults to **allowing** working-copy auto-snapshot — `--ignore-working-copy` is **never** passed by adapter code (locked decision: snapshot is required to keep WC fresh; skipping causes stale-WC headaches)
-- [ ] **JJ-04**: Output parsing uses `-T 'json(self) ++ "\n"' --no-graph` NDJSON format for `log`, `op log`, `workspace list`; per-backend parsers in `sdk/src/vcs/parse/`
+- [x] **JJ-04**: Output parsing uses `-T 'json(self) ++ "\n"' --no-graph` NDJSON format for `log`, `op log`, `workspace list`; per-backend parsers in `sdk/src/vcs/parse/`
 - [x] **JJ-05**: jj binary discovery at adapter construction (`which jj`); explicit error with install instructions when missing
 - [x] **JJ-06**: jj version is "track latest, no floor" — adapter doesn't enforce a min version; errors clearly when an op behaves unexpectedly
 - [ ] **JJ-07**: `JJ_USER` / `JJ_EMAIL` env propagated when scripting commits
@@ -218,7 +218,7 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | JJ-01 | Phase 3 | Complete |
 | JJ-02 | Phase 3 | Complete |
 | JJ-03 | Phase 3 | Complete |
-| JJ-04 | Phase 3 | Pending |
+| JJ-04 | Phase 3 | Complete |
 | JJ-05 | Phase 3 | Complete |
 | JJ-06 | Phase 3 | Complete |
 | JJ-07 | Phase 3 | Pending |
