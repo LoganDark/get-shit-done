@@ -514,7 +514,14 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       const refName = toJjRev(opts.ref);
       // Bookmark-shape gate (T-03.06-01): only letter-leading, refname-safe
       // names get `--bookmark`. `@`, `@-`, `from..to` ranges fall through.
-      const isBookmarkLike = /^[A-Za-z][\w\-/.]*$/.test(refName);
+      // WR-06: `.` is in the trailing character class to admit refname
+      // dots (e.g. `release/v1.2`), but that also lets the range token
+      // `..` slip through when both range ends are bookmark-shaped (e.g.
+      // `from..to` joined by toJjRev). Exclude `..` explicitly so the
+      // gate intent ("bookmark-shaped, not a range") is actually
+      // enforced.
+      const isBookmarkLike =
+        /^[A-Za-z][\w\-/.]*$/.test(refName) && !refName.includes('..');
       if (isBookmarkLike) {
         args.push('--bookmark', refName);
       }
