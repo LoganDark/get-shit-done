@@ -122,9 +122,11 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
 });
 
 describe('GSD_TEST_BACKENDS filter sanity', () => {
-  it('parseBackendsEnv("jj-colocated") yields empty intersection in Phase 1', async () => {
+  it('parseBackendsEnv("jj-native") yields empty intersection in Phase 3 (Phase 4 owns jj-native)', async () => {
     const { parseBackendsEnv } = await import('../backends.js');
     // B-4: parseBackendsEnv returns { available, requested, unavailable }.
-    expect(parseBackendsEnv('jj-colocated')).toEqual({ available: [], requested: ['jj-colocated'], unavailable: ['jj-colocated'] });
+    // Phase 3 D-13: jj-colocated joined BACKENDS_AVAILABLE; jj-native remains
+    // declared-but-unavailable until Phase 4 owns workspace semantics.
+    expect(parseBackendsEnv('jj-native')).toEqual({ available: [], requested: ['jj-native'], unavailable: ['jj-native'] });
   });
 });
