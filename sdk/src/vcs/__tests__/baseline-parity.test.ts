@@ -99,6 +99,17 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
         }
 
         // Adapter-level equivalence (the actual GIT-02 SC: the adapter's API surface).
+        //
+        // 2.1 D-03 (plan 08): three dispatch clauses removed —
+        //   - `args[0]==='add' && args.includes('--')`        (was vcs.stage; services commit-ts-148-add, commit-ts-294-add-c-form)
+        //   - `args[0]==='rm' && args.includes('--cached')`   (was vcs.unstage; services commands-cjs-330-rm-cached)
+        //   - `args[0]==='add' && args.length===2`            (was vcs.stage; services commands-cjs-332-add, commands-cjs-398-add)
+        // The corresponding 5 baseline JSON files become orphaned and are
+        // deleted by plan 09's baseline-parity sweep. Baselines that fall
+        // through to no dispatch clause are silently skipped by the existing
+        // chain; plan 09 also removes the orphan capture-definitions from
+        // tests/__tools__/capture-vcs-baselines.cjs to keep them out of any
+        // re-capture run.
         const vcs = createVcsAdapter(cwd);
         if (vcs.kind !== 'git') throw new Error('expected git adapter');
         const args = baseline.args;
@@ -307,27 +318,6 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           });
           expect(String(n)).toBe(baseline.expected.stdout);
         } else if (
-          args[0] === 'add' &&
-          args.includes('--') &&
-          // Make sure we don't shadow the standard `git add` with rename
-          // markers or status flags — only the bare `add -- <files>` shape.
-          !args.some((a) => a.startsWith('-') && a !== '--')
-        ) {
-          // Plan 02-08: vcs.stage([file]) wraps `git add -- <files>`. Captured
-          // for sites 148 and 294 (commit.ts main flow + commitToSubrepo).
-          const dashIdx = args.indexOf('--');
-          const files = args.slice(dashIdx + 1);
-          const r = vcs.stage(files);
-          expect({
-            exitCode: r.exitCode,
-            stdout: r.stdout,
-            stderr: r.stderr,
-          }).toEqual({
-            exitCode: baseline.expected.exitCode,
-            stdout: baseline.expected.stdout,
-            stderr: baseline.expected.stderr,
-          });
-        } else if (
           args[0] === 'commit' &&
           args.includes('-m') &&
           args.includes('--') &&
@@ -437,54 +427,6 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           } finally {
             rmSync(adapterCwd, { recursive: true, force: true });
           }
-        } else if (
-          args[0] === 'rm' &&
-          args.includes('--cached') &&
-          args.includes('--ignore-unmatch')
-        ) {
-          // Plan 02-09: vcs.unstage([file]) wraps the deletion-staging form
-          // `git rm --cached --ignore-unmatch <file>`. Captured for site 330
-          // (cmdCommit, default-mode missing-file branch). The canonical
-          // execGit call above already removed the path from index; re-
-          // running on the same fixture would yield empty stdout (nothing
-          // to remove). Re-create the fixture for byte-identity assertion.
-          const flagsEnd = args.indexOf('--ignore-unmatch') + 1;
-          const files = args.slice(flagsEnd);
-          const adapterCwd = initFixture(baseline);
-          try {
-            const adapterVcs = createVcsAdapter(adapterCwd);
-            if (adapterVcs.kind !== 'git') throw new Error('expected git adapter');
-            const r = adapterVcs.unstage(files);
-            expect(r.exitCode).toBe(baseline.expected.exitCode);
-            // stdout shape: `rm '<path>'` per file. Byte-identical to the
-            // captured baseline for the single-file fixture captured here.
-            expect(r.stdout).toBe(baseline.expected.stdout);
-          } finally {
-            rmSync(adapterCwd, { recursive: true, force: true });
-          }
-        } else if (
-          args[0] === 'add' &&
-          args.length === 2 &&
-          !args[1].startsWith('-')
-        ) {
-          // Plan 02-09: vcs.stage([file]) wraps the no-`--`-separator
-          // form `git add <file>`. Captured for sites 332 (cmdCommit) and 398
-          // (commitFilesIfDeletion). The adapter's stage() call adds a `--`
-          // separator internally (git.ts:384), which is byte-identical to
-          // running `git add <file>` for paths that don't start with `-`
-          // (the captured fixture uses `foo.txt` / `bar.txt` — no leading
-          // dashes). Compare exit + std streams.
-          const files = args.slice(1);
-          const r = vcs.stage(files);
-          expect({
-            exitCode: r.exitCode,
-            stdout: r.stdout,
-            stderr: r.stderr,
-          }).toEqual({
-            exitCode: baseline.expected.exitCode,
-            stdout: baseline.expected.stdout,
-            stderr: baseline.expected.stderr,
-          });
         } else if (
           args[0] === 'commit' &&
           args.includes('-m') &&

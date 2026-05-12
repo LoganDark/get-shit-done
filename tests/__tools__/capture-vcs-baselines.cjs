@@ -251,14 +251,12 @@ const baselines = [
   // moves cwd from `-C` arg position to the createVcsAdapter(projectDir, …)
   // factory, so baselines capture the normalized args (no `-C` prefix) — the
   // semantics are byte-identical to running the same command from that cwd.
-  {
-    id: 'commit-ts-148-add',
-    source: 'sdk/src/query/commit.ts:148',
-    // Stage a single file via `git add -- foo`. The `--` separator is the
-    // option-injection guard the migration must preserve via vcs.stage.
-    fixture: ['echo foo > foo.txt'],
-    args: ['add', '--', 'foo.txt'],
-  },
+  // 2.1 D-03 (plan 08): `commit-ts-148-add` entry removed. The site at
+  // sdk/src/query/commit.ts:148 was a vcs.stage call that plan 04 collapsed
+  // onto vcs.commit({files,message}) via Pattern E (WC-state-capture). No
+  // equivalent capture clause exists post-D-03; the baseline JSON
+  // tests/baselines/git-vcs/commit-ts-148-add.snap.json is orphaned and
+  // deleted by plan 09.
   {
     id: 'commit-ts-155-diff-cached',
     source: 'sdk/src/query/commit.ts:155',
@@ -292,15 +290,11 @@ const baselines = [
     fixture: ['echo foo > foo.txt', 'git add -- foo.txt'],
     args: ['diff', '--cached', '--name-only'],
   },
-  {
-    id: 'commit-ts-294-add-c-form',
-    source: 'sdk/src/query/commit.ts:294',
-    // commitToSubrepo's `git -C <dir> add -- <files>` becomes
-    // createVcsAdapter(<dir>).stage([files]). The baseline captures the
-    // normalized form (no -C) since the migration moves cwd into the factory.
-    fixture: ['echo bar > bar.txt'],
-    args: ['add', '--', 'bar.txt'],
-  },
+  // 2.1 D-03 (plan 08): `commit-ts-294-add-c-form` entry removed.
+  // commit.ts:294 (commitToSubrepo) collapsed its vcs.stage call onto
+  // vcs.commit({files,message}) in plan 04. Baseline JSON
+  // tests/baselines/git-vcs/commit-ts-294-add-c-form.snap.json orphaned;
+  // plan 09 deletes it.
   {
     id: 'commit-ts-301-commit-c-form',
     source: 'sdk/src/query/commit.ts:301',
@@ -351,27 +345,14 @@ const baselines = [
     fixture: ['git branch feature'],
     args: ['checkout', 'feature'],
   },
-  {
-    id: 'commands-cjs-330-rm-cached',
-    source: 'get-shit-done/bin/lib/commands.cjs:330',
-    // cmdCommit (default mode, missing-file branch): `execGit(cwd, ['rm',
-    // '--cached', '--ignore-unmatch', file])` stages a deletion when the
-    // referenced file is missing on disk. Pitfall 2 / D-08: this stays as
-    // ONE adapter call (vcs.unstage). Adapter equivalent: vcs.unstage([file]).
-    fixture: ['echo foo > foo.txt', 'git add foo.txt', 'rm foo.txt'],
-    args: ['rm', '--cached', '--ignore-unmatch', 'foo.txt'],
-  },
-  {
-    id: 'commands-cjs-332-add',
-    source: 'get-shit-done/bin/lib/commands.cjs:332',
-    // cmdCommit (else branch): `execGit(cwd, ['add', file])` stages an
-    // existing file. Pitfall 2 / D-08: this is the ELSE half of the
-    // if(deletion){rm-cached}else{add} block — stays as a separate adapter
-    // call (vcs.stage), NOT collapsed with the unstage at line 330. Adapter
-    // equivalent: vcs.stage([file]).
-    fixture: ['echo foo > foo.txt'],
-    args: ['add', 'foo.txt'],
-  },
+  // 2.1 D-03 (plan 08): `commands-cjs-330-rm-cached` and
+  // `commands-cjs-332-add` entries removed. The cmdCommit `if(deletion){rm-
+  // cached}else{add}` block was reshaped by plan 04 onto the WC-state-capture
+  // form of `vcs.commit({files})` (the caller deletes the file in WC for the
+  // deletion case, then commits a single path set). Baselines
+  // tests/baselines/git-vcs/commands-cjs-330-rm-cached.snap.json and
+  // tests/baselines/git-vcs/commands-cjs-332-add.snap.json orphaned; plan 09
+  // deletes them.
   {
     id: 'commands-cjs-339-commit',
     source: 'get-shit-done/bin/lib/commands.cjs:339',
@@ -393,16 +374,11 @@ const baselines = [
     fixture: [],
     args: ['rev-parse', '--short', 'HEAD'],
   },
-  {
-    id: 'commands-cjs-398-add',
-    source: 'get-shit-done/bin/lib/commands.cjs:398',
-    // commitFilesIfDeletion (cmdCommitToSubrepo loop): `execGit(repoCwd,
-    // ['add', relativePath])` stages a single file in a sub-repo. Adapter
-    // equivalent: vcs.stage([relativePath]) on a per-sub-repo adapter
-    // instance (cwd-via-factory pattern from 02-08).
-    fixture: ['echo bar > bar.txt'],
-    args: ['add', 'bar.txt'],
-  },
+  // 2.1 D-03 (plan 08): `commands-cjs-398-add` entry removed.
+  // commitFilesIfDeletion (cmdCommitToSubrepo loop) collapsed onto
+  // `subVcs.commit({files,message})` per Pattern E in plan 04. Baseline
+  // tests/baselines/git-vcs/commands-cjs-398-add.snap.json orphaned;
+  // plan 09 deletes it.
   {
     id: 'commands-cjs-402-commit',
     source: 'get-shit-done/bin/lib/commands.cjs:402',

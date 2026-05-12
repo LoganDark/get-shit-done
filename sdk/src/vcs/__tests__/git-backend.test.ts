@@ -495,26 +495,13 @@ describe('createGitAdapter — bookmarks.switch (02-03 Task 1)', () => {
   });
 });
 
-describe('createGitAdapter — stage / unstage (02-03 Task 1)', () => {
-  it('stage([file]) makes file appear in diff({staged:true,nameOnly:true})', () => {
-    const vcs = createGitAdapter(tmpDir);
-    writeFileSync(join(tmpDir, 'foo.txt'), 'x\n');
-    const r = vcs.stage(['foo.txt']);
-    expect(r.exitCode).toBe(0);
-    const d = vcs.diff({ staged: true, nameOnly: true });
-    expect(d.nameOnly).toContain('foo.txt');
-  });
-
-  it('unstage([file]) reverts a previously staged add (rm --cached)', () => {
-    const vcs = createGitAdapter(tmpDir);
-    writeFileSync(join(tmpDir, 'foo.txt'), 'x\n');
-    vcs.stage(['foo.txt']);
-    const r = vcs.unstage(['foo.txt']);
-    expect(r.exitCode).toBe(0);
-    const d = vcs.diff({ staged: true, nameOnly: true });
-    expect(d.nameOnly).not.toContain('foo.txt');
-  });
-});
+// 2.1 D-03: `describe('createGitAdapter — stage / unstage (02-03 Task 1)')`
+// deleted in full. vcs.stage and vcs.unstage are hard-removed from the adapter
+// surface — staging is git-only and not a cross-backend concept. The two it()
+// blocks here were contract probes for verbs that no longer exist on the
+// adapter; there is no D-04 / WC-state-capture replacement assertion that
+// belongs in the cross-backend block (the equivalent assertions live in the
+// `commit` describe block above and exercise vcs.commit({files,message})).
 
 describe('createGitAdapter — log.allRefs (02-03 Task 2)', () => {
   it('log({allRefs:true}) returns commits from non-HEAD refs', () => {
@@ -543,7 +530,11 @@ describe('createGitAdapter — diff.nameStatus (02-03 Task 2)', () => {
   it('diff({staged:true,nameStatus:true}) returns nameStatus entries with status letters', () => {
     const vcs = createGitAdapter(tmpDir);
     writeFileSync(join(tmpDir, 'newfile.txt'), 'x\n');
-    vcs.stage(['newfile.txt']);
+    // 2.1 D-03: vcs.stage hard-removed. Synthesize pre-staged state via raw
+    // `git add` (this file is on the no-raw-git lint allowlist per plan 01-05).
+    // The probe under test is the staged-diff side of vcs.diff — there is no
+    // adapter verb that puts a path into the index without committing.
+    execSync('git add -- newfile.txt', { cwd: tmpDir, stdio: 'pipe' });
     const d = vcs.diff({ staged: true, nameStatus: true });
     expect(d.nameStatus).toBeTruthy();
     const entry = d.nameStatus!.find((e) => e.path === 'newfile.txt');
