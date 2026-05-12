@@ -556,11 +556,14 @@ describe('createGitAdapter — diff.nameStatus (02-03 Task 2)', () => {
 
 describe('createGitAdapter — workspace.context (02-03 Task 2 — Blocker 4)', () => {
   it('on main repo, returns mode=main, isLinked=false, gitDir===gitCommonDir', () => {
+    // 2.1 D-18: WorkspaceContext.{gitDir,gitCommonDir} moved to GitOnlyOps;
+    // narrow on vcs.kind === 'git' to access. createGitAdapter returns
+    // GitVcsAdapter directly, so vcs.gitOnly is accessible without narrowing.
     const vcs = createGitAdapter(tmpDir);
     const ctx = vcs.workspace.context();
     expect(ctx.mode).toBe('main');
     expect(ctx.isLinked).toBe(false);
-    expect(ctx.gitDir).toBe(ctx.gitCommonDir);
+    expect(vcs.gitOnly.gitDir()).toBe(vcs.gitOnly.gitCommonDir());
     // effectiveRoot resolves to the repo root (realpath-equivalent on macOS).
     expect(realpathSync(ctx.effectiveRoot)).toBe(realpathSync(tmpDir));
   });
@@ -575,7 +578,8 @@ describe('createGitAdapter — workspace.context (02-03 Task 2 — Blocker 4)', 
       const ctx = wtVcs.workspace.context();
       expect(ctx.isLinked).toBe(true);
       expect(ctx.mode).toBe('linked');
-      expect(ctx.gitDir).not.toBe(ctx.gitCommonDir);
+      // 2.1 D-18: linked-worktree predicate now via vcs.gitOnly methods.
+      expect(wtVcs.gitOnly.gitDir()).not.toBe(wtVcs.gitOnly.gitCommonDir());
     } finally {
       try {
         execSync(`git worktree remove ${wtPath} --force`, { cwd: tmpDir, stdio: 'pipe' });

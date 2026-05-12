@@ -109,7 +109,14 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
     const ctx = vcs.workspace.context();
     expect(ctx.mode).toBe('main');
     expect(ctx.isLinked).toBe(false);
-    expect(ctx.gitDir).toBe(ctx.gitCommonDir);
+    // 2.1 D-18: WorkspaceContext.{gitDir,gitCommonDir} moved to GitOnlyOps;
+    // narrow on vcs.kind === 'git' to access. On jj backend the equivalent
+    // semantic check is workspace.context()'s mode/isLinked assertion above —
+    // the underlying .git directory layout is not part of the cross-backend
+    // contract surface.
+    if (vcs.kind === 'git') {
+      expect(vcs.gitOnly.gitDir()).toBe(vcs.gitOnly.gitCommonDir());
+    }
   });
 });
 

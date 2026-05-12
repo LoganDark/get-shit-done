@@ -132,13 +132,16 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           args[0] === 'rev-parse' &&
           (args.includes('--git-dir') || args.includes('--git-common-dir'))
         ) {
-          // Plan 02-04 Task 2: vcs.workspace.context() exposes gitDir and
-          // gitCommonDir as absolute paths (path.resolve'd in the adapter).
-          // The raw baseline is a relative `.git` because cwd IS the repo
-          // root; the adapter's absolute form must end with `/.git` (or its
-          // OS-native equivalent) for a non-linked main worktree.
-          const ctx = vcs.workspace.context();
-          const which = args.includes('--git-dir') ? ctx.gitDir : ctx.gitCommonDir;
+          // 2.1 D-18: WorkspaceContext.{gitDir,gitCommonDir} moved to GitOnlyOps;
+          // narrow on vcs.kind === 'git' to access. The narrow at line ~103
+          // (`if (vcs.kind !== 'git') throw …`) already typed vcs as
+          // GitVcsAdapter, so vcs.gitOnly is accessible here without re-narrow.
+          // The path-resolution semantics are unchanged: gitOnly.gitDir() and
+          // gitOnly.gitCommonDir() apply the same resolvePath(cwd, …) the
+          // adapter's workspace.context() body did pre-D-18.
+          const which = args.includes('--git-dir')
+            ? vcs.gitOnly.gitDir()
+            : vcs.gitOnly.gitCommonDir();
           // Adapter applies path.resolve(cwd, '.git'); equivalent in absolute form.
           const expectedAbsolute = require('node:path').resolve(cwd, baseline.expected.stdout);
           expect(which).toBe(expectedAbsolute);
