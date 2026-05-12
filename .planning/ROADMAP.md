@@ -65,13 +65,21 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 
 ### Phase 2.1: VCS Abstraction Audit — Drop Git-Only Concepts (INSERTED)
 
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
+**Goal:** Reshape the cross-backend VcsAdapter type surface so it only exposes operations with a direct jj equivalent. Move git-only concepts (stage/unstage/hooks/gitDir/gitCommonDir/StatusEntry.index/currentBranch terminology/CommitInput.pathspec) to `vcs.gitOnly.*` after narrowing, or hard-remove them. Adopt change-first identifier semantics on the cross-backend surface (`expr.commit` → `expr.rev`). Mechanically refactor every caller. Still git-only — no jj backend code (Phase 3 owns that). Pre-Phase-3 cleanup that fixes what Phase 1's "forward-complete adapter" claim got wrong.
+**Requirements**: None new — audit/cleanup of VCS-01..VCS-06 from Phase 1/Phase 2. Plans reference decision IDs D-01..D-22 from `2.1-CONTEXT.md`.
 **Depends on:** Phase 2
-**Plans:** 0 plans
+**Plans:** 9 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 2.1 to break down)
+- [ ] 2.1-PLAN-01.md — Shape commit: types.ts + expr.ts + parse/{git,jj}-rev.ts + backends/git.ts + hook-bridge.ts atomic (D-01..D-22)
+- [ ] 2.1-PLAN-02.md — Rename expr.commit → expr.rev across 46 consumer sites (D-13)
+- [ ] 2.1-PLAN-03.md — Rename currentBranch → currentBookmarks (string|null → string[]) across 11 sites (D-15)
+- [ ] 2.1-PLAN-04.md — Collapse CommitInput.pathspec onto files (WC-state-capture) + caller-side #2014 pre-probe (D-02/D-04/D-06)
+- [ ] 2.1-PLAN-05.md — Drop StatusEntry.index from test assertions (D-16)
+- [ ] 2.1-PLAN-06.md — Move gitDir/gitCommonDir to vcs.gitOnly (D-18); worktree-safety.cjs primary consumer
+- [ ] 2.1-PLAN-07.md — Remove vcs.hooks public surface test consumers (D-07; cosmetic — Phase 4 owns internal invocation)
+- [ ] 2.1-PLAN-08.md — Hard-remove vcs.stage and vcs.unstage callers via Pattern E (D-03)
+- [ ] 2.1-PLAN-09.md — Baseline-parity sweep + allowlist re-tighten + 2.1-LEARNINGS.md (D-22, phase close)
 
 ### Phase 3: jj Backend Core — Squash, Refs, Conflict
 **Goal**: Land `sdk/src/vcs/backends/jj.ts` implementing the full adapter contract with the squash-based commit model, NDJSON output parsing, bookmark refs, and in-tree conflict detection — the working-copy auto-snapshot is allowed by default and `--ignore-working-copy` is never used by adapter code.
