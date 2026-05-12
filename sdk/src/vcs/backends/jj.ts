@@ -277,8 +277,29 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       }
       if (line.startsWith('Working copy  (@)') || line.startsWith('Parent commit')) break;
       if (!inSection) continue;
-      const m = /^([AMDRC]) (.+)$/.exec(line);
-      if (m) entries.push({ path: m[2], worktree: m[1] });
+      // WR-05: widen the regex to tolerate (a) extra whitespace between
+      // the status letter and the path (alignment-driven), and (b) the
+      // rename arrow form `R old -> new`. For rename/copy we canonicalize
+      // on the post-state (new path), matching the git backend's
+      // `(letter === 'R' || letter === 'C') ? cols[2] : cols[1]` heuristic
+      // at git.ts:316.
+      const m = /^([AMDRC])\s+(.+)$/.exec(line);
+      if (!m) {
+        // IN-06: defensive — once inSection, any non-entry line ends
+        // the section. The explicit `Working copy  (@)` / `Parent commit`
+        // markers above remain for known steady-state output; this
+        // catches future jj template reshapes that drop those markers.
+        break;
+      }
+      const letter = m[1];
+      const rest = m[2];
+      if (letter === 'R' || letter === 'C') {
+        const arrowIdx = rest.indexOf(' -> ');
+        const path = arrowIdx >= 0 ? rest.slice(arrowIdx + ' -> '.length) : rest;
+        entries.push({ path, worktree: letter });
+      } else {
+        entries.push({ path: rest, worktree: letter });
+      }
     }
     return entries;
   };
