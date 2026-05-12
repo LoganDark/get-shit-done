@@ -4,10 +4,10 @@ milestone: v1.0
 milestone_name: milestone
 status: Phase merged to main; UAT 8/8 pass; ready for Phase 3
 stopped_at: Phase 3 context gathered
-last_updated: "2026-05-12T05:08:21.290Z"
+last_updated: "2026-05-12T05:10:09.902Z"
 last_activity: 2026-05-12 -- Phase 2.1 UAT complete (8/8 pass; 02.1-UAT.md); merged to main
 progress:
-  total_phases: 6
+  total_phases: 7
   completed_phases: 3
   total_plans: 26
   completed_plans: 26
@@ -75,6 +75,7 @@ Progress: [██████████] 100% — phase complete
 ### Roadmap Evolution
 
 - Phase 2.1 inserted after Phase 2: VCS Abstraction Audit — Drop Git-Only Concepts (URGENT)
+- Phase 6 added: Brownfield jj Migration — sticky vcs.adapter flip (Phase 3 D-17) + .planning SHA→change_id rewriter (Phase 3 D-19 tracker consumer)
 
 ### Decisions
 
