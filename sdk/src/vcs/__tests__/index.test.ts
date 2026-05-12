@@ -50,15 +50,16 @@ describe('createVcsAdapter — git backend (real, plan 03)', () => {
   });
 });
 
-describe('createVcsAdapter — jj path', () => {
-  it('throws GSDError "jj backend not yet implemented" when kind=jj is forced', () => {
-    expect(() => createVcsAdapter(tmpDir, { kind: 'jj' })).toThrow(
-      /jj backend not yet implemented/,
-    );
+describe('createVcsAdapter — jj path (Phase 3 plan 03-01)', () => {
+  it('returns the jj skeleton adapter when kind=jj is forced', () => {
+    const vcs = createVcsAdapter(tmpDir, { kind: 'jj' });
+    expect(vcs.kind).toBe('jj');
+    expect(vcs.cwd).toBe(tmpDir);
   });
 
   it('GSD_VCS=jj env override beats git auto-detect', () => {
     process.env.GSD_VCS = 'jj';
-    expect(() => createVcsAdapter(tmpDir)).toThrow(/jj backend not yet implemented/);
+    const vcs = createVcsAdapter(tmpDir);
+    expect(vcs.kind).toBe('jj');
   });
 });

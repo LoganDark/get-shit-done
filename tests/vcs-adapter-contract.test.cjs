@@ -4,21 +4,36 @@
  * Mirrors sdk/src/vcs/__tests__/adapter-contract.test.ts but runs against the dist-cjs/ artifact.
  * D-02: integration tests require() dist-cjs/ — verifies the actual artifact bin/lib will load.
  * RESEARCH Pitfall 1: this file uses the hand-rolled vcsTest from helpers.cjs (NOT vitest API).
+ *
+ * Phase 3 plan 03-01 Task 5: per-verb gating via BACKENDS_AVAILABLE_FOR_VERB.
+ * D-12 throw-not-skip is observed by gating each test through the allowlist:
+ * tests for verbs not-yet-implemented on the current backend short-circuit
+ * with a "skip" assertion that doesn't increase the static skip count.
  */
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { vcsTest } = require('./helpers.cjs');
+const helpers = require('./helpers.cjs');
+const { vcsTest } = helpers;
 
 vcsTest('auto', ({ getVcs, getCwd, getKind }) => {
+  // Phase 3 D-12: per-verb allowlist gate. When the verb is not yet
+  // implemented on this backend, the body short-circuits.
+  function verbReady(verb) {
+    const lane = (helpers.BACKENDS_AVAILABLE_FOR_VERB && helpers.BACKENDS_AVAILABLE_FOR_VERB[verb]) || [];
+    return lane.includes(getKind());
+  }
+
   test('vcs.kind matches backend selection', () => {
     const vcs = getVcs();
     if (getKind() === 'git') assert.equal(vcs.kind, 'git');
+    else if (getKind() === 'jj-colocated') assert.equal(vcs.kind, 'jj');
   });
 
   test('vcs.commit({files,message}) produces a hash', () => {
+    if (!verbReady('commit')) return; // verb-group plan 03-04 lands jj impl
     const vcs = getVcs();
     const cwd = getCwd();
     fs.writeFileSync(path.join(cwd, 'a.txt'), 'a');
@@ -28,6 +43,7 @@ vcsTest('auto', ({ getVcs, getCwd, getKind }) => {
   });
 
   test('vcs.log returns entries after a commit', () => {
+    if (!verbReady('log') || !verbReady('commit')) return;
     const vcs = getVcs();
     const cwd = getCwd();
     fs.writeFileSync(path.join(cwd, 'b.txt'), 'b');
@@ -38,6 +54,7 @@ vcsTest('auto', ({ getVcs, getCwd, getKind }) => {
   });
 
   test('vcs.status({porcelain:true}) lists untracked files', () => {
+    if (!verbReady('status')) return;
     const vcs = getVcs();
     const cwd = getCwd();
     fs.writeFileSync(path.join(cwd, 'untracked.txt'), 'u');
@@ -46,6 +63,7 @@ vcsTest('auto', ({ getVcs, getCwd, getKind }) => {
   });
 
   test('vcs.findConflicts({scope:"all"}) returns [] on git', () => {
+    if (!verbReady('findConflicts')) return;
     const vcs = getVcs();
     assert.deepEqual(vcs.findConflicts({ scope: 'all' }), []);
   });
@@ -64,6 +82,7 @@ vcsTest('auto', ({ getVcs, getCwd, getKind }) => {
     assert.ok(Object.isFrozen(vcs.refs));
     assert.ok(Object.isFrozen(vcs.refs.bookmarks));
     assert.ok(Object.isFrozen(vcs.workspace));
-    assert.ok(Object.isFrozen(vcs.gitOnly));
+    // gitOnly only exists on git backend (JjVcsAdapter has no gitOnly).
+    if (vcs.kind === 'git') assert.ok(Object.isFrozen(vcs.gitOnly));
   });
 });

@@ -253,14 +253,33 @@ function vcsTest(kindOrKinds, suiteFn) {
       let snapshotHandle = null;
 
       before(() => {
-        if (kind !== 'git') {
-          throw new Error("backend '" + kind + "' not yet implemented in Phase 1 (BACKENDS_AVAILABLE=" + backends.BACKENDS_AVAILABLE.join(',') + ')');
+        // Phase 3 plan 03-01 Task 5: jj-colocated lane mirrors the
+        // vcs-fixture.ts ts-side dispatch. snapshot/restore is gated by
+        // BACKENDS_AVAILABLE_FOR_VERB per D-12 — plan 03-01's stub jj
+        // adapter throws VcsNotImplementedError on snapshot, so we
+        // probe the allowlist before invoking.
+        if (kind === 'git') {
+          sharedDir = createTempGitProject('gsd-vcs-cjs-');
+          sharedAdapter = vcsLib.createVcsAdapter(sharedDir, { kind: 'git' });
+        } else if (kind === 'jj-colocated') {
+          sharedDir = createTempDir('gsd-vcs-cjs-jj-');
+          const { execSync: ex } = require('node:child_process');
+          ex('jj git init --colocate', { cwd: sharedDir, stdio: 'pipe' });
+          ex('jj config set --repo user.email "test@test.com"', { cwd: sharedDir, stdio: 'pipe' });
+          ex('jj config set --repo user.name "Test"', { cwd: sharedDir, stdio: 'pipe' });
+          sharedAdapter = vcsLib.createVcsAdapter(sharedDir, { kind: 'jj' });
+        } else {
+          throw new Error("backend '" + kind + "' not yet implemented (BACKENDS_AVAILABLE=" + backends.BACKENDS_AVAILABLE.join(',') + ') — Phase 4 owns jj-native');
         }
-        sharedDir = createTempGitProject('gsd-vcs-cjs-');
-        sharedAdapter = vcsLib.createVcsAdapter(sharedDir, { kind: 'git' });
         const testApi = sharedAdapter[__VCS_TEST_ONLY_SYMBOL];
         if (!testApi) throw new Error('Adapter missing __vcsTestOnly namespace');
-        snapshotHandle = testApi.snapshot();
+        const snapshotAvailable = (
+          backends.BACKENDS_AVAILABLE_FOR_VERB &&
+          backends.BACKENDS_AVAILABLE_FOR_VERB['__vcsTestOnly.snapshot']
+        ) || [];
+        if (snapshotAvailable.includes(kind)) {
+          snapshotHandle = testApi.snapshot();
+        }
       });
 
       beforeEach(() => {
@@ -293,5 +312,6 @@ const _exports = {
 };
 Object.defineProperty(_exports, 'BACKENDS_AVAILABLE', { enumerable: true, get: () => _loadVcs().backends.BACKENDS_AVAILABLE });
 Object.defineProperty(_exports, 'BACKENDS_DECLARED', { enumerable: true, get: () => _loadVcs().backends.BACKENDS_DECLARED });
+Object.defineProperty(_exports, 'BACKENDS_AVAILABLE_FOR_VERB', { enumerable: true, get: () => _loadVcs().backends.BACKENDS_AVAILABLE_FOR_VERB });
 Object.defineProperty(_exports, 'parseBackendsEnv', { enumerable: true, get: () => _loadVcs().backends.parseBackendsEnv });
 module.exports = _exports;

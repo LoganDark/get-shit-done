@@ -9,24 +9,41 @@ import { join } from 'node:path';
 import { makeBackendFixture, selectedBackends } from './vcs-fixture.js';
 import { expr } from '../expr.js';
 import { toGitRev } from '../parse/git-rev.js';
+import { BACKENDS_AVAILABLE_FOR_VERB } from '../backends.js';
+
+/**
+ * Phase 3 D-12: per-verb allowlist gate for contract tests. When the
+ * adapter under test does not yet implement `verb` on this backend, the
+ * test is skipped (rather than throwing VcsNotImplementedError, which
+ * would surface as a failure). Verb-group plans 03-02..03-06 flip
+ * BACKENDS_AVAILABLE_FOR_VERB entries to include `'jj-colocated'` as
+ * bodies land; Phase 5 deletes the gate entirely when CI-01 graduates
+ * the jj lane.
+ */
+function verbReady(verb: string, kind: string): boolean {
+  const lane = (BACKENDS_AVAILABLE_FOR_VERB[verb] ?? []) as readonly string[];
+  return lane.includes(kind);
+}
 
 describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) => {
   const { test, setupHooks } = makeBackendFixture(kind);
   setupHooks();
+  // Cache the kind-binding of verbReady so test-level skipIf reads tighter.
+  const ready = (verb: string): boolean => verbReady(verb, kind);
 
   test('vcs.kind matches backend kind', ({ vcs }) => {
     if (kind === 'git') expect(vcs.kind).toBe('git');
     else expect(vcs.kind).toBe('jj');
   });
 
-  test('vcs.commit({files,message}) produces a hash', ({ vcs, cwd }) => {
+  test.skipIf(!ready('commit'))('vcs.commit({files,message}) produces a hash', ({ vcs, cwd }) => {
     writeFileSync(join(cwd, 'a.txt'), 'a');
     const r = vcs.commit({ files: ['a.txt'], message: 'add a' });
     expect(r.exitCode).toBe(0);
     expect(r.hash).toMatch(/^[0-9a-f]+$/);
   });
 
-  test('vcs.log returns at least one entry after a commit', ({ vcs, cwd }) => {
+  test.skipIf(!ready('log') || !ready('commit'))('vcs.log returns at least one entry after a commit', ({ vcs, cwd }) => {
     writeFileSync(join(cwd, 'b.txt'), 'b');
     vcs.commit({ files: ['b.txt'], message: 'add b' });
     const entries = vcs.log({ maxCount: 5 });
@@ -34,13 +51,13 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
     expect(entries[0].hash).toMatch(/^[0-9a-f]+$/);
   });
 
-  test('vcs.status({porcelain:true}) lists untracked files', ({ vcs, cwd }) => {
+  test.skipIf(!ready('status'))('vcs.status({porcelain:true}) lists untracked files', ({ vcs, cwd }) => {
     writeFileSync(join(cwd, 'untracked.txt'), 'u');
     const s = vcs.status({ porcelain: true });
     expect(s.entries.some((e) => e.path === 'untracked.txt')).toBe(true);
   });
 
-  test('vcs.diff({rev:parent,nameOnly:true}) returns name-only of last commit', ({ vcs, cwd }) => {
+  test.skipIf(!ready('diff') || !ready('commit'))('vcs.diff({rev:parent,nameOnly:true}) returns name-only of last commit', ({ vcs, cwd }) => {
     writeFileSync(join(cwd, 'c.txt'), 'c');
     vcs.commit({ files: ['c.txt'], message: 'add c' });
     const d = vcs.diff({ rev: expr.parent(), nameOnly: true });
@@ -52,7 +69,9 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
     expect(toGitRev(vcs.refs.parent)).toBe('HEAD~1');
   });
 
-  test('vcs.refs.bookmarks: create, exists, list, delete', ({ vcs }) => {
+  test.skipIf(
+    !ready('refs.bookmarks.list') || !ready('refs.bookmarks.create') || !ready('refs.bookmarks.exists') || !ready('refs.bookmarks.delete')
+  )('vcs.refs.bookmarks: create, exists, list, delete', ({ vcs }) => {
     const before = vcs.refs.bookmarks.list();
     expect(before.length).toBeGreaterThan(0);
     const baseBranch = before[0].name;
@@ -63,11 +82,11 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
     expect(vcs.refs.bookmarks.exists('feat-x')).toBe(false);
   });
 
-  test('vcs.findConflicts({scope:"all"}) returns [] on git (Phase 1 documented gap)', ({ vcs }) => {
+  test.skipIf(!ready('findConflicts'))('vcs.findConflicts({scope:"all"}) returns [] on git (Phase 1 documented gap)', ({ vcs }) => {
     expect(vcs.findConflicts({ scope: 'all' })).toEqual([]);
   });
 
-  test('vcs.findConflicts({scope:"working-copy"}) is empty on a clean repo', ({ vcs }) => {
+  test.skipIf(!ready('findConflicts'))('vcs.findConflicts({scope:"working-copy"}) is empty on a clean repo', ({ vcs }) => {
     expect(vcs.findConflicts({ scope: 'working-copy' })).toEqual([]);
   });
 
@@ -85,7 +104,7 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
   // Plan 02-03 Task 3 — symmetric contract tests for new verbs.
   // These properties hold on every backend (git in Phase 1/2; jj added in Phase 3).
 
-  test('vcs.refs.currentBookmarks returns a non-empty string[] after init', ({ vcs }) => {
+  test.skipIf(!ready('refs.currentBookmarks'))('vcs.refs.currentBookmarks returns a non-empty string[] after init', ({ vcs }) => {
     const cb = vcs.refs.currentBookmarks();
     expect(Array.isArray(cb)).toBe(true);
     expect(cb.length).toBeGreaterThan(0);
@@ -93,7 +112,7 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
     expect(cb[0]!.length).toBeGreaterThan(0);
   });
 
-  test('vcs.refs.countCommits returns a positive integer after a commit', ({ vcs, cwd }) => {
+  test.skipIf(!ready('refs.countCommits') || !ready('commit'))('vcs.refs.countCommits returns a positive integer after a commit', ({ vcs, cwd }) => {
     writeFileSync(join(cwd, 'cc.txt'), 'cc');
     vcs.commit({ files: ['cc.txt'], message: 'add cc' });
     const n = vcs.refs.countCommits({ rev: vcs.refs.head });
@@ -101,12 +120,12 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
     expect(n).toBeGreaterThan(0);
   });
 
-  test('vcs.refs.exists is true for HEAD, false for an all-zeros SHA', ({ vcs }) => {
+  test.skipIf(!ready('refs.exists'))('vcs.refs.exists is true for HEAD, false for an all-zeros SHA', ({ vcs }) => {
     expect(vcs.refs.exists(vcs.refs.head)).toBe(true);
     expect(vcs.refs.exists(expr.rev('0000000000000000000000000000000000000000'))).toBe(false);
   });
 
-  test('vcs.workspace.context on main workspace: mode=main, gitDir===gitCommonDir', ({ vcs }) => {
+  test.skipIf(!ready('workspace.context'))('vcs.workspace.context on main workspace: mode=main, gitDir===gitCommonDir', ({ vcs }) => {
     const ctx = vcs.workspace.context();
     expect(ctx.mode).toBe('main');
     expect(ctx.isLinked).toBe(false);

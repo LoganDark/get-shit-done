@@ -85,6 +85,17 @@ export function parseDiffCheckPath(line: string): string | null {
 
 export function createGitAdapter(cwd: string): GitVcsAdapter {
   // ─── commit ──────────────────────────────────────────────────────────────
+  /**
+   * Phase 3 D-01 / D-04: `input.bookmark` and `input.bookmarkRaw` are
+   * IGNORED on the git backend. Native `git commit` on a checked-out
+   * branch auto-advances the branch ref to the new commit, so the explicit
+   * bookmark-advance contract that the jj backend implements is a no-op
+   * here. Callers writing cross-backend code may pass either field
+   * unconditionally; git ignores both.
+   *
+   * The fields are declared on the cross-backend `CommitInput` type so
+   * structural typing accepts them without per-backend type-narrowing.
+   */
   const commit = (input: CommitInput): CommitResult => {
     // WR-01: explicit `files: []` is ambiguous — the previous behaviour fell
     // through to `git commit -am` (commit ALL tracked modifications) which
