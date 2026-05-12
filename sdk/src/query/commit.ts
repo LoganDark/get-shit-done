@@ -121,38 +121,49 @@ export const commit: QueryHandler = async (args, projectDir, workstream) => {
     return { data: { committed: false, reason: '--files requires at least one path' } };
   }
 
-  // Compute pathspec once: the handler commits exactly the paths it staged,
+  // Compute the path scope once: the handler commits exactly these paths,
   // never anything that was pre-staged externally (#3061).
   const pathsToCommit = filePaths.length > 0 ? filePaths : ['.planning/'];
   // Plan 02-08: route through the VcsAdapter exclusively (W5 prescriptive).
   const vcs = createVcsAdapter(projectDir, { kind: 'git' });
-  for (const file of pathsToCommit) {
-    // vcs.stage applies the `--` option-injection guard internally so a path
-    // that starts with `-` (e.g. a file literally named `-A`) is treated as
-    // a pathspec rather than a git option.
-    const addResult = vcs.stage([file]);
-    if (addResult.exitCode !== 0) {
-      return { data: { committed: false, reason: addResult.stderr || `failed to stage ${file}`, exitCode: addResult.exitCode } };
-    }
-  }
 
-  // Check if anything is staged within the pathspec we're about to commit.
-  const diffResult = vcs.diff({ staged: true, nameOnly: true, paths: pathsToCommit });
-  const stagedFiles = diffResult.nameOnly;
-  if (stagedFiles.length === 0) {
-    return { data: { committed: false, reason: 'nothing staged' } };
+  // Plan 2.1-04 (D-02 + D-04 + D-06): legacy path-scope field collapsed onto
+  // `files` with WC-state-capture semantics. The git backend's commit({files})
+  // now runs `git add -A -- <files>` (captures adds/mods/dels) then
+  // `git commit -m` (no -a), so the upstream `vcs.stage` loop is gone — the
+  // WC IS the source of truth, the adapter captures it on commit. The caller-
+  // side #2014 pre-probe migrates from `vcs.diff({staged:true,nameOnly:true})`
+  // to `vcs.status({porcelain:true})` filtering: any WC entry whose path
+  // starts with one of the requested scope paths is in-scope. If nothing
+  // surfaces, short-circuit before the commit call. The wording shifts
+  // from 'nothing staged' to 'nothing to commit' to reflect the new
+  // WC-state-capture semantic (there is no "staged but uncommitted"
+  // distinction from the handler's perspective).
+  const status = vcs.status({ porcelain: true });
+  // Bidirectional path-containment: a status entry overlaps the requested
+  // scope when either (a) the entry is INSIDE one of the requested paths
+  // (entry.startsWith(scope)) — e.g. scope=".planning/", entry=".planning/
+  // STATE.md" — or (b) the entry IS a directory that CONTAINS one of the
+  // requested paths (scope.startsWith(entry)) — e.g. entry=".planning/" (the
+  // un-recursed untracked-directory summary git emits in default mode) and
+  // scope=".planning/STATE.md". The latter form is required because `git
+  // status --porcelain` collapses fully-untracked directories to a single
+  // `?? <dir>/` entry rather than enumerating their files.
+  const surviving = status.entries.filter(e => pathsToCommit.some(p => e.path.startsWith(p) || p.startsWith(e.path)));
+  if (surviving.length === 0) {
+    return { data: { committed: false, reason: 'nothing to commit' } };
   }
+  const stagedFiles = surviving.map(e => e.path);
 
-  // The vcs.commit pathspec parameter (gap-fill landed in this plan) ensures
-  // the commit captures only files within the requested scope, even when the
-  // caller's index already had unrelated entries staged before this handler
-  // ran. `files: undefined` means "commit what is already staged"; `pathspec`
-  // narrows the commit's scope without re-staging.
+  // WC-state-capture: vcs.commit({files}) runs `git add -A -- <files>` then
+  // `git commit -m <msg>` (no -a), capturing exactly the requested scope's
+  // WC state (#3061 — pre-staged unrelated entries do not leak in because
+  // the commit's path scope stays bound to <files>).
   const commitResult = vcs.commit({
     message: sanitized ?? '',
     amend: hasAmend,
     noVerify: hasNoVerify,
-    pathspec: pathsToCommit,
+    files: pathsToCommit,
   });
   if (commitResult.exitCode !== 0) {
     if (commitResult.stdout.includes('nothing to commit') || commitResult.stderr.includes('nothing to commit')) {
@@ -283,21 +294,19 @@ export const commitToSubrepo: QueryHandler = async (args, projectDir, workstream
     }
 
     const fileArgs = files.length > 0 ? files : ['.'];
-    // Plan 02-08: the pre-migration form `git -C <dir> …` becomes a per-call
-    // adapter rooted at the sub-repo (cwd-via-factory pattern). The `--`
-    // separator that protected against option-injection now lives inside
-    // vcs.stage / vcs.commit (pathspec).
+    // Plan 02-08 / 2.1-04: the pre-migration form `git -C <dir> …` becomes a
+    // per-call adapter rooted at the sub-repo (cwd-via-factory pattern). The
+    // `--` separator that protected against option-injection now lives inside
+    // vcs.commit's WC-state-capture implementation (`git add -A -- <files>`).
+    // The upstream `vcs.stage` call is gone — D-02 + D-04 collapse stage +
+    // commit into a single `vcs.commit({files})` call that captures the WC
+    // state of the requested paths. `files: fileArgs` keeps the scope
+    // identical to the requested paths so pre-staged external changes do not
+    // leak in (#3061).
     const subVcs = createVcsAdapter(projectDir, { kind: 'git' });
-    const addResult = subVcs.stage(fileArgs);
-    if (addResult.exitCode !== 0) {
-      return { data: { committed: false, reason: addResult.stderr || 'git add failed' } };
-    }
-
-    // Pathspec on the commit keeps the scope identical to what was just staged,
-    // so any pre-staged external changes do not leak in (#3061).
     const commitResult = subVcs.commit({
       message: sanitized,
-      pathspec: fileArgs,
+      files: fileArgs,
     });
     if (commitResult.exitCode !== 0) {
       return { data: { committed: false, reason: commitResult.stderr || 'commit failed' } };

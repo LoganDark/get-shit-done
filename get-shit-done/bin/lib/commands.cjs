@@ -329,59 +329,72 @@ function cmdCommit(cwd, message, files, raw, amend, noVerify) {
   // share the same cwd; CommitInput consumes the amend/noVerify gap-fill from 02-08.
   const vcs = createVcsAdapter(cwd, { kind: 'git' });
 
-  // Stage files
+  // Plan 2.1-04 (D-02 + D-04 + D-06): legacy stage/unstage + commit path-scope
+  // field collapses to a single `vcs.commit({files})` with WC-state-capture. The
+  // git backend's commit({files}) runs `git add -A -- <files>` which stages
+  // adds/mods/dels alike, so the explicit if/else stage-vs-unstage dichotomy
+  // (deletion-branch → unstage; existing-branch → stage) is now redundant —
+  // `git add -A` handles both shapes from one call.
+  //
+  // #2014 invariant (PRESERVED): when a caller passes an explicit --files for
+  // a missing tracked file, the path is FILTERED OUT BEFORE vcs.commit sees
+  // it. If we did not filter, `git add -A -- <missing-path>` would stage the
+  // deletion and silently remove tracked planning files (e.g. STATE.md,
+  // ROADMAP.md) when temporarily absent. In default mode (".planning/"
+  // catch-all) the directory always exists, so the filter is a no-op there
+  // and removed files inside the tree are still recorded — matching the
+  // original "stage all of .planning/" semantics.
+  //
+  // After the filter, the caller-side pre-probe migrates from
+  // `vcs.diff({staged:true,nameOnly:true})` to `vcs.status({porcelain:true})`
+  // filtering per D-06. If no WC entries match the scope, short-circuit to
+  // `nothing_to_commit` rather than invoking vcs.commit (which would fall
+  // into the `git commit` no-changes path and emit a non-zero exit anyway,
+  // but the short-circuit avoids the extra spawn).
   const explicitFiles = files && files.length > 0;
-  const filesToStage = explicitFiles ? files : ['.planning/'];
-  // Track which paths were actually touched (staged or unstaged) so the commit
-  // pathspec narrows scope to those paths only. #2014 invariant: when a caller
-  // passes --files for a missing tracked file, the path is SKIPPED from staging
-  // AND from the pathspec — pathspec'ing a missing-file path with no staged
-  // change would still record a deletion via `git commit -- <path>` semantics.
-  const stagedOrUnstaged = [];
-  for (const file of filesToStage) {
-    const fullPath = path.join(cwd, file);
-    if (!fs.existsSync(fullPath)) {
-      if (explicitFiles) {
-        // Caller passed an explicit --files list: missing files are skipped.
-        // Staging a deletion here would silently remove tracked planning files
-        // (e.g. STATE.md, ROADMAP.md) when they are temporarily absent (#2014).
-        continue;
-      }
-      // Default mode (staging all of .planning/): stage the deletion so
-      // removed planning files are not left dangling in the index.
-      // Pitfall 2 / D-08: this if/else stays as TWO adapter calls
-      // (vcs.unstage on the deletion branch, vcs.stage on the existing-file
-      // branch). NOT collapsed into a single vcs.commit({files}) call —
-      // even though `vcs.commit({files})` could in principle stage and commit,
-      // the original code separates them and the mechanical-only invariant
-      // requires preserving that shape.
-      vcs.unstage([file]);                                                             // line 330 (was: rm --cached --ignore-unmatch <file>)
-      stagedOrUnstaged.push(file);
-    } else {
-      vcs.stage([file]);                                                               // line 332 (was: add <file>)
-      stagedOrUnstaged.push(file);
-    }
-  }
+  const filesRequested = explicitFiles ? files : ['.planning/'];
+  const filesToCommit = explicitFiles
+    ? filesRequested.filter(f => fs.existsSync(path.join(cwd, f)))
+    : filesRequested;
 
-  // Commit (--no-verify skips pre-commit hooks, used by parallel executor agents).
-  // Plan 02-09: vcs.commit consumes amend/noVerify/pathspec gap-fill from 02-08.
-  // Pathspec preserves the prior `git commit -m <msg>` shape (NOT `-am`) by
-  // routing through the backend's already-staged-paths branch — files were
-  // already staged via vcs.unstage / vcs.stage above. For amend mode, the
-  // adapter emits `commit --amend --no-edit` (message field is ignored).
-  // #2014 invariant: when explicit --files were passed but every entry was
-  // skipped (all missing on disk), short-circuit to `nothing_to_commit` to
-  // mirror the original semantics where `git commit -m <msg>` against an
-  // empty index returned that exit. Bypassing vcs.commit avoids the `-am`
-  // fallback (no pathspec/files) which would auto-stage tracked mods.
-  if (!amend && explicitFiles && stagedOrUnstaged.length === 0) {
+  // #2014 invariant: explicit --files with all-missing entries short-circuits
+  // BEFORE vcs.commit. Mirrors the prior `stagedOrUnstaged.length === 0` gate.
+  if (!amend && explicitFiles && filesToCommit.length === 0) {
     const result = { committed: false, hash: null, reason: 'nothing_to_commit' };
     output(result, raw, 'nothing');
     return;
   }
+
+  // D-06 #2014 caller-side pre-probe via vcs.status (replaces vcs.diff
+  // staged-name-only). The scope is the path-prefix set in filesToCommit;
+  // any WC entry whose path starts with one of those prefixes counts as a
+  // change to commit. Skipped for amend (amend rewrites HEAD with any
+  // currently-staged content — the prior code had no pre-probe in the amend
+  // branch either, so we preserve that exit shape).
+  if (!amend) {
+    const status = vcs.status({ porcelain: true });
+    // Bidirectional path-containment (see sdk/src/query/commit.ts for full
+    // rationale): scope ↔ entry containment in either direction counts as a
+    // match. Required because `git status --porcelain` collapses fully-
+    // untracked directories to a single `?? <dir>/` entry; without the
+    // entry-contains-scope leg, `--files .planning/STATE.md` against a fresh
+    // worktree where .planning/ is fully untracked would miss the match.
+    const surviving = status.entries.filter(e => filesToCommit.some(p => e.path.startsWith(p) || p.startsWith(e.path)));
+    if (surviving.length === 0) {
+      const result = { committed: false, hash: null, reason: 'nothing_to_commit' };
+      output(result, raw, 'nothing');
+      return;
+    }
+  }
+
+  // Commit (--no-verify skips pre-commit hooks, used by parallel executor agents).
+  // Plan 2.1-04: `files` replaces the prior path-scope field with WC-state-capture semantics —
+  // `git add -A -- <files>` then `git commit -m <msg>` (no -a). For amend
+  // mode, the adapter emits `commit --amend --no-edit` (message field is
+  // ignored; `files` is irrelevant under amend's index-rewrite semantics).
   const commitResult = amend
     ? vcs.commit({ message, amend: true, noVerify })                                   // line 339 (was: commit --amend --no-edit [+ --no-verify])
-    : vcs.commit({ message, pathspec: stagedOrUnstaged, noVerify });                   // line 339 (was: commit -m <msg> [+ --no-verify])
+    : vcs.commit({ message, files: filesToCommit, noVerify });                         // line 339 (was: commit -m <msg> [+ --no-verify])
   if (commitResult.exitCode !== 0) {
     if (commitResult.stdout.includes('nothing to commit') || commitResult.stderr.includes('nothing to commit')) {
       const result = { committed: false, hash: null, reason: 'nothing_to_commit' };
@@ -449,23 +462,14 @@ function cmdCommitToSubrepo(cwd, message, files, raw) {
     // (byte-identical to running the same command from that cwd).
     const subVcs = createVcsAdapter(repoCwd, { kind: 'git' });
 
-    // Stage files (strip sub-repo prefix for paths relative to that repo)
-    for (const file of repoFiles) {
-      const relativePath = file.slice(repo.length + 1);
-      subVcs.stage([relativePath]);                                                    // line 398 (was: add <relativePath>)
-    }
-
-    // Commit
-    // Plan 02-09: vcs.commit replaces the prior commit invocation
-    // (commit -m <message> at the sub-repo cwd). No pathspec — files were just staged above
-    // and the original commit had no `-- <pathspec>` argument either, so
-    // pathspec-less + no files arg → backend `commit -am <msg>` path.
-    // BUT the original was `commit -m <msg>` (NOT -am). To preserve the
-    // mechanical shape, route through pathspec with the per-file relative
-    // paths so the backend takes the already-staged-paths branch (commit -m
-    // <msg> -- <pathspec>) — equivalent given the explicit upstream stage.
-    const subPathspec = repoFiles.map(f => f.slice(repo.length + 1));
-    const commitResult = subVcs.commit({ message, pathspec: subPathspec });            // line 402 (was: commit -m <msg>)
+    // Plan 2.1-04 (D-02 + D-04): the explicit per-file stage loop is gone —
+    // vcs.commit({files}) captures WC state of the requested paths via
+    // `git add -A -- <files>` then `git commit -m <msg>` (no -a). The path
+    // list is the sub-repo-relative form of repoFiles (strip the sub-repo
+    // prefix so the paths resolve under the sub-repo cwd). `files` scopes
+    // the commit identically to the prior "stage these, commit these" shape.
+    const subFiles = repoFiles.map(f => f.slice(repo.length + 1));
+    const commitResult = subVcs.commit({ message, files: subFiles });                  // line 402 (was: commit -m <msg>)
     if (commitResult.exitCode !== 0) {
       if (commitResult.stdout.includes('nothing to commit') || commitResult.stderr.includes('nothing to commit')) {
         repos[repo] = { committed: false, hash: null, files: repoFiles, reason: 'nothing_to_commit' };

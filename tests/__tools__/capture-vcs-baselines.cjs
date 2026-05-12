@@ -287,7 +287,7 @@ const baselines = [
   {
     id: 'commit-ts-211-diff-cached',
     source: 'sdk/src/query/commit.ts:211',
-    // checkCommit's variant: `diff --cached --name-only` (no pathspec).
+    // checkCommit's variant: `diff --cached --name-only` (no path scope).
     // Adapter equivalent: vcs.diff({staged:true, nameOnly:true}).
     fixture: ['echo foo > foo.txt', 'git add -- foo.txt'],
     args: ['diff', '--cached', '--name-only'],

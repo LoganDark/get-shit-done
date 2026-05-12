@@ -1163,8 +1163,9 @@ describe('commit command', () => {
     // Add .planning/ to .gitignore and commit it so git recognizes the ignore
     fs.writeFileSync(path.join(tmpDir, '.gitignore'), '.planning/\n');
     const vcs = createVcsAdapter(tmpDir, { kind: 'git' });
-    vcs.stage(['.gitignore']);
-    vcs.commit({ message: 'add gitignore', pathspec: ['.gitignore'] });
+    // Plan 2.1-04: vcs.commit({files}) captures WC state via `git add -A --
+    // <files>` then `git commit -m`; the upstream stage is no longer required.
+    vcs.commit({ message: 'add gitignore', files: ['.gitignore'] });
 
     const result = runGsdTools('commit "test message"', tmpDir);
     assert.ok(result.success, `Command failed: ${result.error}`);
@@ -1211,8 +1212,8 @@ describe('commit command', () => {
     // Create a file and commit it first
     fs.writeFileSync(path.join(tmpDir, '.planning', 'amend-file.md'), '# Initial\n');
     const vcs = createVcsAdapter(tmpDir, { kind: 'git' });
-    vcs.stage(['.planning/amend-file.md']);
-    vcs.commit({ message: 'initial file', pathspec: ['.planning/amend-file.md'] });
+    // Plan 2.1-04: vcs.commit({files}) captures WC state; upstream stage gone.
+    vcs.commit({ message: 'initial file', files: ['.planning/amend-file.md'] });
 
     // Modify the file and amend
     fs.writeFileSync(path.join(tmpDir, '.planning', 'amend-file.md'), '# Amended\n');
@@ -1630,17 +1631,17 @@ describe('stats command', () => {
     fs.writeFileSync(path.join(tmpDir, '.planning', 'PROJECT.md'), '# Project\n');
     // Date-pinned commits via process.env injection: VcsAdapter.commit() has
     // no per-call env seam, so we mutate process.env in a try/finally pair
-    // around vcs.stage + vcs.commit (the adapter inherits process.env when
-    // spawning git). Restoring the prior values after each commit keeps
-    // sibling tests' dates clean.
+    // around vcs.commit (the adapter inherits process.env when spawning git).
+    // Restoring the prior values after each commit keeps sibling tests' dates
+    // clean. Plan 2.1-04: vcs.commit({files}) captures WC state directly so
+    // the upstream vcs.stage call is unnecessary.
     const dateCommit = (relPath, isoDate, message) => {
       const prevAuthor = process.env.GIT_AUTHOR_DATE;
       const prevCommitter = process.env.GIT_COMMITTER_DATE;
       process.env.GIT_AUTHOR_DATE = isoDate;
       process.env.GIT_COMMITTER_DATE = isoDate;
       try {
-        vcs.stage([relPath]);
-        vcs.commit({ message, pathspec: [relPath] });
+        vcs.commit({ message, files: [relPath] });
       } finally {
         if (prevAuthor === undefined) delete process.env.GIT_AUTHOR_DATE; else process.env.GIT_AUTHOR_DATE = prevAuthor;
         if (prevCommitter === undefined) delete process.env.GIT_COMMITTER_DATE; else process.env.GIT_COMMITTER_DATE = prevCommitter;
@@ -1788,9 +1789,10 @@ describe('stats command', () => {
 
 describe('check-commit command', () => {
   const { createTempGitProject } = require('./helpers.cjs');
-  // Plan 02-09 D-06 paired retarget: stage operations route through the
-  // VcsAdapter (vcs.stage) to verify check-commit's new vcs.diff probe path.
-  const { createVcsAdapter } = require('../sdk/dist-cjs/vcs/index.js');
+  // Plan 02-09 D-06 paired retarget: check-commit verifies the new vcs.diff
+  // probe path. Plan 2.1-04 (D-03): the vcs.stage adapter verb is gone, so
+  // pre-staging is synthesized via raw `git add` (this file is on the
+  // no-raw-git lint allowlist for tests/**/*.test.cjs).
   let tmpDir;
 
   beforeEach(() => {
@@ -1817,9 +1819,11 @@ describe('check-commit command', () => {
       path.join(tmpDir, '.planning', 'config.json'),
       JSON.stringify({ commit_docs: false })
     );
-    // Stage a non-planning file
+    // Stage a non-planning file. Plan 2.1-04 (D-03): vcs.stage is gone; use
+    // raw git here — this file is on the no-raw-git lint allowlist for tests.
+    const { execFileSync } = require('child_process');
     fs.writeFileSync(path.join(tmpDir, 'src.js'), 'console.log("hi")');
-    createVcsAdapter(tmpDir, { kind: 'git' }).stage(['src.js']);
+    execFileSync('git', ['add', '--', 'src.js'], { cwd: tmpDir, stdio: 'pipe' });
 
     const result = runGsdTools('check-commit', tmpDir);
     assert.ok(result.success, `Command failed: ${result.error}`);
@@ -1833,7 +1837,9 @@ describe('check-commit command', () => {
       JSON.stringify({ commit_docs: false })
     );
     fs.writeFileSync(path.join(tmpDir, '.planning', 'STATE.md'), '# State');
-    createVcsAdapter(tmpDir, { kind: 'git' }).stage(['.planning/STATE.md']);
+    // Plan 2.1-04 (D-03): vcs.stage is gone; raw git is lint-allowed here.
+    const { execFileSync } = require('child_process');
+    execFileSync('git', ['add', '--', '.planning/STATE.md'], { cwd: tmpDir, stdio: 'pipe' });
 
     const result = runGsdTools('check-commit', tmpDir);
     assert.ok(!result.success, 'should block commit');

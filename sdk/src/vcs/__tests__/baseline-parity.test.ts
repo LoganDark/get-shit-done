@@ -330,23 +330,23 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           args.includes('--') &&
           !args.includes('--amend')
         ) {
-          // Plan 02-08: vcs.commit({message, pathspec}) wraps the
-          // already-staged-paths `git commit -m <msg> -- <pathspec>` form.
-          // Captured for sites 170 and 301 (commit.ts main flow +
-          // commitToSubrepo). The canonical execGit call above already
-          // performed the commit on this fixture, so the working tree is
-          // now clean — re-create a fresh fixture for the adapter call so
-          // the staged paths still exist. The stdout embeds the auto-
+          // Plan 02-08 / 2.1-04: vcs.commit({message, files}) wraps the
+          // WC-state-capture form `git add -A -- <files>` + `git commit -m
+          // <msg>` (no -a). Captured for sites 170 and 301 (commit.ts main
+          // flow + commitToSubrepo). The canonical execGit call above
+          // already performed the commit on this fixture, so the working
+          // tree is now clean — re-create a fresh fixture for the adapter
+          // call so the paths still exist. The stdout embeds the auto-
           // generated short SHA; baseline match.stdout is a regex.
           const dashIdx = args.indexOf('--');
           const msgIdx = args.indexOf('-m');
           const message = args[msgIdx + 1];
-          const pathspec = args.slice(dashIdx + 1);
+          const scopedFiles = args.slice(dashIdx + 1);
           const adapterCwd = initFixture(baseline);
           try {
             const adapterVcs = createVcsAdapter(adapterCwd);
             if (adapterVcs.kind !== 'git') throw new Error('expected git adapter');
-            const r = adapterVcs.commit({ message, pathspec });
+            const r = adapterVcs.commit({ message, files: scopedFiles });
             expect(r.exitCode).toBe(baseline.expected.exitCode);
             if (baseline.match?.stdout?.startsWith('regex:')) {
               const re = new RegExp(baseline.match.stdout.slice('regex:'.length));
@@ -464,7 +464,7 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           args.length === 2 &&
           !args[1].startsWith('-')
         ) {
-          // Plan 02-09: vcs.stage([file]) wraps the no-pathspec-separator
+          // Plan 02-09: vcs.stage([file]) wraps the no-`--`-separator
           // form `git add <file>`. Captured for sites 332 (cmdCommit) and 398
           // (commitFilesIfDeletion). The adapter's stage() call adds a `--`
           // separator internally (git.ts:384), which is byte-identical to
@@ -488,18 +488,17 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           !args.includes('--') &&
           !args.includes('--amend')
         ) {
-          // Plan 02-09: vcs.commit({message, pathspec:[]}) wraps the
-          // no-pathspec form `git commit -m <msg>`. Captured for sites 339
-          // (cmdCommit) and 402 (commitFilesIfDeletion). The canonical
+          // Plan 02-09 / 2.1-04: vcs.commit({message, files}) wraps the
+          // no-explicit-`--` form `git commit -m <msg>`. Captured for sites
+          // 339 (cmdCommit) and 402 (commitFilesIfDeletion). The canonical
           // execGit call above already commits the staged path, so the
           // adapter call needs a fresh fixture (mirrors plan 02-08's
           // commit-clause per-fixture re-init pattern). The migrated
-          // commands.cjs uses pathspec: stagedOrUnstaged for #2014 safety;
-          // for the baseline-parity assertion we route through pathspec
-          // with the staged path so the backend takes the already-staged-
-          // paths branch (commit -m <msg> -- <path>) — byte-identical exit
-          // semantics to the canonical `commit -m <msg>` form on the same
-          // single-file fixture.
+          // commands.cjs uses files: filesToCommit for #2014 safety; for the
+          // baseline-parity assertion we route through `files` with the
+          // pre-staged path so the backend's WC-state-capture re-adds (-A)
+          // and commits that path — byte-identical exit semantics to the
+          // canonical `commit -m <msg>` form on the same single-file fixture.
           const msgIdx = args.indexOf('-m');
           const message = args[msgIdx + 1];
           const adapterCwd = initFixture(baseline);
@@ -507,12 +506,12 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
             const adapterVcs = createVcsAdapter(adapterCwd);
             if (adapterVcs.kind !== 'git') throw new Error('expected git adapter');
             // Fixture's setup staged a single file (foo.txt or bar.txt);
-            // route through pathspec with the same path so the adapter
-            // takes the no-`-am` already-staged branch.
-            const pathspec = baseline.fixture.setup
+            // route through `files` with the same path so the adapter
+            // captures its WC state and commits exactly that path.
+            const scopedFiles = baseline.fixture.setup
               .filter(s => /^git add /.test(s))
               .map(s => s.replace(/^git add /, '').trim());
-            const r = adapterVcs.commit({ message, pathspec });
+            const r = adapterVcs.commit({ message, files: scopedFiles });
             expect(r.exitCode).toBe(baseline.expected.exitCode);
             if (baseline.match?.stdout?.startsWith('regex:')) {
               const re = new RegExp(baseline.match.stdout.slice('regex:'.length));
