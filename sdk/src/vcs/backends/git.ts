@@ -18,6 +18,7 @@
  * D-14:  __vcsTestOnly snapshot/restore implements RESEARCH Pattern 3 (strategy 3).
  */
 
+import { spawnSync } from 'node:child_process';
 import { resolve as resolvePath } from 'node:path';
 import { execGit } from '../exec.js';
 import type { ExecResult } from '../exec.js';
@@ -98,6 +99,25 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
       );
     }
     if (input.files && input.files.length > 0) {
+      // Phase 2.1 #3061: reset the index to HEAD (or empty when there is no
+      // HEAD yet) before staging the requested paths. Pre-staged entries that
+      // the caller did not list in `files` would otherwise leak into the
+      // commit, because bare `git commit -m` records the entire index. The
+      // earlier `git commit -- <paths>` narrowing this replaces had no jj
+      // equivalent (D-02). Trade-off: pre-staged unrelated entries become
+      // worktree-only changes after the commit instead of remaining staged —
+      // matches jj's index-less semantics; documented in 2.1-04-SUMMARY.md.
+      const headExists =
+        execGit(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD']).exitCode === 0;
+      const resetRes = execGit(cwd, ['read-tree', headExists ? 'HEAD' : '--empty']);
+      if (resetRes.exitCode !== 0) {
+        return {
+          exitCode: resetRes.exitCode,
+          stdout: resetRes.stdout,
+          stderr: resetRes.stderr,
+          hash: null,
+        };
+      }
       // Phase 2.1 D-04: WC-state-capture — `git add -A -- <paths>` records
       // adds/mods/dels for the given paths from the working copy in one shot.
       // Mirrors the Phase 3 jj backend's `jj squash <paths> -B @ -k -m '<msg>'`.
@@ -205,15 +225,29 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
   // Use `-z` for the structured-entry path so paths arrive verbatim, NUL-separated.
   // The 5-field `raw` field still preserves the user-visible porcelain text from a
   // separate (newline-mode) call so byte-identity baselines are unaffected.
+  //
+  // Phase 2.1 #3061: execGit's stdout.trim() strips the leading space when the
+  // first porcelain entry is worktree-only (` M file`, ` D file`), corrupting
+  // both the first parsed entry's path AND the `.raw` byte-identity field. Use
+  // an untrimmed spawnSync directly for the porcelain calls so the first
+  // entry's XY prefix survives.
   const status = (opts: StatusOpts = {}): StatusResult => {
     if (opts.porcelain === false) {
       const r = execGit(cwd, ['status']);
       return { entries: [], raw: r.stdout };
     }
+    // Strip trailing newline(s) only (TrimEnd) so byte-identity baselines for
+    // entries without a leading-space first entry stay byte-equal, while the
+    // first entry's leading-space (worktree-only modifications/deletions)
+    // survives — execGit's full .trim() corrupts the latter (Phase 2.1 #3061).
+    const statusTrimEnd = (gitArgs: string[]): { exitCode: number; stdout: string } => {
+      const r = spawnSync('git', gitArgs, { cwd, stdio: 'pipe', encoding: 'utf-8' });
+      return { exitCode: r.status ?? -1, stdout: (r.stdout ?? '').toString().replace(/\n+$/, '') };
+    };
     // Parse path-safe entries from `-z` output; preserve byte-identity `raw` from
     // the newline-mode `--porcelain` call (matches GIT-02 baselines).
-    const rawRes = execGit(cwd, ['status', '--porcelain']);
-    const zRes = execGit(cwd, ['-c', 'core.quotePath=false', 'status', '--porcelain', '-z']);
+    const rawRes = statusTrimEnd(['status', '--porcelain']);
+    const zRes = statusTrimEnd(['-c', 'core.quotePath=false', 'status', '--porcelain', '-z']);
     const entries: StatusEntry[] = [];
     if (zRes.exitCode === 0 && zRes.stdout.length > 0) {
       // `-z` records: XY <space> path NUL [origPath NUL when XY indicates rename/copy]

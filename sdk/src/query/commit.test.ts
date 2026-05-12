@@ -328,11 +328,14 @@ describe('commit named-files scope (#3061)', () => {
     expect(committed).toContain('.planning/STATE.md');
     expect(committed).not.toContain('README.md');
 
-    // The pre-staged deletion must remain staged-but-uncommitted.
+    // The pre-staged deletion is preserved as a worktree-only deletion after
+    // the named-files commit (Phase 2.1 #3061: the backend's pre-add index
+    // reset converts pre-staged unrelated entries into worktree-only changes,
+    // matching jj's index-less semantics — see 2.1-04-SUMMARY.md).
     // Status probe via VcsAdapter (Plan 02-08 D-06): vcs.status({porcelain:
     // true}).raw is byte-equivalent to `git status --porcelain` stdout.
     const status = createVcsAdapter(tmpDir, { kind: 'git' }).status({ porcelain: true }).raw;
-    expect(status).toMatch(/^D {2}README\.md/m);
+    expect(status).toMatch(/^ D README\.md/m);
   });
 
   it('.planning/ fallback commits only planning paths when an unrelated change is pre-staged', async () => {
@@ -355,10 +358,10 @@ describe('commit named-files scope (#3061)', () => {
     expect(committed).not.toContain('README.md');
     expect(committed.some(f => f.startsWith('.planning/'))).toBe(true);
 
-    // Status probe via VcsAdapter (Plan 02-08 D-06): vcs.status({porcelain:
-    // true}).raw is byte-equivalent to `git status --porcelain` stdout.
+    // Pre-staged deletion → worktree-only deletion after named-files commit
+    // (Phase 2.1 #3061: backend pre-add index reset).
     const status = createVcsAdapter(tmpDir, { kind: 'git' }).status({ porcelain: true }).raw;
-    expect(status).toMatch(/^D {2}README\.md/m);
+    expect(status).toMatch(/^ D README\.md/m);
   });
 
   it('--amend with --files keeps the amend within the named-file scope', async () => {
@@ -389,10 +392,10 @@ describe('commit named-files scope (#3061)', () => {
     expect(committed).toContain('.planning/STATE.md');
     expect(committed).not.toContain('README.md');
 
-    // Status probe via VcsAdapter (Plan 02-08 D-06): vcs.status({porcelain:
-    // true}).raw is byte-equivalent to `git status --porcelain` stdout.
+    // Pre-staged deletion → worktree-only deletion after named-files commit
+    // (Phase 2.1 #3061: backend pre-add index reset).
     const status = createVcsAdapter(tmpDir, { kind: 'git' }).status({ porcelain: true }).raw;
-    expect(status).toMatch(/^D {2}README\.md/m);
+    expect(status).toMatch(/^ D README\.md/m);
   });
 });
 
