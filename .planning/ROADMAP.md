@@ -96,7 +96,7 @@ Plans:
 - [x] 03-02-PLAN.md — NDJSON parsers (real impls) + jj-id translator + __vcsTestOnly snapshot/restore (JJ-04)
 - [x] 03-03-PLAN.md — Refs namespace: head/parent/bookmarks CRUD + currentBookmarks + resolveShort/exists/countCommits/rootCommits/remotes (REFS-01..04, REFS-06)
 - [x] 03-04-PLAN.md — Squash commit + bookmark advance + JJ-07 env (SQUASH-01..07, REFS-05, JJ-07)
-- [ ] 03-05-PLAN.md — Status, log, diff, findConflicts (conflicts() plural) (CONFLICT-01..03)
+- [x] 03-05-PLAN.md — Status, log, diff, findConflicts (conflicts() plural) (CONFLICT-01..03)
 - [ ] 03-06-PLAN.md — Push/fetch + workspace stubs + TEST-08 bug-test triage execution (TEST-08)
 - [ ] 03-07-PLAN.md — Wrap-up: CI matrix activation + conflict()→conflicts() doc-fix + phase-close invariants (CI-01, CI-02)
 
@@ -134,7 +134,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Adapter Foundation + Git Backend | 5/5 | Complete | 2026-05-09 |
 | 2. Bulk Call-Site Migration (Still Git-Only) | 12/12 | Plans Complete (ready for phase-level verifier) |  |
-| 3. jj Backend Core — Squash, Refs, Conflict | 3/7 | In Progress|  |
+| 3. jj Backend Core — Squash, Refs, Conflict | 5/7 | In Progress|  |
 | 4. Workspaces + Octopus Structure + Hooks | 0/TBD | Not started | - |
 | 5. Command Translations + Brownfield Validation + CI Hardening | 0/TBD | Not started | - |
 

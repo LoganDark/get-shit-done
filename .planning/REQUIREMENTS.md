@@ -71,9 +71,9 @@
 
 ### Conflict Detection (CONFLICT)
 
-- [ ] **CONFLICT-01**: `vcs.findConflicts({ scope: 'all' })` returns change IDs of any in-tree conflicts via `jj log -r 'conflict()'` (jj backend) or `git diff --check` equivalent (git backend)
-- [ ] **CONFLICT-02**: `vcs.findConflicts({ scope: 'working-copy' })` checks only the materialized working-copy state (`jj st` style on jj; `git status` style on git)
-- [ ] **CONFLICT-03**: Verify gate uses `scope: 'all'` to catch in-tree conflicts that jj's conflict-tolerant model preserves silently
+- [x] **CONFLICT-01**: `vcs.findConflicts({ scope: 'all' })` returns change IDs of any in-tree conflicts via `jj log -r 'conflict()'` (jj backend) or `git diff --check` equivalent (git backend)
+- [x] **CONFLICT-02**: `vcs.findConflicts({ scope: 'working-copy' })` checks only the materialized working-copy state (`jj st` style on jj; `git status` style on git)
+- [x] **CONFLICT-03**: Verify gate uses `scope: 'all'` to catch in-tree conflicts that jj's conflict-tolerant model preserves silently
 
 ### Hooks (HOOK)
 
@@ -235,9 +235,9 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | REFS-04 | Phase 3 | Complete |
 | REFS-05 | Phase 3 | Complete |
 | REFS-06 | Phase 3 | Complete |
-| CONFLICT-01 | Phase 3 | Pending |
-| CONFLICT-02 | Phase 3 | Pending |
-| CONFLICT-03 | Phase 3 | Pending |
+| CONFLICT-01 | Phase 3 | Complete |
+| CONFLICT-02 | Phase 3 | Complete |
+| CONFLICT-03 | Phase 3 | Complete |
 | TEST-08 | Phase 3 | Pending |
 | CI-01 | Phase 3 | Pending |
 | CI-02 | Phase 3 | Pending |

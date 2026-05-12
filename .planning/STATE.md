@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 03-04-PLAN.md (commit squash body + bookmark advance + JJ-07 env propagation)
-last_updated: "2026-05-12T14:24:31.817Z"
+last_updated: "2026-05-12T14:37:04.106Z"
 last_activity: 2026-05-12
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 33
-  completed_plans: 30
-  percent: 91
+  completed_plans: 31
+  percent: 94
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 03 (jj-backend-core-squash-refs-conflict) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-05-12
 
-Progress: [█████████░] 91%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -73,6 +73,7 @@ Progress: [█████████░] 91%
 | Phase 03 P02 | fork-constrained | 3 tasks | 13 files |
 | Phase 03 P03 | 11min | 2 tasks | 10 files |
 | Phase 03 P04 | ~7min | 2 tasks tasks | 7 files files |
+| Phase 03 P05 | 11m | - tasks | - files |
 
 ## Accumulated Context
 
@@ -160,6 +161,7 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 03-04: ExecOptions extended with env?:Record<string,string>; vcsExec merges opts.env on top of process.env without mutating the calling process; envOpts() returns undefined when no JJ_USER/JJ_EMAIL set
 - [Phase ?]: Plan 03-04: hash resolution uses deterministic second jj log -r @- -T commit_id call rather than parsing Created new commit ... stdout from jj squash
 - [Phase ?]: Plan 03-04: bookmark-advance failure surfaces via merged CommitResult.stderr; squash is NOT rolled back (T-03.04-03 mitigation)
+- [Phase ?]: Plan 03-05 lands jj log/status/diff/findConflicts bodies; conflicts() PLURAL revset (RESEARCH Q1 correction; CONTEXT/REQUIREMENTS doc-fix deferred to plan 03-07); jj resolve --list -r <rev> empirically verified on jj 0.41
 
 ### Pending Todos
 
@@ -179,7 +181,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-12T14:24:31.811Z
+Last session: 2026-05-12T14:36:34.297Z
 Stopped at: Completed 03-04-PLAN.md (commit squash body + bookmark advance + JJ-07 env propagation)
 Resume file: None
 
