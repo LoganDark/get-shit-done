@@ -892,6 +892,18 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       // snapshot. The integration test in __tests__/jj-snapshot-restore.test.ts
       // documents the observed behavior; if plan 03-07 wrap-up reveals a
       // cleanup gap, a follow-up `jj st`-driven removal lands here.
+      //
+      // IN-05 — caller responsibility: contract-suite tests that
+      // assert on `vcs.status()` after a `restore()` are sensitive to
+      // prior-test untracked-file residue (e.g., an `A untracked.txt`
+      // entry surfaces from a file materialized in the previous test
+      // and not deleted by op-restore). Authors of such tests must
+      // either: (a) delete the file via fs.unlinkSync before
+      // assertion, (b) seed and restore from a snapshot taken AFTER
+      // the suspect file was materialized, or (c) phrase the
+      // assertion to tolerate the residue. Phase 4 may add an
+      // opt-in `restore({clean: true})` once the orchestrator has a
+      // real caller need.
     },
   });
 
