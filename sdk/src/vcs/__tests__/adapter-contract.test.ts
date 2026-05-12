@@ -71,10 +71,11 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
     expect(vcs.findConflicts({ scope: 'working-copy' })).toEqual([]);
   });
 
-  test('vcs.hooks.fire(no hook installed) is a no-op', ({ vcs }) => {
-    const r = vcs.hooks.fire('pre-commit');
-    expect(r.exitCode).toBe(0);
-  });
+  // 2.1 D-07 + RESEARCH Open Q1: vcs.hooks public surface removed.
+  // The fireHook helper stays private in hook-bridge.ts; Phase 4 (HOOK-01..05)
+  // wires the internal invocation from commit() / push(). Re-introduce hook-
+  // firing observability tests there via side-effect assertion (e.g., a hook
+  // script that touches a file).
 
   test('vcs.gitOnly.version returns a real git version', ({ vcs }) => {
     if (vcs.kind !== 'git') return;

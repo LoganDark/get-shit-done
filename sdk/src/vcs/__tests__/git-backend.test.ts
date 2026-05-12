@@ -206,13 +206,11 @@ describe('createGitAdapter — workspace', () => {
   });
 });
 
-describe('createGitAdapter — hooks', () => {
-  it('hooks.fire returns ExecResult with exitCode 0 when no hook installed', () => {
-    const vcs = createGitAdapter(tmpDir);
-    const r = vcs.hooks.fire('pre-commit');
-    expect(r.exitCode).toBe(0);
-  });
-});
+// 2.1 D-07 + RESEARCH Open Q1: vcs.hooks public surface removed.
+// The fireHook helper stays private in hook-bridge.ts; Phase 4 (HOOK-01..05)
+// wires the internal invocation from commit() / push(). Re-introduce hook-
+// firing observability tests there via side-effect assertion (e.g., a hook
+// script that touches a file).
 
 describe('parseDiffCheckPath (CR-03 / WR-02)', () => {
   it('extracts POSIX path with no embedded colon (pre-2.31 line:line form)', () => {
@@ -627,13 +625,14 @@ describe('createGitAdapter — gitOnly.init / configGet / configSet (02-03 Task 
 });
 
 describe('createGitAdapter — frozen depth', () => {
+  // 2.1 D-07: vcs.hooks removed from public surface; frozen-depth probe no longer
+  // covers a hooks namespace because there is no hooks namespace on the adapter.
   it('every nested namespace is frozen', () => {
     const vcs: GitVcsAdapter = createGitAdapter(tmpDir);
     expect(Object.isFrozen(vcs)).toBe(true);
     expect(Object.isFrozen(vcs.refs)).toBe(true);
     expect(Object.isFrozen(vcs.refs.bookmarks)).toBe(true);
     expect(Object.isFrozen(vcs.workspace)).toBe(true);
-    expect(Object.isFrozen(vcs.hooks)).toBe(true);
     expect(Object.isFrozen(vcs.gitOnly)).toBe(true);
   });
 });

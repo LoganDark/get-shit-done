@@ -56,13 +56,14 @@ vcsTest('auto', ({ getVcs, getCwd, getKind }) => {
     assert.match(vcs.gitOnly.version(), /git version/);
   });
 
+  // 2.1 D-07: vcs.hooks removed from public surface; frozen-depth probe no longer
+  // covers a hooks namespace. Phase 4 (HOOK-01..05) wires hook firing internally.
   test('Object.isFrozen on adapter and nested namespaces', () => {
     const vcs = getVcs();
     assert.ok(Object.isFrozen(vcs));
     assert.ok(Object.isFrozen(vcs.refs));
     assert.ok(Object.isFrozen(vcs.refs.bookmarks));
     assert.ok(Object.isFrozen(vcs.workspace));
-    assert.ok(Object.isFrozen(vcs.hooks));
     assert.ok(Object.isFrozen(vcs.gitOnly));
   });
 });
