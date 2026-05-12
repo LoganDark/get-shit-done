@@ -91,7 +91,14 @@ Plans:
   3. `vcs.findConflicts({ scope: 'all' })` (via `jj log -r 'conflict()'`) and `{ scope: 'working-copy' }` (via `jj st`-style inspection) correctly surface in-tree conflicts that jj's conflict-tolerant model preserves silently, and the verify gate consumes the `'all'` scope.
   4. NDJSON output parsing (`-T 'json(self) ++ "\n"' --no-graph`) for `log`, `op log`, `workspace list` is centralized in `sdk/src/vcs/parse/jj-*.ts` with snapshot tests pinned against the supported jj version range; argv-array invocation only (no shell-string concatenation), and `--repository`, `--no-pager`, `--color never`, `--quiet` are passed uniformly.
   5. CI matrix runs both backends (`git` + `jj-colocated`) with `jj` installed via release-tarball install step; jj-backend tests are gated as allow-failure (graduated to required-blocking in Phase 5); worktree-edge-case bug tests (`bug-2924/2774/3097/3099/2075/2431/2015/2388`) are re-triaged with each test's destination (jj-mapped, git-only with rationale, or carries-verbatim) recorded.
-**Plans**: TBD
+**Plans**: 7 plans
+- [ ] 03-01-PLAN.md — Shape commit: types/exec/backends/index/parser stubs/config/fixture/triage-doc scaffold (JJ-01/02/03/05/06, SQUASH-05)
+- [ ] 03-02-PLAN.md — NDJSON parsers (real impls) + jj-id translator + __vcsTestOnly snapshot/restore (JJ-04)
+- [ ] 03-03-PLAN.md — Refs namespace: head/parent/bookmarks CRUD + currentBookmarks + resolveShort/exists/countCommits/rootCommits/remotes (REFS-01..04, REFS-06)
+- [ ] 03-04-PLAN.md — Squash commit + bookmark advance + JJ-07 env (SQUASH-01..07, REFS-05, JJ-07)
+- [ ] 03-05-PLAN.md — Status, log, diff, findConflicts (conflicts() plural) (CONFLICT-01..03)
+- [ ] 03-06-PLAN.md — Push/fetch + workspace stubs + TEST-08 bug-test triage execution (TEST-08)
+- [ ] 03-07-PLAN.md — Wrap-up: CI matrix activation + conflict()→conflicts() doc-fix + phase-close invariants (CI-01, CI-02)
 
 ### Phase 4: Workspaces + Octopus Structure + Hooks
 **Goal**: Land the orchestrator-creates-heads-and-workspaces flow with lazy octopus-merge structure, batch reap of empty heads, workspace-path-safety guards, and the v1 hook strategy (Tier 1: colocated default + jj-native non-colocated direct trigger). Subagent fan-out works end-to-end on jj, and pre-commit/pre-push hooks fire at the right moments on both backends.
