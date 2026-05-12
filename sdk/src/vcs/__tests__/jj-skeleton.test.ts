@@ -122,10 +122,20 @@ describe('Phase 3 plan 03-01: jj.ts skeleton', () => {
   });
 
   // __vcsTestOnly
-  it('__vcsTestOnly.snapshot/restore throw VcsNotImplementedError', () => {
+  // Phase 3 plan 03-02 landed the real `jj op log`/`jj op restore` body.
+  // On a non-existent cwd (`/tmp/never-exists`), snapshot() now throws the
+  // typed VcsExecError instead of VcsNotImplementedError. The integration
+  // suite in jj-snapshot-restore.test.ts covers the happy-path against
+  // real jj 0.41; here we only verify that the verbs ARE wired (no longer
+  // stub-throwing) and the kind-mismatch guard on restore() is in place.
+  it('__vcsTestOnly.snapshot/restore are wired (no longer VcsNotImplementedError)', () => {
     const t = (vcs as any)[__vcsTestOnly];
-    expect(() => t.snapshot()).toThrow(VcsNotImplementedError);
-    expect(() => t.restore({ id: 'x', kind: 'jj' })).toThrow(VcsNotImplementedError);
+    expect(() => t.snapshot()).not.toThrow(VcsNotImplementedError);
+    expect(() => t.restore({ id: 'x', kind: 'jj' })).not.toThrow(VcsNotImplementedError);
+  });
+  it('__vcsTestOnly.restore rejects handle with kind mismatch', () => {
+    const t = (vcs as any)[__vcsTestOnly];
+    expect(() => t.restore({ id: 'x', kind: 'git' })).toThrow(/handle kind mismatch/);
   });
 });
 

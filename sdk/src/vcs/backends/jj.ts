@@ -20,7 +20,7 @@
  */
 
 import { expr } from '../expr.js';
-import { vcsExec } from '../exec.js';
+import { vcsExec, VcsExecError } from '../exec.js';
 import type { ExecResult } from '../exec.js';
 import { toJjRev } from '../parse/jj-rev.js';
 import { parseJjLog } from '../parse/jj-log.js';
@@ -149,20 +149,67 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     prune: (): ExecResult => notImpl('workspace.prune'),
   });
 
-  // ─── test-only snapshot/restore (plan 03-02 — parser plan owns this since
-  //     `jj op log` parsing is its remit) ──────────────────────────────────
+  // ─── test-only snapshot/restore (plan 03-02) ───────────────────────────
+  // RESEARCH §`[__vcsTestOnly]`: `jj op log` ids are stable snapshots of
+  // the entire repo state. `jj op restore <id>` rewinds the workspace to
+  // exactly that operation, which is cleaner than git's `reset --hard +
+  // clean -fdx` strategy. D-05 still applies: no `--ignore-working-copy`.
   const testOnly: VcsTestOnly = Object.freeze({
-    snapshot: (): SnapshotHandle => notImpl('__vcsTestOnly.snapshot'),
-    restore: (_handle: SnapshotHandle): void =>
-      notImpl('__vcsTestOnly.restore'),
+    snapshot: (): SnapshotHandle => {
+      const args = jjArgv('op', 'log', '--no-graph', '-T', 'id ++ "\\n"', '-n', '1');
+      const r = vcsExec(cwd, 'jj', args);
+      if (r.exitCode !== 0) {
+        throw new VcsExecError(
+          `__vcsTestOnly.snapshot: ${r.stderr || r.stdout}`,
+          {
+            exitCode: r.exitCode,
+            stdout: r.stdout,
+            stderr: r.stderr,
+            timedOut: r.timedOut,
+            args,
+          }
+        );
+      }
+      const id = r.stdout.split('\n').filter(Boolean)[0] ?? '';
+      if (!id) {
+        throw new Error('__vcsTestOnly.snapshot: jj op log returned empty id');
+      }
+      return { id, kind: 'jj' };
+    },
+    restore: (handle: SnapshotHandle): void => {
+      if (handle.kind !== 'jj') {
+        throw new Error(
+          `__vcsTestOnly.restore: handle kind mismatch (got ${handle.kind}, expected jj)`
+        );
+      }
+      const args = jjArgv('op', 'restore', handle.id);
+      const r = vcsExec(cwd, 'jj', args);
+      if (r.exitCode !== 0) {
+        throw new VcsExecError(
+          `__vcsTestOnly.restore: ${r.stderr || r.stdout}`,
+          {
+            exitCode: r.exitCode,
+            stdout: r.stdout,
+            stderr: r.stderr,
+            timedOut: r.timedOut,
+            args,
+          }
+        );
+      }
+      // Q4 (RESEARCH): jj op restore rewinds the jj op-log state but does
+      // NOT necessarily delete untracked disk files materialized after the
+      // snapshot. The integration test in __tests__/jj-snapshot-restore.test.ts
+      // documents the observed behavior; if plan 03-07 wrap-up reveals a
+      // cleanup gap, a follow-up `jj st`-driven removal lands here.
+    },
   });
 
   // Mark imports used (silence TS unused warnings — they become real in
-  // verb-group plans). These are no-op references that compile away.
+  // verb-group plans 03-03..03-06). `vcsExec` is now used by `testOnly`
+  // (plan 03-02). Other refs compile away when verbs land.
   void jjArgv;
   void addPrefix;
   void stripPrefix;
-  void vcsExec;
   void toJjRev;
   void parseJjLog;
   void parseJjWorkspaceList;

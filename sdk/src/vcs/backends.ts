@@ -72,9 +72,13 @@ export const BACKENDS_AVAILABLE_FOR_VERB: Readonly<
   'workspace.prune': Object.freeze(['git'] as const),
   // Test-only snapshot/restore (gated separately so per-test fixture
   // setup can probe verb availability before invoking them — see
-  // sdk/src/vcs/__tests__/vcs-fixture.ts).
-  '__vcsTestOnly.snapshot': Object.freeze(['git'] as const),
-  '__vcsTestOnly.restore': Object.freeze(['git'] as const),
+  // sdk/src/vcs/__tests__/vcs-fixture.ts). Phase 3 plan 03-02 flipped both
+  // entries to include 'jj-colocated' once the real `jj op log`/
+  // `jj op restore`-backed body landed in backends/jj.ts. This unlocks
+  // the contract-test fixture lane for jj-colocated, enabling per-test
+  // hermetic state rewind for verb-group plans 03-03..03-06.
+  '__vcsTestOnly.snapshot': Object.freeze(['git', 'jj-colocated'] as const),
+  '__vcsTestOnly.restore': Object.freeze(['git', 'jj-colocated'] as const),
 });
 
 export interface ParseBackendsResult {

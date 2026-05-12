@@ -36,8 +36,16 @@ describe('BACKENDS_AVAILABLE_FOR_VERB (Phase 3 D-12 per-verb allowlist)', () => 
     expect(Object.isFrozen(BACKENDS_AVAILABLE_FOR_VERB)).toBe(true);
   });
   it('includes __vcsTestOnly.snapshot / restore (vcs-fixture probes these)', () => {
-    expect(BACKENDS_AVAILABLE_FOR_VERB['__vcsTestOnly.snapshot']).toEqual(['git']);
-    expect(BACKENDS_AVAILABLE_FOR_VERB['__vcsTestOnly.restore']).toEqual(['git']);
+    // Phase 3 plan 03-02 flipped both entries to include jj-colocated once
+    // the real jj op log / jj op restore body landed in backends/jj.ts.
+    expect(BACKENDS_AVAILABLE_FOR_VERB['__vcsTestOnly.snapshot']).toEqual([
+      'git',
+      'jj-colocated',
+    ]);
+    expect(BACKENDS_AVAILABLE_FOR_VERB['__vcsTestOnly.restore']).toEqual([
+      'git',
+      'jj-colocated',
+    ]);
   });
 });
 
