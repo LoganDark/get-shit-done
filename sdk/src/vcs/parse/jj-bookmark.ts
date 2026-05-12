@@ -41,7 +41,7 @@ export function parseJjBookmarkRecord(
   line: string,
   stripPrefix: (s: string) => string,
 ): Bookmark {
-  let record: { name: string; target: unknown };
+  let record: { name: unknown; target: unknown };
   try {
     record = JSON.parse(line);
   } catch (e) {
@@ -50,9 +50,22 @@ export function parseJjBookmarkRecord(
       `parseJjBookmarkRecord: malformed NDJSON line: ${preview} (${(e as Error).message})`,
     );
   }
+  // IN-02: type-shape validation — JSON.parse returns `any` and an
+  // upstream contract drift like `{"name":null,"target":[...]}` would
+  // otherwise propagate null through stripPrefix.startsWith (TypeError)
+  // or into VcsBookmarkDivergentError.bookmarkName silently. Mirror the
+  // T-03.02-01 "throw on contract drift" pattern used for JSON.parse
+  // failures.
+  if (typeof record.name !== 'string') {
+    const preview = line.length > 80 ? line.slice(0, 80) + '...' : line;
+    throw new Error(
+      `parseJjBookmarkRecord: contract drift — record.name is not a string (got ${typeof record.name}): ${preview}`,
+    );
+  }
+  const recordName: string = record.name;
   if (Array.isArray(record.target) && record.target.length > 1) {
     throw new VcsBookmarkDivergentError({
-      bookmarkName: record.name,
+      bookmarkName: recordName,
       divergentTargets: record.target as readonly string[],
     });
   }
@@ -60,5 +73,5 @@ export function parseJjBookmarkRecord(
     Array.isArray(record.target) && record.target.length > 0
       ? (record.target[0] as string)
       : '';
-  return { name: stripPrefix(record.name), rev: firstTarget };
+  return { name: stripPrefix(recordName), rev: firstTarget };
 }
