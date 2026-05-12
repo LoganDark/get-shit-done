@@ -219,8 +219,10 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
    *  - `opts.maxCount` → `-n N`
    *  - `opts.allRefs` → `-r 'all()'`
    *  - `opts.rev` → `-r toJjRev(rev)`
-   *  - `opts.paths` → trailing positional path filter (jj has no `--`
-   *    separator like git uses; paths follow the rev args)
+   *  - `opts.paths` → trailing positional path filter, prefixed with the
+   *    `--` end-of-options separator (WR-01: verified working on jj 0.41;
+   *    neutralizes leading-`-` paths that would otherwise be parsed as
+   *    flags by jj's CLI — same defense the git backend uses at git.ts:202).
    * PITFALL 1: `LogEntry.hash` is `commit_id` (40-char hex), NEVER
    * `change_id` — pinned by `parseJjLog`.
    */
@@ -229,7 +231,7 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     if (opts.maxCount) args.push('-n', String(opts.maxCount));
     if (opts.allRefs) args.push('-r', 'all()');
     if (opts.rev) args.push('-r', toJjRev(opts.rev));
-    if (opts.paths && opts.paths.length > 0) args.push(...opts.paths);
+    if (opts.paths && opts.paths.length > 0) args.push('--', ...opts.paths);
     const r = vcsExec(cwd, 'jj', jjArgv(...args));
     if (r.exitCode !== 0) return [];
     return parseJjLog(r.stdout);
@@ -312,14 +314,16 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
    *  - `opts.nameOnly` → `--name-only`
    *  - `opts.nameStatus` → `--summary` (jj's name-status equivalent)
    *  - `opts.rev` → `-r toJjRev(rev)`
-   *  - `opts.paths` → trailing positional (jj has no `--` separator)
+   *  - `opts.paths` → trailing positional, prefixed with `--` end-of-options
+   *    separator (WR-01: verified working on jj 0.41; mirrors the git
+   *    backend's argv shape at git.ts:298).
    */
   const diff = (opts: DiffOpts = {}): DiffResult => {
     const args: string[] = ['diff'];
     if (opts.nameOnly) args.push('--name-only');
     if (opts.nameStatus) args.push('--summary');
     if (opts.rev) args.push('-r', toJjRev(opts.rev));
-    if (opts.paths && opts.paths.length > 0) args.push(...opts.paths);
+    if (opts.paths && opts.paths.length > 0) args.push('--', ...opts.paths);
     // opts.staged: no-op on jj (no index concept). See JSDoc above.
     const r = vcsExec(cwd, 'jj', jjArgv(...args));
     if (r.exitCode !== 0) {
