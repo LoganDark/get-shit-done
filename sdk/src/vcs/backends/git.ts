@@ -322,6 +322,12 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
   };
 
   // ─── refs.bookmarks ──────────────────────────────────────────────────────
+  /**
+   * Phase 3 D-04: `opts.raw` is accepted on every mutating bookmark method
+   * but IGNORED on the git backend. Git branches use unprefixed names
+   * (upstream convention) — there is no `gsd/` prefix to escape. The jj
+   * backend uses this flag to opt out of its internal `gsd/` prefix munging.
+   */
   const bookmarks = Object.freeze({
     list: (): Bookmark[] => {
       const r = execGit(cwd, ['branch', '--format=%(refname:short)']);
@@ -333,30 +339,31 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         .filter(Boolean)
         .map((name) => ({ name: name.trim(), rev: '' }));
     },
-    create: (name: string, rev: RevisionExpr): void => {
+    create: (name: string, rev: RevisionExpr, _opts?: { raw?: boolean }): void => {
       const r = execGit(cwd, ['branch', name, toGitRev(rev)]);
       if (r.exitCode !== 0) {
         throw new Error(`bookmarks.create failed: ${r.stderr || r.stdout}`);
       }
     },
-    move: (name: string, rev: RevisionExpr): void => {
+    move: (name: string, rev: RevisionExpr, _opts?: { raw?: boolean }): void => {
       const r = execGit(cwd, ['branch', '-f', name, toGitRev(rev)]);
       if (r.exitCode !== 0) {
         throw new Error(`bookmarks.move failed: ${r.stderr || r.stdout}`);
       }
     },
-    delete: (name: string): void => {
+    delete: (name: string, _opts?: { raw?: boolean }): void => {
       const r = execGit(cwd, ['branch', '-D', name]);
       if (r.exitCode !== 0) {
         throw new Error(`bookmarks.delete failed: ${r.stderr || r.stdout}`);
       }
     },
-    exists: (name: string): boolean => {
+    exists: (name: string, _opts?: { raw?: boolean }): boolean => {
       const r = execGit(cwd, ['rev-parse', '--verify', '--quiet', name]);
       return r.exitCode === 0;
     },
     // Plan 02-03 Task 1 gap-fill: switch / checkout (with optional create).
-    switch: (name: string, opts: { create?: boolean } = {}): void => {
+    // Phase 3 D-04: `opts.raw` accepted and ignored (git has no prefix to escape).
+    switch: (name: string, opts: { create?: boolean; raw?: boolean } = {}): void => {
       const args = opts.create ? ['checkout', '-b', name] : ['checkout', name];
       const r = execGit(cwd, args);
       if (r.exitCode !== 0) {

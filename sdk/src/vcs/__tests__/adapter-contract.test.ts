@@ -72,10 +72,26 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
   test.skipIf(
     !ready('refs.bookmarks.list') || !ready('refs.bookmarks.create') || !ready('refs.bookmarks.exists') || !ready('refs.bookmarks.delete')
   )('vcs.refs.bookmarks: create, exists, list, delete', ({ vcs }) => {
-    const before = vcs.refs.bookmarks.list();
-    expect(before.length).toBeGreaterThan(0);
-    const baseBranch = before[0].name;
-    vcs.refs.bookmarks.create('feat-x', expr.bookmark(baseBranch));
+    // Phase 3 plan 03-03: this used to be a single-shape test against git's
+    // implicit `main` branch, but jj's `initJjRepo` (vcs-fixture.ts) has no
+    // implicit bookmark — jj's `@` is anonymous on top of root. To preserve
+    // the cross-backend property under test (create → exists → list-membership
+    // → delete → not-exists), branch on `vcs.kind`:
+    //   - git: read existing `before[0].name` and base `feat-x` off it via
+    //     `expr.bookmark(name)`.
+    //   - jj: base `feat-x` off `expr.parent()` directly (no need to round-
+    //     trip through a bookmark revset; the jj adapter's D-03 `gsd/`
+    //     prefix would otherwise force `expr.bookmark('base')` to resolve
+    //     to revset `base` which doesn't exist on jj — only `gsd/base` does).
+    const baseRev =
+      vcs.kind === 'jj'
+        ? expr.parent()
+        : (() => {
+            const before = vcs.refs.bookmarks.list();
+            expect(before.length).toBeGreaterThan(0);
+            return expr.bookmark(before[0].name);
+          })();
+    vcs.refs.bookmarks.create('feat-x', baseRev);
     expect(vcs.refs.bookmarks.exists('feat-x')).toBe(true);
     expect(vcs.refs.bookmarks.list().some((b) => b.name === 'feat-x')).toBe(true);
     vcs.refs.bookmarks.delete('feat-x');
@@ -104,12 +120,29 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
   // Plan 02-03 Task 3 — symmetric contract tests for new verbs.
   // These properties hold on every backend (git in Phase 1/2; jj added in Phase 3).
 
-  test.skipIf(!ready('refs.currentBookmarks'))('vcs.refs.currentBookmarks returns a non-empty string[] after init', ({ vcs }) => {
+  test.skipIf(!ready('refs.currentBookmarks'))('vcs.refs.currentBookmarks returns a string[] after init', ({ vcs }) => {
+    // Phase 3 plan 03-03: git's `initGitRepo` produces an attached `main`/
+    // `master` branch so currentBookmarks() returns one entry. jj's
+    // `initJjRepo` produces an anonymous @ on top of root with no
+    // bookmarks, so currentBookmarks() returns []. Both cases satisfy the
+    // cross-backend contract (Array of strings; D-15 explicitly admits the
+    // empty-array case for anonymous head). When a bookmark IS attached,
+    // the entry is a non-empty string — seed and re-probe to pin that half.
     const cb = vcs.refs.currentBookmarks();
     expect(Array.isArray(cb)).toBe(true);
-    expect(cb.length).toBeGreaterThan(0);
-    expect(typeof cb[0]).toBe('string');
-    expect(cb[0]!.length).toBeGreaterThan(0);
+    if (vcs.kind === 'git') {
+      // Git always has an attached branch after init.
+      expect(cb.length).toBeGreaterThan(0);
+      expect(typeof cb[0]).toBe('string');
+      expect(cb[0]!.length).toBeGreaterThan(0);
+    } else {
+      // jj: fresh init has no bookmarks. Seed one and verify currentBookmarks()
+      // surfaces the (stripped) name.
+      vcs.refs.bookmarks.create('cb-test', expr.parent());
+      const cb2 = vcs.refs.currentBookmarks();
+      expect(cb2.length).toBeGreaterThan(0);
+      expect(cb2).toContain('cb-test'); // stripped per D-03
+    }
   });
 
   test.skipIf(!ready('refs.countCommits') || !ready('commit'))('vcs.refs.countCommits returns a positive integer after a commit', ({ vcs, cwd }) => {
@@ -120,9 +153,14 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
     expect(n).toBeGreaterThan(0);
   });
 
-  test.skipIf(!ready('refs.exists'))('vcs.refs.exists is true for HEAD, false for an all-zeros SHA', ({ vcs }) => {
+  test.skipIf(!ready('refs.exists'))('vcs.refs.exists is true for HEAD, false for a nonexistent SHA', ({ vcs }) => {
     expect(vcs.refs.exists(vcs.refs.head)).toBe(true);
-    expect(vcs.refs.exists(expr.rev('0000000000000000000000000000000000000000'))).toBe(false);
+    // Phase 3 plan 03-03: the all-zeros SHA used to be the canonical "does
+    // not exist" probe on git, but jj uses `0000...0000` as its synthetic
+    // root commit id (`root()` revset resolves to it) — so the all-zeros
+    // probe returns true on jj backends. Use `ffff...ffff` instead, which
+    // is non-existent on both backends.
+    expect(vcs.refs.exists(expr.rev('ffffffffffffffffffffffffffffffffffffffff'))).toBe(false);
   });
 
   test.skipIf(!ready('workspace.context'))('vcs.workspace.context on main workspace: mode=main, gitDir===gitCommonDir', ({ vcs }) => {

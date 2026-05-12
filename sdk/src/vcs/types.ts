@@ -228,12 +228,20 @@ export interface VcsRefs {
 
 export interface VcsBookmarks {
   list(): Bookmark[];
-  create(name: string, rev: RevisionExpr): void;
-  move(name: string, rev: RevisionExpr): void;
-  delete(name: string): void;
-  exists(name: string): boolean;
-  // Plan 02-03 Task 1 gap-fill (RESEARCH §Forward-Complete Gaps Summary):
-  switch(name: string, opts?: { create?: boolean }): void;
+  /**
+   * Phase 3 D-04 raw-name escape: when `opts.raw === true` the jj backend
+   * does NOT add its internal `gsd/` prefix (used for upstream-tracking
+   * bookmarks like `main`/`trunk`). On the git backend the flag is accepted
+   * and IGNORED — git branches use unprefixed names natively, there is no
+   * `gsd/` prefix to escape.
+   */
+  create(name: string, rev: RevisionExpr, opts?: { raw?: boolean }): void;
+  move(name: string, rev: RevisionExpr, opts?: { raw?: boolean }): void;
+  delete(name: string, opts?: { raw?: boolean }): void;
+  exists(name: string, opts?: { raw?: boolean }): boolean;
+  // Plan 02-03 Task 1 gap-fill (RESEARCH §Forward-Complete Gaps Summary);
+  // Phase 3 D-04 extended `opts` with the raw-name escape.
+  switch(name: string, opts?: { create?: boolean; raw?: boolean }): void;
 }
 
 // Phase 2.1 D-18: workspace.context() return shape — cross-backend fields only.

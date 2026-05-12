@@ -25,6 +25,7 @@ import type { ExecResult } from '../exec.js';
 import { toJjRev } from '../parse/jj-rev.js';
 import { parseJjLog } from '../parse/jj-log.js';
 import { parseJjWorkspaceList } from '../parse/jj-workspace-list.js';
+import { parseJjBookmarkRecord } from '../parse/jj-bookmark.js';
 import { __vcsTestOnly, VcsNotImplementedError } from '../types.js';
 import type {
   Bookmark,
@@ -77,7 +78,6 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
    * names; the adapter adds the prefix on every write path. D-04 raw-name
    * escape: `raw === true` skips the addition.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const addPrefix = (name: string, raw?: boolean): string =>
     raw ? name : `gsd/${name}`;
 
@@ -85,7 +85,6 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
    * D-03 strip half: every read path that emits a bookmark name to a
    * caller threads through this helper.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const stripPrefix = (name: string): string =>
     name.startsWith('gsd/') ? name.slice('gsd/'.length) : name;
 
@@ -112,16 +111,72 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
   const fetch = (_opts: FetchOpts = {}): ExecResult => notImpl('fetch');
 
   // ─── refs.bookmarks namespace (plan 03-03) ──────────────────────────────
+  // D-03 (gsd/ prefix discipline): every mutating write threads through
+  // `addPrefix(name, opts?.raw)`; every read site that emits a name to a
+  // caller threads through `stripPrefix(rawName)`.
+  // D-04 (raw escape): `opts.raw === true` opts out of the prefix add on
+  // mutating methods. Used for upstream-tracking bookmarks like `main`.
+  // D-02 (divergence): `bookmarks.list` throws `VcsBookmarkDivergentError`
+  // via `parseJjBookmarkRecord` when the `target` array reports >1 entry.
   const bookmarks: VcsBookmarks = Object.freeze({
-    list: (): Bookmark[] => notImpl('refs.bookmarks.list'),
-    create: (_name: string, _rev: RevisionExpr): void =>
-      notImpl('refs.bookmarks.create'),
-    move: (_name: string, _rev: RevisionExpr): void =>
-      notImpl('refs.bookmarks.move'),
-    delete: (_name: string): void => notImpl('refs.bookmarks.delete'),
-    exists: (_name: string): boolean => notImpl('refs.bookmarks.exists'),
-    switch: (_name: string, _opts?: { create?: boolean }): void =>
-      notImpl('refs.bookmarks.switch'),
+    list: (): Bookmark[] => {
+      const args = jjArgv('bookmark', 'list', '-T', 'json(self) ++ "\\n"');
+      const r = vcsExec(cwd, 'jj', args);
+      if (r.exitCode !== 0) {
+        throw new VcsExecError(`refs.bookmarks.list failed: ${r.stderr || r.stdout}`, {
+          exitCode: r.exitCode,
+          stdout: r.stdout,
+          stderr: r.stderr,
+          timedOut: r.timedOut,
+          args,
+        });
+      }
+      const lines = r.stdout.split('\n').filter(Boolean);
+      return lines.map((line) => parseJjBookmarkRecord(line, stripPrefix));
+    },
+    create: (name: string, rev: RevisionExpr, opts?: { raw?: boolean }): void => {
+      const actualName = addPrefix(name, opts?.raw);
+      const args = jjArgv('bookmark', 'create', actualName, '-r', toJjRev(rev));
+      const r = vcsExec(cwd, 'jj', args);
+      if (r.exitCode !== 0) {
+        throw new Error(`refs.bookmarks.create failed: ${r.stderr || r.stdout}`);
+      }
+    },
+    move: (name: string, rev: RevisionExpr, opts?: { raw?: boolean }): void => {
+      const actualName = addPrefix(name, opts?.raw);
+      const args = jjArgv('bookmark', 'move', actualName, '--to', toJjRev(rev));
+      const r = vcsExec(cwd, 'jj', args);
+      if (r.exitCode !== 0) {
+        throw new Error(`refs.bookmarks.move failed: ${r.stderr || r.stdout}`);
+      }
+    },
+    delete: (name: string, opts?: { raw?: boolean }): void => {
+      const actualName = addPrefix(name, opts?.raw);
+      const args = jjArgv('bookmark', 'delete', actualName);
+      const r = vcsExec(cwd, 'jj', args);
+      if (r.exitCode !== 0) {
+        throw new Error(`refs.bookmarks.delete failed: ${r.stderr || r.stdout}`);
+      }
+    },
+    exists: (name: string, opts?: { raw?: boolean }): boolean => {
+      const actualName = addPrefix(name, opts?.raw);
+      // `jj bookmark list <name>` exits 0 even when the bookmark is absent
+      // (just emits an empty list). The presence probe combines exit-0 with
+      // non-empty stdout.
+      const args = jjArgv('bookmark', 'list', actualName);
+      const r = vcsExec(cwd, 'jj', args);
+      return r.exitCode === 0 && r.stdout.trim().length > 0;
+    },
+    switch: (_name: string, _opts?: { create?: boolean; raw?: boolean }): void => {
+      // RESEARCH §`refs.bookmarks.switch`: no Phase 3 caller exercises this
+      // on jj backends. The two production callers in get-shit-done/bin/lib/
+      // commands.cjs:319/321 both pin `createVcsAdapter(cwd, { kind: 'git' })`
+      // so the dispatch is statically git-only. Audit recorded in
+      // 03-03-AUDIT.md; Phase 4 reshapes if WS-* needs it.
+      throw new VcsNotImplementedError(
+        'refs.bookmarks.switch: deferred — no Phase 3 caller exercises this on jj backend (see 03-03-AUDIT.md)',
+      );
+    },
   });
 
   // ─── refs namespace (plan 03-03) ────────────────────────────────────────
@@ -129,15 +184,118 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     head: expr.head(),
     parent: expr.parent(),
     bookmarks,
-    currentBookmarks: (): string[] => notImpl('refs.currentBookmarks'),
-    resolveShort: (_rev: RevisionExpr): string => notImpl('refs.resolveShort'),
-    countCommits: (_opts: { rev?: RevisionExpr }): number =>
-      notImpl('refs.countCommits'),
-    rootCommits: (_opts: { rev?: RevisionExpr }): string[] =>
-      notImpl('refs.rootCommits'),
-    exists: (_rev: RevisionExpr): boolean => notImpl('refs.exists'),
-    isIgnored: (_path: string): boolean => notImpl('refs.isIgnored'),
-    remotes: (): string[] => notImpl('refs.remotes'),
+
+    currentBookmarks: (): string[] => {
+      // jj's "current bookmark" semantics map to bookmarks at @- (the parent
+      // of the working-copy commit), because @ is always the in-progress WC
+      // commit. Multiple bookmarks can point at the same revision; the
+      // template `bookmarks.join("\n")` emits each name on its own line.
+      const args = jjArgv(
+        'log',
+        '-r',
+        '@-',
+        '-T',
+        'bookmarks.join("\\n")',
+        '--no-graph',
+        '-n',
+        '1',
+      );
+      const r = vcsExec(cwd, 'jj', args);
+      if (r.exitCode !== 0) return [];
+      return r.stdout
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        // jj appends `*` to a bookmark name when the local bookmark is ahead
+        // of its remote-tracking counterpart. Strip for caller-visible name.
+        .map((s) => s.replace(/\*$/, ''))
+        .map(stripPrefix);
+    },
+
+    resolveShort: (rev: RevisionExpr): string => {
+      const args = jjArgv(
+        'log',
+        '-r',
+        toJjRev(rev),
+        '-T',
+        'commit_id.short()',
+        '--no-graph',
+        '-n',
+        '1',
+      );
+      const r = vcsExec(cwd, 'jj', args);
+      if (r.exitCode !== 0) {
+        throw new Error(`refs.resolveShort failed: ${r.stderr || r.stdout}`);
+      }
+      return r.stdout.trim();
+    },
+
+    countCommits: ({ rev }: { rev?: RevisionExpr }): number => {
+      const target = rev ? toJjRev(rev) : '::@';
+      // Emit each commit's id on its own line so the count survives
+      // vcsExec's stdout trim (a bare `"\n"` template would collapse to
+      // empty stdout after trim and miscount as zero). `.split('\n')` +
+      // `.filter(Boolean)` is the same idiom used by every other parser in
+      // this file.
+      const args = jjArgv('log', '-r', target, '-T', 'commit_id ++ "\\n"', '--no-graph');
+      const r = vcsExec(cwd, 'jj', args);
+      if (r.exitCode !== 0) return 0;
+      return r.stdout.split('\n').filter(Boolean).length;
+    },
+
+    rootCommits: ({ rev }: { rev?: RevisionExpr }): string[] => {
+      const target = rev ? toJjRev(rev) : '@';
+      const args = jjArgv(
+        'log',
+        '-r',
+        `root() & ::${target}`,
+        '-T',
+        'commit_id ++ "\\n"',
+        '--no-graph',
+      );
+      const r = vcsExec(cwd, 'jj', args);
+      if (r.exitCode !== 0) return [];
+      return r.stdout
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    },
+
+    exists: (rev: RevisionExpr): boolean => {
+      const args = jjArgv(
+        'log',
+        '-r',
+        toJjRev(rev),
+        '-T',
+        '"x"',
+        '--no-graph',
+        '-n',
+        '1',
+      );
+      const r = vcsExec(cwd, 'jj', args);
+      return r.exitCode === 0 && r.stdout.trim().length > 0;
+    },
+
+    isIgnored: (_path: string): boolean => {
+      // RESEARCH §`refs.isIgnored`: the single production caller is
+      // `get-shit-done/bin/lib/core.cjs` (ADR-0004) which constructs the
+      // adapter via `createVcsAdapter(cwd, { kind: 'git' })` — statically
+      // git-only. Audit recorded in 03-03-AUDIT.md. jj-side semantics
+      // revisit in Phase 4 if a real caller surfaces.
+      throw new VcsNotImplementedError(
+        'refs.isIgnored: deferred — only git-side production caller (core.cjs) pins kind:git; jj-side semantics revisit in Phase 4 (see 03-03-AUDIT.md)',
+      );
+    },
+
+    remotes: (): string[] => {
+      const args = jjArgv('git', 'remote', 'list', '-T', 'name ++ "\\n"');
+      const r = vcsExec(cwd, 'jj', args);
+      if (r.exitCode !== 0) return [];
+      return r.stdout
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    },
   });
 
   // ─── workspace namespace (plan 03-06; stubs only — Phase 4 owns real semantics) ─
@@ -204,13 +362,11 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     },
   });
 
-  // Mark imports used (silence TS unused warnings — they become real in
-  // verb-group plans 03-03..03-06). `vcsExec` is now used by `testOnly`
-  // (plan 03-02). Other refs compile away when verbs land.
-  void jjArgv;
-  void addPrefix;
-  void stripPrefix;
-  void toJjRev;
+  // Mark imports used (silence TS unused warnings — these become real in
+  // verb-group plans 03-04..03-05). `addPrefix`, `stripPrefix`, `toJjRev`,
+  // `jjArgv`, and `vcsExec` are now actively used by the refs.* + bookmarks
+  // implementations landed in plan 03-03. The two remaining void shims cover
+  // parsers consumed by plans 03-05 (log) and 03-06 (workspace).
   void parseJjLog;
   void parseJjWorkspaceList;
 

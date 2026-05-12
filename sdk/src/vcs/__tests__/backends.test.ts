@@ -24,10 +24,19 @@ describe('BACKENDS constants', () => {
 });
 
 describe('BACKENDS_AVAILABLE_FOR_VERB (Phase 3 D-12 per-verb allowlist)', () => {
-  it('seeds every cross-backend verb with [git] only at plan 03-01 land time', () => {
+  it('seeds plan-03-01 unimplemented verbs with [git] only; plan 03-03 flipped refs.* entries', () => {
+    // Verbs still pending body in plans 03-04..03-06 stay [git]-only:
     expect(BACKENDS_AVAILABLE_FOR_VERB.commit).toEqual(['git']);
     expect(BACKENDS_AVAILABLE_FOR_VERB.log).toEqual(['git']);
-    expect(BACKENDS_AVAILABLE_FOR_VERB['refs.bookmarks.list']).toEqual(['git']);
+    // Plan 03-03 flipped refs.bookmarks.list to admit jj-colocated:
+    expect(BACKENDS_AVAILABLE_FOR_VERB['refs.bookmarks.list']).toEqual([
+      'git',
+      'jj-colocated',
+    ]);
+    // refs.bookmarks.switch + refs.isIgnored stay git-only (audit-confirmed
+    // no jj-reachable caller; jj backend throws VcsNotImplementedError):
+    expect(BACKENDS_AVAILABLE_FOR_VERB['refs.bookmarks.switch']).toEqual(['git']);
+    expect(BACKENDS_AVAILABLE_FOR_VERB['refs.isIgnored']).toEqual(['git']);
   });
   it('declares at least 25 verb keys (full VcsAdapterCommon surface)', () => {
     expect(Object.keys(BACKENDS_AVAILABLE_FOR_VERB).length).toBeGreaterThanOrEqual(25);

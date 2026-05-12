@@ -62,46 +62,54 @@ describe('Phase 3 plan 03-01: jj.ts skeleton', () => {
   });
 
   // refs.bookmarks namespace
-  it('refs.bookmarks.list() throws VcsNotImplementedError', () => {
-    expect(() => vcs.refs.bookmarks.list()).toThrow(VcsNotImplementedError);
+  // Phase 3 plan 03-03 landed real bodies for list/create/move/delete/exists.
+  // Against a non-existent cwd (`/tmp/never-exists`) they no longer throw
+  // VcsNotImplementedError — they either spawn jj (returning a non-zero
+  // exitCode) or return falsy (exists is exit-0 + non-empty stdout, both fail
+  // here). The integration suite in jj-refs.test.ts covers the happy path.
+  // `switch` stays VcsNotImplementedError per the audit (03-03-AUDIT.md).
+  it('refs.bookmarks.list() does not throw VcsNotImplementedError (wired in plan 03-03)', () => {
+    // Probe lifecycle only — the call may throw VcsExecError, not the stub error.
+    expect(() => vcs.refs.bookmarks.list()).not.toThrow(VcsNotImplementedError);
   });
-  it('refs.bookmarks.create() throws VcsNotImplementedError', () => {
-    expect(() => vcs.refs.bookmarks.create('x', expr.head())).toThrow(VcsNotImplementedError);
+  it('refs.bookmarks.create() does not throw VcsNotImplementedError (wired in plan 03-03)', () => {
+    expect(() => vcs.refs.bookmarks.create('x', expr.head())).not.toThrow(VcsNotImplementedError);
   });
-  it('refs.bookmarks.move() throws VcsNotImplementedError', () => {
-    expect(() => vcs.refs.bookmarks.move('x', expr.head())).toThrow(VcsNotImplementedError);
+  it('refs.bookmarks.move() does not throw VcsNotImplementedError (wired in plan 03-03)', () => {
+    expect(() => vcs.refs.bookmarks.move('x', expr.head())).not.toThrow(VcsNotImplementedError);
   });
-  it('refs.bookmarks.delete() throws VcsNotImplementedError', () => {
-    expect(() => vcs.refs.bookmarks.delete('x')).toThrow(VcsNotImplementedError);
+  it('refs.bookmarks.delete() does not throw VcsNotImplementedError (wired in plan 03-03)', () => {
+    expect(() => vcs.refs.bookmarks.delete('x')).not.toThrow(VcsNotImplementedError);
   });
-  it('refs.bookmarks.exists() throws VcsNotImplementedError', () => {
-    expect(() => vcs.refs.bookmarks.exists('x')).toThrow(VcsNotImplementedError);
+  it('refs.bookmarks.exists() does not throw VcsNotImplementedError (wired in plan 03-03)', () => {
+    // exists returns boolean — no throw on non-zero exit. Just confirm no stub throw.
+    expect(() => vcs.refs.bookmarks.exists('x')).not.toThrow(VcsNotImplementedError);
   });
-  it('refs.bookmarks.switch() throws VcsNotImplementedError', () => {
+  it('refs.bookmarks.switch() still throws VcsNotImplementedError (no jj caller — see 03-03-AUDIT.md)', () => {
     expect(() => vcs.refs.bookmarks.switch('x')).toThrow(VcsNotImplementedError);
   });
 
-  // refs.* other
-  it('refs.currentBookmarks() throws VcsNotImplementedError', () => {
-    expect(() => vcs.refs.currentBookmarks()).toThrow(VcsNotImplementedError);
+  // refs.* other — same lifecycle. switch + isIgnored stay stub-throws.
+  it('refs.currentBookmarks() does not throw VcsNotImplementedError (wired in plan 03-03)', () => {
+    expect(() => vcs.refs.currentBookmarks()).not.toThrow(VcsNotImplementedError);
   });
-  it('refs.resolveShort() throws VcsNotImplementedError', () => {
-    expect(() => vcs.refs.resolveShort(expr.head())).toThrow(VcsNotImplementedError);
+  it('refs.resolveShort() does not throw VcsNotImplementedError (wired in plan 03-03)', () => {
+    expect(() => vcs.refs.resolveShort(expr.head())).not.toThrow(VcsNotImplementedError);
   });
-  it('refs.countCommits() throws VcsNotImplementedError', () => {
-    expect(() => vcs.refs.countCommits({})).toThrow(VcsNotImplementedError);
+  it('refs.countCommits() does not throw VcsNotImplementedError (wired in plan 03-03)', () => {
+    expect(() => vcs.refs.countCommits({})).not.toThrow(VcsNotImplementedError);
   });
-  it('refs.rootCommits() throws VcsNotImplementedError', () => {
-    expect(() => vcs.refs.rootCommits({})).toThrow(VcsNotImplementedError);
+  it('refs.rootCommits() does not throw VcsNotImplementedError (wired in plan 03-03)', () => {
+    expect(() => vcs.refs.rootCommits({})).not.toThrow(VcsNotImplementedError);
   });
-  it('refs.exists() throws VcsNotImplementedError', () => {
-    expect(() => vcs.refs.exists(expr.head())).toThrow(VcsNotImplementedError);
+  it('refs.exists() does not throw VcsNotImplementedError (wired in plan 03-03)', () => {
+    expect(() => vcs.refs.exists(expr.head())).not.toThrow(VcsNotImplementedError);
   });
-  it('refs.isIgnored() throws VcsNotImplementedError', () => {
+  it('refs.isIgnored() still throws VcsNotImplementedError (no jj caller — see 03-03-AUDIT.md)', () => {
     expect(() => vcs.refs.isIgnored('x')).toThrow(VcsNotImplementedError);
   });
-  it('refs.remotes() throws VcsNotImplementedError', () => {
-    expect(() => vcs.refs.remotes()).toThrow(VcsNotImplementedError);
+  it('refs.remotes() does not throw VcsNotImplementedError (wired in plan 03-03)', () => {
+    expect(() => vcs.refs.remotes()).not.toThrow(VcsNotImplementedError);
   });
 
   // workspace

@@ -49,21 +49,27 @@ export const BACKENDS_AVAILABLE_FOR_VERB: Readonly<
   findConflicts: Object.freeze(['git'] as const),
   push: Object.freeze(['git'] as const),
   fetch: Object.freeze(['git'] as const),
-  // VcsRefs
-  'refs.currentBookmarks': Object.freeze(['git'] as const),
-  'refs.resolveShort': Object.freeze(['git'] as const),
-  'refs.countCommits': Object.freeze(['git'] as const),
-  'refs.rootCommits': Object.freeze(['git'] as const),
-  'refs.exists': Object.freeze(['git'] as const),
-  'refs.isIgnored': Object.freeze(['git'] as const),
-  'refs.remotes': Object.freeze(['git'] as const),
-  // VcsBookmarks
-  'refs.bookmarks.list': Object.freeze(['git'] as const),
-  'refs.bookmarks.create': Object.freeze(['git'] as const),
-  'refs.bookmarks.move': Object.freeze(['git'] as const),
-  'refs.bookmarks.delete': Object.freeze(['git'] as const),
-  'refs.bookmarks.exists': Object.freeze(['git'] as const),
-  'refs.bookmarks.switch': Object.freeze(['git'] as const),
+  // VcsRefs — plan 03-03 flipped every verb with a real body to admit
+  // 'jj-colocated'. `refs.isIgnored` stays git-only: the single production
+  // caller pins `kind:'git'` (see 03-03-AUDIT.md), and the jj backend
+  // throws `VcsNotImplementedError`.
+  'refs.currentBookmarks': Object.freeze(['git', 'jj-colocated'] as const),
+  'refs.resolveShort': Object.freeze(['git', 'jj-colocated'] as const),
+  'refs.countCommits': Object.freeze(['git', 'jj-colocated'] as const),
+  'refs.rootCommits': Object.freeze(['git', 'jj-colocated'] as const),
+  'refs.exists': Object.freeze(['git', 'jj-colocated'] as const),
+  'refs.isIgnored': Object.freeze(['git'] as const), // jj-side: VcsNotImplementedError (audit-confirmed no jj caller)
+  'refs.remotes': Object.freeze(['git', 'jj-colocated'] as const),
+  // VcsBookmarks — plan 03-03 flipped every mutator + list to admit
+  // 'jj-colocated'. `refs.bookmarks.switch` stays git-only: both production
+  // callers in commands.cjs pin `kind:'git'` (see 03-03-AUDIT.md), and the
+  // jj backend throws `VcsNotImplementedError`.
+  'refs.bookmarks.list': Object.freeze(['git', 'jj-colocated'] as const),
+  'refs.bookmarks.create': Object.freeze(['git', 'jj-colocated'] as const),
+  'refs.bookmarks.move': Object.freeze(['git', 'jj-colocated'] as const),
+  'refs.bookmarks.delete': Object.freeze(['git', 'jj-colocated'] as const),
+  'refs.bookmarks.exists': Object.freeze(['git', 'jj-colocated'] as const),
+  'refs.bookmarks.switch': Object.freeze(['git'] as const), // jj-side: VcsNotImplementedError (audit-confirmed no jj caller)
   // VcsWorkspace
   'workspace.add': Object.freeze(['git'] as const),
   'workspace.forget': Object.freeze(['git'] as const),
