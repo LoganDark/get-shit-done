@@ -95,7 +95,7 @@ Plans:
 - [x] 03-01-PLAN.md — Shape commit: types/exec/backends/index/parser stubs/config/fixture/triage-doc scaffold (JJ-01/02/03/05/06, SQUASH-05)
 - [x] 03-02-PLAN.md — NDJSON parsers (real impls) + jj-id translator + __vcsTestOnly snapshot/restore (JJ-04)
 - [x] 03-03-PLAN.md — Refs namespace: head/parent/bookmarks CRUD + currentBookmarks + resolveShort/exists/countCommits/rootCommits/remotes (REFS-01..04, REFS-06)
-- [ ] 03-04-PLAN.md — Squash commit + bookmark advance + JJ-07 env (SQUASH-01..07, REFS-05, JJ-07)
+- [x] 03-04-PLAN.md — Squash commit + bookmark advance + JJ-07 env (SQUASH-01..07, REFS-05, JJ-07)
 - [ ] 03-05-PLAN.md — Status, log, diff, findConflicts (conflicts() plural) (CONFLICT-01..03)
 - [ ] 03-06-PLAN.md — Push/fetch + workspace stubs + TEST-08 bug-test triage execution (TEST-08)
 - [ ] 03-07-PLAN.md — Wrap-up: CI matrix activation + conflict()→conflicts() doc-fix + phase-close invariants (CI-01, CI-02)

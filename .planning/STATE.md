@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-03-PLAN.md (refs + bookmarks bodies; audit recorded)
-last_updated: "2026-05-12T14:14:18.823Z"
+stopped_at: Completed 03-04-PLAN.md (commit squash body + bookmark advance + JJ-07 env propagation)
+last_updated: "2026-05-12T14:24:31.817Z"
 last_activity: 2026-05-12
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 33
-  completed_plans: 29
-  percent: 88
+  completed_plans: 30
+  percent: 91
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 03 (jj-backend-core-squash-refs-conflict) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-05-12
 
-Progress: [█████████░] 88%
+Progress: [█████████░] 91%
 
 ## Performance Metrics
 
@@ -72,6 +72,7 @@ Progress: [█████████░] 88%
 | Phase 03 P01 | 22m | 5 tasks | 19 files |
 | Phase 03 P02 | fork-constrained | 3 tasks | 13 files |
 | Phase 03 P03 | 11min | 2 tasks | 10 files |
+| Phase 03 P04 | ~7min | 2 tasks tasks | 7 files files |
 
 ## Accumulated Context
 
@@ -155,6 +156,10 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 03-03: extracted parseJjBookmarkRecord to parse/jj-bookmark.ts for parity with other NDJSON parsers + unit-test isolation from jj binary
 - [Phase ?]: Plan 03-03: countCommits template uses 'commit_id ++ "\\n"' (not bare '"\\n"') to survive vcsExec stdout-trim — single-commit count was 0 with bare newline
 - [Phase ?]: Plan 03-03: refs.bookmarks.switch + refs.isIgnored remain VcsNotImplementedError on jj backend; audit (03-03-AUDIT.md) confirms no jj-reachable caller — Phase 4 reshape trigger
+- [Phase ?]: Plan 03-04: squash-based commit() body lands with SQUASH-01..07 + REFS-05 (D-01 advance) + D-04 (raw escape) + JJ-07 (env propagation) + WR-01 verbatim; SQUASH-05 grep gate stays green
+- [Phase ?]: Plan 03-04: ExecOptions extended with env?:Record<string,string>; vcsExec merges opts.env on top of process.env without mutating the calling process; envOpts() returns undefined when no JJ_USER/JJ_EMAIL set
+- [Phase ?]: Plan 03-04: hash resolution uses deterministic second jj log -r @- -T commit_id call rather than parsing Created new commit ... stdout from jj squash
+- [Phase ?]: Plan 03-04: bookmark-advance failure surfaces via merged CommitResult.stderr; squash is NOT rolled back (T-03.04-03 mitigation)
 
 ### Pending Todos
 
@@ -174,8 +179,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-12T14:14:18.817Z
-Stopped at: Completed 03-03-PLAN.md (refs + bookmarks bodies; audit recorded)
+Last session: 2026-05-12T14:24:31.811Z
+Stopped at: Completed 03-04-PLAN.md (commit squash body + bookmark advance + JJ-07 env propagation)
 Resume file: None
 
 ## Known Pre-Existing Test Failures (Non-Blocking)
