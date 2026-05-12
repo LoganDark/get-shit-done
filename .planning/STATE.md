@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-05-12T08:07:32.671Z"
+stopped_at: Completed 03-03-PLAN.md (refs + bookmarks bodies; audit recorded)
+last_updated: "2026-05-12T14:14:18.823Z"
 last_activity: 2026-05-12
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 33
-  completed_plans: 28
-  percent: 85
+  completed_plans: 29
+  percent: 88
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 03 (jj-backend-core-squash-refs-conflict) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-05-12
 
-Progress: [█████████░] 85%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -71,6 +71,7 @@ Progress: [█████████░] 85%
 | Phase 02 P12 | ~2m (resume-only) | 1 task | 1 files (+SUMMARY/STATE/ROADMAP/REQUIREMENTS) |
 | Phase 03 P01 | 22m | 5 tasks | 19 files |
 | Phase 03 P02 | fork-constrained | 3 tasks | 13 files |
+| Phase 03 P03 | 11min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -151,6 +152,9 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 03-02: production jj NDJSON parsers + jj op log/restore for testOnly; allowlist flipped for jj-colocated
 - [Phase ?]: Plan 03-02: VcsExecError constructor uses (message, fields) signature per exec.ts:51-76
 - [Phase ?]: Plan 03-02: inline snapshots (toMatchInlineSnapshot) used over external .snap files due to fork-constrained execution environment; hand-verified via node -e direct invocation
+- [Phase ?]: Plan 03-03: extracted parseJjBookmarkRecord to parse/jj-bookmark.ts for parity with other NDJSON parsers + unit-test isolation from jj binary
+- [Phase ?]: Plan 03-03: countCommits template uses 'commit_id ++ "\\n"' (not bare '"\\n"') to survive vcsExec stdout-trim — single-commit count was 0 with bare newline
+- [Phase ?]: Plan 03-03: refs.bookmarks.switch + refs.isIgnored remain VcsNotImplementedError on jj backend; audit (03-03-AUDIT.md) confirms no jj-reachable caller — Phase 4 reshape trigger
 
 ### Pending Todos
 
@@ -170,8 +174,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-12T08:07:32.647Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-05-12T14:14:18.817Z
+Stopped at: Completed 03-03-PLAN.md (refs + bookmarks bodies; audit recorded)
 Resume file: None
 
 ## Known Pre-Existing Test Failures (Non-Blocking)

@@ -62,12 +62,12 @@
 
 ### Refs / Bookmarks (REFS)
 
-- [ ] **REFS-01**: `vcs.refs.head` returns `RevisionExpr` for current change; jj backend resolves `@`, git backend resolves `HEAD`
-- [ ] **REFS-02**: `vcs.refs.parent` returns `@-` (last commit, may be empty)
-- [ ] **REFS-03**: `vcs.refs.bookmarks.list()`, `.create(name, rev)`, `.move(name, rev)`, `.delete(name)`, `.exists(name)` — backend-translated to bookmarks (jj) or branches (git)
-- [ ] **REFS-04**: Bookmark names use `gsd/` namespace prefix on jj backend (e.g., `gsd/phase-001-adapter-foundation`); git backend uses unprefixed branch names matching upstream convention
+- [x] **REFS-01**: `vcs.refs.head` returns `RevisionExpr` for current change; jj backend resolves `@`, git backend resolves `HEAD`
+- [x] **REFS-02**: `vcs.refs.parent` returns `@-` (last commit, may be empty)
+- [x] **REFS-03**: `vcs.refs.bookmarks.list()`, `.create(name, rev)`, `.move(name, rev)`, `.delete(name)`, `.exists(name)` — backend-translated to bookmarks (jj) or branches (git)
+- [x] **REFS-04**: Bookmark names use `gsd/` namespace prefix on jj backend (e.g., `gsd/phase-001-adapter-foundation`); git backend uses unprefixed branch names matching upstream convention
 - [ ] **REFS-05**: `vcs.commit()` auto-advances the active bookmark to the new commit (locked decision: caller doesn't explicitly call `advanceBookmark`; adapter does it internally)
-- [ ] **REFS-06**: Tags on jj backend = named bookmarks under `gsd/release/<version>`; no annotated-tag concept (defer if release flow needs them)
+- [x] **REFS-06**: Tags on jj backend = named bookmarks under `gsd/release/<version>`; no annotated-tag concept (defer if release flow needs them)
 
 ### Conflict Detection (CONFLICT)
 
@@ -229,12 +229,12 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | SQUASH-05 | Phase 3 | Complete |
 | SQUASH-06 | Phase 3 | Pending |
 | SQUASH-07 | Phase 3 | Pending |
-| REFS-01 | Phase 3 | Pending |
-| REFS-02 | Phase 3 | Pending |
-| REFS-03 | Phase 3 | Pending |
-| REFS-04 | Phase 3 | Pending |
+| REFS-01 | Phase 3 | Complete |
+| REFS-02 | Phase 3 | Complete |
+| REFS-03 | Phase 3 | Complete |
+| REFS-04 | Phase 3 | Complete |
 | REFS-05 | Phase 3 | Pending |
-| REFS-06 | Phase 3 | Pending |
+| REFS-06 | Phase 3 | Complete |
 | CONFLICT-01 | Phase 3 | Pending |
 | CONFLICT-02 | Phase 3 | Pending |
 | CONFLICT-03 | Phase 3 | Pending |
