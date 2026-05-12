@@ -46,7 +46,11 @@ export function parseJjLog(raw: string): LogEntry[] {
     }
     const description: string = record.description ?? '';
     const nlIdx = description.indexOf('\n');
-    const subject = (nlIdx === -1 ? description : description.slice(0, nlIdx)).replace(/\n$/, '');
+    // IN-01: `.slice(0, nlIdx)` already excludes the newline at position
+    // `nlIdx`, and the `nlIdx === -1` branch returns the full description
+    // (which by definition contains no `\n` at all). The previous
+    // `.replace(/\n$/, '')` was unreachable in both branches; removed.
+    const subject = nlIdx === -1 ? description : description.slice(0, nlIdx);
     const bodyRaw = nlIdx === -1 ? '' : description.slice(nlIdx + 1);
     const entry: LogEntry = {
       hash: record.commit_id ?? '',
