@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 2.1
-Plan: 7 of 9 complete
-Status: Executing (plan 08 next)
-Last activity: 2026-05-12 -- Phase 2.1 plan 07 vcs.hooks consumer removal (b1071f86; 6→0 sites)
+Plan: 8 of 9 complete
+Status: Executing (plan 09 next — final)
+Last activity: 2026-05-12 -- Phase 2.1 plan 08 vcs.stage/unstage hard-removal (378241e9; 9→0 sites)
 
-Progress: [███████···] ~78% (plan execution; phase-level verify pending)
+Progress: [████████··] ~89% (plan execution; phase-level verify pending)
 
 ## Performance Metrics
 
