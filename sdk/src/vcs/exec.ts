@@ -44,6 +44,13 @@ export interface ExecResult {
 
 export interface ExecOptions {
   timeout?: number;
+  /**
+   * Phase 3 JJ-07: extra environment variables to pass to the spawned child.
+   * Merged on top of `process.env` (caller-supplied keys win). Does NOT mutate
+   * the calling process's env. Primary consumer: jj.ts `commit()` passing
+   * `JJ_USER` / `JJ_EMAIL` when set.
+   */
+  env?: Record<string, string>;
 }
 
 // ─── Errors ──────────────────────────────────────────────────────────────────
@@ -88,11 +95,20 @@ export function vcsExec(
   options: ExecOptions = {},
 ): ExecResult {
   const timeout = options.timeout ?? DEFAULT_VCS_TIMEOUT_MS;
+  // Phase 3 JJ-07: merge opts.env onto process.env for the spawned child.
+  // Does NOT mutate the calling process env — spawnSync receives a fresh
+  // object. Omitting the `env` spawn option entirely would let Node inherit
+  // process.env automatically; passing { ...process.env } produces the same
+  // observable effect plus the caller-merge layer.
+  const childEnv = options.env
+    ? { ...process.env, ...options.env }
+    : undefined;
   const result = spawnSync(bin, args, {
     cwd,
     stdio: 'pipe',
     encoding: 'utf-8',
     timeout,
+    ...(childEnv ? { env: childEnv } : {}),
   });
   const timedOut =
     result.signal === 'SIGTERM' &&
