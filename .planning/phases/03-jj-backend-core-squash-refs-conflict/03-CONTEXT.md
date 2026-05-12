@@ -6,7 +6,7 @@
 <domain>
 ## Phase Boundary
 
-Land `sdk/src/vcs/backends/jj.ts` implementing the full adapter contract against jj — squash-based commit model (`jj squash <files> -B @ -k -m '<msg>'`), NDJSON output parsing (`-T 'json(self) ++ "\n"' --no-graph`), bookmark refs with `gsd/` namespace prefix, in-tree conflict detection (`jj log -r 'conflict()'`), and CI matrix activation for jj-colocated as allow-failure. Working-copy auto-snapshot is allowed by default and `--ignore-working-copy` is **never** passed by adapter code.
+Land `sdk/src/vcs/backends/jj.ts` implementing the full adapter contract against jj — squash-based commit model (`jj squash <files> -B @ -k -m '<msg>'`), NDJSON output parsing (`-T 'json(self) ++ "\n"' --no-graph`), bookmark refs with `gsd/` namespace prefix, in-tree conflict detection (`jj log -r 'conflicts()'`), and CI matrix activation for jj-colocated as allow-failure. Working-copy auto-snapshot is allowed by default and `--ignore-working-copy` is **never** passed by adapter code.
 
 **In Phase 3:**
 - `sdk/src/vcs/backends/jj.ts` (net-new, target ~600-1000 LOC mirroring `git.ts` 663 LOC)

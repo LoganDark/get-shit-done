@@ -71,7 +71,7 @@
 
 ### Conflict Detection (CONFLICT)
 
-- [x] **CONFLICT-01**: `vcs.findConflicts({ scope: 'all' })` returns change IDs of any in-tree conflicts via `jj log -r 'conflict()'` (jj backend) or `git diff --check` equivalent (git backend)
+- [x] **CONFLICT-01**: `vcs.findConflicts({ scope: 'all' })` returns change IDs of any in-tree conflicts via `jj log -r 'conflicts()'` (jj backend) or `git diff --check` equivalent (git backend)
 - [x] **CONFLICT-02**: `vcs.findConflicts({ scope: 'working-copy' })` checks only the materialized working-copy state (`jj st` style on jj; `git status` style on git)
 - [x] **CONFLICT-03**: Verify gate uses `scope: 'all'` to catch in-tree conflicts that jj's conflict-tolerant model preserves silently
 
