@@ -181,7 +181,18 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       'log', '-r', '@-', '-T', 'commit_id', '--no-graph', '-n', '1',
     );
     const hashRes = vcsExec(cwd, 'jj', hashArgs);
-    const hash = hashRes.exitCode === 0 ? hashRes.stdout.trim() : null;
+    let hash: string | null = null;
+    // WR-03: when the deterministic hash probe fails after a successful
+    // squash, surface the failure on stderr so callers can debug
+    // `{hash: null}` (instead of guessing whether the commit even
+    // landed). The squash itself succeeded, so we still proceed to the
+    // bookmark-advance step below.
+    let mergedStderr = squashRes.stderr;
+    if (hashRes.exitCode === 0) {
+      hash = hashRes.stdout.trim();
+    } else {
+      mergedStderr = `${squashRes.stderr}\n[hash-probe failed]: ${hashRes.stderr || hashRes.stdout}`;
+    }
 
     // D-01 / D-04: bookmark advance. The squash already succeeded; an
     // advance failure here is reported via merged stderr (never silently
@@ -196,7 +207,7 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
         return {
           exitCode: squashRes.exitCode,
           stdout: squashRes.stdout,
-          stderr: `${squashRes.stderr}\n[bookmark advance failed]: ${advRes.stderr || advRes.stdout}`,
+          stderr: `${mergedStderr}\n[bookmark advance failed]: ${advRes.stderr || advRes.stdout}`,
           hash,
         };
       }
@@ -205,7 +216,7 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     return {
       exitCode: squashRes.exitCode,
       stdout: squashRes.stdout,
-      stderr: squashRes.stderr,
+      stderr: mergedStderr,
       hash,
     };
   };
