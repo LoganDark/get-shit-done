@@ -382,7 +382,7 @@ const COMMIT_HASH_RE = /^[0-9a-f]{4,40}$/i;
  * full 40-hex SHA; the new shape returns the auto-disambiguated short SHA.
  * The two consumers in graphifyStatus() either (a) `.slice(0, 7)` it for
  * display (no-op for already-short SHAs) or (b) feed it to countCommitsBetween
- * which now accepts the short SHA via expr.commit() (4-40 hex validator).
+ * which now accepts the short SHA via expr.rev() (4-40 hex validator).
  */
 function readGitHead(cwd) {
   try {
@@ -400,11 +400,11 @@ function readGitHead(cwd) {
  * or the cwd is not a git repo.
  *
  * Plan 02-07: migrated from raw `git rev-list --count <from>..<to>` to
- * `vcs.refs.countCommits({rev: expr.range(expr.commit(from), expr.commit(to))})`.
+ * `vcs.refs.countCommits({rev: expr.range(expr.rev(from), expr.rev(to))})`.
  * This is the first production consumer of the expr.range factory introduced
  * in plan 02-03. Both `from` and `to` are runtime SHA strings (`from` validated
  * by COMMIT_HASH_RE upstream; `to` produced by readGitHead) so they wrap via
- * expr.commit() per D-12 (no expr.raw escape hatch).
+ * expr.rev() per D-12 (no expr.raw escape hatch).
  *
  * Adapter contract differs subtly from the prior raw-git: `vcs.refs.countCommits`
  * returns 0 on non-zero exit (e.g. unreachable ref). The original returned null
@@ -415,8 +415,8 @@ function readGitHead(cwd) {
 function countCommitsBetween(cwd, from, to) {
   try {
     const vcs = createVcsAdapter(cwd, { kind: 'git' });
-    const fromExpr = expr.commit(from);
-    const toExpr = expr.commit(to);
+    const fromExpr = expr.rev(from);
+    const toExpr = expr.rev(to);
     if (!vcs.refs.exists(fromExpr) || !vcs.refs.exists(toExpr)) return null;
     const n = vcs.refs.countCommits({ rev: expr.range(fromExpr, toExpr) });
     return Number.isFinite(n) ? n : null;

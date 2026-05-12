@@ -329,7 +329,7 @@ export const verifyCommits: QueryHandler = async (args, projectDir) => {
   }
 
   // Plan 02-10: migrated from execGit shim to VcsAdapter.
-  // Blocker 3 closure — runtime SHA wraps via expr.commit(hash). expr.commit
+  // Blocker 3 closure — runtime SHA wraps via expr.rev(hash). expr.commit
   // shape-validates the SHA (4-40 hex chars); inputs that fail validation
   // throw and route to invalid. Mirrors the verify.cjs:268 semantic shift
   // (any reachable object — commit/tree/blob/tag — registers as "valid"; in
@@ -339,7 +339,7 @@ export const verifyCommits: QueryHandler = async (args, projectDir) => {
   // `invalid` / `total`) is a vestigial commit-only name. The pre-migration
   // `cat-file -t <hash>` probe checked `stdout.trim() === 'commit'`, so a
   // tree/blob/tag hash that exists in the object store was classified
-  // `invalid`. `vcs.refs.exists(expr.commit(hash))` returns true for ANY
+  // `invalid`. `vcs.refs.exists(expr.rev(hash))` returns true for ANY
   // reachable object — so a tree SHA hand-cited in a SUMMARY.md (rare but
   // possible) is now reported `valid` where the old probe reported
   // `invalid`. The phase context sanctions this shift (CLI inputs are
@@ -356,7 +356,7 @@ export const verifyCommits: QueryHandler = async (args, projectDir) => {
   for (const hash of args) {
     let exists = false;
     try {
-      exists = vcs.refs.exists(expr.commit(hash));
+      exists = vcs.refs.exists(expr.rev(hash));
     } catch {
       exists = false; // expr.commit shape-validation throw → invalid
     }
@@ -504,7 +504,7 @@ export const verifySummary: QueryHandler = async (args, projectDir) => {
   }
 
   // Plan 02-10: migrated from execGit shim to VcsAdapter.
-  // Blocker 3 closure — runtime SHA wraps via expr.commit(hash). The original
+  // Blocker 3 closure — runtime SHA wraps via expr.rev(hash). The original
   // probe also matched stdout==='commit' (vs 'tree'/'blob'/'tag'); for
   // SUMMARY-mentioned hashes the exit-0 path is dominated by commit objects,
   // and tree/blob hashes shorter than 4 chars are rejected by expr.commit's
@@ -517,7 +517,7 @@ export const verifySummary: QueryHandler = async (args, projectDir) => {
   for (const hash of hashes.slice(0, 3)) {
     let exists = false;
     try {
-      exists = vcs.refs.exists(expr.commit(hash));
+      exists = vcs.refs.exists(expr.rev(hash));
     } catch {
       exists = false;
     }

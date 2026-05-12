@@ -442,7 +442,7 @@ const baselines = [
   // Site 924 takes a runtime SHA (resolved from line 921). The args+fixture
   // below probe `show -s --format=%as HEAD` against the initial commit
   // (structural baseline); the migrated code path uses
-  // expr.commit(firstCommit) per Blocker 3 from iteration 1 — first
+  // expr.rev(firstCommit) per Blocker 3 from iteration 1 — first
   // production consumer of expr.commit OUTSIDE the SDK layer (progress.ts
   // was the first overall, in plan 02-06). Mirrors the
   // progress-ts-293-show-format baseline shape.
@@ -454,7 +454,7 @@ const baselines = [
   },
   // Plan 02-10: get-shit-done/bin/lib/verify.cjs (1,390 LOC, 6 sites). The
   // cat-file -t probes (71/268/1305) take a runtime SHA and route through
-  // vcs.refs.exists(expr.commit(hash)) per Blocker 3 from iteration 1
+  // vcs.refs.exists(expr.rev(hash)) per Blocker 3 from iteration 1
   // (structured factory closure). Site 1224 consumes LogOpts.allRefs gap-fill.
   // Site 1286 is the "is this a git repo" probe via vcs.refs.exists(vcs.refs.head).
   // Site 1309 consumes DiffOpts.nameStatus gap-fill.
@@ -465,7 +465,7 @@ const baselines = [
     // sha as a stand-in — the actual call site receives a 7-40 hex string
     // pattern-matched from arbitrary text. Captured args target HEAD because
     // capture-time the SHA isn't deterministic; the parity dispatch clause
-    // probes via expr.commit(<full HEAD sha>).
+    // probes via expr.rev(<full HEAD sha>).
     fixture: [],
     args: ['cat-file', '-t', 'HEAD'],
   },
@@ -507,7 +507,7 @@ const baselines = [
     // cmdVerifyCodebaseDrift: paired with 1305 (uses the same `base` SHA). The
     // baseline probes `git diff --name-status <base> HEAD`; for capture we use
     // HEAD as both ends so output is empty (no changes). Adapter equivalent:
-    // vcs.diff({rev: expr.commit(base), nameStatus: true}).
+    // vcs.diff({rev: expr.rev(base), nameStatus: true}).
     fixture: ['echo a > a.txt', 'git add a.txt', 'git commit -m c1'],
     args: ['diff', '--name-status', 'HEAD~1', 'HEAD'],
   },

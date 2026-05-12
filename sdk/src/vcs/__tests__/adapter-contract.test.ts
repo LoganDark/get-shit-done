@@ -100,7 +100,7 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
 
   test('vcs.refs.exists is true for HEAD, false for an all-zeros SHA', ({ vcs }) => {
     expect(vcs.refs.exists(vcs.refs.head)).toBe(true);
-    expect(vcs.refs.exists(expr.commit('0000000000000000000000000000000000000000'))).toBe(false);
+    expect(vcs.refs.exists(expr.rev('0000000000000000000000000000000000000000'))).toBe(false);
   });
 
   test('vcs.workspace.context on main workspace: mode=main, gitDir===gitCommonDir', ({ vcs }) => {

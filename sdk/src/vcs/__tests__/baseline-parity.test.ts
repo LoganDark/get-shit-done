@@ -226,7 +226,7 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           args.some((a) => a.startsWith('--format=%as'))
         ) {
           // Plan 02-06 Task 3 / Blocker-3 closure: progress.ts:293 wraps
-          // `git show -s --format=%as <sha>` via vcs.log({rev: expr.commit(sha),
+          // `git show -s --format=%as <sha>` via vcs.log({rev: expr.rev(sha),
           // maxCount:1}) and slices entries[0].date.slice(0,10). The runtime
           // SHA target here is HEAD's first parent or the root — for the
           // baseline, we use HEAD itself (the captured fixture has only the
@@ -237,7 +237,7 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           // wrap as expr.commit, then call vcs.log.
           const headRes = execGit(cwd, ['rev-parse', 'HEAD']);
           const fullSha = headRes.stdout.trim();
-          const entries = vcs.log({ rev: expr.commit(fullSha), maxCount: 1 });
+          const entries = vcs.log({ rev: expr.rev(fullSha), maxCount: 1 });
           const date = entries[0]?.date?.slice(0, 10) ?? '';
           if (baseline.match?.stdout?.startsWith('regex:')) {
             const re = new RegExp(baseline.match.stdout.slice('regex:'.length));
@@ -279,8 +279,8 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           args.some((a) => a.includes('..'))
         ) {
           // Plan 02-07: graphify.cjs:384 wraps `git rev-list --count A..B`
-          // via `vcs.refs.countCommits({rev: expr.range(expr.commit(from),
-          // expr.commit(to))})`. Site 384 is the first production consumer of
+          // via `vcs.refs.countCommits({rev: expr.range(expr.rev(from),
+          // expr.rev(to))})`. Site 384 is the first production consumer of
           // the expr.range factory introduced in plan 02-03. The captured
           // fixture builds 3 commits on top of the initial commit and
           // probes `HEAD~3..HEAD` (exit 0, stdout "3"). For the adapter
@@ -291,7 +291,7 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           const headSha = headRes.stdout.trim();
           const baseSha = baseRes.stdout.trim();
           const n = vcs.refs.countCommits({
-            rev: expr.range(expr.commit(baseSha), expr.commit(headSha)),
+            rev: expr.range(expr.rev(baseSha), expr.rev(headSha)),
           });
           expect(String(n)).toBe(baseline.expected.stdout);
         } else if (
@@ -520,7 +520,7 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           args[1] === '-t' &&
           args.length === 3
         ) {
-          // Plan 02-10: vcs.refs.exists(expr.commit(<sha>)) wraps
+          // Plan 02-10: vcs.refs.exists(expr.rev(<sha>)) wraps
           // `git cat-file -t <sha>`. Captured for verify.cjs sites 71, 268,
           // 1305 and verify.ts sites 336, 485 (Blocker 3 closure: runtime SHA
           // wraps via expr.commit factory). The captured fixture's HEAD-token
@@ -529,10 +529,10 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           // assert the adapter call returns true.
           const headRes = execGit(cwd, ['rev-parse', 'HEAD']);
           const fullSha = headRes.stdout.trim();
-          const exists = vcs.refs.exists(expr.commit(fullSha));
+          const exists = vcs.refs.exists(expr.rev(fullSha));
           expect(exists).toBe(true);
           // Negative: a clearly-bogus SHA must NOT exist.
-          const bogus = vcs.refs.exists(expr.commit('0123456789abcdef0123456789abcdef01234567'));
+          const bogus = vcs.refs.exists(expr.rev('0123456789abcdef0123456789abcdef01234567'));
           expect(bogus).toBe(false);
         } else if (
           args[0] === 'log' &&
@@ -594,7 +594,7 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           const baseSha = baseRes.stdout.trim();
           const targetSha = targetRes.stdout.trim();
           const result = vcs.diff({
-            rev: expr.range(expr.commit(baseSha), expr.commit(targetSha)),
+            rev: expr.range(expr.rev(baseSha), expr.rev(targetSha)),
             nameStatus: true,
           });
           expect(result.raw).toBe(baseline.expected.stdout);

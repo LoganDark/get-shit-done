@@ -986,7 +986,7 @@ function cmdStats(cwd, format, raw) {
   // Git stats
   // Plan 02-09: cmdStats's git-touching block migrates to vcs.refs adapter.
   // Mirrors plan 02-06 progress.ts:285-303 shape (the canonical cookbook for
-  // countCommits / rootCommits / log({rev: expr.commit(<runtime-sha>)}) —
+  // countCommits / rootCommits / log({rev: expr.rev(<runtime-sha>)}) —
   // first production consumer of expr.commit per Blocker 3 from iteration 1).
   let gitCommits = 0;
   let gitFirstCommitDate = null;
@@ -996,12 +996,12 @@ function cmdStats(cwd, format, raw) {
     const roots = statsVcs.refs.rootCommits({ rev: statsVcs.refs.head });              // line 921 (was: rev-list --max-parents=0 HEAD)
     if (roots.length > 0) {
       const firstCommit = roots[0];
-      // Plan 02-09 / Blocker-3 closure: wrap the runtime SHA via expr.commit()
+      // Plan 02-09 / Blocker-3 closure: wrap the runtime SHA via expr.rev()
       // to construct a structured RevisionExpr (D-12 — no expr.raw escape
       // hatch). vcs.log() with maxCount:1 is the contract path for "show -s
       // --format=%as <sha>"; the date arrives on LogEntry.date as %aI iso
       // format. Slice [0,10) to match the prior `%as` YYYY-MM-DD shape.
-      const entries = statsVcs.log({ rev: expr.commit(firstCommit), maxCount: 1 });    // line 924 (was: show -s --format=%as <firstCommit>)
+      const entries = statsVcs.log({ rev: expr.rev(firstCommit), maxCount: 1 });    // line 924 (was: show -s --format=%as <firstCommit>)
       if (entries.length > 0 && entries[0].date) {
         gitFirstCommitDate = entries[0].date.slice(0, 10) || null;
       }
