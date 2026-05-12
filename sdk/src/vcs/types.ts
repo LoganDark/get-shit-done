@@ -23,13 +23,21 @@ export type RevisionExpr = string & { readonly [__vcsRevisionBrand]: 'RevisionEx
 
 export interface CommitInput {
   /**
-   * Path set to commit.
-   * - `undefined`: run `git commit -am` (all tracked modifications).
-   * - `[…paths]` (≥1 entry): `git add <paths…>` then `git commit -m`.
-   * - `[]` (empty array): REJECTED with a structured error — see WR-01. Pass
-   *   `undefined` for `-am` semantics, or at least one path for path-set
-   *   semantics. The empty-array case used to silently fall through to `-am`,
-   *   which is a data-correctness footgun.
+   * Phase 2.1 D-02 + D-04: path set whose WC state to capture (mix of
+   * adds/mods/dels). Git backend synthesizes via `git add -A -- <paths>`; jj
+   * backend (Phase 3) records the WC-state directly via
+   * `jj squash <paths> -B @ -k -m '<msg>'`.
+   *
+   * - `undefined`: capture all tracked changes (`git commit -am`).
+   * - `[…paths]` (≥1 entry): WC-state-capture for those paths only.
+   * - `[]` (empty array): REJECTED (WR-01 preserved) — pass `undefined` for
+   *   `-am` semantics, or ≥1 path for path-set semantics. The empty-array
+   *   case used to silently fall through to `-am`, a data-correctness footgun.
+   *
+   * Phase 2.1 D-02: the legacy commit-scope-narrowing field has been
+   * removed; callers that previously composed `stage(...)` then
+   * `commit({...narrow-scope...})` collapse to a single
+   * `commit({files:[...]})` call.
    */
   files?: string[];
   message: string;
@@ -43,20 +51,11 @@ export interface CommitInput {
    */
   amend?: boolean;
   /**
-   * Plan 02-08 gap-fill (Rule 3 — blocking issue closure): when true, append
-   * `--no-verify` to the commit invocation, skipping pre-commit/commit-msg
-   * hooks. Required by sdk/src/query/commit.ts's `--no-verify` code path.
+   * Phase 2.1 D-08: the only public knob for skipping pre-commit hook
+   * firing. Cross-backend. Git: passes `--no-verify` to `git commit`. Jj
+   * (Phase 3): skips internal `fireHook` invocation post-squash.
    */
   noVerify?: boolean;
-  /**
-   * Plan 02-08 gap-fill (Rule 3 — blocking issue closure): when set, append
-   * `-- <paths…>` to the `git commit` invocation so the commit captures only
-   * files within the requested scope, even when the caller's index already
-   * had unrelated entries staged before. Mirrors the pathspec-scope guard
-   * for #3061. Distinct from `files` (which controls staging); pathspec
-   * narrows the commit's scope but does not stage anything.
-   */
-  pathspec?: string[];
 }
 
 export interface CommitResult {
@@ -96,8 +95,11 @@ export interface StatusOpts {
 
 export interface StatusEntry {
   path: string;
-  index: string;
   worktree: string;
+  // Phase 2.1 D-16: `index` REMOVED — meaningless cross-backend after
+  // stage/unstage drop (D-03). Sites that probed git's index character
+  // either no longer have callers (audited) or now use raw git inside an
+  // allowlisted test file (not the adapter).
 }
 export interface StatusResult {
   entries: StatusEntry[];
@@ -155,6 +157,12 @@ export interface PushOpts {
   remote?: string;
   ref?: RevisionExpr;
   force?: boolean;
+  /**
+   * Phase 2.1 D-08: the only public knob for skipping pre-push hook firing.
+   * Cross-backend. Git: passes `--no-verify` to `git push`. Jj (Phase 3):
+   * skips internal `fireHook` invocation pre-push.
+   */
+  noVerify?: boolean;
 }
 export interface FetchOpts {
   remote?: string;
@@ -171,22 +179,32 @@ export interface VcsAdapterCommon {
   diff(opts?: DiffOpts): DiffResult;
   refs: VcsRefs;
   workspace: VcsWorkspace;
-  hooks: VcsHooks;
   findConflicts(opts: { scope: 'all' | 'working-copy' }): ConflictResult[];
   push(opts?: PushOpts): ExecResult;
   fetch(opts?: FetchOpts): ExecResult;
-  // Plan 02-03 Task 1 gap-fill (RESEARCH §Forward-Complete Gaps Summary):
-  // top-level stage / unstage verbs symmetric on git and jj backends.
-  stage(files: string[]): ExecResult;
-  unstage(files: string[]): ExecResult;
+  // Phase 2.1 D-03: `stage(files)` and `unstage(files)` REMOVED entirely —
+  // not even moved to gitOnly. Callers refactor onto `commit({files})` with
+  // WC-state-capture semantics (D-02 + D-04). Tests that genuinely need to
+  // probe git's index use raw git inside an allowlisted test file.
+  // Phase 2.1 D-07: the public `hooks` namespace has been REMOVED. `fireHook`
+  // is now a private helper in hook-bridge.ts; Phase 4 (HOOK-01..05) wires
+  // internal invocations from commit() / push().
 }
 
 export interface VcsRefs {
   readonly head: RevisionExpr;
   readonly parent: RevisionExpr;
   bookmarks: VcsBookmarks;
-  // Plan 02-03 Task 1 gap-fill (RESEARCH §Forward-Complete Gaps Summary):
-  currentBranch(): string | null;
+  /**
+   * Phase 2.1 D-15: renamed (and retyped) from the prior single-string
+   * accessor. Both backends can have 0..N bookmarks/branches pointing at
+   * the same revision;
+   * empty array means anonymous head (jj) or detached HEAD (git). Consumers
+   * that previously took the value as `string | null` now adopt array
+   * semantics — most take `[0] ?? null` for UI surfacing or check
+   * `.length === 0` for detached/anonymous detection.
+   */
+  currentBookmarks(): string[];
   resolveShort(rev: RevisionExpr): string;
   countCommits(opts: { rev?: RevisionExpr }): number;
   rootCommits(opts: { rev?: RevisionExpr }): string[];
@@ -205,16 +223,15 @@ export interface VcsBookmarks {
   switch(name: string, opts?: { create?: boolean }): void;
 }
 
-// Plan 02-03 Task 2 — Blocker 4 extension: workspace.context() return shape.
-// gitDir/gitCommonDir let worktree-safety.cjs:122-123 migrate cleanly without
-// semantics drift — they are the raw path strings the underlying
-// `git rev-parse --git-dir` / `--git-common-dir` would have produced.
+// Phase 2.1 D-18: workspace.context() return shape — cross-backend fields only.
+// gitDir and gitCommonDir moved to vcs.gitOnly.gitDir() / vcs.gitOnly.gitCommonDir()
+// (accessed after `vcs.kind === 'git'` narrowing). The single production
+// consumer of linked-worktree detection (worktree-safety.cjs) is already
+// git-specific per ADR-0004 and adopts the narrowing pattern.
 export interface WorkspaceContext {
   effectiveRoot: string;
   mode: 'main' | 'linked';
   isLinked: boolean;
-  gitDir: string;        // for main repo == gitCommonDir; for linked worktree == .git/worktrees/<name>
-  gitCommonDir: string;  // absolute path to the main repo's .git directory
 }
 
 export interface VcsWorkspace {
@@ -226,9 +243,11 @@ export interface VcsWorkspace {
   prune(): ExecResult;
 }
 
-export interface VcsHooks {
-  fire(stage: HookStage, ctx?: HookContext): ExecResult;
-}
+// Phase 2.1 D-07: the public hooks namespace interface has been DELETED.
+// `fireHook` is now a private helper inside hook-bridge.ts; HookStage /
+// HookContext remain exported (the hook-bridge module uses them) but are
+// not part of any public adapter surface. Phase 4 (HOOK-01..05) wires
+// internal invocation from commit() / push() in the backends.
 
 // ─── Discriminated union (D-06/D-07 — branch-typed gitOnly) ─────────────────
 
@@ -241,6 +260,11 @@ export interface GitOnlyOps {
   init(): void;                                  // git init in cwd
   configGet(key: string): string | null;         // git config --get; null on exit 1
   configSet(key: string, value: string): void;   // git config <key> <value>; throw on non-zero
+  // Phase 2.1 D-18: moved from WorkspaceContext. The raw path strings the
+  // underlying `git rev-parse --git-dir` / `--git-common-dir` produce; consumers
+  // (worktree-safety.cjs:122-123) narrow on `vcs.kind === 'git'` first.
+  gitDir(): string;          // for main repo == gitCommonDir; for linked worktree == .git/worktrees/<name>
+  gitCommonDir(): string;    // absolute path to the main repo's .git directory
   // D-12: NO `raw` escape hatch in Phase 1. Add specific verbs as Phase 2 migration discovers them.
 }
 

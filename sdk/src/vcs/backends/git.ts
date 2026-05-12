@@ -21,7 +21,6 @@
 import { resolve as resolvePath } from 'node:path';
 import { execGit } from '../exec.js';
 import type { ExecResult } from '../exec.js';
-import { fireHook } from '../hook-bridge.js';
 import { expr } from '../expr.js';
 import { toGitRev } from '../parse/git-rev.js';
 import { readWorktreeList } from '../parse/worktree-list.js';
@@ -40,8 +39,6 @@ import type {
   Bookmark,
   WorkspaceAdd,
   WorkspaceInfo,
-  HookStage,
-  HookContext,
   ConflictResult,
   PushOpts,
   FetchOpts,
@@ -49,6 +46,10 @@ import type {
   SnapshotHandle,
   VcsTestOnly,
 } from '../types.js';
+// Phase 2.1 D-07: hook-bridge import removed — the helper is now module-private
+// to hook-bridge.ts; Phase 4 wires internal invocation from inside this
+// backend's commit() / push() implementations. HookStage / HookContext type
+// imports likewise removed (no remaining consumer in this module).
 
 // CR-04: previously this module reached out to
 // `../../../../get-shit-done/bin/lib/worktree-safety.cjs` via `createRequire`.
@@ -97,13 +98,14 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
       );
     }
     if (input.files && input.files.length > 0) {
-      // CR-01 (Phase 2 review): inject `--` to neutralise filenames that begin
-      // with `-` (the canonical option-injection trap — e.g. `-A.md` would
-      // otherwise be parsed by git as the `-A`/`--all` flag plus a stray
-      // `.md` pathspec, silently staging every tracked modification). The
-      // peer entry points `vcs.stage` / `vcs.unstage` already pass `--`; this
-      // closes the same hole on the `commit({files})` path.
-      const addRes = execGit(cwd, ['add', '--', ...input.files]);
+      // Phase 2.1 D-04: WC-state-capture — `git add -A -- <paths>` records
+      // adds/mods/dels for the given paths from the working copy in one shot.
+      // Mirrors the Phase 3 jj backend's `jj squash <paths> -B @ -k -m '<msg>'`.
+      // CR-01 (Phase 2 review): `--` separator still required to neutralise
+      // filenames that begin with `-` — the peer commit-scope-narrowing field
+      // is gone, but the `-A` flag still mandates the same option-injection
+      // guard.
+      const addRes = execGit(cwd, ['add', '-A', '--', ...input.files]);
       if (addRes.exitCode !== 0) {
         return {
           exitCode: addRes.exitCode,
@@ -115,31 +117,25 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     }
     // Plan 02-08 gap-fill: amend takes precedence and uses `--amend --no-edit`
     // (HEAD's message is preserved; input.message is ignored). When not amending
-    // and no `files` were staged, fall through to `-am` for "commit all tracked
-    // modifications" UNLESS a pathspec is set — pathspec callers (e.g. the
-    // commit handler) staged paths explicitly upstream and want only those
-    // staged paths committed, NOT a `-am` sweep over the whole worktree.
+    // and `files` were given, commit the WC-state-captured paths WITHOUT `-a`
+    // (else unrelated tracked modifications would also be swept in). When no
+    // `files` are given, fall through to `-am` for "commit all tracked
+    // modifications".
     let args: string[];
     if (input.amend) {
       args = ['commit', '--amend', '--no-edit'];
     } else if (input.files && input.files.length > 0) {
-      args = ['commit', '-m', input.message];
-    } else if (input.pathspec && input.pathspec.length > 0) {
-      // Already-staged-paths path: commit ONLY what is currently staged within
-      // the pathspec, without `-am` (which would auto-stage tracked mods).
       args = ['commit', '-m', input.message];
     } else {
       args = ['commit', '-am', input.message];
     }
     if (input.allowEmpty) args.push('--allow-empty');
     if (input.noVerify) args.push('--no-verify');
-    // Plan 02-08 gap-fill: pathspec narrows the commit's scope without staging.
-    // Used by sdk/src/query/commit.ts to guarantee the commit captures only the
-    // paths the handler staged, even when the caller's index had unrelated
-    // entries pre-staged (#3061).
-    if (input.pathspec && input.pathspec.length > 0) {
-      args.push('--', ...input.pathspec);
-    }
+    // Phase 2.1 D-02: the commit-scope-narrowing branch (formerly appending
+    // `-- <paths>` to `git commit`) is removed. Callers that need a narrow
+    // commit scope now pass `files` and rely on D-04 WC-state-capture
+    // semantics; the `-A` add stages exactly the requested paths and nothing
+    // more.
     const commitRes = execGit(cwd, args);
     if (commitRes.exitCode !== 0) {
       return {
@@ -230,7 +226,9 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         const index = tok[0] ?? ' ';
         const worktree = tok[1] ?? ' ';
         const path = tok.slice(3);
-        entries.push({ path, index, worktree });
+        // Phase 2.1 D-16: `index` is dropped from the public StatusEntry; the
+        // local `index` variable still gates the rename/copy heuristic below.
+        entries.push({ path, worktree });
         // Rename/copy entries are followed by a second token holding origPath.
         // Consume it so it is not interpreted as a fresh entry.
         if (index === 'R' || index === 'C' || worktree === 'R' || worktree === 'C') {
@@ -325,12 +323,17 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
   // Plan 02-03 Task 1 gap-fill (RESEARCH §Forward-Complete Gaps Summary):
   // 7 read-only verbs on vcs.refs.* — each mirrors the existing factory shape
   // (call execGit, parse the standard 5-field result, return typed scalar).
-  const currentBranch = (): string | null => {
+  // Phase 2.1 D-15: renamed from the prior single-string accessor (returning
+  // `string | null`) to currentBookmarks returning `string[]`. Empty = anonymous head
+  // (jj) or detached HEAD (git). Git always reports a single bookmark when
+  // attached; the array shape gives both backends a uniform empty-detached
+  // signal and accommodates jj's 0..N bookmarks-pointing-at-the-same-rev case.
+  const currentBookmarks = (): string[] => {
     const r = execGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
-    if (r.exitCode !== 0) return null;
+    if (r.exitCode !== 0) return [];
     const name = r.stdout.trim();
-    if (!name || name === 'HEAD') return null; // detached
-    return name;
+    if (!name || name === 'HEAD') return []; // detached
+    return [name];
   };
 
   const resolveShort = (rev: RevisionExpr): string => {
@@ -381,7 +384,7 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     head: expr.head(),
     parent: expr.parent(),
     bookmarks,
-    currentBranch,
+    currentBookmarks,
     resolveShort,
     countCommits,
     rootCommits,
@@ -390,13 +393,8 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     remotes,
   });
 
-  // Plan 02-03 Task 1 gap-fill: top-level stage / unstage verbs.
-  const stage = (files: string[]): ExecResult => {
-    return execGit(cwd, ['add', '--', ...files]);
-  };
-  const unstage = (files: string[]): ExecResult => {
-    return execGit(cwd, ['rm', '--cached', '--ignore-unmatch', '--', ...files]);
-  };
+  // Phase 2.1 D-03: top-level stage / unstage verbs DELETED. Callers refactor
+  // onto commit({files}) with WC-state-capture semantics (D-02 + D-04).
 
   // ─── workspace ───────────────────────────────────────────────────────────
   const workspace = Object.freeze({
@@ -430,10 +428,10 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         (e): WorkspaceInfo => ({ path: e.path, rev: e.head, locked: e.locked }),
       );
     },
-    // Plan 02-03 Task 2 — Blocker 4: workspace.context returns the same path
-    // strings worktree-safety.cjs:122-123 reads via raw `git rev-parse`. The
-    // gitDir/gitCommonDir distinction is what lets the consumer detect linked
-    // worktrees (gitDir !== gitCommonDir).
+    // Phase 2.1 D-18: workspace.context returns cross-backend fields only —
+    // effectiveRoot, mode, isLinked. The git-specific gitDir / gitCommonDir
+    // path strings moved to vcs.gitOnly.gitDir() / vcs.gitOnly.gitCommonDir()
+    // (the local rev-parse results are still needed here to compute isLinked).
     context: () => {
       const top = execGit(cwd, ['rev-parse', '--show-toplevel']);
       const gd = execGit(cwd, ['rev-parse', '--git-dir']);
@@ -447,15 +445,13 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         );
       }
       const effectiveRoot = resolvePath(cwd, top.stdout.trim());
-      const gitDir = resolvePath(cwd, gd.stdout.trim());
-      const gitCommonDir = resolvePath(cwd, cd.stdout.trim());
-      const isLinked = gitDir !== gitCommonDir;
+      const gitDirResolved = resolvePath(cwd, gd.stdout.trim());
+      const gitCommonDirResolved = resolvePath(cwd, cd.stdout.trim());
+      const isLinked = gitDirResolved !== gitCommonDirResolved;
       return {
         effectiveRoot,
         mode: (isLinked ? 'linked' : 'main') as 'main' | 'linked',
         isLinked,
-        gitDir,
-        gitCommonDir,
       };
     },
     // Plan 02-03 Task 2 gap-fill: `git worktree prune` removes stale
@@ -463,10 +459,10 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     prune: (): ExecResult => execGit(cwd, ['worktree', 'prune']),
   });
 
-  // ─── hooks ───────────────────────────────────────────────────────────────
-  const hooks = Object.freeze({
-    fire: (stage: HookStage, ctx?: HookContext): ExecResult => fireHook(cwd, stage, ctx),
-  });
+  // Phase 2.1 D-07: the `hooks` Object.freeze block is DELETED. The hook
+  // helper is now module-private to hook-bridge.ts; Phase 4 (HOOK-01..05)
+  // will wire internal invocation from inside commit() / push() — Phase 2.1
+  // leaves the wiring as a no-op (RESEARCH Open Question 1).
 
   // ─── findConflicts ───────────────────────────────────────────────────────
   const findConflicts = (opts: { scope: 'all' | 'working-copy' }): ConflictResult[] => {
@@ -512,6 +508,9 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
   const push = (opts: PushOpts = {}): ExecResult => {
     const args = ['push'];
     if (opts.force) args.push('--force');
+    // Phase 2.1 D-08: PushOpts.noVerify is the sole public knob for skipping
+    // pre-push hook firing on the cross-backend surface.
+    if (opts.noVerify) args.push('--no-verify');
     if (opts.remote) args.push(opts.remote);
     if (opts.ref) args.push(toGitRev(opts.ref));
     return execGit(cwd, args);
@@ -569,6 +568,23 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         throw new Error(`gitOnly.configSet failed: ${r.stderr || r.stdout}`);
       }
     },
+    // Phase 2.1 D-18: moved off WorkspaceContext. Same `git rev-parse` calls
+    // that the workspace.context() body issues; consumers (worktree-safety.cjs)
+    // narrow on `vcs.kind === 'git'` before calling these.
+    gitDir: (): string => {
+      const r = execGit(cwd, ['rev-parse', '--git-dir']);
+      if (r.exitCode !== 0) {
+        throw new Error(`gitOnly.gitDir failed: ${r.stderr || r.stdout}`);
+      }
+      return resolvePath(cwd, r.stdout.trim());
+    },
+    gitCommonDir: (): string => {
+      const r = execGit(cwd, ['rev-parse', '--git-common-dir']);
+      if (r.exitCode !== 0) {
+        throw new Error(`gitOnly.gitCommonDir failed: ${r.stderr || r.stdout}`);
+      }
+      return resolvePath(cwd, r.stdout.trim());
+    },
   });
 
   // ─── __vcsTestOnly snapshot/restore (D-14, RESEARCH Pattern 3 / strategy 3) ─
@@ -590,6 +606,9 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     },
   });
 
+  // Phase 2.1 D-03 / D-07: `hooks`, `stage`, `unstage` no longer appear in
+  // the public adapter shape. WC-state-capture commit({files}) absorbs the
+  // staging surface; Phase 4 absorbs hook invocation internally.
   const adapter = Object.freeze({
     kind: 'git' as const,
     cwd,
@@ -599,12 +618,9 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     diff,
     refs,
     workspace,
-    hooks,
     findConflicts,
     push,
     fetch,
-    stage,
-    unstage,
     gitOnly,
     [__vcsTestOnly]: testOnly,
   }) as unknown as GitVcsAdapter;

@@ -8,10 +8,11 @@ import type { RevisionExpr } from '../types.js';
 import { parseExpr } from '../expr.js';
 
 export function toJjRev(rev: RevisionExpr): string {
-  // Plan 02-03 Task 2 — same range/commit handling as toGitRev. jj uses '..'
-  // for ranges and resolves SHAs verbatim, so the per-backend output shape is
-  // structurally identical for these two new kinds (only the inner head/parent
-  // translations differ — '@' vs 'HEAD').
+  // Plan 02-03 Task 2 — same range/rev handling as toGitRev. jj uses '..'
+  // for ranges and resolves revisions verbatim, so the per-backend output
+  // shape is structurally identical for these two kinds (only the inner
+  // head/parent translations differ — '@' vs 'HEAD').
+  // Phase 2.1 D-13: `commit:` brand prefix renamed to `rev:`.
   const encoded = rev as unknown as string;
   if (encoded.startsWith('range:')) {
     const inner = encoded.slice('range:'.length);
@@ -21,8 +22,8 @@ export function toJjRev(rev: RevisionExpr): string {
     const toEnc = inner.slice(sepIdx + 2) as unknown as RevisionExpr;
     return `${toJjRev(fromEnc)}..${toJjRev(toEnc)}`;
   }
-  if (encoded.startsWith('commit:')) {
-    return encoded.slice('commit:'.length); // emit SHA verbatim
+  if (encoded.startsWith('rev:')) {
+    return encoded.slice('rev:'.length); // emit change_id (or SHA) prefix verbatim
   }
   const p = parseExpr(rev);
   switch (p.kind) {

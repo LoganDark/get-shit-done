@@ -14,7 +14,9 @@ import type { HookStage, HookContext } from './types.js';
 // ctx.stagedFiles will be passed via env. For Phase 1 the hook contract is
 // "fire and surface exit code only". Suppress unused-arg lint in the meantime.
 
-export function fireHook(cwd: string, stage: HookStage, ctx?: HookContext): ExecResult {
+// 2.1 D-07: kept private; Phase 4 (HOOK-01..05) will wire internal invocations
+// from commit() / push().
+function fireHook(cwd: string, stage: HookStage, ctx?: HookContext): ExecResult {
   void ctx;
   const hookPath = join(cwd, '.githooks', stage);
   if (!existsSync(hookPath)) {
