@@ -437,8 +437,67 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
   };
 
   // ─── push / fetch (plan 03-06) ──────────────────────────────────────────
-  const push = (_opts: PushOpts = {}): ExecResult => notImpl('push');
-  const fetch = (_opts: FetchOpts = {}): ExecResult => notImpl('fetch');
+  /**
+   * `vcs.push(opts)` — wraps `jj git push` (NOT raw `git push`; `jj git push`
+   * is a jj subcommand and is the only legal jj-side wrapper around the
+   * git-remote protocol).
+   *
+   * Argv mapping (empirically verified against jj 0.41 during plan 03-06):
+   *  - `opts.remote` → `--remote <name>`
+   *  - `opts.ref`    → `--bookmark <name>` IFF the ref is bookmark-shaped
+   *                    (matches `^[A-Za-z][\w\-/.]*$` after `toJjRev`).
+   *                    Other shapes (`@`, `@-`, range exprs) are a documented
+   *                    no-op — jj's default push behavior applies.
+   *  - `opts.force`  → DOCUMENTED NO-OP. `jj git push` has NO `--force-with-lease`
+   *                    flag. Its DEFAULT behavior IS already force-with-lease
+   *                    semantics ("safety checks" per `jj git push --help`).
+   *                    Accepted on the cross-backend surface for parity; adds
+   *                    no flag to the argv. (Empirical correction to
+   *                    RESEARCH A4 which speculated --force-with-lease existed.)
+   *  - `opts.noVerify` → no-op on jj in Phase 3 (Phase 4 owns hook firing).
+   *
+   * T-03.06-01 mitigation: the bookmark-shape regex gates the `--bookmark`
+   * path; non-matching refs proceed without the flag. The regex disallows
+   * leading `-` (rules out flag-injection like `--bookmark='--delete'`).
+   */
+  const push = (opts: PushOpts = {}): ExecResult => {
+    const args: string[] = ['git', 'push'];
+    if (opts.remote) args.push('--remote', opts.remote);
+    if (opts.ref) {
+      const refName = toJjRev(opts.ref);
+      // Bookmark-shape gate (T-03.06-01): only letter-leading, refname-safe
+      // names get `--bookmark`. `@`, `@-`, `from..to` ranges fall through.
+      const isBookmarkLike = /^[A-Za-z][\w\-/.]*$/.test(refName);
+      if (isBookmarkLike) {
+        args.push('--bookmark', refName);
+      }
+      // else: documented no-op — jj's default push behavior applies. Phase 4
+      // may reshape if a real caller needs per-rev push selectivity.
+    }
+    // opts.force: documented no-op (see JSDoc above). No flag added.
+    // opts.noVerify: Phase 4 owns hook firing; no-op here.
+    return vcsExec(cwd, 'jj', jjArgv(...args));
+  };
+
+  /**
+   * `vcs.fetch(opts)` — wraps `jj git fetch`.
+   *
+   * Argv mapping (empirically verified against jj 0.41 during plan 03-06):
+   *  - `opts.remote` → `--remote <name>`
+   *  - `opts.ref`    → DOCUMENTED NO-OP (RESEARCH A6). `jj git fetch` has
+   *                    `--branch <glob>` (glob filter on bookmark names) but
+   *                    no per-ref selectivity in the git-style sense. The
+   *                    cross-backend `opts.ref` field has no clean
+   *                    translation; jj fetches all configured remote refs.
+   *                    Audit (T-03.06-02 mitigation): no jj-reachable caller
+   *                    passes opts.ref to fetch — recorded in 03-06-AUDIT.md.
+   */
+  const fetch = (opts: FetchOpts = {}): ExecResult => {
+    const args: string[] = ['git', 'fetch'];
+    if (opts.remote) args.push('--remote', opts.remote);
+    // opts.ref: documented no-op on jj (see JSDoc above).
+    return vcsExec(cwd, 'jj', jjArgv(...args));
+  };
 
   // ─── refs.bookmarks namespace (plan 03-03) ──────────────────────────────
   // D-03 (gsd/ prefix discipline): every mutating write threads through
@@ -628,13 +687,61 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     },
   });
 
-  // ─── workspace namespace (plan 03-06; stubs only — Phase 4 owns real semantics) ─
+  // ─── workspace namespace (plan 03-06) ────────────────────────────────────
+  // list() + context() have real Phase 3 bodies; add() / forget() / prune()
+  // still throw VcsNotImplementedError — Phase 4 owns workspace orchestrator
+  // semantics (WS-01..13). Per-verb allowlist in backends.ts flips list and
+  // context to admit 'jj-colocated'; add/forget/prune stay ['git'].
   const workspace: VcsWorkspace = Object.freeze({
-    add: (_input: WorkspaceAdd): WorkspaceInfo => notImpl('workspace.add'),
-    forget: (_path: string): void => notImpl('workspace.forget'),
-    list: (): WorkspaceInfo[] => notImpl('workspace.list'),
-    context: (): WorkspaceContext => notImpl('workspace.context'),
-    prune: (): ExecResult => notImpl('workspace.prune'),
+    add: (_input: WorkspaceAdd): WorkspaceInfo => {
+      throw new VcsNotImplementedError(
+        'workspace.add: Phase 4 owns workspace orchestrator semantics (WS-01..13)',
+      );
+    },
+    forget: (_path: string): void => {
+      throw new VcsNotImplementedError(
+        'workspace.forget: Phase 4 owns workspace orchestrator semantics (WS-02)',
+      );
+    },
+    /**
+     * `vcs.workspace.list()` — parses `jj workspace list -T 'json(self) ++
+     * "\n"'` NDJSON via `parseJjWorkspaceList` (production from plan 03-02).
+     *
+     * On a fresh single-workspace colocated repo this returns a one-element
+     * array `[{path: 'default', rev: <40-char-commit_id>, locked: false}]`.
+     * `locked` is always false (jj has no lock primitive — PITFALL 4).
+     *
+     * Phase 4 reshapes when multi-workspace flows land. Phase 3 just needs
+     * the contract-passing single-workspace case for cross-backend parity.
+     */
+    list: (): WorkspaceInfo[] => {
+      const args = jjArgv('workspace', 'list', '-T', 'json(self) ++ "\\n"');
+      const r = vcsExec(cwd, 'jj', args);
+      if (r.exitCode !== 0) return [];
+      return parseJjWorkspaceList(r.stdout);
+    },
+    /**
+     * `vcs.workspace.context()` — Phase 3 stub returning the cross-backend
+     * shape literally. T-03.06-03: `mode: 'main'` is a documented Phase-3
+     * boundary; Phase 4 implements real multi-workspace context (effectiveRoot
+     * resolution when @ points into a linked workspace, isLinked detection
+     * via `.jj/working_copy/<name>` sentinel files, etc.).
+     *
+     * No jj invocation — pure literal, returned frozen so callers cannot
+     * mutate the shape (matches Object.freeze convention used throughout
+     * the adapter).
+     */
+    context: (): WorkspaceContext =>
+      Object.freeze({
+        effectiveRoot: cwd,
+        mode: 'main' as const,
+        isLinked: false,
+      }),
+    prune: (): ExecResult => {
+      throw new VcsNotImplementedError(
+        'workspace.prune: Phase 4 owns workspace orchestrator semantics',
+      );
+    },
   });
 
   // ─── test-only snapshot/restore (plan 03-02) ───────────────────────────
@@ -692,10 +799,11 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     },
   });
 
-  // Mark imports used (silence TS unused warnings). `parseJjLog` is now
-  // actively consumed by `log()` (plan 03-05) — the prior void-shim was
-  // dropped. `parseJjWorkspaceList` is still pending plan 03-06.
-  void parseJjWorkspaceList;
+  // All parser imports are now actively consumed: `parseJjLog` by `log()`
+  // (plan 03-05) and `findConflicts()`, `parseJjWorkspaceList` by
+  // `workspace.list()` (this plan 03-06), `parseJjBookmarkRecord` by
+  // `bookmarks.list()` (plan 03-03). The prior `void parseJjWorkspaceList`
+  // unused-import shim is gone.
 
   return Object.freeze({
     kind: 'jj' as const,

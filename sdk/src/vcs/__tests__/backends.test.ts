@@ -24,7 +24,7 @@ describe('BACKENDS constants', () => {
 });
 
 describe('BACKENDS_AVAILABLE_FOR_VERB (Phase 3 D-12 per-verb allowlist)', () => {
-  it('plan 03-05 flipped log/status/diff/findConflicts to admit jj-colocated; push/fetch/workspace still pending', () => {
+  it('plan 03-06 flipped push/fetch/workspace.list/workspace.context to admit jj-colocated; workspace.add/forget/prune stay git-only', () => {
     // Plan 03-04 flipped `commit`; plan 03-05 Task 1 flipped log/status/diff;
     // plan 03-05 Task 2 flipped findConflicts:
     expect(BACKENDS_AVAILABLE_FOR_VERB.commit).toEqual(['git', 'jj-colocated']);
@@ -32,9 +32,11 @@ describe('BACKENDS_AVAILABLE_FOR_VERB (Phase 3 D-12 per-verb allowlist)', () => 
     expect(BACKENDS_AVAILABLE_FOR_VERB.status).toEqual(['git', 'jj-colocated']);
     expect(BACKENDS_AVAILABLE_FOR_VERB.diff).toEqual(['git', 'jj-colocated']);
     expect(BACKENDS_AVAILABLE_FOR_VERB.findConflicts).toEqual(['git', 'jj-colocated']);
-    // Verbs still pending body in plan 03-06 stay [git]-only:
-    expect(BACKENDS_AVAILABLE_FOR_VERB.push).toEqual(['git']);
-    expect(BACKENDS_AVAILABLE_FOR_VERB.fetch).toEqual(['git']);
+    // Plan 03-06 Task 1 flipped push/fetch (real `jj git push` / `jj git
+    // fetch` bodies; opts.force on push and opts.ref on fetch are documented
+    // no-ops — see backends/jj.ts JSDoc + 03-06-SUMMARY.md):
+    expect(BACKENDS_AVAILABLE_FOR_VERB.push).toEqual(['git', 'jj-colocated']);
+    expect(BACKENDS_AVAILABLE_FOR_VERB.fetch).toEqual(['git', 'jj-colocated']);
     // Plan 03-03 flipped refs.bookmarks.list to admit jj-colocated:
     expect(BACKENDS_AVAILABLE_FOR_VERB['refs.bookmarks.list']).toEqual([
       'git',
@@ -44,6 +46,14 @@ describe('BACKENDS_AVAILABLE_FOR_VERB (Phase 3 D-12 per-verb allowlist)', () => 
     // no jj-reachable caller; jj backend throws VcsNotImplementedError):
     expect(BACKENDS_AVAILABLE_FOR_VERB['refs.bookmarks.switch']).toEqual(['git']);
     expect(BACKENDS_AVAILABLE_FOR_VERB['refs.isIgnored']).toEqual(['git']);
+    // Plan 03-06 Task 1: workspace.list + workspace.context flipped (Phase 3
+    // stubs — real semantics in Phase 4). workspace.add/forget/prune stay
+    // ['git'] only (Phase 4 owns WS-*; jj backend throws VcsNotImplementedError):
+    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.list']).toEqual(['git', 'jj-colocated']);
+    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.context']).toEqual(['git', 'jj-colocated']);
+    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.add']).toEqual(['git']);
+    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.forget']).toEqual(['git']);
+    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.prune']).toEqual(['git']);
   });
   it('declares at least 25 verb keys (full VcsAdapterCommon surface)', () => {
     expect(Object.keys(BACKENDS_AVAILABLE_FOR_VERB).length).toBeGreaterThanOrEqual(25);

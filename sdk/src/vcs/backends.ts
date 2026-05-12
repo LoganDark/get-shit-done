@@ -60,8 +60,14 @@ export const BACKENDS_AVAILABLE_FOR_VERB: Readonly<
   // -r <rev>` (primary, empirically verified on jj 0.41) with `jj diff
   // --summary` fallback.
   findConflicts: Object.freeze(['git', 'jj-colocated'] as const),
-  push: Object.freeze(['git'] as const),
-  fetch: Object.freeze(['git'] as const),
+  // Phase 3 plan 03-06 Task 1 flipped push/fetch to admit 'jj-colocated':
+  // push wraps `jj git push` (--remote / --bookmark mapped from opts; opts.force
+  // is a documented no-op because jj's default push IS already force-with-lease
+  // semantics, empirically verified on jj 0.41 — see 03-06-SUMMARY.md);
+  // fetch wraps `jj git fetch` (--remote mapped; opts.ref is a documented
+  // no-op per RESEARCH A6, audit-confirmed no jj-reachable caller).
+  push: Object.freeze(['git', 'jj-colocated'] as const),
+  fetch: Object.freeze(['git', 'jj-colocated'] as const),
   // VcsRefs — plan 03-03 flipped every verb with a real body to admit
   // 'jj-colocated'. `refs.isIgnored` stays git-only: the single production
   // caller pins `kind:'git'` (see 03-03-AUDIT.md), and the jj backend
@@ -83,11 +89,16 @@ export const BACKENDS_AVAILABLE_FOR_VERB: Readonly<
   'refs.bookmarks.delete': Object.freeze(['git', 'jj-colocated'] as const),
   'refs.bookmarks.exists': Object.freeze(['git', 'jj-colocated'] as const),
   'refs.bookmarks.switch': Object.freeze(['git'] as const), // jj-side: VcsNotImplementedError (audit-confirmed no jj caller)
-  // VcsWorkspace
+  // VcsWorkspace — Phase 3 plan 03-06 Task 1 flipped list + context to admit
+  // 'jj-colocated' (real bodies in backends/jj.ts: list parses NDJSON via
+  // parseJjWorkspaceList, context returns the Phase 3 literal stub
+  // {effectiveRoot:cwd, mode:'main', isLinked:false}). add/forget/prune stay
+  // ['git'] only: Phase 4 owns workspace orchestrator semantics (WS-*) and
+  // the jj backend throws VcsNotImplementedError there.
   'workspace.add': Object.freeze(['git'] as const),
   'workspace.forget': Object.freeze(['git'] as const),
-  'workspace.list': Object.freeze(['git'] as const),
-  'workspace.context': Object.freeze(['git'] as const),
+  'workspace.list': Object.freeze(['git', 'jj-colocated'] as const),
+  'workspace.context': Object.freeze(['git', 'jj-colocated'] as const),
   'workspace.prune': Object.freeze(['git'] as const),
   // Test-only snapshot/restore (gated separately so per-test fixture
   // setup can probe verb availability before invoking them — see

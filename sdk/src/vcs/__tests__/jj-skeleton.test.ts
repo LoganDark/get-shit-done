@@ -87,11 +87,23 @@ describe('Phase 3 plan 03-01: jj.ts skeleton', () => {
       }
     }).not.toThrow(VcsNotImplementedError);
   });
-  it('push() throws VcsNotImplementedError', () => {
-    expect(() => vcs.push()).toThrow(VcsNotImplementedError);
+  // Phase 3 plan 03-06 Task 1 landed push/fetch bodies — the verbs no longer
+  // throw VcsNotImplementedError. They may throw VcsExecError when the spawned
+  // jj binary fails (cwd /tmp/never-exists) but that's a different class.
+  // Integration suite in jj-push-fetch.test.ts covers the happy path.
+  it('push() does not throw VcsNotImplementedError (wired in plan 03-06)', () => {
+    expect(() => {
+      try { vcs.push(); } catch (e) {
+        if (e instanceof VcsNotImplementedError) throw e;
+      }
+    }).not.toThrow(VcsNotImplementedError);
   });
-  it('fetch() throws VcsNotImplementedError', () => {
-    expect(() => vcs.fetch()).toThrow(VcsNotImplementedError);
+  it('fetch() does not throw VcsNotImplementedError (wired in plan 03-06)', () => {
+    expect(() => {
+      try { vcs.fetch(); } catch (e) {
+        if (e instanceof VcsNotImplementedError) throw e;
+      }
+    }).not.toThrow(VcsNotImplementedError);
   });
 
   // refs.bookmarks namespace
@@ -145,20 +157,26 @@ describe('Phase 3 plan 03-01: jj.ts skeleton', () => {
     expect(() => vcs.refs.remotes()).not.toThrow(VcsNotImplementedError);
   });
 
-  // workspace
-  it('workspace.add() throws VcsNotImplementedError', () => {
+  // workspace — Phase 3 plan 03-06 Task 1 landed list/context bodies. add/
+  // forget/prune still throw VcsNotImplementedError (Phase 4 owns WS-*).
+  it('workspace.add() still throws VcsNotImplementedError (Phase 4 owns WS-*)', () => {
     expect(() => vcs.workspace.add({ path: '/x' })).toThrow(VcsNotImplementedError);
   });
-  it('workspace.forget() throws VcsNotImplementedError', () => {
+  it('workspace.forget() still throws VcsNotImplementedError (Phase 4 owns WS-*)', () => {
     expect(() => vcs.workspace.forget('/x')).toThrow(VcsNotImplementedError);
   });
-  it('workspace.list() throws VcsNotImplementedError', () => {
-    expect(() => vcs.workspace.list()).toThrow(VcsNotImplementedError);
+  it('workspace.list() does not throw VcsNotImplementedError (wired in plan 03-06)', () => {
+    expect(() => {
+      try { vcs.workspace.list(); } catch (e) {
+        if (e instanceof VcsNotImplementedError) throw e;
+      }
+    }).not.toThrow(VcsNotImplementedError);
   });
-  it('workspace.context() throws VcsNotImplementedError', () => {
-    expect(() => vcs.workspace.context()).toThrow(VcsNotImplementedError);
+  it('workspace.context() does not throw VcsNotImplementedError (wired in plan 03-06)', () => {
+    // workspace.context is a pure literal — no jj invocation, no throw.
+    expect(() => vcs.workspace.context()).not.toThrow();
   });
-  it('workspace.prune() throws VcsNotImplementedError', () => {
+  it('workspace.prune() still throws VcsNotImplementedError (Phase 4 owns WS-*)', () => {
     expect(() => vcs.workspace.prune()).toThrow(VcsNotImplementedError);
   });
 
