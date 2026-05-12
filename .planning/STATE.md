@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 Phase: 2.1 (complete + UAT passed + merged) — next: Phase 3 (jj Backend Core)
 Plan: 9 of 9 complete
 Status: Phase merged to main; UAT 8/8 pass; ready for Phase 3
-Last activity: 2026-05-12 -- Phase 2.1 UAT complete (8/8 pass; 2.1-UAT.md); merged to main
+Last activity: 2026-05-12 -- Phase 2.1 UAT complete (8/8 pass; 02.1-UAT.md); merged to main
 
 Progress: [██████████] 100% — phase complete
 
@@ -152,7 +152,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 Last session: 2026-05-11T23:16:26.440Z
 Stopped at: Phase 2.1 context gathered
-Resume file: .planning/phases/2.1-vcs-abstraction-audit-drop-git-only-concepts/2.1-CONTEXT.md
+Resume file: .planning/phases/02.1-vcs-abstraction-audit-drop-git-only-concepts/02.1-CONTEXT.md
 
 ## Known Pre-Existing Test Failures (Non-Blocking)
 
