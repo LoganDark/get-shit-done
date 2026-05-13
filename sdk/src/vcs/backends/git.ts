@@ -25,7 +25,7 @@ import type { ExecResult } from '../exec.js';
 import { expr } from '../expr.js';
 import { toGitRev } from '../parse/git-rev.js';
 import { readWorktreeList } from '../parse/worktree-list.js';
-import { __vcsTestOnly } from '../types.js';
+import { __vcsTestOnly, VcsNotImplementedError } from '../types.js';
 import type {
   GitVcsAdapter,
   CommitInput,
@@ -38,6 +38,7 @@ import type {
   DiffOpts,
   DiffResult,
   Bookmark,
+  ReapResult,
   WorkspaceAdd,
   WorkspaceInfo,
   ConflictResult,
@@ -509,7 +510,27 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     // Plan 02-03 Task 2 gap-fill: `git worktree prune` removes stale
     // .git/worktrees/<name> entries whose worktree directories no longer exist.
     prune: (): ExecResult => execGit(cwd, ['worktree', 'prune']),
+    reap: (opts: { phaseNamePrefix: string; phaseDir: string }): ReapResult => {
+      // Phase 4: git mirror of jj reap. Enumerate worktrees, filter by name prefix,
+      // run `git worktree remove` for each. No empty-tree probe on git side
+      // (git's worktrees don't carry the auto-snapshot footgun jj does). Full body
+      // lands in plan 04 alongside the jj sidecar; this stub throws until then to
+      // match the per-verb allowlist gating.
+      void opts;
+      throw new VcsNotImplementedError(
+        'workspace.reap: Phase 4 plan 04 owns the real body on both backends',
+      );
+    },
   });
+
+  // Phase 4 D-19: kernel-enforced via .git/index.lock; the adapter primitive is
+  // a no-op by design. Cross-backend callers get a release-handle for symmetry.
+  const acquireWriteLock = (
+    _workspace: string,
+    _opts?: { timeout?: number },
+  ): { release(): void } => {
+    return { release: (): void => {} };
+  };
 
   // Phase 2.1 D-07: the `hooks` Object.freeze block is DELETED. The hook
   // helper is now module-private to hook-bridge.ts; Phase 4 (HOOK-01..05)
@@ -673,6 +694,7 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     findConflicts,
     push,
     fetch,
+    acquireWriteLock,
     gitOnly,
     [__vcsTestOnly]: testOnly,
   }) as unknown as GitVcsAdapter;
