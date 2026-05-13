@@ -268,8 +268,21 @@ function vcsTest(kindOrKinds, suiteFn) {
           ex('jj config set --repo user.email "test@test.com"', { cwd: sharedDir, stdio: 'pipe' });
           ex('jj config set --repo user.name "Test"', { cwd: sharedDir, stdio: 'pipe' });
           sharedAdapter = vcsLib.createVcsAdapter(sharedDir, { kind: 'jj' });
+        } else if (kind === 'jj-native') {
+          // Phase 4 plan 01 (D-22): non-colocated jj fixture. Empirically
+          // verified against jj 0.41.0: `--colocate` IS THE DEFAULT, so
+          // we MUST pass `--no-colocate` to suppress `.git` creation
+          // and produce a jj-native (non-colocated) repo. Plan-action's
+          // `--no-git` spelling was hypothetical; the actual 0.41 flag is
+          // `--no-colocate` (see `jj git init --help`).
+          sharedDir = createTempDir('gsd-vcs-cjs-jj-native-');
+          const { execSync: ex } = require('node:child_process');
+          ex('jj git init --no-colocate', { cwd: sharedDir, stdio: 'pipe' });
+          ex('jj config set --repo user.email "test@test.com"', { cwd: sharedDir, stdio: 'pipe' });
+          ex('jj config set --repo user.name "Test"', { cwd: sharedDir, stdio: 'pipe' });
+          sharedAdapter = vcsLib.createVcsAdapter(sharedDir, { kind: 'jj' });
         } else {
-          throw new Error("backend '" + kind + "' not yet implemented (BACKENDS_AVAILABLE=" + backends.BACKENDS_AVAILABLE.join(',') + ') — Phase 4 owns jj-native');
+          throw new Error("backend '" + kind + "' not yet implemented (BACKENDS_AVAILABLE=" + backends.BACKENDS_AVAILABLE.join(',') + ')');
         }
         const testApi = sharedAdapter[__VCS_TEST_ONLY_SYMBOL];
         if (!testApi) throw new Error('Adapter missing __vcsTestOnly namespace');

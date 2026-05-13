@@ -58,6 +58,24 @@ function initJjRepo(): string {
   return dir;
 }
 
+function initJjNativeRepo(): string {
+  // Phase 4 plan 01 (D-22): non-colocated jj fixture. Empirically verified
+  // against jj 0.41.0: `--colocate` is the default, so `--no-colocate` is
+  // required to suppress `.git` creation. Mirrors tests/helpers.cjs's
+  // jj-native branch.
+  const dir = mkdtempSync(join(tmpdir(), 'gsd-vcs-jj-native-'));
+  execSync('jj git init --no-colocate', { cwd: dir, stdio: 'pipe' });
+  execSync('jj config set --repo user.email "test@test.com"', {
+    cwd: dir,
+    stdio: 'pipe',
+  });
+  execSync('jj config set --repo user.name "Test"', {
+    cwd: dir,
+    stdio: 'pipe',
+  });
+  return dir;
+}
+
 export function makeBackendFixture(kind: VcsBackendKey) {
   let sharedDir: string | null = null;
   let sharedAdapter: VcsAdapter | null = null;
@@ -87,9 +105,12 @@ export function makeBackendFixture(kind: VcsBackendKey) {
       } else if (kind === 'jj-colocated') {
         sharedDir = initJjRepo();
         sharedAdapter = createVcsAdapter(sharedDir, { kind: 'jj' });
+      } else if (kind === 'jj-native') {
+        sharedDir = initJjNativeRepo();
+        sharedAdapter = createVcsAdapter(sharedDir, { kind: 'jj' });
       } else {
         throw new Error(
-          `backend '${kind}' not yet implemented (BACKENDS_AVAILABLE=${BACKENDS_AVAILABLE.join(',')}) — Phase 4 owns jj-native per D-13`
+          `backend '${kind}' not yet implemented (BACKENDS_AVAILABLE=${BACKENDS_AVAILABLE.join(',')})`
         );
       }
       // Plan 03-01: jj-colocated snapshot/restore lands in plan 03-02 (parser
