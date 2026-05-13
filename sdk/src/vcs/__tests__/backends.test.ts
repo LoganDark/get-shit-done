@@ -24,7 +24,7 @@ describe('BACKENDS constants', () => {
 });
 
 describe('BACKENDS_AVAILABLE_FOR_VERB (Phase 3 D-12 per-verb allowlist)', () => {
-  it('Phase 4 plan 04-01 flipped workspace.{add,forget,list,context,prune} to admit jj-colocated AND jj-native; NEW verbs workspace.reap and acquireWriteLock gated [git] until plans 04-04/04-03 land', () => {
+  it('Phase 4 plan 04-01 flipped workspace.{add,forget,list,context,prune} to admit jj-colocated AND jj-native; plan 04-03 flipped acquireWriteLock to admit both jj backends; workspace.reap still gated [git] until plan 04-04 lands', () => {
     // Plan 03-04 flipped `commit`; plan 03-05 Task 1 flipped log/status/diff;
     // plan 03-05 Task 2 flipped findConflicts:
     expect(BACKENDS_AVAILABLE_FOR_VERB.commit).toEqual(['git', 'jj-colocated']);
@@ -55,11 +55,17 @@ describe('BACKENDS_AVAILABLE_FOR_VERB (Phase 3 D-12 per-verb allowlist)', () => 
     expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.list']).toEqual(['git', 'jj-colocated', 'jj-native']);
     expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.context']).toEqual(['git', 'jj-colocated', 'jj-native']);
     expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.prune']).toEqual(['git', 'jj-colocated', 'jj-native']);
-    // NEW verbs introduced by Phase 4 plan 04-01: bodies deferred to later
-    // plans (04-04 → workspace.reap; 04-03 → acquireWriteLock). Per-verb
-    // allowlist gated to [git] until those plans flip.
+    // workspace.reap body still deferred (plan 04-04); per-verb allowlist
+    // gated to [git] until that plan flips it.
     expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.reap']).toEqual(['git']);
-    expect(BACKENDS_AVAILABLE_FOR_VERB['acquireWriteLock']).toEqual(['git']);
+    // Phase 4 plan 04-03 landed the acquireWriteLock body in
+    // sdk/src/vcs/jj/lock.ts and flipped the allowlist to admit both jj
+    // backends.
+    expect(BACKENDS_AVAILABLE_FOR_VERB['acquireWriteLock']).toEqual([
+      'git',
+      'jj-colocated',
+      'jj-native',
+    ]);
   });
   it('declares at least 25 verb keys (full VcsAdapterCommon surface)', () => {
     expect(Object.keys(BACKENDS_AVAILABLE_FOR_VERB).length).toBeGreaterThanOrEqual(25);

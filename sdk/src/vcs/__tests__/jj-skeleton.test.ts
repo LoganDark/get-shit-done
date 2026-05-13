@@ -200,8 +200,19 @@ describe('Phase 3 plan 03-01: jj.ts skeleton', () => {
     expect(() => vcs.workspace.reap({ phaseNamePrefix: 'phase-04-subagent-', phaseDir: '/x' }))
       .toThrow(VcsNotImplementedError);
   });
-  it('acquireWriteLock() still throws VcsNotImplementedError (Phase 4 plan 03 owns)', () => {
-    expect(() => vcs.acquireWriteLock('/x')).toThrow(VcsNotImplementedError);
+  it('acquireWriteLock() does not throw VcsNotImplementedError (wired in plan 04-03)', () => {
+    // Plan 04-03 landed the real body in sdk/src/vcs/jj/lock.ts; the jj.ts
+    // wrapper delegates. Against a non-existent cwd ('/x') the call may still
+    // throw (mkdirSync EACCES or vcsExec failure) but the stub-error class is
+    // what we forbid.
+    expect(() => {
+      try {
+        const h = vcs.acquireWriteLock('/x');
+        try { h.release(); } catch { /* noop */ }
+      } catch (e) {
+        if (e instanceof VcsNotImplementedError) throw e;
+      }
+    }).not.toThrow(VcsNotImplementedError);
   });
 
   // __vcsTestOnly

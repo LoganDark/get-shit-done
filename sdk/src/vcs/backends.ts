@@ -100,10 +100,13 @@ export const BACKENDS_AVAILABLE_FOR_VERB: Readonly<
   'workspace.list': Object.freeze(['git', 'jj-colocated', 'jj-native'] as const),
   'workspace.context': Object.freeze(['git', 'jj-colocated', 'jj-native'] as const),
   'workspace.prune': Object.freeze(['git', 'jj-colocated', 'jj-native'] as const),
-  // NEW verbs — Phase 4 introduces. Allowlist gated to git only until each plan
-  // lands the real body on jj (plan 03 → acquireWriteLock; plan 04 → workspace.reap).
+  // NEW verbs — Phase 4 introduces. workspace.reap stays gated to [git] until
+  // plan 04-04 lands the real body in sdk/src/vcs/jj/reap.ts.
   'workspace.reap': Object.freeze(['git'] as const),
-  'acquireWriteLock': Object.freeze(['git'] as const),
+  // Phase 4 plan 03 (D-19): per-workspace flock primitive landed in
+  // sdk/src/vcs/jj/lock.ts. Allowlist admits both jj backends now that contract
+  // tests pass on each.
+  'acquireWriteLock': Object.freeze(['git', 'jj-colocated', 'jj-native'] as const),
   // Test-only snapshot/restore (gated separately so per-test fixture
   // setup can probe verb availability before invoking them — see
   // sdk/src/vcs/__tests__/vcs-fixture.ts). Phase 3 plan 03-02 flipped both
