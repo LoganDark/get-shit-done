@@ -16,48 +16,19 @@
  */
 
 import type { RevisionExpr } from './types.js';
+// Phase 4 plan 07 D-24 / cr-01 fold-in: the refname validator (formerly
+// inlined here as `validateBookmarkName`) is now sourced from the shared
+// module so the jj + git backends can reuse the same rules at every
+// bookmark/branch write site. The alias preserves the in-file binding name
+// `validateBookmarkName` so the existing call sites below (`expr.bookmark`,
+// `expr.remote`) need zero changes.
+import {
+  validateBookmarkName,
+  REFNAME_FORBIDDEN_BYTE_OR_SET,
+} from './refs-validator.js';
 
 function brand(s: string): RevisionExpr {
   return s as RevisionExpr;
-}
-
-// WR-07: validate against git's refname rules (see git-check-ref-format(1)).
-// The factory is the right place to enforce this so jj and git share the
-// constraint — feeding `expr.bookmark('-D')` to `git branch <name>` would have
-// the worst-case interpretation `git branch -D` (deletes branches).
-//
-// Reject:
-//   - empty string
-//   - any ASCII control byte (0x00-0x1f, 0x7f), space, or one of `~^:?*[\\`
-//   - leading `-` (would be parsed as a flag)
-//   - leading `.` (forbidden by refname rules)
-//   - `..` or `@{` anywhere
-//   - trailing `/` or `.lock`
-//   - any path component (`/`-separated) that starts with `.` or ends with `.lock`
-const REFNAME_FORBIDDEN_BYTE_OR_SET = /[\x00-\x1f\x7f ~^:?*[\\]/;
-function validateBookmarkName(name: string): void {
-  if (!name) throw new Error(`expr.bookmark: empty name`);
-  if (REFNAME_FORBIDDEN_BYTE_OR_SET.test(name)) {
-    throw new Error(`expr.bookmark: invalid name '${name}' (forbidden byte or character)`);
-  }
-  if (name.startsWith('-')) {
-    throw new Error(`expr.bookmark: invalid name '${name}' (leading '-')`);
-  }
-  if (name.startsWith('.') || name.endsWith('/') || name.endsWith('.lock')) {
-    throw new Error(`expr.bookmark: invalid name '${name}' (refname format)`);
-  }
-  if (name.includes('..') || name.includes('@{')) {
-    throw new Error(`expr.bookmark: invalid name '${name}' (forbidden sequence)`);
-  }
-  // Per-component checks for path-shaped names like 'feature/x'.
-  for (const component of name.split('/')) {
-    if (!component) {
-      throw new Error(`expr.bookmark: invalid name '${name}' (empty path component)`);
-    }
-    if (component.startsWith('.') || component.endsWith('.lock')) {
-      throw new Error(`expr.bookmark: invalid name '${name}' (component '${component}')`);
-    }
-  }
 }
 
 // Phase 2.1 D-13: permissive validator. Accepts hex SHA (git) OR change_id
