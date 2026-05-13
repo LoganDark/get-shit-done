@@ -131,7 +131,7 @@ Plans:
 **Plans**: 7 plans
 - [x] 04-01-PLAN.md — Shape commit: types.ts + jj.ts workspace stubs replacement + git.ts mirror + backends.ts allowlist + CI matrix axis (jj-native lane) + fireHook export
 - [x] 04-02-PLAN.md — jj workspace.add/forget/prune contract tests + vcsMultiWsTest fixture + WS-13 multi-workspace bug-audit
-- [ ] 04-03-PLAN.md — acquireWriteLock primitive (jj/lock.ts) + concurrent-acquire/timeout/stale-recovery tests (D-19, D-21)
+- [x] 04-03-PLAN.md — acquireWriteLock primitive (jj/lock.ts) + concurrent-acquire/timeout/stale-recovery tests (D-19, D-21)
 - [ ] 04-04-PLAN.md — workspace.reap (jj/reap.ts) + incomplete-work queue + phase-merge VcsIncompleteSubagentsError gate (D-12 corrected, D-13, D-14)
 - [ ] 04-05-PLAN.md — Lazy octopus helpers (jj/octopus.ts) — createPhaseStructure/createSubagentHead/createSubagentSlot using jj new -A -B --no-edit
 - [ ] 04-06-PLAN.md — Hook wiring: commit() pre-commit + push() pre-push + pre-push.ts inline replication + SDK query bridge (HOOK-01..05, CI-04)
