@@ -69,6 +69,19 @@ export interface CommitInput {
    * Git backend: ignored.
    */
   bookmarkRaw?: string;
+  /**
+   * Phase 4 plan 04 D-14: phase-merge gate. When set, vcs.commit() reads
+   * `${phaseDir}/incomplete-work.md` BEFORE the squash/commit and throws
+   * VcsIncompleteSubagentsError if the queue is non-empty.
+   *
+   * Orchestrator passes this only on the final phase-merge squash (the one
+   * that advances `gsd/phase-{N}` to the merge change per WS-09). Subagent-tier
+   * squashes do NOT set this. Both backends honour the gate; the queue file
+   * format is git/jj-agnostic (markdown line-delimited).
+   */
+  phaseMergeFor?: {
+    phaseDir: string;
+  };
 }
 
 export interface CommitResult {

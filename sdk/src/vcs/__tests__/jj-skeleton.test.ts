@@ -159,9 +159,8 @@ describe('Phase 3 plan 03-01: jj.ts skeleton', () => {
 
   // workspace — Phase 3 plan 03-06 Task 1 landed list/context bodies. Phase 4
   // plan 01 (verb-shape commit) landed real add/forget bodies and a documented
-  // no-op for prune. New Phase 4 verbs workspace.reap and acquireWriteLock
-  // remain VcsNotImplementedError stubs until plans 04-04 and 04-03 land their
-  // real bodies (per-verb allowlist gating).
+  // no-op for prune. Plan 04-03 landed acquireWriteLock; plan 04-04 landed
+  // workspace.reap. All workspace verbs are now wired on the jj backend.
   it('workspace.add() does not throw VcsNotImplementedError (wired in plan 04-01)', () => {
     // Probe lifecycle only — call against non-existent cwd will throw
     // VcsExecError (a non-zero jj exitCode) or a generic Error from the
@@ -196,9 +195,18 @@ describe('Phase 3 plan 03-01: jj.ts skeleton', () => {
     // ExecResult zero-shape; the verb no longer throws.
     expect(() => vcs.workspace.prune()).not.toThrow();
   });
-  it('workspace.reap() still throws VcsNotImplementedError (Phase 4 plan 04 owns)', () => {
-    expect(() => vcs.workspace.reap({ phaseNamePrefix: 'phase-04-subagent-', phaseDir: '/x' }))
-      .toThrow(VcsNotImplementedError);
+  it('workspace.reap() does not throw VcsNotImplementedError (wired in plan 04-04)', () => {
+    // Plan 04-04 landed the real body in sdk/src/vcs/jj/reap.ts. Against a
+    // non-existent cwd ('/tmp/never-exists') the call may throw (vcsExec
+    // failure inside list() or the probe), but the stub-error class is what
+    // we forbid here.
+    expect(() => {
+      try {
+        vcs.workspace.reap({ phaseNamePrefix: 'phase-04-subagent-', phaseDir: '/x' });
+      } catch (e) {
+        if (e instanceof VcsNotImplementedError) throw e;
+      }
+    }).not.toThrow(VcsNotImplementedError);
   });
   it('acquireWriteLock() does not throw VcsNotImplementedError (wired in plan 04-03)', () => {
     // Plan 04-03 landed the real body in sdk/src/vcs/jj/lock.ts; the jj.ts

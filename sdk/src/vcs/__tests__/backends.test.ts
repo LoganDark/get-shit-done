@@ -24,7 +24,7 @@ describe('BACKENDS constants', () => {
 });
 
 describe('BACKENDS_AVAILABLE_FOR_VERB (Phase 3 D-12 per-verb allowlist)', () => {
-  it('Phase 4 plan 04-01 flipped workspace.{add,forget,list,context,prune} to admit jj-colocated AND jj-native; plan 04-03 flipped acquireWriteLock to admit both jj backends; workspace.reap still gated [git] until plan 04-04 lands', () => {
+  it('Phase 4 plan 04-01 flipped workspace.{add,forget,list,context,prune} to admit jj-colocated AND jj-native; plan 04-03 flipped acquireWriteLock to admit both jj backends; plan 04-04 flipped workspace.reap to admit both jj backends', () => {
     // Plan 03-04 flipped `commit`; plan 03-05 Task 1 flipped log/status/diff;
     // plan 03-05 Task 2 flipped findConflicts:
     expect(BACKENDS_AVAILABLE_FOR_VERB.commit).toEqual(['git', 'jj-colocated']);
@@ -55,9 +55,14 @@ describe('BACKENDS_AVAILABLE_FOR_VERB (Phase 3 D-12 per-verb allowlist)', () => 
     expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.list']).toEqual(['git', 'jj-colocated', 'jj-native']);
     expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.context']).toEqual(['git', 'jj-colocated', 'jj-native']);
     expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.prune']).toEqual(['git', 'jj-colocated', 'jj-native']);
-    // workspace.reap body still deferred (plan 04-04); per-verb allowlist
-    // gated to [git] until that plan flips it.
-    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.reap']).toEqual(['git']);
+    // Phase 4 plan 04-04 landed the workspace.reap bodies on both backends
+    // (jj-side via sdk/src/vcs/jj/reap.ts UPSTREAM-02 sidecar; git-side via
+    // a `git worktree remove` loop). The allowlist admits all three keys.
+    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.reap']).toEqual([
+      'git',
+      'jj-colocated',
+      'jj-native',
+    ]);
     // Phase 4 plan 04-03 landed the acquireWriteLock body in
     // sdk/src/vcs/jj/lock.ts and flipped the allowlist to admit both jj
     // backends.
