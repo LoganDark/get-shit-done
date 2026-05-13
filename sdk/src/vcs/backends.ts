@@ -100,9 +100,11 @@ export const BACKENDS_AVAILABLE_FOR_VERB: Readonly<
   'workspace.list': Object.freeze(['git', 'jj-colocated', 'jj-native'] as const),
   'workspace.context': Object.freeze(['git', 'jj-colocated', 'jj-native'] as const),
   'workspace.prune': Object.freeze(['git', 'jj-colocated', 'jj-native'] as const),
-  // NEW verbs — Phase 4 introduces. workspace.reap stays gated to [git] until
-  // plan 04-04 lands the real body in sdk/src/vcs/jj/reap.ts.
-  'workspace.reap': Object.freeze(['git'] as const),
+  // Phase 4 plan 04 (WS-11/WS-12): workspace.reap real bodies landed on
+  // both backends. jj-side lives in sdk/src/vcs/jj/reap.ts (UPSTREAM-02
+  // sidecar) with the corrected `jj diff --from <parent> --to <head> -s`
+  // empty-tree probe; git-side mirrors via a `git worktree remove` loop.
+  'workspace.reap': Object.freeze(['git', 'jj-colocated', 'jj-native'] as const),
   // Phase 4 plan 03 (D-19): per-workspace flock primitive landed in
   // sdk/src/vcs/jj/lock.ts. Allowlist admits both jj backends now that contract
   // tests pass on each.

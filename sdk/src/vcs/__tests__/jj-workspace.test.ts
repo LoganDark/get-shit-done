@@ -134,10 +134,18 @@ describe('Phase 4 plan 04-01 — workspace.add/forget/prune real bodies + reap/a
     expect(r.stderr).toBe('');
   });
 
-  it('workspace.reap still throws VcsNotImplementedError (Phase 4 plan 04 owns the real body)', () => {
-    expect(() =>
-      vcs.workspace.reap({ phaseNamePrefix: 'phase-04-subagent-', phaseDir: '/x' }),
-    ).toThrow(VcsNotImplementedError);
+  it('workspace.reap does not throw VcsNotImplementedError (wired in plan 04-04)', () => {
+    // Plan 04-04 landed the real body in sdk/src/vcs/jj/reap.ts. Against a
+    // non-existent cwd ('/tmp/some-jj-workspace') the call may throw (vcsExec
+    // failure inside list() or the probe), but the stub-error class is what
+    // we forbid here.
+    expect(() => {
+      try {
+        vcs.workspace.reap({ phaseNamePrefix: 'phase-04-subagent-', phaseDir: '/x' });
+      } catch (e) {
+        if (e instanceof VcsNotImplementedError) throw e;
+      }
+    }).not.toThrow(VcsNotImplementedError);
   });
 
   it('acquireWriteLock does not throw VcsNotImplementedError (wired in plan 04-03)', () => {
@@ -306,7 +314,7 @@ describe.skipIf(!jjAvailable)(
 );
 
 describe.skipIf(!jjAvailable)(
-  'jj workspace.reap — Phase 4 plan 01 bodies (multi-workspace, allowlist gate)',
+  'jj workspace.reap — Phase 4 plan 04 real body (boundary marker)',
   () => {
     let dir: string;
     let vcs: ReturnType<typeof createJjAdapter>;
@@ -319,10 +327,16 @@ describe.skipIf(!jjAvailable)(
       if (dir) rmSync(dir, { recursive: true, force: true });
     });
 
-    it('throws VcsNotImplementedError pointing at plan 04', () => {
-      expect(() =>
-        vcs.workspace.reap({ phaseNamePrefix: 'phase-04-subagent-', phaseDir: dir }),
-      ).toThrow(/Phase 4 plan 04 owns the real body/);
+    it('no longer throws /Phase 4 plan 04 owns the real body/ — body landed', () => {
+      // Plan 04-04 landed the real body. The marker error from the
+      // plan-01 stub is gone. With no subagent workspaces matching the
+      // prefix, reap returns { abandoned: [], incomplete: [] } cleanly.
+      const result = vcs.workspace.reap({
+        phaseNamePrefix: 'phase-04-subagent-',
+        phaseDir: dir,
+      });
+      expect(result.abandoned).toEqual([]);
+      expect(result.incomplete).toEqual([]);
     });
   },
 );

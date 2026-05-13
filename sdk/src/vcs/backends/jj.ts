@@ -19,7 +19,7 @@
  * in `bin/lib/commands.cjs`).
  */
 
-import { basename, dirname } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { expr } from '../expr.js';
 import { vcsExec, VcsExecError } from '../exec.js';
 import type { ExecResult } from '../exec.js';
@@ -29,7 +29,14 @@ import { parseJjWorkspaceList } from '../parse/jj-workspace-list.js';
 import { parseJjBookmarkRecord } from '../parse/jj-bookmark.js';
 import { mkdirSync } from 'node:fs';
 import { acquireJjWriteLock } from '../jj/lock.js';
-import { __vcsTestOnly, VcsNotImplementedError, VcsBookmarkDivergentError } from '../types.js';
+import { performJjReap } from '../jj/reap.js';
+import { readIncomplete } from '../jj/incomplete-work.js';
+import {
+  __vcsTestOnly,
+  VcsNotImplementedError,
+  VcsBookmarkDivergentError,
+  VcsIncompleteSubagentsError,
+} from '../types.js';
 import type {
   Bookmark,
   CommitInput,
@@ -165,6 +172,23 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       throw new Error(
         'commit(): pass at most one of {bookmark, bookmarkRaw} — D-01 and D-04 are mutually exclusive.',
       );
+    }
+    // D-14 phase-merge gate. When `phaseMergeFor` is set, read the crash
+    // queue at `${phaseDir}/incomplete-work.md` and throw before any squash
+    // when the queue is non-empty. The orchestrator clears the file (by
+    // reviewing entries and deleting them) before re-attempting the merge.
+    // Subagent-tier squashes do not set this field; only the final
+    // phase-merge squash that advances `gsd/phase-{N}` does (WS-09).
+    if (input.phaseMergeFor) {
+      const entries = readIncomplete(input.phaseMergeFor.phaseDir);
+      if (entries.length > 0) {
+        throw new VcsIncompleteSubagentsError({
+          entries,
+          phaseDir: input.phaseMergeFor.phaseDir,
+          hint:
+            'review entries in incomplete-work.md and delete them before re-running the phase merge',
+        });
+      }
     }
     // allowEmpty / noVerify: documented no-ops on jj. See JSDoc above.
 
@@ -882,14 +906,27 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       return { exitCode: 0, stdout: '', stderr: '', timedOut: false, error: null };
     },
     reap: (opts: { phaseNamePrefix: string; phaseDir: string }): ReapResult => {
-      // Phase 4 plan 04 ships the real body in sdk/src/vcs/jj/reap.ts (sidecar
-      // for upstream-rebase zero-conflict surface per UPSTREAM-02). This stub
-      // throws until plan 04 lands — the per-verb allowlist gates contract-test
-      // access (TEST-06 skip-not-throw).
-      void opts;
-      throw new VcsNotImplementedError(
-        'workspace.reap: Phase 4 plan 04 owns the real body; sdk/src/vcs/jj/reap.ts',
-      );
+      // Phase 4 plan 04: delegate to the UPSTREAM-02 sidecar in
+      // sdk/src/vcs/jj/reap.ts. Inventory via workspace.list(), filter by
+      // phaseNamePrefix (D-04 / #2774 inclusion-filter pattern), resolve
+      // workspace-name → on-disk path via the orchestrator-locked layout
+      // `.claude/jj-workspaces/<name>` per D-16. If D-18 is ever relaxed,
+      // this path-resolution policy moves to a caller-supplied override
+      // layer; for now it's encoded inline as the only conformant layout.
+      const allEntries = workspace.list();
+      const tracked = allEntries
+        .filter((e) => e.path.startsWith(opts.phaseNamePrefix))
+        .map((e) => ({
+          name: e.path,
+          headChange: e.rev,
+          path: join(cwd, '.claude/jj-workspaces', e.path),
+        }));
+      return performJjReap({
+        mainRepoRoot: cwd,
+        phaseNamePrefix: opts.phaseNamePrefix,
+        phaseDir: opts.phaseDir,
+        entries: tracked,
+      });
     },
   });
 

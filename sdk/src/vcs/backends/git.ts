@@ -25,7 +25,11 @@ import type { ExecResult } from '../exec.js';
 import { expr } from '../expr.js';
 import { toGitRev } from '../parse/git-rev.js';
 import { readWorktreeList } from '../parse/worktree-list.js';
-import { __vcsTestOnly, VcsNotImplementedError } from '../types.js';
+import {
+  __vcsTestOnly,
+  VcsIncompleteSubagentsError,
+} from '../types.js';
+import { readIncomplete } from '../jj/incomplete-work.js';
 import type {
   GitVcsAdapter,
   CommitInput,
@@ -109,6 +113,23 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         'commit({files:[]}) is ambiguous; pass files: undefined for `git commit -am`, ' +
           'or pass at least one path to commit a specific path set.',
       );
+    }
+    // Phase 4 plan 04 D-14: phase-merge gate (cross-backend). Read the crash
+    // queue at `${phaseDir}/incomplete-work.md` and throw before commit when
+    // the queue is non-empty. The queue file format is git/jj-agnostic
+    // (markdown line-delimited); both backends honour the gate. Reader lives
+    // under sdk/src/vcs/jj/ only because that's where the format was authored
+    // alongside the jj-side reap producer (no jj invocation in the parser).
+    if (input.phaseMergeFor) {
+      const entries = readIncomplete(input.phaseMergeFor.phaseDir);
+      if (entries.length > 0) {
+        throw new VcsIncompleteSubagentsError({
+          entries,
+          phaseDir: input.phaseMergeFor.phaseDir,
+          hint:
+            'review entries in incomplete-work.md and delete them before re-running the phase merge',
+        });
+      }
     }
     if (input.files && input.files.length > 0) {
       // Phase 2.1 #3061: reset the index to HEAD (or empty when there is no
@@ -511,15 +532,30 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     // .git/worktrees/<name> entries whose worktree directories no longer exist.
     prune: (): ExecResult => execGit(cwd, ['worktree', 'prune']),
     reap: (opts: { phaseNamePrefix: string; phaseDir: string }): ReapResult => {
-      // Phase 4: git mirror of jj reap. Enumerate worktrees, filter by name prefix,
-      // run `git worktree remove` for each. No empty-tree probe on git side
-      // (git's worktrees don't carry the auto-snapshot footgun jj does). Full body
-      // lands in plan 04 alongside the jj sidecar; this stub throws until then to
-      // match the per-verb allowlist gating.
-      void opts;
-      throw new VcsNotImplementedError(
-        'workspace.reap: Phase 4 plan 04 owns the real body on both backends',
-      );
+      // Phase 4 plan 04: git mirror of jj reap. Enumerate worktrees,
+      // filter by basename prefix (D-04 / #2774 inclusion-filter pattern),
+      // `git worktree remove` each. No empty-tree probe needed because git
+      // worktrees do NOT auto-snapshot — uncommitted state in a git worktree
+      // stays in its WC and surfaces independently via the orchestrator's
+      // status probe. `incomplete` is always empty on the git side; the
+      // crash-queue concern is a jj-side concept driven by auto-snapshot.
+      void opts.phaseDir; // unused on git side
+      const entries = workspace.list();
+      const abandoned: { name: string; changeId: string; path: string }[] = [];
+      for (const entry of entries) {
+        // git workspace.list() returns the on-disk path (not a workspace
+        // name); inclusion filter matches on basename.
+        const name = entry.path.split('/').pop() ?? entry.path;
+        if (!name.startsWith(opts.phaseNamePrefix)) continue;
+        const removeRes = execGit(cwd, ['worktree', 'remove', entry.path]);
+        if (removeRes.exitCode !== 0) {
+          throw new Error(
+            `git workspace.reap remove failed for ${entry.path}: ${removeRes.stderr || removeRes.stdout}`,
+          );
+        }
+        abandoned.push({ name, changeId: entry.rev, path: entry.path });
+      }
+      return { abandoned, incomplete: [] };
     },
   });
 
