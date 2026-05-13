@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 
 ## Current Position
 
-Phase: 03.1 (make-tests-run-faster) — BLOCKED on Plan 01 Task 2
-Plan: 1 of 4 (Task 1 landed: harness script + .gitignore. Task 2 blocked: baseline measurement)
-Status: Paused — fix pre-existing golden-parity failures before resuming
-Last activity: 2026-05-12 -- Phase 03.1 paused (see Blockers/Concerns)
+Phase: 03.1 (make-tests-run-faster) — EXECUTING
+Plan: 2 of 4 (Plan 01 complete: harness + pre-fix baseline landed)
+Status: Ready for Plan 02 (L1 pool: threads)
+Last activity: 2026-05-13 -- Phase 03.1 Plan 01 complete; baseline recorded
 
 Progress: [██████████] 100%
 
