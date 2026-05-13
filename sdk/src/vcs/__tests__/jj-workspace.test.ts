@@ -103,27 +103,44 @@ describe('Phase 3 plan 03-06 Task 1 — workspace.context() on jj (no jj needed)
   });
 });
 
-describe('Phase 3 plan 03-06 Task 1 — workspace.add/forget/prune still NotImpl (Phase 4 owns)', () => {
+describe('Phase 4 plan 04-01 — workspace.add/forget/prune real bodies + reap/acquireWriteLock stubs', () => {
   const vcs = createJjAdapter('/tmp/some-jj-workspace');
 
-  it('workspace.add throws VcsNotImplementedError', () => {
-    expect(() => vcs.workspace.add({ path: '/x' })).toThrow(VcsNotImplementedError);
+  it('workspace.add does not throw VcsNotImplementedError (wired in plan 04-01)', () => {
+    // Plan 04-01 replaced the Phase 3 stub with mkdir -p + jj workspace add.
+    // Against a non-existent cwd the call will throw a generic Error from
+    // either the mkdirSync (EACCES on /x) or from non-zero jj exitCode —
+    // the stub-error class is the one we forbid.
+    expect(() => {
+      try { vcs.workspace.add({ path: '/x' }); } catch (e) {
+        if (e instanceof VcsNotImplementedError) throw e;
+      }
+    }).not.toThrow(VcsNotImplementedError);
   });
 
-  it('workspace.add error message references Phase 4 WS-*', () => {
-    try {
-      vcs.workspace.add({ path: '/x' });
-      throw new Error('expected throw');
-    } catch (e) {
-      expect((e as Error).message).toMatch(/Phase 4/);
-    }
+  it('workspace.forget does not throw VcsNotImplementedError (wired in plan 04-01)', () => {
+    expect(() => {
+      try { vcs.workspace.forget('/x'); } catch (e) {
+        if (e instanceof VcsNotImplementedError) throw e;
+      }
+    }).not.toThrow(VcsNotImplementedError);
   });
 
-  it('workspace.forget throws VcsNotImplementedError', () => {
-    expect(() => vcs.workspace.forget('/x')).toThrow(VcsNotImplementedError);
+  it('workspace.prune is a documented success no-op (plan 04-01 D-29; jj has no `workspace prune`)', () => {
+    expect(() => vcs.workspace.prune()).not.toThrow();
+    const r = vcs.workspace.prune();
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toBe('');
+    expect(r.stderr).toBe('');
   });
 
-  it('workspace.prune throws VcsNotImplementedError', () => {
-    expect(() => vcs.workspace.prune()).toThrow(VcsNotImplementedError);
+  it('workspace.reap still throws VcsNotImplementedError (Phase 4 plan 04 owns the real body)', () => {
+    expect(() =>
+      vcs.workspace.reap({ phaseNamePrefix: 'phase-04-subagent-', phaseDir: '/x' }),
+    ).toThrow(VcsNotImplementedError);
+  });
+
+  it('acquireWriteLock still throws VcsNotImplementedError (Phase 4 plan 03 owns the real body)', () => {
+    expect(() => vcs.acquireWriteLock('/x')).toThrow(VcsNotImplementedError);
   });
 });

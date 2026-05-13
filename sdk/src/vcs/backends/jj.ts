@@ -19,6 +19,7 @@
  * in `bin/lib/commands.cjs`).
  */
 
+import { basename, dirname } from 'node:path';
 import { expr } from '../expr.js';
 import { vcsExec, VcsExecError } from '../exec.js';
 import type { ExecResult } from '../exec.js';
@@ -26,6 +27,7 @@ import { toJjRev } from '../parse/jj-rev.js';
 import { parseJjLog } from '../parse/jj-log.js';
 import { parseJjWorkspaceList } from '../parse/jj-workspace-list.js';
 import { parseJjBookmarkRecord } from '../parse/jj-bookmark.js';
+import { mkdirSync } from 'node:fs';
 import { __vcsTestOnly, VcsNotImplementedError, VcsBookmarkDivergentError } from '../types.js';
 import type {
   Bookmark,
@@ -40,6 +42,7 @@ import type {
   LogEntry,
   LogOpts,
   PushOpts,
+  ReapResult,
   RevisionExpr,
   SnapshotHandle,
   StatusEntry,
@@ -783,21 +786,57 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     },
   });
 
-  // ─── workspace namespace (plan 03-06) ────────────────────────────────────
-  // list() + context() have real Phase 3 bodies; add() / forget() / prune()
-  // still throw VcsNotImplementedError — Phase 4 owns workspace orchestrator
-  // semantics (WS-01..13). Per-verb allowlist in backends.ts flips list and
-  // context to admit 'jj-colocated'; add/forget/prune stay ['git'].
+  // ─── workspace namespace (plan 04-01 fills add/forget/prune real bodies) ─
+  // Phase 3 left add/forget/prune as VcsNotImplementedError stubs. Plan 04-01
+  // replaces them with real bodies on jj. reap() + acquireWriteLock are added
+  // as Phase 4 stubs that throw — plans 04-03 (lock) and 04-04 (reap) ship
+  // the real bodies; per-verb allowlist gates contract access (TEST-06
+  // skip-not-throw).
   const workspace: VcsWorkspace = Object.freeze({
-    add: (_input: WorkspaceAdd): WorkspaceInfo => {
-      throw new VcsNotImplementedError(
-        'workspace.add: Phase 4 owns workspace orchestrator semantics (WS-01..13)',
-      );
+    add: (input: WorkspaceAdd): WorkspaceInfo => {
+      // D-17 (RESEARCH Pitfall 4): jj workspace add does NOT auto-create
+      // intermediate directories. mkdir -p the parent before invoking.
+      mkdirSync(dirname(input.path), { recursive: true });
+      // D-04: --name <NAME> threaded from input.name (Phase 4 type extension);
+      // defaults to basename(input.path) per jj's own default when --name omitted.
+      // Security (T-04.01-01 mitigate): insert `--` end-of-options separator
+      // before user-influenced positional `input.path` so an attacker-controlled
+      // path like '--no-confirm' cannot be parsed as a flag.
+      const args = jjArgv('workspace', 'add');
+      if (input.baseRef) {
+        args.push('-r', toJjRev(input.baseRef));
+      }
+      if (input.name) {
+        args.push('--name', input.name);
+      }
+      args.push('--', input.path);
+      const r = vcsExec(cwd, 'jj', args);
+      if (r.exitCode !== 0) {
+        throw new Error(`workspace.add failed: ${r.stderr || r.stdout}`);
+      }
+      // Return shape parity with git backend (git.ts:453-465): fetch the new
+      // workspace's entry from list() rather than re-deriving change_id.
+      const entries = workspace.list();
+      const wsName = input.name ?? basename(input.path);
+      const entry = entries.find((e) => e.path === wsName);
+      return entry ?? { path: input.path, rev: '', locked: false };
     },
-    forget: (_path: string): void => {
-      throw new VcsNotImplementedError(
-        'workspace.forget: Phase 4 owns workspace orchestrator semantics (WS-02)',
-      );
+    forget: (workspaceNameOrPath: string): void => {
+      // jj workspace forget takes the workspace NAME (not path). Resolve path → name
+      // via list() when the caller hands us a path.
+      const entries = workspace.list();
+      const matchByName = entries.find((e) => e.path === workspaceNameOrPath);
+      const name = matchByName?.path ?? basename(workspaceNameOrPath);
+      // Security (T-04.01-02 mitigate): `--` separator before user-influenced positional.
+      const args = jjArgv('workspace', 'forget', '--', name);
+      const r = vcsExec(cwd, 'jj', args);
+      if (r.exitCode !== 0) {
+        throw new Error(`workspace.forget failed: ${r.stderr || r.stdout}`);
+      }
+      // PITFALL 3 (RESEARCH): forget does NOT remove the on-disk dir.
+      // The caller (typically vcs.workspace.reap()) is responsible for `rm -rf`
+      // of the workspace path for the empty-head case. workspace.forget() itself
+      // does not remove the directory — that's a separate concern owned by reap().
     },
     /**
      * `vcs.workspace.list()` — parses `jj workspace list -T 'json(self) ++
@@ -834,11 +873,37 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
         isLinked: false,
       }),
     prune: (): ExecResult => {
+      // jj has no `jj workspace prune` subcommand (verified locally on 0.41).
+      // The equivalent is `vcs.workspace.reap({...})` (Phase 4 verb) which
+      // batches abandon+forget+rm. workspace.prune() returns a documented
+      // success no-op for cross-backend surface parity; callers needing
+      // actual reap semantics call workspace.reap() instead.
+      return { exitCode: 0, stdout: '', stderr: '', timedOut: false, error: null };
+    },
+    reap: (opts: { phaseNamePrefix: string; phaseDir: string }): ReapResult => {
+      // Phase 4 plan 04 ships the real body in sdk/src/vcs/jj/reap.ts (sidecar
+      // for upstream-rebase zero-conflict surface per UPSTREAM-02). This stub
+      // throws until plan 04 lands — the per-verb allowlist gates contract-test
+      // access (TEST-06 skip-not-throw).
+      void opts;
       throw new VcsNotImplementedError(
-        'workspace.prune: Phase 4 owns workspace orchestrator semantics',
+        'workspace.reap: Phase 4 plan 04 owns the real body; sdk/src/vcs/jj/reap.ts',
       );
     },
   });
+
+  // Phase 4 D-19: real impl in sdk/src/vcs/jj/lock.ts (plan 03 lands the body).
+  // Per-verb allowlist gates contract-test access until then.
+  const acquireWriteLock = (
+    workspace: string,
+    opts?: { timeout?: number },
+  ): { release(): void } => {
+    void workspace;
+    void opts;
+    throw new VcsNotImplementedError(
+      'acquireWriteLock: Phase 4 plan 03 owns the real body; sdk/src/vcs/jj/lock.ts',
+    );
+  };
 
   // ─── test-only snapshot/restore (plan 03-02) ───────────────────────────
   // RESEARCH §`[__vcsTestOnly]`: `jj op log` ids are stable snapshots of
@@ -925,6 +990,7 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     findConflicts,
     push,
     fetch,
+    acquireWriteLock,
     [__vcsTestOnly]: testOnly,
   });
 }

@@ -157,13 +157,27 @@ describe('Phase 3 plan 03-01: jj.ts skeleton', () => {
     expect(() => vcs.refs.remotes()).not.toThrow(VcsNotImplementedError);
   });
 
-  // workspace — Phase 3 plan 03-06 Task 1 landed list/context bodies. add/
-  // forget/prune still throw VcsNotImplementedError (Phase 4 owns WS-*).
-  it('workspace.add() still throws VcsNotImplementedError (Phase 4 owns WS-*)', () => {
-    expect(() => vcs.workspace.add({ path: '/x' })).toThrow(VcsNotImplementedError);
+  // workspace — Phase 3 plan 03-06 Task 1 landed list/context bodies. Phase 4
+  // plan 01 (verb-shape commit) landed real add/forget bodies and a documented
+  // no-op for prune. New Phase 4 verbs workspace.reap and acquireWriteLock
+  // remain VcsNotImplementedError stubs until plans 04-04 and 04-03 land their
+  // real bodies (per-verb allowlist gating).
+  it('workspace.add() does not throw VcsNotImplementedError (wired in plan 04-01)', () => {
+    // Probe lifecycle only — call against non-existent cwd will throw
+    // VcsExecError (a non-zero jj exitCode) or a generic Error from the
+    // mkdirSync prelude. The stub-error class is what we forbid here.
+    expect(() => {
+      try { vcs.workspace.add({ path: '/x' }); } catch (e) {
+        if (e instanceof VcsNotImplementedError) throw e;
+      }
+    }).not.toThrow(VcsNotImplementedError);
   });
-  it('workspace.forget() still throws VcsNotImplementedError (Phase 4 owns WS-*)', () => {
-    expect(() => vcs.workspace.forget('/x')).toThrow(VcsNotImplementedError);
+  it('workspace.forget() does not throw VcsNotImplementedError (wired in plan 04-01)', () => {
+    expect(() => {
+      try { vcs.workspace.forget('/x'); } catch (e) {
+        if (e instanceof VcsNotImplementedError) throw e;
+      }
+    }).not.toThrow(VcsNotImplementedError);
   });
   it('workspace.list() does not throw VcsNotImplementedError (wired in plan 03-06)', () => {
     expect(() => {
@@ -176,8 +190,18 @@ describe('Phase 3 plan 03-01: jj.ts skeleton', () => {
     // workspace.context is a pure literal — no jj invocation, no throw.
     expect(() => vcs.workspace.context()).not.toThrow();
   });
-  it('workspace.prune() still throws VcsNotImplementedError (Phase 4 owns WS-*)', () => {
-    expect(() => vcs.workspace.prune()).toThrow(VcsNotImplementedError);
+  it('workspace.prune() does not throw VcsNotImplementedError (documented no-op in plan 04-01)', () => {
+    // Plan 04-01 (D-29 + jj-on-0.41 has no `jj workspace prune` subcommand)
+    // turned prune into a documented success no-op returning the standard
+    // ExecResult zero-shape; the verb no longer throws.
+    expect(() => vcs.workspace.prune()).not.toThrow();
+  });
+  it('workspace.reap() still throws VcsNotImplementedError (Phase 4 plan 04 owns)', () => {
+    expect(() => vcs.workspace.reap({ phaseNamePrefix: 'phase-04-subagent-', phaseDir: '/x' }))
+      .toThrow(VcsNotImplementedError);
+  });
+  it('acquireWriteLock() still throws VcsNotImplementedError (Phase 4 plan 03 owns)', () => {
+    expect(() => vcs.acquireWriteLock('/x')).toThrow(VcsNotImplementedError);
   });
 
   // __vcsTestOnly

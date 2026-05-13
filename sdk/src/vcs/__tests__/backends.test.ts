@@ -18,13 +18,13 @@ describe('BACKENDS constants', () => {
   it('BACKENDS_DECLARED is [git, jj-colocated, jj-native]', () => {
     expect([...BACKENDS_DECLARED]).toEqual(['git', 'jj-colocated', 'jj-native']);
   });
-  it('BACKENDS_AVAILABLE is [git, jj-colocated] in Phase 3', () => {
-    expect([...BACKENDS_AVAILABLE]).toEqual(['git', 'jj-colocated']);
+  it('BACKENDS_AVAILABLE is [git, jj-colocated, jj-native] after Phase 4 plan 01 D-22', () => {
+    expect([...BACKENDS_AVAILABLE]).toEqual(['git', 'jj-colocated', 'jj-native']);
   });
 });
 
 describe('BACKENDS_AVAILABLE_FOR_VERB (Phase 3 D-12 per-verb allowlist)', () => {
-  it('plan 03-06 flipped push/fetch/workspace.list/workspace.context to admit jj-colocated; workspace.add/forget/prune stay git-only', () => {
+  it('Phase 4 plan 04-01 flipped workspace.{add,forget,list,context,prune} to admit jj-colocated AND jj-native; NEW verbs workspace.reap and acquireWriteLock gated [git] until plans 04-04/04-03 land', () => {
     // Plan 03-04 flipped `commit`; plan 03-05 Task 1 flipped log/status/diff;
     // plan 03-05 Task 2 flipped findConflicts:
     expect(BACKENDS_AVAILABLE_FOR_VERB.commit).toEqual(['git', 'jj-colocated']);
@@ -46,14 +46,20 @@ describe('BACKENDS_AVAILABLE_FOR_VERB (Phase 3 D-12 per-verb allowlist)', () => 
     // no jj-reachable caller; jj backend throws VcsNotImplementedError):
     expect(BACKENDS_AVAILABLE_FOR_VERB['refs.bookmarks.switch']).toEqual(['git']);
     expect(BACKENDS_AVAILABLE_FOR_VERB['refs.isIgnored']).toEqual(['git']);
-    // Plan 03-06 Task 1: workspace.list + workspace.context flipped (Phase 3
-    // stubs — real semantics in Phase 4). workspace.add/forget/prune stay
-    // ['git'] only (Phase 4 owns WS-*; jj backend throws VcsNotImplementedError):
-    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.list']).toEqual(['git', 'jj-colocated']);
-    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.context']).toEqual(['git', 'jj-colocated']);
-    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.add']).toEqual(['git']);
-    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.forget']).toEqual(['git']);
-    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.prune']).toEqual(['git']);
+    // Phase 4 plan 04-01 verb-shape commit: workspace.{add,forget,prune} bodies
+    // landed on jj.ts (real `jj workspace add/forget` + documented prune no-op),
+    // workspace.{list,context} already flipped in 03-06. All five expanded to
+    // admit both jj backends.
+    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.add']).toEqual(['git', 'jj-colocated', 'jj-native']);
+    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.forget']).toEqual(['git', 'jj-colocated', 'jj-native']);
+    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.list']).toEqual(['git', 'jj-colocated', 'jj-native']);
+    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.context']).toEqual(['git', 'jj-colocated', 'jj-native']);
+    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.prune']).toEqual(['git', 'jj-colocated', 'jj-native']);
+    // NEW verbs introduced by Phase 4 plan 04-01: bodies deferred to later
+    // plans (04-04 → workspace.reap; 04-03 → acquireWriteLock). Per-verb
+    // allowlist gated to [git] until those plans flip.
+    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.reap']).toEqual(['git']);
+    expect(BACKENDS_AVAILABLE_FOR_VERB['acquireWriteLock']).toEqual(['git']);
   });
   it('declares at least 25 verb keys (full VcsAdapterCommon surface)', () => {
     expect(Object.keys(BACKENDS_AVAILABLE_FOR_VERB).length).toBeGreaterThanOrEqual(25);
@@ -78,7 +84,7 @@ describe('BACKENDS_AVAILABLE_FOR_VERB (Phase 3 D-12 per-verb allowlist)', () => 
 describe('parseBackendsEnv', () => {
   it('undefined → all-available + empty requested', () => {
     expect(parseBackendsEnv(undefined)).toEqual({
-      available: ['git', 'jj-colocated'],
+      available: ['git', 'jj-colocated', 'jj-native'],
       requested: [],
       unavailable: [],
     });
@@ -86,7 +92,7 @@ describe('parseBackendsEnv', () => {
 
   it("'' → all-available + empty requested (treated like undefined)", () => {
     expect(parseBackendsEnv('')).toEqual({
-      available: ['git', 'jj-colocated'],
+      available: ['git', 'jj-colocated', 'jj-native'],
       requested: [],
       unavailable: [],
     });
@@ -108,11 +114,11 @@ describe('parseBackendsEnv', () => {
     });
   });
 
-  it("'jj-native' alone → available=[], unavailable=[jj-native] (Phase 4 owns jj-native)", () => {
+  it("'jj-native' alone → available=[jj-native] after Phase 4 plan 01 D-22", () => {
     expect(parseBackendsEnv('jj-native')).toEqual({
-      available: [],
+      available: ['jj-native'],
       requested: ['jj-native'],
-      unavailable: ['jj-native'],
+      unavailable: [],
     });
   });
 

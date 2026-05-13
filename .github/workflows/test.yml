@@ -58,10 +58,10 @@ jobs:
     timeout-minutes: 10
 
     # Phase 3 plan 03-07 (CI-01): the jj-colocated lane is allowed to fail —
-    # CI-01 graduates to required-blocking in Phase 5 (per D-11). The matrix-
-    # level `continue-on-error` below absorbs per-cell failures so the git
-    # lane doesn't get masked when a jj-side test surfaces drift.
-    continue-on-error: ${{ matrix.backend == 'jj-colocated' }}
+    # CI-01 graduates to required-blocking in Phase 5 (per D-11). Phase 4
+    # plan 01 (D-22) adds the jj-native lane with the same allow-failure
+    # posture; both graduate together in Phase 5.
+    continue-on-error: ${{ matrix.backend == 'jj-colocated' || matrix.backend == 'jj-native' }}
 
     strategy:
       # Phase 3 plan 03-07 (CI-01 D-11): fail-fast disabled so a jj-colocated
@@ -76,7 +76,10 @@ jobs:
         # ubuntu-latest matrix. macOS stays git-only via the `include:` shape
         # below — the jj install step targets `unknown-linux-musl` tarballs
         # and would fail on the macOS runner.
-        backend: [git, jj-colocated]
+        # Phase 4 plan 01 (D-22): jj-native lane added with same allow-failure
+        # posture as jj-colocated; both use the same jj binary install step
+        # (lane difference is fixture init, not install).
+        backend: [git, jj-colocated, jj-native]
         include:
           # Single macOS runner — verifies platform compatibility on the standard version
           - os: macos-latest
@@ -127,7 +130,7 @@ jobs:
       # resolves `uname -m` to `x86_64`; the tarball provides a static
       # `unknown-linux-musl` build that runs on any Linux distro.
       - name: Install jj
-        if: matrix.backend == 'jj-colocated'
+        if: matrix.backend == 'jj-colocated' || matrix.backend == 'jj-native'
         shell: bash
         run: |
           set -euo pipefail

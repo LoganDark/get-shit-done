@@ -179,11 +179,17 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
 });
 
 describe('GSD_TEST_BACKENDS filter sanity', () => {
-  it('parseBackendsEnv("jj-native") yields empty intersection in Phase 3 (Phase 4 owns jj-native)', async () => {
+  it('parseBackendsEnv("jj-native") resolves cleanly after Phase 4 plan 01 D-22', async () => {
     const { parseBackendsEnv } = await import('../backends.js');
     // B-4: parseBackendsEnv returns { available, requested, unavailable }.
-    // Phase 3 D-13: jj-colocated joined BACKENDS_AVAILABLE; jj-native remains
-    // declared-but-unavailable until Phase 4 owns workspace semantics.
-    expect(parseBackendsEnv('jj-native')).toEqual({ available: [], requested: ['jj-native'], unavailable: ['jj-native'] });
+    // Phase 3 D-13: jj-colocated joined BACKENDS_AVAILABLE; Phase 4 plan 01
+    // D-22 lands jj-native, so the lane is now an available intersection
+    // (unavailable: []) rather than the empty-intersection guardrail it was
+    // during the Phase 3 deferred window.
+    expect(parseBackendsEnv('jj-native')).toEqual({
+      available: ['jj-native'],
+      requested: ['jj-native'],
+      unavailable: [],
+    });
   });
 });

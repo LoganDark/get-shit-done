@@ -18,6 +18,7 @@ export const BACKENDS_DECLARED: readonly VcsBackendKey[] = Object.freeze([
 export const BACKENDS_AVAILABLE: readonly VcsBackendKey[] = Object.freeze([
   'git',
   'jj-colocated',
+  'jj-native',
 ] as const);
 
 /**
@@ -89,17 +90,20 @@ export const BACKENDS_AVAILABLE_FOR_VERB: Readonly<
   'refs.bookmarks.delete': Object.freeze(['git', 'jj-colocated'] as const),
   'refs.bookmarks.exists': Object.freeze(['git', 'jj-colocated'] as const),
   'refs.bookmarks.switch': Object.freeze(['git'] as const), // jj-side: VcsNotImplementedError (audit-confirmed no jj caller)
-  // VcsWorkspace — Phase 3 plan 03-06 Task 1 flipped list + context to admit
-  // 'jj-colocated' (real bodies in backends/jj.ts: list parses NDJSON via
-  // parseJjWorkspaceList, context returns the Phase 3 literal stub
-  // {effectiveRoot:cwd, mode:'main', isLinked:false}). add/forget/prune stay
-  // ['git'] only: Phase 4 owns workspace orchestrator semantics (WS-*) and
-  // the jj backend throws VcsNotImplementedError there.
-  'workspace.add': Object.freeze(['git'] as const),
-  'workspace.forget': Object.freeze(['git'] as const),
-  'workspace.list': Object.freeze(['git', 'jj-colocated'] as const),
-  'workspace.context': Object.freeze(['git', 'jj-colocated'] as const),
-  'workspace.prune': Object.freeze(['git'] as const),
+  // Phase 4 plan 01 shape commit: workspace.{add,forget,list,context,prune} bodies
+  // landed on jj backend (real bodies in jj.ts replace the Phase 3
+  // VcsNotImplementedError stubs). Per-verb allowlist admits 'jj-colocated' and
+  // 'jj-native'. Plan 04 ships workspace.reap real body; that verb's flip happens
+  // there. acquireWriteLock real body lands plan 03; flip happens there.
+  'workspace.add': Object.freeze(['git', 'jj-colocated', 'jj-native'] as const),
+  'workspace.forget': Object.freeze(['git', 'jj-colocated', 'jj-native'] as const),
+  'workspace.list': Object.freeze(['git', 'jj-colocated', 'jj-native'] as const),
+  'workspace.context': Object.freeze(['git', 'jj-colocated', 'jj-native'] as const),
+  'workspace.prune': Object.freeze(['git', 'jj-colocated', 'jj-native'] as const),
+  // NEW verbs — Phase 4 introduces. Allowlist gated to git only until each plan
+  // lands the real body on jj (plan 03 → acquireWriteLock; plan 04 → workspace.reap).
+  'workspace.reap': Object.freeze(['git'] as const),
+  'acquireWriteLock': Object.freeze(['git'] as const),
   // Test-only snapshot/restore (gated separately so per-test fixture
   // setup can probe verb availability before invoking them — see
   // sdk/src/vcs/__tests__/vcs-fixture.ts). Phase 3 plan 03-02 flipped both
