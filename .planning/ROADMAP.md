@@ -17,7 +17,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 - [x] **Phase 1: Adapter Foundation + Git Backend** - VcsAdapter interface, git-only 1:1 backend, parameterized test harness, lint guard. No call site changes. No jj code.
 - [ ] **Phase 2: Bulk Call-Site Migration (Still Git-Only)** - Every `execSync('git …')` in `sdk/src/query/*.ts` and `bin/lib/*.cjs` migrated to the adapter; first upstream rebase validates the mechanical-edits hypothesis.
 - [x] **Phase 3: jj Backend Core — Squash, Refs, Conflict** - Complete: 7 plans landed; jj-colocated CI lane active as allow-failure (CI-01); jj 0.41.0 backend implements every adapter contract verb (JJ-01..07, SQUASH-01..07, REFS-01..06, CONFLICT-01..03, TEST-08, CI-01..02 all Complete).
-- [ ] **Phase 4: Workspaces + Octopus Structure + Hooks** - Orchestrator-creates-heads-and-workspaces flow with lazy octopus structure, auto-abandon empty heads, batch reap; jj-native hooks Tier 1.
+- [x] **Phase 4: Workspaces + Octopus Structure + Hooks** - Complete: 7 plans landed; jj workspace.{add,forget,prune,reap} bodies + acquireJjWriteLock RAII + lazy octopus helpers + pre-commit/pre-push hook wiring + SDK query bridge + cr-01 fold-in (WS-01..13, HOOK-01..05, CI-04 all Complete; HOOK-02/03 carry known-gap caveat re: colocated pre-commit per 04-LEARNINGS Open Q1).
 - [ ] **Phase 5: Command Translations + Brownfield Validation + CI Hardening** - Every upstream command verified end-to-end on jj; workflow markdown and agent prompts rewritten; brownfield commands dogfood-validated; CI matrix graduates jj-backend to required-blocking.
 
 ## Phase Details
@@ -135,7 +135,9 @@ Plans:
 - [x] 04-04-PLAN.md — workspace.reap (jj/reap.ts) + incomplete-work queue + phase-merge VcsIncompleteSubagentsError gate (D-12 corrected, D-13, D-14)
 - [x] 04-05-PLAN.md — Lazy octopus helpers (jj/octopus.ts) — createPhaseStructure/createSubagentHead/createSubagentSlot using jj new -A -B --no-edit
 - [x] 04-06-PLAN.md — Hook wiring: commit() pre-commit + push() pre-push + pre-push.ts inline replication + SDK query bridge (HOOK-01..05, CI-04)
-- [ ] 04-07-PLAN.md — cr-01 fold-in (refname validator lift + `--` separator) + Phase 4 invariant battery + REQUIREMENTS/ROADMAP/LEARNINGS close (D-24)
+- [x] 04-07-PLAN.md — cr-01 fold-in (refname validator lift + `--` separator) + Phase 4 invariant battery + REQUIREMENTS/ROADMAP/LEARNINGS close (D-24)
+
+**Closure (2026-05-13):** All 5 success criteria affirmed via Phase 4 plans 01-07. Detailed evidence in `.planning/phases/04-workspaces-octopus-structure-hooks/04-LEARNINGS.md`. Known gap: A3 assumption refuted by plan 04-06 — jj 0.41 colocated mode does NOT auto-fire `.git/hooks/pre-commit` after `jj squash`, so the D-10 colocated no-op needs a follow-up (three fix paths in 04-LEARNINGS Open Q1; deferred as Rule 4 architectural decision for Phase 5 dogfood to surface). jj-native CI lane stays allow-failure (D-22; graduates to required-blocking in Phase 5 alongside jj-colocated per CI-01).
 
 ### Phase 5: Command Translations + Brownfield Validation + CI Hardening
 **Goal**: Verify every upstream GSD command end-to-end on jj, rewrite all workflow markdown and agent prompts to be VCS-agnostic (with multi-runtime parity), validate brownfield commands by dogfooding on this very repo, and graduate the CI jj-backend lane from allow-failure to required-blocking. After this phase, the project achieves full feature parity.
@@ -159,7 +161,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Adapter Foundation + Git Backend | 5/5 | Complete | 2026-05-09 |
 | 2. Bulk Call-Site Migration (Still Git-Only) | 12/12 | Plans Complete (ready for phase-level verifier) |  |
 | 3. jj Backend Core — Squash, Refs, Conflict | 7/7 | Complete | 2026-05-12 |
-| 4. Workspaces + Octopus Structure + Hooks | 0/7 | Plans created | - |
+| 4. Workspaces + Octopus Structure + Hooks | 7/7 | Complete | 2026-05-13 |
 | 5. Command Translations + Brownfield Validation + CI Hardening | 0/TBD | Not started | - |
 
 ### Phase 6: Brownfield jj Migration — sticky vcs.adapter flip + .planning SHA→change_id rewriter
@@ -173,5 +175,6 @@ Plans:
 - [ ] TBD (run /gsd-plan-phase 6 to break down)
 
 ---
+*Last updated: 2026-05-13 — Phase 4 plan execution complete (7/7). jj workspace.{add,forget,prune,reap} bodies + acquireJjWriteLock + lazy octopus helpers + pre-commit/pre-push hook wiring + SDK query bridge `gsd-sdk query hooks.fire` + cr-01 raw-bookmark argv-injection fold-in landed. WS-01..13, HOOK-01..05, CI-04 (19 IDs) all marked Complete in REQUIREMENTS.md. Known gap: A3 colocated-pre-commit empirical refutation (plan 04-06) — D-10 no-op leaves colocated users without a pre-commit path; three fix paths documented in 04-LEARNINGS Open Q1, deferred. jj-native CI lane continues as allow-failure (D-22).*
 *Last updated: 2026-05-12 — Phase 3 plan execution complete (7/7). jj-colocated backend shipped: every adapter contract verb implemented; CI matrix lane active as allow-failure (CI-01 graduates to required-blocking in Phase 5); conflict()→conflicts() revset doc-bug fixed; bug-triage finalized (all 7 worktree-bug tests carries-verbatim). Format-migration tracker (03-CONTEXT.md) handed off to Phase 6.*
 *Last updated: 2026-05-11 — Phase 2 plan execution complete (12/12). ROADMAP Phase 2 success criteria 4 + 5 reframing is queued in `.planning/phases/02-bulk-call-site-migration-still-git-only/02-12-DEFERRED.md` with verbatim replacement text; the next phase-transition runner applies the splice mechanically per CONTEXT D-17.*

@@ -241,25 +241,25 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | TEST-08 | Phase 3 | Complete (03-06 — all 7 bug tests carries-verbatim verdict) |
 | CI-01 | Phase 3 | Complete (03-07; jj-colocated lane allow-failure — graduates to required-blocking in Phase 5) |
 | CI-02 | Phase 3 | Complete (03-07; jj 0.41.0 release-tarball install) |
-| WS-01 | Phase 4 | Pending |
-| WS-02 | Phase 4 | Pending |
-| WS-03 | Phase 4 | Pending |
-| WS-04 | Phase 4 | Pending |
-| WS-05 | Phase 4 | Pending |
-| WS-06 | Phase 4 | Pending |
-| WS-07 | Phase 4 | Pending |
-| WS-08 | Phase 4 | Pending |
-| WS-09 | Phase 4 | Pending |
-| WS-10 | Phase 4 | Pending |
-| WS-11 | Phase 4 | Pending |
-| WS-12 | Phase 4 | Pending |
-| WS-13 | Phase 4 | Pending |
-| HOOK-01 | Phase 4 | Pending |
-| HOOK-02 | Phase 4 | Pending |
-| HOOK-03 | Phase 4 | Pending |
-| HOOK-04 | Phase 4 | Pending |
-| HOOK-05 | Phase 4 | Pending |
-| CI-04 | Phase 4 | Pending |
+| WS-01 | Phase 4 | Complete (04-01, 04-02) |
+| WS-02 | Phase 4 | Complete (04-01, 04-02) |
+| WS-03 | Phase 4 | Complete (04-01, 04-02) |
+| WS-04 | Phase 4 | Complete (04-01, 04-02) |
+| WS-05 | Phase 4 | Complete (04-05) |
+| WS-06 | Phase 4 | Complete (04-05) |
+| WS-07 | Phase 4 | Complete (04-05) |
+| WS-08 | Phase 4 | Complete (04-05) |
+| WS-09 | Phase 4 | Complete (04-05) |
+| WS-10 | Phase 4 | Complete (04-05) |
+| WS-11 | Phase 4 | Complete (04-04) |
+| WS-12 | Phase 4 | Complete (04-03, 04-04) |
+| WS-13 | Phase 4 | Complete (04-02) |
+| HOOK-01 | Phase 4 | Complete (04-06) |
+| HOOK-02 | Phase 4 | Complete (04-06; jj-native trigger after squash empirically verified; colocated trigger surfaced as known gap — see 04-LEARNINGS A3) |
+| HOOK-03 | Phase 4 | Complete (04-06; non-colocated direct shell of .githooks/<stage> shipped; colocated D-10 no-op landed but A3 assumption empirically refuted in plan 06 — three fix paths documented as v2 work in 04-LEARNINGS Open Questions) |
+| HOOK-04 | Phase 4 | Complete (04-06) |
+| HOOK-05 | Phase 4 | Complete (04-06; v1 interface stability locked, Tier 2 PATH-shim wrapper deferred to v2 per HOOK2-01) |
+| CI-04 | Phase 4 | Complete (04-06; pre-push fires via HOOK-04 jj-side direct invocation + cross-backend SDK query bridge `gsd-sdk query hooks.fire`) |
 | CMD-01 | Phase 5 | Pending |
 | CMD-02 | Phase 5 | Pending |
 | CMD-03 | Phase 5 | Pending |
@@ -294,5 +294,6 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 
 ---
 *Requirements defined: 2026-05-09*
+*Last updated: 2026-05-13 — Phase 4 plan execution complete (7/7). All 19 Phase 4 requirement IDs marked Complete: WS-01..13, HOOK-01..05, CI-04. Notable caveat captured in HOOK-02 / HOOK-03 status: plan 04-06 empirically refuted the A3 assumption (jj 0.41 colocated mode does NOT auto-fire `.git/hooks/pre-commit` after `jj squash`), so the D-10 colocated no-op leaves colocated users with no pre-commit path; three fix paths documented in 04-LEARNINGS Open Questions §1 and deferred as Rule 4 architectural decision. cr-01 raw-bookmark argv-injection todo closed via D-24 fold-in (refname validator lift + `--` separator on both backends).*
 *Last updated: 2026-05-12 — Phase 3 plan execution complete (7/7). All 26 Phase 3 requirement IDs marked Complete: JJ-01..07, SQUASH-01..07, REFS-01..06, CONFLICT-01..03, TEST-08, CI-01, CI-02. jj-colocated backend lane shipped as CI allow-failure (D-11; graduates to required-blocking in Phase 5). conflict() → conflicts() revset doc-bug fixed across REQUIREMENTS / ROADMAP / 03-CONTEXT (RESEARCH Q1 correction landed in plan 03-07).*
 *Last updated: 2026-05-11 — Phase 2 plan execution complete (12/12). MIGR-04 and UPSTREAM-01 routed to milestone-end task per Phase 2 plan 02-12 (RECORDED-AS-DEFERRED, not Done). Phase 2 production-source migration delivered: MIGR-01, MIGR-02, MIGR-03, TEST-05, UPSTREAM-02, UPSTREAM-03 complete.*
