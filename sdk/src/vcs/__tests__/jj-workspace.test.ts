@@ -140,8 +140,20 @@ describe('Phase 4 plan 04-01 — workspace.add/forget/prune real bodies + reap/a
     ).toThrow(VcsNotImplementedError);
   });
 
-  it('acquireWriteLock still throws VcsNotImplementedError (Phase 4 plan 03 owns the real body)', () => {
-    expect(() => vcs.acquireWriteLock('/x')).toThrow(VcsNotImplementedError);
+  it('acquireWriteLock does not throw VcsNotImplementedError (wired in plan 04-03)', () => {
+    // Plan 04-03 replaced the Phase-4-plan-01 stub with a delegating call to
+    // sdk/src/vcs/jj/lock.ts::acquireJjWriteLock. Against a non-existent cwd
+    // ('/x') the call may still throw (mkdirSync EACCES, or vcsExec failure)
+    // but the stub-error class is what we forbid here.
+    expect(() => {
+      try {
+        const h = vcs.acquireWriteLock('/x');
+        // If somehow the call returns (e.g. real /x is writable), release immediately.
+        try { h.release(); } catch { /* noop */ }
+      } catch (e) {
+        if (e instanceof VcsNotImplementedError) throw e;
+      }
+    }).not.toThrow(VcsNotImplementedError);
   });
 });
 
