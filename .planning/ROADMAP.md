@@ -129,7 +129,7 @@ Plans:
   5. `vcs.hooks.fire('pre-commit', ctx)` is invoked after every `jj squash` (the sole jj commit primitive); in colocated mode the call is a no-op because git's `.git/hooks/pre-commit` fires via colocation; in non-colocated mode the adapter triggers `.githooks/pre-commit` directly post-squash; pre-push hook fires on `jj git push` via `acarapetis/jj-pre-push`-style integration; the v1 hook interface is shaped to accommodate a future Tier 2 PATH-shim wrapper without breaking change.
 **UI hint**: no
 **Plans**: 7 plans
-- [ ] 04-01-PLAN.md — Shape commit: types.ts + jj.ts workspace stubs replacement + git.ts mirror + backends.ts allowlist + CI matrix axis (jj-native lane) + fireHook export
+- [x] 04-01-PLAN.md — Shape commit: types.ts + jj.ts workspace stubs replacement + git.ts mirror + backends.ts allowlist + CI matrix axis (jj-native lane) + fireHook export
 - [ ] 04-02-PLAN.md — jj workspace.add/forget/prune contract tests + vcsMultiWsTest fixture + WS-13 multi-workspace bug-audit
 - [ ] 04-03-PLAN.md — acquireWriteLock primitive (jj/lock.ts) + concurrent-acquire/timeout/stale-recovery tests (D-19, D-21)
 - [ ] 04-04-PLAN.md — workspace.reap (jj/reap.ts) + incomplete-work queue + phase-merge VcsIncompleteSubagentsError gate (D-12 corrected, D-13, D-14)
