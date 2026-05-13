@@ -519,6 +519,10 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
         addIssue('warning', 'W008', 'config.json: workflow.nyquist_validation absent (defaults to enabled but agents may skip)', 'Run /gsd-health --repair to add key', true);
         if (!repairs.includes('addNyquistKey')) repairs.push('addNyquistKey');
       }
+      if (workflow && workflow.ai_integration_phase === undefined) {
+        addIssue('warning', 'W016', 'config.json: workflow.ai_integration_phase absent (defaults to enabled — run /gsd-ai-integration-phase before planning AI system phases)', 'Run /gsd-health --repair to add key', true);
+        if (!repairs.includes('addAiIntegrationPhaseKey')) repairs.push('addAiIntegrationPhaseKey');
+      }
     } catch { /* intentionally empty */ }
   }
 
@@ -595,9 +599,21 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
         }
       } catch { /* intentionally empty */ }
 
+      // Build a set of phases explicitly marked not-yet-started in the ROADMAP
+      // summary list (- [ ] **Phase N:**). These phases are intentionally absent
+      // from disk -- W006 must not fire for them (#2009).
+      const notStartedPhases = new Set<string>();
+      const uncheckedPattern = /-\s*\[\s\]\s*\*{0,2}Phase\s+(\d+[A-Z]?(?:\.\d+)*)[:\s*]/gi;
+      let um: RegExpExecArray | null;
+      while ((um = uncheckedPattern.exec(roadmapContent)) !== null) {
+        notStartedPhases.add(um[1]);
+        notStartedPhases.add(String(parseInt(um[1], 10)).padStart(2, '0'));
+      }
+
       for (const p of roadmapPhases) {
         const padded = String(parseInt(p, 10)).padStart(2, '0');
         if (!diskPhases.has(p) && !diskPhases.has(padded)) {
+          if (notStartedPhases.has(p) || notStartedPhases.has(padded)) continue;
           addIssue('warning', 'W006', `Phase ${p} in ROADMAP.md but no directory on disk`, 'Create phase directory or remove from roadmap');
         }
       }
@@ -738,6 +754,25 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
                 const wf = configParsed.workflow as Record<string, unknown>;
                 if (wf.nyquist_validation === undefined) {
                   wf.nyquist_validation = true;
+                  await writeFile(configPath, JSON.stringify(configParsed, null, 2), 'utf-8');
+                }
+                repairActions.push({ action: repair, success: true, path: 'config.json' });
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                repairActions.push({ action: repair, success: false, error: msg });
+              }
+            }
+            break;
+          }
+          case 'addAiIntegrationPhaseKey': {
+            if (existsSync(configPath)) {
+              try {
+                const configRaw = await readFile(configPath, 'utf-8');
+                const configParsed = JSON.parse(configRaw) as Record<string, unknown>;
+                if (!configParsed.workflow) configParsed.workflow = {};
+                const wf = configParsed.workflow as Record<string, unknown>;
+                if (wf.ai_integration_phase === undefined) {
+                  wf.ai_integration_phase = true;
                   await writeFile(configPath, JSON.stringify(configParsed, null, 2), 'utf-8');
                 }
                 repairActions.push({ action: repair, success: true, path: 'config.json' });

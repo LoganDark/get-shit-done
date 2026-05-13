@@ -11,6 +11,12 @@ import { extractFrontmatter } from './frontmatter.js';
 import { planningPaths, sanitizeForDisplay } from './helpers.js';
 import type { QueryHandler } from './utils.js';
 
+// Terminal UAT frontmatter statuses — these UAT files are considered closed
+// even if individual scenarios remain `result: pending` in the body (those rows
+// are typically templates that no human will ever fill out post-resolution,
+// per workflows/execute-phase.md).
+const TERMINAL_UAT_STATUSES = new Set(['complete', 'resolved']);
+
 function scanDebugSessions(planDir: string): Array<Record<string, unknown>> {
   const debugDir = join(planDir, 'debug');
   if (!existsSync(debugDir)) return [];
@@ -316,8 +322,12 @@ function scanUatGaps(planDir: string): Array<Record<string, unknown>> {
 
       const fm = extractFrontmatter(content);
       const status = (fm.status || 'unknown').toString().toLowerCase();
+      const result = (fm.result || '').toString().toLowerCase();
 
-      if (status === 'complete') continue;
+      if (TERMINAL_UAT_STATUSES.has(status)) continue;
+      // Also accept `result: all_pass` as a fallback when status is absent
+      // (older UAT files predate the explicit terminal-status convention).
+      if (status === 'unknown' && result === 'all_pass') continue;
 
       const pendingMatches = (content.match(/result:\s*(?:pending|\[pending\])/gi) || []).length;
 

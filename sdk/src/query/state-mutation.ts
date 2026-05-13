@@ -35,7 +35,7 @@ import {
   normalizeMd,
   stateExtractField,
 } from './helpers.js';
-import { buildStateFrontmatter, getMilestonePhaseFilter } from './state.js';
+import { buildStateFrontmatter, computeProgressPercent, getMilestonePhaseFilter } from './state.js';
 import type { QueryHandler } from './utils.js';
 
 // ─── Process exit lock cleanup (D2 — match CJS state.cjs:16-23) ─────────
@@ -1435,6 +1435,7 @@ export const stateSync: QueryHandler = async (args, projectDir, workstream) => {
 
   let totalDiskPlans = 0;
   let totalDiskSummaries = 0;
+  let diskCompletedPhases = 0;
   let highestIncompletePhase: string | null = null;
   let highestIncompletePhaseplanCount = 0;
 
@@ -1445,6 +1446,7 @@ export const stateSync: QueryHandler = async (args, projectDir, workstream) => {
     const summaries = files.filter(f => /-SUMMARY\.md$/i.test(f)).length;
     totalDiskPlans += plans;
     totalDiskSummaries += summaries;
+    if (plans > 0 && summaries >= plans) diskCompletedPhases++;
 
     const phaseMatch = dir.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
     if (phaseMatch && plans > 0 && summaries < plans) {
@@ -1452,6 +1454,16 @@ export const stateSync: QueryHandler = async (args, projectDir, workstream) => {
       highestIncompletePhaseplanCount = plans;
     }
   }
+
+  // Determine total phases from ROADMAP (may be larger than realized disk dirs).
+  // Mirrors buildStateFrontmatter so both report consistent percents.
+  let syncTotalPhases: number | null = null;
+  try {
+    const isDirInMilestone = await getMilestonePhaseFilter(projectDir, workstream);
+    syncTotalPhases = isDirInMilestone.phaseCount > 0
+      ? Math.max(entries.length, isDirInMilestone.phaseCount)
+      : entries.length;
+  } catch { /* intentionally empty */ }
 
   const runModifier = (modified: string): string => {
     let m = modified;
@@ -1464,7 +1476,7 @@ export const stateSync: QueryHandler = async (args, projectDir, workstream) => {
       }
     }
 
-    const percent = totalDiskPlans > 0 ? Math.min(100, Math.round((totalDiskSummaries / totalDiskPlans) * 100)) : 0;
+    const percent = computeProgressPercent(totalDiskSummaries, totalDiskPlans, diskCompletedPhases, syncTotalPhases) ?? 0;
     const currentProgress = stateExtractField(m, 'Progress');
     if (currentProgress) {
       const currentPercent = parseInt(currentProgress.replace(/[^\d]/g, ''), 10);

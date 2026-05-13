@@ -30,6 +30,30 @@ import type { QueryHandler } from './utils.js';
 // ─── Internal helpers ──────────────────────────────────────────────────────
 
 /**
+ * Roadmap-aware progress percent: min(plan_fraction, phase_fraction).
+ *
+ * Mirrors state.cjs:31-41. Caps unrealised ROADMAP phases (declared in the
+ * roadmap but with no on-disk directory yet) so the percent reflects whichever
+ * dimension is further behind. Returns null when there is no data.
+ */
+export function computeProgressPercent(
+  completedPlans: number | null,
+  totalPlans: number | null,
+  completedPhases: number | null,
+  totalPhases: number | null,
+): number | null {
+  const hasPlanData = totalPlans !== null && totalPlans > 0 && completedPlans !== null;
+  const hasPhaseData = totalPhases !== null && totalPhases > 0 && completedPhases !== null;
+
+  if (!hasPlanData && !hasPhaseData) return null;
+
+  const planFraction = hasPlanData ? (completedPlans as number) / (totalPlans as number) : 1;
+  const phaseFraction = hasPhaseData ? (completedPhases as number) / (totalPhases as number) : 1;
+
+  return Math.min(100, Math.round(Math.min(planFraction, phaseFraction) * 100));
+}
+
+/**
  * Build a filter function that checks if a phase directory belongs to the current milestone.
  *
  * Port of getMilestonePhaseFilter from core.cjs lines 1409-1442.
@@ -145,11 +169,11 @@ export async function buildStateFrontmatter(bodyContent: string, projectDir: str
     completedPlans = diskTotalSummaries;
   } catch { /* intentionally empty */ }
 
-  // Derive percent from disk counts (ground truth)
-  let progressPercent: number | null = null;
-  if (totalPlans !== null && totalPlans > 0 && completedPlans !== null) {
-    progressPercent = Math.min(100, Math.round(completedPlans / totalPlans * 100));
-  } else if (progressRaw) {
+  // Derive percent from disk counts (ground truth).
+  // Uses min(plan_fraction, phase_fraction) so unrealised ROADMAP phases
+  // (declared but with no on-disk directory yet) cap the percent.
+  let progressPercent: number | null = computeProgressPercent(completedPlans, totalPlans, completedPhases, totalPhases);
+  if (progressPercent === null && progressRaw) {
     const pctMatch = progressRaw.match(/(\d+)%/);
     if (pctMatch) progressPercent = parseInt(pctMatch[1], 10);
   }
