@@ -37,6 +37,8 @@ try {
   cliAvailable = false;
 }
 
+const e2eEnabled = process.env.GSD_ENABLE_E2E === '1';
+
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const sdkPromptsDir = join(__dirname, '..', 'prompts');
 const GSD_TOOLS_PATH = resolveGsdToolsPath(process.cwd());
@@ -56,7 +58,7 @@ const STEP_ORDER: Record<string, number> = {
 
 // ─── Test suite ──────────────────────────────────────────────────────────────
 
-describe.skipIf(!cliAvailable || !gsdToolsAvailable)('E2E Lifecycle: InitRunner → GSD.runPhase() full lifecycle', () => {
+describe.skipIf(!cliAvailable || !gsdToolsAvailable || !e2eEnabled)('E2E Lifecycle: InitRunner → GSD.runPhase() full lifecycle', () => {
   let tmpDir: string;
   let initSuccess: boolean = false;
   let phase1Number: string | null = null;

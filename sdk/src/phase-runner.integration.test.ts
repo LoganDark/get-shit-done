@@ -26,6 +26,7 @@ import { GSDEventType, PhaseStepType } from './types.js';
 
 const GSD_TOOLS_PATH = resolveGsdToolsPath(process.cwd());
 const gsdToolsAvailable = existsSync(GSD_TOOLS_PATH);
+const e2eEnabled = process.env.GSD_ENABLE_E2E === '1';
 
 async function createTempPlanningDir(): Promise<string> {
   const tmpDir = await mkdtemp(join(tmpdir(), 'gsd-sdk-phase-int-'));
@@ -111,7 +112,7 @@ describe.skipIf(!gsdToolsAvailable)('Integration: PhaseRunner against real gsd-t
 
   // ── Test 2: PhaseRunner state machine control flow ──
 
-  it('PhaseRunner emits lifecycle events and captures session errors gracefully', { timeout: 300_000 }, async () => {
+  it.skipIf(!e2eEnabled)('PhaseRunner emits lifecycle events and captures session errors gracefully', { timeout: 300_000 }, async () => {
     const eventStream = new GSDEventStream();
     const config = await loadConfig(tmpDir);
     const contextEngine = new ContextEngine(tmpDir);
@@ -201,7 +202,7 @@ describe.skipIf(!gsdToolsAvailable)('Integration: PhaseRunner against real gsd-t
 
   // ── Test 4: GSD.runPhase() public API delegates correctly ──
 
-  it('GSD.runPhase() creates collaborators and delegates to PhaseRunner', { timeout: 300_000 }, async () => {
+  it.skipIf(!e2eEnabled)('GSD.runPhase() creates collaborators and delegates to PhaseRunner', { timeout: 300_000 }, async () => {
     // Import GSD here to test the public API wiring
     const { GSD } = await import('./index.js');
 
