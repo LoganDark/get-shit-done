@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: blocked
-stopped_at: Phase 03.1 Plan 01 Task 2 — blocked on pre-existing golden-parity test failures
-last_updated: "2026-05-12T22:10:00.000Z"
-last_activity: 2026-05-12 -- Phase 03.1 execution paused (baseline harness landed, baseline measurement blocked)
+status: executing
+stopped_at: Phase 03.1 Plan 01 complete — ready for Plan 02 (L1 pool: threads)
+last_updated: "2026-05-13T03:25:00.000Z"
+last_activity: 2026-05-13 -- Phase 03.1 Plan 01 complete; baseline recorded
 progress:
   total_phases: 8
   completed_phases: 4
@@ -182,12 +182,11 @@ None yet.
 ### Blockers/Concerns
 
 - **Requirement-count discrepancy:** REQUIREMENTS.md self-reports "78 v1 requirements across 13 categories" but actually contains 86 requirements across 15 categories (added SQUASH and BROWN as separate sections during requirement definition, plus larger category sizes). Roadmap maps the actual 86. REQUIREMENTS.md footer should be reconciled at next phase transition.
-- **Phase 03.1 baseline blocked by pre-existing golden-parity failures (2026-05-12):** The 03.1-01 baseline harness landed and ran, but Run 1 exited with `success: false` due to 5 pre-existing assertion failures in the integration suite. The D-05c flakiness gate (correctly) refuses to record a baseline. Failing tests on `main`:
-  - `sdk/src/golden/golden.integration.test.ts`: `roadmap.analyze`, `validate.health`, `state.sync --verify` (SDK JSON vs gsd-tools.cjs deep-equal mismatches)
-  - `sdk/src/golden/read-only-parity.integration.test.ts`: `audit-open`, `state.json` (same mismatch shape, excluding volatile fields)
-  - These are Phase 3 fallout, not 03.1 work. A separate fix-pass / phase is needed before 03.1 baseline can be recorded.
-  - Additional observation while running: Run 2 hung — vitest workers idle at 0% CPU for 14+ minutes with no output (process killed at the plan's 30-min wall-clock abort threshold). The hang appears in `lifecycle-e2e.integration.test.ts` and/or `phase-runner.integration.test.ts`, which together account for ~95% of integration wall-clock (~11:27 min and ~4:18 min respectively on Run 1). Investigating this hang is likely a higher-leverage fix than any vitest config knob — `pool: threads` will not help I/O-bound CLI-spawning tests.
-  - Resume path: fix the 5 golden parity failures → fix the lifecycle/phase-runner hang → re-run `node sdk/scripts/profile-integration.mjs --label baseline` → continue 03.1 from Plan 01 Task 2.
+- **Phase 03.1 baseline unblocked (2026-05-13):** Both prior blockers resolved.
+  - Golden-parity drift (5 failures) fixed in `66dbc36a` (`fix(query): port five upstream CJS fixes to SDK …`). Debug session resolved at `.planning/debug/resolved/golden-parity-failures.md`.
+  - Slow Claude-CLI test hang gated behind `GSD_ENABLE_E2E=1` in `f9dd5edd` — three tests (lifecycle-e2e + 2 phase-runner E2E cases) now opt-in. Baseline harness no longer drives the LLM, so per-run wall-clock dropped from 15-50 min to ~5 s.
+  - Baseline data committed in `c0df4ded`: 7 integration files, 98 tests / 7 skipped, 7394 ms median total, 3/3 runs green.
+  - Plans 02..N can now proceed per D-09 (evidence-tied flips).
 
 ## Deferred Items
 
