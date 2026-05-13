@@ -10,6 +10,7 @@ import { progressJson } from './progress.js';
 import { frontmatterSet, frontmatterMerge, frontmatterValidate } from './frontmatter-mutation.js';
 import { configSet, configSetModelProfile, configNewProject, configEnsureSection } from './config-mutation.js';
 import { commit, checkCommit } from './commit.js';
+import { fireHookQuery } from './hooks.js';
 import { templateFill, templateSelect } from './template.js';
 import { verifySummary, verifyPathExists } from './verify.js';
 import { decisionsParse } from './decisions.js';
@@ -57,6 +58,10 @@ export const MUTATION_SURFACES_STATIC_CATALOG: ReadonlyArray<readonly [string, Q
   ['config-ensure-section', configEnsureSection],
   ['commit', commit],
   ['check-commit', checkCommit],
+  // Phase 4 plan 06 D-08: SDK query bridge for fireHook (workflow markdown
+  // rewrites in Phase 5 replace `git hook run pre-commit` with this).
+  ['hooks.fire', fireHookQuery],
+  ['hooks fire', fireHookQuery],
   ['template.fill', templateFill],
   ['template.select', templateSelect],
   ['template select', templateSelect],

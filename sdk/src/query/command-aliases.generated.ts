@@ -121,6 +121,7 @@ export const NON_FAMILY_COMMAND_ALIASES: readonly NonFamilyCommandAlias[] = [
   { canonical: 'generate-claude-md', aliases: [], mutation: true },
   { canonical: 'generate-claude-profile', aliases: [], mutation: true },
   { canonical: 'generate-dev-preferences', aliases: [], mutation: true },
+  { canonical: 'hooks.fire', aliases: ['hooks fire'], mutation: true },
   { canonical: 'intel.patch-meta', aliases: ['intel patch-meta'], mutation: true },
   { canonical: 'intel.snapshot', aliases: ['intel snapshot'], mutation: true },
   { canonical: 'learnings.copy', aliases: ['learnings copy'], mutation: true },

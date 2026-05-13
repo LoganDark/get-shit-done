@@ -645,6 +645,13 @@ const NON_FAMILY_COMMAND_ALIASES = [
     "mutation": true
   },
   {
+    "canonical": "hooks.fire",
+    "aliases": [
+      "hooks fire"
+    ],
+    "mutation": true
+  },
+  {
     "canonical": "intel.patch-meta",
     "aliases": [
       "intel patch-meta"
