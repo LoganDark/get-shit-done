@@ -40,6 +40,10 @@ export const NON_FAMILY_COMMAND_MANIFEST: readonly NonFamilyCommandManifestEntry
 
   { canonical: 'task.is-behavior-adding', aliases: ['task is-behavior-adding'], mutation: false, outputMode: 'json' },
 
+  // Phase 4 plan 06 D-08: fireHook bridge for workflow markdown rewrites in Phase 5.
+  // `mutation: true` because firing a hook can have arbitrary side effects.
+  { canonical: 'hooks.fire', aliases: ['hooks fire'], mutation: true, outputMode: 'json' },
+
   { canonical: 'todo.match-phase', aliases: ['todo match-phase'], mutation: false, outputMode: 'json' },
 
   { canonical: 'uat.render-checkpoint', aliases: ['uat render-checkpoint'], mutation: false, outputMode: 'json' },

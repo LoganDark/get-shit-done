@@ -27,10 +27,12 @@ import { toJjRev } from '../parse/jj-rev.js';
 import { parseJjLog } from '../parse/jj-log.js';
 import { parseJjWorkspaceList } from '../parse/jj-workspace-list.js';
 import { parseJjBookmarkRecord } from '../parse/jj-bookmark.js';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { acquireJjWriteLock } from '../jj/lock.js';
 import { performJjReap } from '../jj/reap.js';
 import { readIncomplete } from '../jj/incomplete-work.js';
+import { fireHook } from '../hook-bridge.js';
+import { firePrePushHook } from '../jj/pre-push.js';
 import {
   __vcsTestOnly,
   VcsNotImplementedError,
@@ -231,6 +233,33 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       hash = hashRes.stdout.trim();
     } else {
       mergedStderr = `${squashRes.stderr}\n[hash-probe failed]: ${hashRes.stderr || hashRes.stdout}`;
+    }
+
+    // HOOK-02 / HOOK-03 / D-10 (Phase 4 plan 06): pre-commit fires AFTER
+    // squash success, BEFORE bookmark advance.
+    //
+    // Colocated detection (D-10): when both .git and .jj exist at cwd, git's
+    // own .git/hooks/pre-commit fires automatically via colocation when
+    // post-squash jj git export updates .git (A3 assumption — observed by
+    // jj-hooks.test.ts regression test).
+    //
+    // Non-colocated: adapter shells .githooks/<stage> directly via fireHook.
+    //
+    // noVerify (HOOK-01 contract): skips the fire entirely.
+    if (!input.noVerify) {
+      const isColocated = existsSync(join(cwd, '.git')) && existsSync(join(cwd, '.jj'));
+      if (!isColocated) {
+        const hookRes = fireHook(cwd, 'pre-commit', { stagedFiles: input.files });
+        if (hookRes.exitCode !== 0) {
+          // T-03.04-03 mitigation pattern: squash already succeeded; report
+          // hook failure via merged stderr, but exitCode reflects squashRes
+          // (the squash itself didn't fail). Caller decides whether to treat
+          // as error based on stderr presence.
+          mergedStderr = `${mergedStderr}\n[pre-commit hook failed]: ${hookRes.stderr || hookRes.stdout}`;
+        }
+      }
+      // colocated: no-op (A3 assumption — git's own hook firing kicks in via
+      // post-squash jj git export).
     }
 
     // D-01 / D-04: bookmark advance. The squash already succeeded; an
@@ -571,7 +600,22 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       // may reshape if a real caller needs per-rev push selectivity.
     }
     // opts.force: documented no-op (see JSDoc above). No flag added.
-    // opts.noVerify: Phase 4 owns hook firing; no-op here.
+    // HOOK-04 (Phase 4 plan 06): pre-push fires BEFORE jj git push. Inline
+    // replication of acarapetis/jj-pre-push trigger logic (CI-02 — no Python
+    // runtime dep). When the hook returns non-zero, abort the push. noVerify
+    // (HOOK-01 contract) suppresses the fire.
+    if (!opts.noVerify) {
+      const hookRes = firePrePushHook(cwd, { remote: opts.remote });
+      if (hookRes.exitCode !== 0) {
+        return {
+          exitCode: hookRes.exitCode,
+          stdout: hookRes.stdout,
+          stderr: `[pre-push hook failed]: ${hookRes.stderr || hookRes.stdout}`,
+          timedOut: false,
+          error: null,
+        };
+      }
+    }
     return vcsExec(cwd, 'jj', jjArgv(...args));
   };
 
