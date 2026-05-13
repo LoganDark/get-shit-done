@@ -32,6 +32,7 @@ import { acquireJjWriteLock } from '../jj/lock.js';
 import { performJjReap } from '../jj/reap.js';
 import { readIncomplete } from '../jj/incomplete-work.js';
 import { fireHook } from '../hook-bridge.js';
+import { firePrePushHook } from '../jj/pre-push.js';
 import {
   __vcsTestOnly,
   VcsNotImplementedError,
@@ -599,7 +600,22 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       // may reshape if a real caller needs per-rev push selectivity.
     }
     // opts.force: documented no-op (see JSDoc above). No flag added.
-    // opts.noVerify: Phase 4 owns hook firing; no-op here.
+    // HOOK-04 (Phase 4 plan 06): pre-push fires BEFORE jj git push. Inline
+    // replication of acarapetis/jj-pre-push trigger logic (CI-02 — no Python
+    // runtime dep). When the hook returns non-zero, abort the push. noVerify
+    // (HOOK-01 contract) suppresses the fire.
+    if (!opts.noVerify) {
+      const hookRes = firePrePushHook(cwd, { remote: opts.remote });
+      if (hookRes.exitCode !== 0) {
+        return {
+          exitCode: hookRes.exitCode,
+          stdout: hookRes.stdout,
+          stderr: `[pre-push hook failed]: ${hookRes.stderr || hookRes.stdout}`,
+          timedOut: false,
+          error: null,
+        };
+      }
+    }
     return vcsExec(cwd, 'jj', jjArgv(...args));
   };
 
