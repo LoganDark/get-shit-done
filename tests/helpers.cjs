@@ -319,9 +319,71 @@ function vcsTest(kindOrKinds, suiteFn) {
   }
 }
 
+/**
+ * Phase 4 plan 02: multi-workspace contract fixture.
+ *
+ * Like vcsTest, but inside the per-describe `before`, creates `n` workspaces
+ * named `phase-04-subagent-{idx}` (1-indexed; mirrors D-04 zero-padded phase
+ * convention) BEFORE running suiteFn. The handle exposed to suiteFn gains a
+ * `getWorkspaces(): string[]` method returning the workspace NAMES (jj's
+ * `workspace.list()` entries reference the name, not the path).
+ *
+ * Workspaces are created under `<cwd>/.claude/jj-workspaces/<name>` — the
+ * D-16 layout. The single-workspace `vcsTest` snapshot/restore between tests
+ * still applies; workspaces created in `before` outlive individual `it`
+ * blocks within the describe.
+ *
+ * NB: workspace.add bodies are wired only on jj-colocated and jj-native (per
+ * plan 01's BACKENDS_AVAILABLE_FOR_VERB flip). On a git fixture, this factory
+ * will run vcs.workspace.add with the WorkspaceAdd shape — the `name` field
+ * is jj-specific but harmless on git (the type is optional). Callers wanting
+ * to exercise multi-workspace flows on jj only should pass `['jj-colocated',
+ * 'jj-native']` for kindOrKinds.
+ *
+ * @param {'git'|'jj-colocated'|'jj-native'|Array<'git'|'jj-colocated'|'jj-native'>} kindOrKinds
+ * @param {number} n - number of workspaces to pre-create per describe block
+ * @param {(handle: {
+ *   getKind: () => string,
+ *   getCwd: () => string,
+ *   getVcs: () => any,
+ *   getWorkspaces: () => string[],
+ * }) => void} suiteFn
+ */
+function vcsMultiWsTest(kindOrKinds, n, suiteFn) {
+  const { before, after } = require('node:test');
+  const { join } = require('node:path');
+  // Reuse vcsTest's mechanism: invoke vcsTest with a wrapping suiteFn that
+  // pre-creates n workspaces in a `before` block, then forwards the (now
+  // augmented) handle to the user's suiteFn.
+  vcsTest(kindOrKinds, (handle) => {
+    const workspaceNames = [];
+    before(() => {
+      for (let i = 1; i <= n; i += 1) {
+        const wsName = `phase-04-subagent-${i}`;
+        const wsPath = join(handle.getCwd(), '.claude/jj-workspaces', wsName);
+        // workspace.add does its own mkdir -p (plan 01 / D-17 / Pitfall 4) so
+        // the test fixture does NOT pre-create the parent.
+        handle.getVcs().workspace.add({ path: wsPath, name: wsName });
+        workspaceNames.push(wsName);
+      }
+    });
+    after(() => {
+      // Best-effort cleanup so a later vcsMultiWsTest call doesn't see leaked
+      // workspaces. Pitfall 3 means the on-disk dirs persist after forget —
+      // they live under the shared tmp dir which the parent `vcsTest`
+      // `after` will rm-rf in full.
+      for (const wsName of workspaceNames) {
+        try { handle.getVcs().workspace.forget(wsName); } catch { /* already forgotten */ }
+      }
+    });
+    handle.getWorkspaces = () => [...workspaceNames];
+    suiteFn(handle);
+  });
+}
+
 const _exports = {
   runGsdTools, createTempDir, createTempProject, createTempGitProject, cleanup, parseFrontmatter, isUsageOutput, TOOLS_PATH,
-  vcsTest,
+  vcsTest, vcsMultiWsTest,
 };
 Object.defineProperty(_exports, 'BACKENDS_AVAILABLE', { enumerable: true, get: () => _loadVcs().backends.BACKENDS_AVAILABLE });
 Object.defineProperty(_exports, 'BACKENDS_DECLARED', { enumerable: true, get: () => _loadVcs().backends.BACKENDS_DECLARED });
