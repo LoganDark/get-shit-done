@@ -134,7 +134,7 @@ Plans:
 - [x] 04-03-PLAN.md — acquireWriteLock primitive (jj/lock.ts) + concurrent-acquire/timeout/stale-recovery tests (D-19, D-21)
 - [x] 04-04-PLAN.md — workspace.reap (jj/reap.ts) + incomplete-work queue + phase-merge VcsIncompleteSubagentsError gate (D-12 corrected, D-13, D-14)
 - [x] 04-05-PLAN.md — Lazy octopus helpers (jj/octopus.ts) — createPhaseStructure/createSubagentHead/createSubagentSlot using jj new -A -B --no-edit
-- [ ] 04-06-PLAN.md — Hook wiring: commit() pre-commit + push() pre-push + pre-push.ts inline replication + SDK query bridge (HOOK-01..05, CI-04)
+- [x] 04-06-PLAN.md — Hook wiring: commit() pre-commit + push() pre-push + pre-push.ts inline replication + SDK query bridge (HOOK-01..05, CI-04)
 - [ ] 04-07-PLAN.md — cr-01 fold-in (refname validator lift + `--` separator) + Phase 4 invariant battery + REQUIREMENTS/ROADMAP/LEARNINGS close (D-24)
 
 ### Phase 5: Command Translations + Brownfield Validation + CI Hardening
