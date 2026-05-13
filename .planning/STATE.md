@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
+status: ready_to_plan
 stopped_at: Phase 03.1 Plan 01 complete — ready for Plan 02 (L1 pool: threads)
 last_updated: "2026-05-13T03:25:00.000Z"
 last_activity: 2026-05-13 -- Phase 03.1 Plan 01 complete; baseline recorded
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 37
   completed_plans: 33
-  percent: 89
+  percent: 63
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 
 ## Current Position
 
-Phase: 03.1 (make-tests-run-faster) — EXECUTING
-Plan: 2 of 4 (Plan 01 complete: harness + pre-fix baseline landed)
-Status: Ready for Plan 02 (L1 pool: threads)
-Last activity: 2026-05-13 -- Phase 03.1 Plan 01 complete; baseline recorded
+Phase: 06
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-13
 
 Progress: [██████████] 100%
 
@@ -36,7 +36,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 12
+- Total plans completed: 17
 - Average duration: —
 - Total execution time: —
 
@@ -46,6 +46,7 @@ Progress: [██████████] 100%
 |-------|-------|-------|----------|
 | 01 | 5 | - | - |
 | 03 | 7 | - | - |
+| 03.1 | 5 | - | - |
 
 **Recent Trend:**
 

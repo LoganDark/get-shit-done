@@ -105,13 +105,13 @@ Plans:
 **Goal:** Profile the `sdk/` vitest integration project (7 files; `sdk/src/**/*.integration.test.ts`), then apply the largest wall-clock speedup achievable without breaking semantics. Baseline + fix ship in the same phase per CONTEXT D-02. Success = ratio recorded against local M-series median-of-3 baseline; D-05 semantics gates (test-count parity, no .skip/.only/.todo added, 3x back-to-back all-pass) must all hold. Final ratio is recorded in this line after Plan 04 lands.
 **Requirements**: None formally mapped (TEST-06 spirit applies — skip count must not increase, asserted manually from --reporter=json numPendingTests per CONTEXT D-05a)
 **Depends on:** Phase 3
-**Plans:** 4 plans
+**Plans:** 5/4 plans complete
 
 Plans:
-- [ ] 03.1-01-PLAN.md — Baseline harness (sdk/scripts/profile-integration.mjs) + pre-fix median-of-3 baseline data committed to .planning/intel/vitest-integration-baseline.md
-- [ ] 03.1-02-PLAN.md — L1 lever attempt: pool: 'threads' on integration project (with measured keep-or-revert decision per D-09)
-- [ ] 03.1-03-PLAN.md — L2 lever attempt: isolate: false on integration project (with pre-flip transitive-import audit + shuffle-order Pitfall 3 check + keep-or-revert per D-09)
-- [ ] 03.1-04-PLAN.md — Final verification: 3x median-of-3, compute pre/post ratio, write 03.1-SUMMARY.md, update this ROADMAP line with the ratio
+- [x] 03.1-01-PLAN.md — Baseline harness (sdk/scripts/profile-integration.mjs) + pre-fix median-of-3 baseline data committed to .planning/intel/vitest-integration-baseline.md
+- [x] 03.1-02-PLAN.md — L1 lever attempt: pool: 'threads' on integration project (with measured keep-or-revert decision per D-09)
+- [x] 03.1-03-PLAN.md — L2 lever attempt: isolate: false on integration project (with pre-flip transitive-import audit + shuffle-order Pitfall 3 check + keep-or-revert per D-09)
+- [x] 03.1-04-PLAN.md — Final verification: 3x median-of-3, compute pre/post ratio, write 03.1-SUMMARY.md, update this ROADMAP line with the ratio
 
 **Cross-cutting constraints:**
 - No changes to scripts/run-tests.cjs, tests/helpers.cjs, .github/workflows/test.yml, cjs `tests/*.test.cjs`, vitest unit project, or backend matrix (D-07)
