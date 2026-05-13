@@ -53,3 +53,41 @@ by plan 03-06; phase-close invariant check confirms no TODO rows remain
 destructive-command deny-list, jj-native branch-base recovery, no-silent-
 bookmark-move analog) filed inline in the "Follow-up phase" column. No
 ESCALATIONS — no test surfaced an adapter bug under the jj-colocated lane.*
+
+---
+
+## Phase 4 multi-workspace audit (WS-13, plan 04-02)
+
+Audit context: with plan 04-01's `workspace.{add,forget,prune}` real bodies
+landed on jj-colocated AND jj-native, this audit re-evaluates the four
+workspace-path-safety bug tests under multi-workspace jj flows. Verdicts
+record whether the existing bug tests still hold (carries-verbatim), need
+jj-side reformulation (jj-mapped), or remain strictly git-only.
+
+All four tests are markdown-structural assertions over workflow / agent
+prompt `.md` files — none invoke `git` or `jj` verbs in their assertion
+bodies. The multi-workspace jj fixtures landed by plan 04-01 do not alter
+the parsed `.md` content, so the verdicts carry verbatim. Each line below
+records the empirical re-evaluation:
+
+- bug-3097 (Phase 4 multi-workspace audit, 2026-05-13): carries-verbatim — the cwd-drift sentinel test (`tests/bug-3097-3099-executor-worktree-path-safety.test.cjs`) parses gsd-executor.md's `<task_commit_protocol>` block for the spawn-time-toplevel sentinel and `rev-parse --git-dir` detection; the protocol it pins applies identically when an agent runs under a jj workspace (the underlying Bash `cd` drift problem is OS-level, not VCS-specific), and the workspace.add fixture landed by plan 04-01 does not modify gsd-executor.md.
+- bug-3099 (Phase 4 multi-workspace audit, 2026-05-13): carries-verbatim — the absolute-path containment guard test (same file as bug-3097, shared regression file) checks for the WT_ROOT derivation + path-containment boundary check in gsd-executor.md; the guard's correctness is filesystem-layer (resolving `pwd`-derived absolute paths against the canonical worktree root), independent of whether the workspace is a git worktree or a jj workspace. Phase 4 jj-native sentinel using `jj workspace root` is filed as a v2 follow-up per Phase 3 D-16 row 3 — no Phase-4-plan-02 work needed.
+- bug-2774 (Phase 4 multi-workspace audit, 2026-05-13): jj-mapped — the inclusion-filter test (`tests/bug-2774-worktree-cleanup-workspace-safety.test.cjs`) asserts the cleanup pipeline filters paths matching `.claude/worktrees/agent-` (git side). Phase 4 D-04's `^phase-{N}-subagent-` workspace-name prefix is the jj-side incarnation of the SAME inclusion-not-exclusion invariant — a parallel jj-side test asserting the reap loop's prefix filter (plan 04-04 territory) MUST mirror the inclusion-not-exclusion shape; the existing git-side test remains correct unchanged.
+- bug-2075 (Phase 4 multi-workspace audit, 2026-05-13): carries-verbatim — the `git clean` prohibition test (`tests/bug-2075-worktree-deletion-safeguards.test.cjs`) parses gsd-executor.md's `<destructive_git_prohibition>` block for the deny-list shape; the deny-list applies to ANY worktree context including jj-colocated workspaces (where `git clean` would corrupt the colocated working copy and confuse jj's snapshot — Pitfall 1 territory). Pitfall 3 (`jj workspace forget` does NOT rm the on-disk dir) is the jj-side analog of bug-2075's worktree-name-reuse concern and is locked by the plan 04-02 task-1 forget-test added today; plan 04-04's reap loop closes the path-reuse-after-rm-rf invariant.
+
+**Audit method:** Re-read each bug test's file under
+`tests/bug-NNNN-*.test.cjs`, confirmed all four are pure markdown
+parsers (zero `execSync('git ...')`, zero `execSync('jj ...')` in the
+assertion bodies; the assertions are `assert.ok(content.includes(...))`
+or regex checks against `.md` content read via `fs.readFileSync`). The
+multi-workspace jj fixture landed by plan 04-01 has no path into the
+files those tests parse, so the Phase 3 `carries-verbatim` verdicts hold.
+The one re-classification (bug-2774 → jj-mapped) reflects the natural
+incarnation of the inclusion-filter pattern on the jj side; the test
+ITSELF still carries verbatim because it asserts the git-side filter
+in workflow `.md` content, but the bug's SPIRIT now has a parallel
+jj-side assertion target that plan 04-04's reap loop will surface.
+
+*Audit performed: Phase 4 plan 04-02 (2026-05-13). All four bug tests
+re-confirmed passing under the jj-colocated lane via plan 04-01's
+workspace.add fixture; no ESCALATIONS surfaced.*
