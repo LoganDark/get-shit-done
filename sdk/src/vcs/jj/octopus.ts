@@ -142,14 +142,21 @@ export function createPhaseStructure(
 			`octopus.createPhaseStructure: jj new (merge) failed: ${newMergeRes.stderr || newMergeRes.stdout}`,
 		);
 	}
-	// Resolve the new merge change. We CANNOT use `<parent>+` here because
-	// the parent revset may resolve to a change that already has other
-	// children (e.g. orchestrator's @ when parentRevset === '@-'). Instead
-	// we match by description: the merge change we just created has the
-	// unique description `phase {NN} merge` and is the newest such change.
+	// Resolve the new merge change. We CANNOT use `<parent>+` alone here
+	// because the parent revset may resolve to a change that already has
+	// other children (e.g. orchestrator's `@` when parentRevset === '@-').
+	// Instead we match by SUBJECT — the merge change we just created has
+	// the unique first-line description `phase {NN} merge`.
+	//
+	// VERIFIED REVSET FUNCTION (jj 0.41, empirically probed 2026-05-13):
+	//   `subject(exact:"<text>")` matches changes whose subject (first
+	//   line of description) exactly equals "<text>". The bare
+	//   `description("<text>")` form requires the trailing `\n` and
+	//   doesn't match jj's `-m`-style descriptions reliably; `subject`
+	//   strips the trailing newline by definition (jj revset help).
 	const mergeChange = resolveChangeId(
 		mainRepoRoot,
-		`description(exact:"phase ${phaseTag} merge") & ${parentChange}+`,
+		`subject(exact:"phase ${phaseTag} merge") & ${parentChange}+`,
 	);
 
 	// Tag both parent and merge with marker bookmarks for idempotent
@@ -227,16 +234,19 @@ export function createSubagentHead(
 	// fixture (Plan 04-05 execution).
 	// Do NOT switch to the `-` form on a Renovate bump without re-verifying.
 	//
-	// We further restrict to subagent-shaped descriptions
-	// (`description(glob:"subagent *")`) so that this resolver remains
+	// We further restrict to subagent-shaped subjects
+	// (`subject(glob:"subagent *")`) so that this resolver remains
 	// correct even if non-subagent helper changes are interleaved between
-	// parent and merge by some future caller. jj log default order is
+	// parent and merge by some future caller. The `subject(...)` revset
+	// function is the verified form on jj 0.41 — bare
+	// `description("subagent *")` requires the trailing `\n` and
+	// doesn't reliably match. jj log default order is
 	// reverse-chronological (newest first), so the head we just created
 	// appears as the FIRST line.
 	const probeArgs = [
 		...jjArgvFlags(mainRepoRoot),
 		'log', '-r',
-		`(${opts.parentChange}+ ~ ${opts.mergeChange}) & description(glob:"subagent *")`,
+		`(${opts.parentChange}+ ~ ${opts.mergeChange}) & subject(glob:"subagent *")`,
 		'-T', 'change_id ++ "\\n"', '--no-graph',
 	];
 	const probe = vcsExec(mainRepoRoot, 'jj', probeArgs);
