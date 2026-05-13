@@ -28,6 +28,7 @@ import { parseJjLog } from '../parse/jj-log.js';
 import { parseJjWorkspaceList } from '../parse/jj-workspace-list.js';
 import { parseJjBookmarkRecord } from '../parse/jj-bookmark.js';
 import { mkdirSync } from 'node:fs';
+import { acquireJjWriteLock } from '../jj/lock.js';
 import { __vcsTestOnly, VcsNotImplementedError, VcsBookmarkDivergentError } from '../types.js';
 import type {
   Bookmark,
@@ -892,17 +893,26 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     },
   });
 
-  // Phase 4 D-19: real impl in sdk/src/vcs/jj/lock.ts (plan 03 lands the body).
-  // Per-verb allowlist gates contract-test access until then.
+  /**
+   * vcs.acquireWriteLock(workspace, opts?) — Phase 4 plan 03 wiring.
+   * Delegates to sdk/src/vcs/jj/lock.ts::acquireJjWriteLock (UPSTREAM-02 sidecar).
+   *
+   * Pitfall 9 (RESEARCH): the stale-WC probe inside acquireJjWriteLock must run
+   * against the MAIN repo root (not the locked workspace) to avoid auto-snapshot
+   * recursion. The adapter passes its own `cwd` as `mainRepoRoot` — orchestrator
+   * callers should construct this jj adapter at the main repo path before
+   * invoking acquireWriteLock on a subagent workspace path. When `cwd ===
+   * workspace`, the probe runs against the same repo (safe — no recursion
+   * because acquireWriteLock does not fire hooks; see Pitfall 9 second half).
+   */
   const acquireWriteLock = (
     workspace: string,
     opts?: { timeout?: number },
   ): { release(): void } => {
-    void workspace;
-    void opts;
-    throw new VcsNotImplementedError(
-      'acquireWriteLock: Phase 4 plan 03 owns the real body; sdk/src/vcs/jj/lock.ts',
-    );
+    return acquireJjWriteLock(workspace, {
+      timeout: opts?.timeout,
+      mainRepoRoot: cwd,
+    });
   };
 
   // ─── test-only snapshot/restore (plan 03-02) ───────────────────────────
