@@ -128,7 +128,14 @@ Plans:
   4. Workspace-path-safety guards (preserving the spirit of `bug-3097/3099`, `bug-2774`, `bug-2075`) pass on jj workspaces, and `vcs.workspace.{add,forget,list}` work uniformly on both backends with the default sibling-path layout.
   5. `vcs.hooks.fire('pre-commit', ctx)` is invoked after every `jj squash` (the sole jj commit primitive); in colocated mode the call is a no-op because git's `.git/hooks/pre-commit` fires via colocation; in non-colocated mode the adapter triggers `.githooks/pre-commit` directly post-squash; pre-push hook fires on `jj git push` via `acarapetis/jj-pre-push`-style integration; the v1 hook interface is shaped to accommodate a future Tier 2 PATH-shim wrapper without breaking change.
 **UI hint**: no
-**Plans**: TBD
+**Plans**: 7 plans
+- [ ] 04-01-PLAN.md — Shape commit: types.ts + jj.ts workspace stubs replacement + git.ts mirror + backends.ts allowlist + CI matrix axis (jj-native lane) + fireHook export
+- [ ] 04-02-PLAN.md — jj workspace.add/forget/prune contract tests + vcsMultiWsTest fixture + WS-13 multi-workspace bug-audit
+- [ ] 04-03-PLAN.md — acquireWriteLock primitive (jj/lock.ts) + concurrent-acquire/timeout/stale-recovery tests (D-19, D-21)
+- [ ] 04-04-PLAN.md — workspace.reap (jj/reap.ts) + incomplete-work queue + phase-merge VcsIncompleteSubagentsError gate (D-12 corrected, D-13, D-14)
+- [ ] 04-05-PLAN.md — Lazy octopus helpers (jj/octopus.ts) — createPhaseStructure/createSubagentHead/createSubagentSlot using jj new -A -B --no-edit
+- [ ] 04-06-PLAN.md — Hook wiring: commit() pre-commit + push() pre-push + pre-push.ts inline replication + SDK query bridge (HOOK-01..05, CI-04)
+- [ ] 04-07-PLAN.md — cr-01 fold-in (refname validator lift + `--` separator) + Phase 4 invariant battery + REQUIREMENTS/ROADMAP/LEARNINGS close (D-24)
 
 ### Phase 5: Command Translations + Brownfield Validation + CI Hardening
 **Goal**: Verify every upstream GSD command end-to-end on jj, rewrite all workflow markdown and agent prompts to be VCS-agnostic (with multi-runtime parity), validate brownfield commands by dogfooding on this very repo, and graduate the CI jj-backend lane from allow-failure to required-blocking. After this phase, the project achieves full feature parity.
@@ -152,7 +159,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Adapter Foundation + Git Backend | 5/5 | Complete | 2026-05-09 |
 | 2. Bulk Call-Site Migration (Still Git-Only) | 12/12 | Plans Complete (ready for phase-level verifier) |  |
 | 3. jj Backend Core — Squash, Refs, Conflict | 7/7 | Complete | 2026-05-12 |
-| 4. Workspaces + Octopus Structure + Hooks | 0/TBD | Not started | - |
+| 4. Workspaces + Octopus Structure + Hooks | 0/7 | Plans created | - |
 | 5. Command Translations + Brownfield Validation + CI Hardening | 0/TBD | Not started | - |
 
 ### Phase 6: Brownfield jj Migration — sticky vcs.adapter flip + .planning SHA→change_id rewriter
