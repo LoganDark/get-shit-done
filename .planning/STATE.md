@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-stopped_at: Phase 4 complete (COMPLETE-WITH-CAVEAT — A3 colocated pre-commit deferred to Phase 5)
-last_updated: "2026-05-13T19:01:22.578Z"
+status: Phase 04 closed; A3 colocated pre-commit gap deferred to Phase 5 dogfood (3 fix paths in 04-LEARNINGS Open Q1)
+stopped_at: Phase 5 context gathered
+last_updated: "2026-05-13T21:59:08.532Z"
 last_activity: 2026-05-13 -- Phase 04 complete (7/7 plans + verified)
 progress:
   total_phases: 8
@@ -199,9 +199,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-13T16:16:36.173Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-workspaces-octopus-structure-hooks/04-CONTEXT.md
+Last session: 2026-05-13T21:59:08.524Z
+Stopped at: Phase 5 context gathered
+Resume file: .planning/phases/05-command-translations-brownfield-validation-ci-hardening/05-CONTEXT.md
 
 ## Known Pre-Existing Test Failures (Non-Blocking)
 
