@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 03.1 context gathered
-last_updated: "2026-05-12T19:04:41.698Z"
-last_activity: 2026-05-12 -- Phase 03.1 planning complete
+status: blocked
+stopped_at: Phase 03.1 Plan 01 Task 2 — blocked on pre-existing golden-parity test failures
+last_updated: "2026-05-12T22:10:00.000Z"
+last_activity: 2026-05-12 -- Phase 03.1 execution paused (baseline harness landed, baseline measurement blocked)
 progress:
   total_phases: 8
   completed_phases: 4
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 03 — jj-backend-core-squash-refs-conflict
+**Current focus:** Phase 03.1 — make-tests-run-faster
 
 ## Current Position
 
-Phase: 03.1
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-12 -- Phase 03.1 planning complete
+Phase: 03.1 (make-tests-run-faster) — BLOCKED on Plan 01 Task 2
+Plan: 1 of 4 (Task 1 landed: harness script + .gitignore. Task 2 blocked: baseline measurement)
+Status: Paused — fix pre-existing golden-parity failures before resuming
+Last activity: 2026-05-12 -- Phase 03.1 paused (see Blockers/Concerns)
 
 Progress: [██████████] 100%
 
@@ -182,6 +182,12 @@ None yet.
 ### Blockers/Concerns
 
 - **Requirement-count discrepancy:** REQUIREMENTS.md self-reports "78 v1 requirements across 13 categories" but actually contains 86 requirements across 15 categories (added SQUASH and BROWN as separate sections during requirement definition, plus larger category sizes). Roadmap maps the actual 86. REQUIREMENTS.md footer should be reconciled at next phase transition.
+- **Phase 03.1 baseline blocked by pre-existing golden-parity failures (2026-05-12):** The 03.1-01 baseline harness landed and ran, but Run 1 exited with `success: false` due to 5 pre-existing assertion failures in the integration suite. The D-05c flakiness gate (correctly) refuses to record a baseline. Failing tests on `main`:
+  - `sdk/src/golden/golden.integration.test.ts`: `roadmap.analyze`, `validate.health`, `state.sync --verify` (SDK JSON vs gsd-tools.cjs deep-equal mismatches)
+  - `sdk/src/golden/read-only-parity.integration.test.ts`: `audit-open`, `state.json` (same mismatch shape, excluding volatile fields)
+  - These are Phase 3 fallout, not 03.1 work. A separate fix-pass / phase is needed before 03.1 baseline can be recorded.
+  - Additional observation while running: Run 2 hung — vitest workers idle at 0% CPU for 14+ minutes with no output (process killed at the plan's 30-min wall-clock abort threshold). The hang appears in `lifecycle-e2e.integration.test.ts` and/or `phase-runner.integration.test.ts`, which together account for ~95% of integration wall-clock (~11:27 min and ~4:18 min respectively on Run 1). Investigating this hang is likely a higher-leverage fix than any vitest config knob — `pool: threads` will not help I/O-bound CLI-spawning tests.
+  - Resume path: fix the 5 golden parity failures → fix the lifecycle/phase-runner hang → re-run `node sdk/scripts/profile-integration.mjs --label baseline` → continue 03.1 from Plan 01 Task 2.
 
 ## Deferred Items
 
