@@ -30,6 +30,7 @@ import {
   VcsIncompleteSubagentsError,
 } from '../types.js';
 import { readIncomplete } from '../jj/incomplete-work.js';
+import { validateRefname } from '../refs-validator.js';
 import type {
   GitVcsAdapter,
   CommitInput,
@@ -362,25 +363,48 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         .map((name) => ({ name: name.trim(), rev: '' }));
     },
     create: (name: string, rev: RevisionExpr, _opts?: { raw?: boolean }): void => {
-      const r = execGit(cwd, ['branch', name, toGitRev(rev)]);
+      // D-24 cr-01 fold-in: validate the user-supplied bookmark name BEFORE
+      // it lands at a `git branch` positional. The git backend has no gsd/
+      // prefix munging (D-04 — opts.raw is accepted but ignored), so the
+      // local `actualName` binding mirrors jj.ts naming and exposes a clean
+      // grep target for the Task 2 acceptance criteria. Defense-in-depth
+      // pair: `--` end-of-options separator below.
+      const actualName = name;
+      validateRefname(actualName);
+      const r = execGit(cwd, ['branch', '--', actualName, toGitRev(rev)]);
       if (r.exitCode !== 0) {
         throw new Error(`bookmarks.create failed: ${r.stderr || r.stdout}`);
       }
     },
     move: (name: string, rev: RevisionExpr, _opts?: { raw?: boolean }): void => {
-      const r = execGit(cwd, ['branch', '-f', name, toGitRev(rev)]);
+      // D-24 cr-01 fold-in: see bookmarks.create above for rationale.
+      const actualName = name;
+      validateRefname(actualName);
+      const r = execGit(cwd, ['branch', '-f', '--', actualName, toGitRev(rev)]);
       if (r.exitCode !== 0) {
         throw new Error(`bookmarks.move failed: ${r.stderr || r.stdout}`);
       }
     },
     delete: (name: string, _opts?: { raw?: boolean }): void => {
-      const r = execGit(cwd, ['branch', '-D', name]);
+      // D-24 cr-01 fold-in: see bookmarks.create above for rationale. The
+      // `-D` flag is positional-flag-shaped; `--` separator after it pins
+      // actualName at the name positional regardless of name shape.
+      const actualName = name;
+      validateRefname(actualName);
+      const r = execGit(cwd, ['branch', '-D', '--', actualName]);
       if (r.exitCode !== 0) {
         throw new Error(`bookmarks.delete failed: ${r.stderr || r.stdout}`);
       }
     },
     exists: (name: string, _opts?: { raw?: boolean }): boolean => {
-      const r = execGit(cwd, ['rev-parse', '--verify', '--quiet', name]);
+      // D-24 cr-01 fold-in: validator rejects '-D'-shape names upfront.
+      // `git rev-parse --verify --quiet -- <name>` is NOT used here because
+      // rev-parse interprets `--` as the revs/paths separator (would treat
+      // <name> as a pathspec, breaking the exists check). The leading-dash
+      // rejection in the validator is what keeps the bare positional safe.
+      const actualName = name;
+      validateRefname(actualName);
+      const r = execGit(cwd, ['rev-parse', '--verify', '--quiet', actualName]);
       return r.exitCode === 0;
     },
     // Plan 02-03 Task 1 gap-fill: switch / checkout (with optional create).

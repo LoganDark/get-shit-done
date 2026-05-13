@@ -27,6 +27,7 @@ import { toJjRev } from '../parse/jj-rev.js';
 import { parseJjLog } from '../parse/jj-log.js';
 import { parseJjWorkspaceList } from '../parse/jj-workspace-list.js';
 import { parseJjBookmarkRecord } from '../parse/jj-bookmark.js';
+import { validateRefname } from '../refs-validator.js';
 import { existsSync, mkdirSync } from 'node:fs';
 import { acquireJjWriteLock } from '../jj/lock.js';
 import { performJjReap } from '../jj/reap.js';
@@ -665,7 +666,14 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     },
     create: (name: string, rev: RevisionExpr, opts?: { raw?: boolean }): void => {
       const actualName = addPrefix(name, opts?.raw);
-      const args = jjArgv('bookmark', 'create', actualName, '-r', toJjRev(rev));
+      // D-24 cr-01 fold-in: validate the post-prefix name BEFORE argv build.
+      // Rejects '-D', '--force-delete', '--push-option=evil', etc. Applied for
+      // both raw (opts.raw === true) and non-raw paths — the gsd/ prefix is
+      // incidental protection, not contract. Defense-in-depth pair: the `--`
+      // end-of-options separator below catches anything the validator misses
+      // and isolates the positional from any preceding flag-bearing tokens.
+      validateRefname(actualName);
+      const args = jjArgv('bookmark', 'create', '-r', toJjRev(rev), '--', actualName);
       const r = vcsExec(cwd, 'jj', args);
       if (r.exitCode !== 0) {
         throw new Error(`refs.bookmarks.create failed: ${r.stderr || r.stdout}`);
@@ -673,7 +681,9 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     },
     move: (name: string, rev: RevisionExpr, opts?: { raw?: boolean }): void => {
       const actualName = addPrefix(name, opts?.raw);
-      const args = jjArgv('bookmark', 'move', actualName, '--to', toJjRev(rev));
+      // D-24 cr-01 fold-in: see bookmarks.create above for rationale.
+      validateRefname(actualName);
+      const args = jjArgv('bookmark', 'move', '--to', toJjRev(rev), '--', actualName);
       const r = vcsExec(cwd, 'jj', args);
       if (r.exitCode !== 0) {
         throw new Error(`refs.bookmarks.move failed: ${r.stderr || r.stdout}`);
@@ -681,7 +691,9 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     },
     delete: (name: string, opts?: { raw?: boolean }): void => {
       const actualName = addPrefix(name, opts?.raw);
-      const args = jjArgv('bookmark', 'delete', actualName);
+      // D-24 cr-01 fold-in: see bookmarks.create above for rationale.
+      validateRefname(actualName);
+      const args = jjArgv('bookmark', 'delete', '--', actualName);
       const r = vcsExec(cwd, 'jj', args);
       if (r.exitCode !== 0) {
         throw new Error(`refs.bookmarks.delete failed: ${r.stderr || r.stdout}`);
@@ -689,10 +701,15 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     },
     exists: (name: string, opts?: { raw?: boolean }): boolean => {
       const actualName = addPrefix(name, opts?.raw);
+      // D-24 cr-01 fold-in: validator on read-side probes too. A probe like
+      // bookmarks.exists('-D') would otherwise pass '-D' as a positional to
+      // `jj bookmark list`, which jj may interpret as a flag depending on
+      // version. Reject the shape upfront.
+      validateRefname(actualName);
       // `jj bookmark list <name>` exits 0 even when the bookmark is absent
       // (just emits an empty list). The presence probe combines exit-0 with
       // non-empty stdout.
-      const args = jjArgv('bookmark', 'list', actualName);
+      const args = jjArgv('bookmark', 'list', '--', actualName);
       const r = vcsExec(cwd, 'jj', args);
       return r.exitCode === 0 && r.stdout.trim().length > 0;
     },

@@ -42,3 +42,24 @@ This is a **cross-backend** hardening item, not a phase-3-only bug. Fixing only 
 
 - `.planning/phases/03-jj-backend-core-squash-refs-conflict/03-REVIEW.md` § CR-01
 - `.planning/phases/03-jj-backend-core-squash-refs-conflict/03-VERIFICATION.md` `human_verification:`
+
+---
+
+## Closure (2026-05-13)
+
+Closed by Phase 4 plan 04-07 (D-24 fold-in).
+
+- Refname validator lifted from `sdk/src/vcs/expr.ts:38-61` to shared module `sdk/src/vcs/refs-validator.ts` (`validateRefname`).
+- Threaded through `refs.bookmarks.{create,move,delete,exists}` on BOTH backends (`sdk/src/vcs/backends/jj.ts` + `sdk/src/vcs/backends/git.ts`) — applied for `opts.raw === true` AND non-raw paths (defense-in-depth; the `gsd/` prefix is incidental protection, not contract).
+- `--` end-of-options separator inserted at argv positions before the bookmark/branch name on both backends (jj: `bookmark create -r <rev> -- <name>`, `bookmark move --to <rev> -- <name>`, `bookmark delete -- <name>`, `bookmark list -- <name>`; git: `branch -- <name> <rev>`, `branch -f -- <name> <rev>`, `branch -D -- <name>`).
+- Contract tests: `sdk/src/vcs/__tests__/refname-validator.test.ts` — 43 cases covering unit-level validator rejection (argv-injection + refname-format rules) and integration-level `bookmarks.*` rejection on git AND jj-colocated, plus legitimate-name round-trip regression.
+
+Verified: `vcs.refs.bookmarks.create('-D', expr.head(), {raw: true})` THROWS before reaching argv on both backends.
+
+### Acceptance-criteria fulfillment
+
+- [x] Cross-backend refname validator wired into both `git.ts` and `jj.ts` bookmark write paths
+- [x] `--` separator inserted before positional name argv where applicable
+- [x] Tests that pass `-D`/`--force-delete`/`--push-option=...` as `name` with `raw:true` and assert rejection (NOT execution)
+- [x] Tests added for both backends with `vcs.adapter` matrix coverage
+- [x] No raw `git` violations introduced (lint guard still 0)
