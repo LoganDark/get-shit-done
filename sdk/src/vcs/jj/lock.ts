@@ -9,11 +9,15 @@
  *
  * D-21: stale-WC handling (jj #7538) folded into acquisition path. After lock
  * is acquired, run `jj workspace update-stale` from inside the locked workspace
- * IF `jj workspace list -R <main_repo_root>` reports it as stale.
+ * UNCONDITIONALLY (it's a no-op when the WC is fresh — verified locally).
  *
- * Pitfall 9 (RESEARCH): stale probe queries `jj workspace list` with -R pointing
- * at the main repo root so the auto-snapshot fires there, NOT in the locked
- * workspace (which would re-snapshot the workspace we're inspecting).
+ * Pitfall 9 (RESEARCH): jj 0.41's `json(self)` template does NOT expose a
+ * `stale` boolean, so there is no probe call from the lock-acquisition path
+ * that could trigger an auto-snapshot on the wrong workspace. The
+ * `mainRepoRoot` option is accepted on the API for forward-compat if a future
+ * jj version surfaces a probe-able stale field. For now we touch only
+ * `workspacePath` via update-stale, which honours Pitfall 9's "stale-recovery
+ * targets the specific workspace" prescription.
  *
  * A2 assumption (RESEARCH): the sentinel under .jj/working_copy/gsd-lock does
  * not interfere with jj's internal snapshot serialisation. Plan 03 Task 3's
@@ -107,29 +111,28 @@ export function acquireJjWriteLock(
 		}
 	}
 
-	// D-21: stale-WC recovery (jj #7538). Probe stale status via
-	// `jj workspace list -R <mainRoot>` (Pitfall 9 — probe queries from main repo,
-	// NOT from the locked workspace, to avoid auto-snapshot recursion).
+	// D-21: stale-WC recovery (jj #7538). EMPIRICAL FINDING (plan 03 execution):
+	// jj 0.41's `json(self)` template does NOT emit a `stale` field on each
+	// workspace record (probed locally — only name/target/parents/change_id/
+	// description/author/committer surface). The plan-action's fallback path
+	// applies: invoke `jj workspace update-stale` UNCONDITIONALLY. The command
+	// is a no-op when the WC is fresh (verified locally — it exits 0 with the
+	// stderr warning "Attempted recovery, but the working copy is not stale").
 	//
-	// jj 0.41's `json(self)` template emits a `stale` boolean field on each
-	// workspace record. If the JSON template shape ever drifts (jj-version bump),
-	// the predicate below falls through to "not stale" — and the lock is still
-	// considered acquired (best-effort stale recovery). The unconditional
-	// `jj workspace update-stale` invocation is a no-op when the WC is fresh,
-	// so an alternative implementation could skip the probe entirely; we keep
-	// the probe to avoid spawning a child process on the happy path.
+	// Pitfall 9 is honoured by virtue of NOT calling `jj workspace list` at all
+	// from the lock-acquisition path: there is no probe that could trigger an
+	// auto-snapshot on the wrong workspace. `mainRepoRoot` is still accepted on
+	// the API for forward-compat (if a future jj version surfaces a probe-able
+	// stale field, the predicate can be reintroduced); for now we touch only
+	// `workspacePath` via the update-stale call, which is the correct cwd per
+	// Pitfall 9's "stale-recovery targets the specific workspace via cd
+	// <workspace_path>" prescription.
+	void mainRoot;
 	try {
-		const probeArgs = [
-			...jjArgvFlags(mainRoot),
-			'workspace', 'list', '-T', 'json(self) ++ "\\n"',
-		];
-		const probe = vcsExec(mainRoot, 'jj', probeArgs);
-		if (probe.exitCode === 0 && /"stale"\s*:\s*true/.test(probe.stdout)) {
-			const updateArgs = [...jjArgvFlags(workspacePath), 'workspace', 'update-stale'];
-			vcsExec(workspacePath, 'jj', updateArgs);
-			// We do NOT throw on update-stale failure — surfaced via stderr only; the
-			// lock is still considered acquired. Stale recovery is best-effort here.
-		}
+		const updateArgs = [...jjArgvFlags(workspacePath), 'workspace', 'update-stale'];
+		vcsExec(workspacePath, 'jj', updateArgs);
+		// We do NOT throw on update-stale failure — surfaced via stderr only; the
+		// lock is still considered acquired. Stale recovery is best-effort here.
 	} catch (e) {
 		// Best-effort stale recovery — do not fail acquisition on probe error.
 		void e;
