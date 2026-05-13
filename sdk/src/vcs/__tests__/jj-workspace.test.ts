@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
@@ -144,3 +144,173 @@ describe('Phase 4 plan 04-01 — workspace.add/forget/prune real bodies + reap/a
     expect(() => vcs.acquireWriteLock('/x')).toThrow(VcsNotImplementedError);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 4 plan 02 — real multi-workspace contract tests against the plan-01
+// bodies. These suites run against a live jj-colocated tmp repo and exercise
+// the full mkdir-p + jjArgv + `--` separator flow that plan 01 landed.
+//
+// Each `describe` owns its own tmp repo (per-block isolation) so cross-test
+// side-effects on `jj workspace list` (a global per-repo state) don't leak.
+// Failures here mean either:
+//   1. plan 01's workspace bodies regressed (Rule-1 fix in jj.ts), or
+//   2. jj 0.41 behaviour changed (escalate — coordinate jj-version bump).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function seedJjColocatedRepo(): string {
+  const d = mkdtempSync(join(tmpdir(), 'gsd-vcs-ws-p4-'));
+  execSync('jj git init --colocate', { cwd: d, stdio: 'pipe' });
+  execSync('jj config set --repo user.email "test@test.com"', { cwd: d, stdio: 'pipe' });
+  execSync('jj config set --repo user.name "Test"', { cwd: d, stdio: 'pipe' });
+  writeFileSync(join(d, 'seed.txt'), 'seed\n');
+  execSync('jj squash -B @ -k -m "seed"', { cwd: d, stdio: 'pipe' });
+  return d;
+}
+
+describe.skipIf(!jjAvailable)(
+  'jj workspace.add — Phase 4 plan 01 bodies (multi-workspace)',
+  () => {
+    let dir: string;
+    let vcs: ReturnType<typeof createJjAdapter>;
+
+    beforeAll(() => {
+      dir = seedJjColocatedRepo();
+      vcs = createJjAdapter(dir);
+    });
+    afterAll(() => {
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('creates a non-default workspace under .claude/jj-workspaces/phase-04-subagent-1', () => {
+      const wsPath = join(dir, '.claude/jj-workspaces/phase-04-subagent-1');
+      // NOTE: parent .claude/jj-workspaces/ does NOT exist before this call —
+      // workspace.add's mkdirSync(dirname, { recursive: true }) must create it (D-17).
+      const info = vcs.workspace.add({ path: wsPath, name: 'phase-04-subagent-1' });
+      expect(info.path).toBe('phase-04-subagent-1'); // jj returns workspace NAME in list, not full path
+      // Verify on-disk dir + .jj/ exists
+      expect(existsSync(wsPath)).toBe(true);
+      expect(existsSync(join(wsPath, '.jj'))).toBe(true);
+      // Verify jj sees it
+      const entries = vcs.workspace.list();
+      expect(entries.some((e) => e.path === 'phase-04-subagent-1')).toBe(true);
+    });
+
+    it('Pitfall 4: mkdir -p the parent directory before invoking jj workspace add', () => {
+      // Deeply nested target whose parent chain doesn't exist; mkdir -p must fire.
+      const wsPath = join(dir, '.claude/jj-workspaces/nested/deeply/p4-mkdir-test');
+      expect(existsSync(join(dir, '.claude/jj-workspaces/nested'))).toBe(false);
+      const info = vcs.workspace.add({ path: wsPath, name: 'p4-mkdir-test' });
+      expect(info.path).toBe('p4-mkdir-test');
+      expect(existsSync(wsPath)).toBe(true);
+    });
+
+    it('T-04.01-01 security: -- separator means a path that looks like a flag is treated as a path', () => {
+      // A workspace path that starts with `--` MUST NOT be interpreted as a flag.
+      // The plan 01 jjArgv build inserts `--` before the path positional.
+      const flagShapedPath = join(dir, '.claude/jj-workspaces/--no-confirm');
+      // jj WILL reject this for being a weird path, BUT the rejection MUST be from
+      // jj's path validation (e.g. "invalid workspace path"), NOT from "unknown flag
+      // '--no-confirm'". Probe the error message.
+      let caught: Error | null = null;
+      try {
+        vcs.workspace.add({ path: flagShapedPath, name: 'security-probe' });
+      } catch (e) {
+        caught = e as Error;
+      }
+      // Acceptable outcomes (planner's expected): EITHER the call succeeds (jj
+      // accepted the literal path) OR it failed with a message that does NOT
+      // mention "unknown argument" or "unexpected flag". Failure to honour `--`
+      // would surface as the latter.
+      if (caught) {
+        expect(caught.message).not.toMatch(/unknown (argument|flag)/i);
+        expect(caught.message).not.toMatch(/unexpected (argument|flag)/i);
+      }
+    });
+  },
+);
+
+describe.skipIf(!jjAvailable)(
+  'jj workspace.forget — Phase 4 plan 01 body',
+  () => {
+    let dir: string;
+    let vcs: ReturnType<typeof createJjAdapter>;
+
+    beforeAll(() => {
+      dir = seedJjColocatedRepo();
+      vcs = createJjAdapter(dir);
+    });
+    afterAll(() => {
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('removes the workspace from jj tracking', () => {
+      const wsPath = join(dir, '.claude/jj-workspaces/forget-test');
+      vcs.workspace.add({ path: wsPath, name: 'forget-test' });
+      expect(vcs.workspace.list().some((e) => e.path === 'forget-test')).toBe(true);
+
+      vcs.workspace.forget('forget-test');
+      expect(vcs.workspace.list().some((e) => e.path === 'forget-test')).toBe(false);
+    });
+
+    it('Pitfall 3: forget does NOT remove the on-disk directory', () => {
+      const wsPath = join(dir, '.claude/jj-workspaces/pitfall-3-test');
+      vcs.workspace.add({ path: wsPath, name: 'pitfall-3-test' });
+      expect(existsSync(wsPath)).toBe(true);
+
+      vcs.workspace.forget('pitfall-3-test');
+      // Pitfall 3: the directory persists. reap() is the verb that removes it.
+      // This test LOCKS the invariant — if a future change starts rm'ing the
+      // dir inside forget(), this test fails and forces a revisit.
+      expect(existsSync(wsPath)).toBe(true);
+      // Cleanup so subsequent tests don't observe orphans.
+      rmSync(wsPath, { recursive: true, force: true });
+    });
+  },
+);
+
+describe.skipIf(!jjAvailable)(
+  'jj workspace.prune — Phase 4 plan 01 documented no-op',
+  () => {
+    let dir: string;
+    let vcs: ReturnType<typeof createJjAdapter>;
+
+    beforeAll(() => {
+      dir = seedJjColocatedRepo();
+      vcs = createJjAdapter(dir);
+    });
+    afterAll(() => {
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('returns success ExecResult without invoking any jj subcommand', () => {
+      // jj has no `jj workspace prune` — the body returns the literal success shape.
+      const r = vcs.workspace.prune();
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toBe('');
+      expect(r.stderr).toBe('');
+      expect(r.timedOut).toBe(false);
+    });
+  },
+);
+
+describe.skipIf(!jjAvailable)(
+  'jj workspace.reap — Phase 4 plan 01 bodies (multi-workspace, allowlist gate)',
+  () => {
+    let dir: string;
+    let vcs: ReturnType<typeof createJjAdapter>;
+
+    beforeAll(() => {
+      dir = seedJjColocatedRepo();
+      vcs = createJjAdapter(dir);
+    });
+    afterAll(() => {
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('throws VcsNotImplementedError pointing at plan 04', () => {
+      expect(() =>
+        vcs.workspace.reap({ phaseNamePrefix: 'phase-04-subagent-', phaseDir: dir }),
+      ).toThrow(/Phase 4 plan 04 owns the real body/);
+    });
+  },
+);
