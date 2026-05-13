@@ -152,6 +152,38 @@ export interface WorkspaceInfo {
 export interface WorkspaceAdd {
   path: string;
   baseRef?: RevisionExpr;
+  /**
+   * D-04 (Phase 4): when set on jj backend, becomes the `--name <NAME>` flag
+   * value; defaults to path basename if omitted.
+   */
+  name?: string;
+}
+
+/**
+ * Phase 4 D-13 / WS-12: a single entry in the per-phase crash queue at
+ * `.planning/phases/{N}/incomplete-work.md`. Records change_id (D-06: no
+ * commit_id encoding — change_id native from day 1).
+ */
+export interface IncompleteWorkEntry {
+  subagentName: string;
+  changeIdShort: string;
+  workspacePath: string;
+  reason: string;
+}
+
+/**
+ * Phase 4 D-19 / D-29 / WS-11: return shape of `vcs.workspace.reap()`.
+ * `abandoned` lists workspaces whose heads were empty (probe per D-12/D-15)
+ * and were abandoned + on-disk dir removed. `incomplete` lists workspaces
+ * whose heads carried real work (crash-recovery D-12) and were squashed +
+ * queued in `incomplete-work.md`; the phase-merge gate blocks while that
+ * queue is non-empty (D-14 / VcsIncompleteSubagentsError).
+ */
+export interface ReapResult {
+  /** Workspaces that were abandoned (empty head) + their on-disk dirs rm-rf'd. */
+  abandoned: readonly { name: string; changeId: string; path: string }[];
+  /** Workspaces whose heads had real work (crash recovery D-12); squashed and queued. */
+  incomplete: readonly IncompleteWorkEntry[];
 }
 
 export type HookStage = 'pre-commit' | 'pre-push';
@@ -195,6 +227,15 @@ export interface VcsAdapterCommon {
   findConflicts(opts: { scope: 'all' | 'working-copy' }): ConflictResult[];
   push(opts?: PushOpts): ExecResult;
   fetch(opts?: FetchOpts): ExecResult;
+  /**
+   * Phase 4 (D-19 / WS-12 partial / Pitfall 4): per-workspace advisory lock primitive.
+   * On jj backend: O_EXCL sentinel under .jj/working_copy/gsd-lock (NOT .jj/working_copy/checkout
+   * — that's jj's internal pointer file, perms 0600 — Pitfall 6 in RESEARCH).
+   * On git backend: no-op (kernel-enforced via .git/index.lock).
+   * Returns a RAII release-handle. Default timeout 30_000ms. Auto-runs
+   * `jj workspace update-stale` on acquire if jj reports stale (D-21).
+   */
+  acquireWriteLock(workspace: string, opts?: { timeout?: number }): { release(): void };
   // Phase 2.1 D-03: `stage(files)` and `unstage(files)` REMOVED entirely —
   // not even moved to gitOnly. Callers refactor onto `commit({files})` with
   // WC-state-capture semantics (D-02 + D-04). Tests that genuinely need to
@@ -262,6 +303,17 @@ export interface VcsWorkspace {
   // Plan 02-03 Task 2 gap-fill (RESEARCH §Forward-Complete Gaps Summary):
   context(): WorkspaceContext;
   prune(): ExecResult;
+  /**
+   * Phase 4 (D-19 / WS-11): batch-reap empty subagent heads after a multi-subagent
+   * phase merges. Inventories tracked workspaces by `phaseNamePrefix` (inclusion
+   * filter per D-04 / #2774 pattern). Empty heads (zero diff vs parent — see
+   * jj/reap.ts for the corrected `jj diff --from <parent> --to <head> -s` probe)
+   * are abandoned and their workspaces forgotten. Non-empty heads (crash-recovery
+   * path D-12) get squashed as 'subagent N: incomplete work' and appended to
+   * .planning/phases/{N}/incomplete-work.md. Empty-tree probe MUST run from the
+   * main workspace, NEVER from inside a subagent workspace (D-15 / Pitfall 1).
+   */
+  reap(opts: { phaseNamePrefix: string; phaseDir: string }): ReapResult;
 }
 
 // Phase 2.1 D-07: the public hooks namespace interface has been DELETED.
@@ -340,6 +392,31 @@ export class VcsBookmarkDivergentError extends Error {
     );
     this.bookmarkName = fields.bookmarkName;
     this.divergentTargets = fields.divergentTargets;
+    this.hint = fields.hint;
+  }
+}
+
+/**
+ * Phase 4 D-14: thrown by `vcs.commit()` when a phase-merge squash is attempted
+ * while `.planning/phases/{N}/incomplete-work.md` is non-empty. Caller must
+ * empty the queue file (delete entries they've reviewed) before re-running.
+ */
+export class VcsIncompleteSubagentsError extends Error {
+  readonly name = 'VcsIncompleteSubagentsError';
+  readonly entries: readonly IncompleteWorkEntry[];
+  readonly phaseDir: string;
+  readonly hint?: string;
+
+  constructor(fields: {
+    entries: readonly IncompleteWorkEntry[];
+    phaseDir: string;
+    hint?: string;
+  }) {
+    super(
+      `phase merge blocked: ${fields.entries.length} incomplete subagent ${fields.entries.length === 1 ? 'entry' : 'entries'} queued at ${fields.phaseDir}/incomplete-work.md`
+    );
+    this.entries = fields.entries;
+    this.phaseDir = fields.phaseDir;
     this.hint = fields.hint;
   }
 }
