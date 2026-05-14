@@ -149,7 +149,12 @@ Plans:
   3. Brownfield commands (`/gsd-map-codebase`, `/gsd-import`, `/gsd-ingest-docs`, `/gsd-resume-work`, `/gsd-ship`, `/gsd-pr-branch`, `/gsd-undo`) are run end-to-end against this very repo's jj backend (dogfood), and observable behavior matches the equivalent runs against a git-only sibling clone of the same repo (no degradation).
   4. The first weekly upstream rebase performed after brownfield validation is recorded with conflict count and a brief retro; CI matrix graduates jj-backend tests from allow-failure to required-blocking; GitHub Actions workflows (`canary`, `release-sdk`, `hotfix`, `branch-cleanup`, `auto-branch`, etc.) remain git-side per CI-03 and are explicitly flagged in the docs as "stays on git — GitHub *is* git".
   5. The full v1 commitment holds: every upstream GSD command works correctly on a jj-only repo without git, with no regression in test coverage on the git side and no `.skip` accumulation on either side.
-**Plans**: TBD
+**Plans**: 5 plans
+- [ ] 05-01-PLAN.md — Foundational infra: A3 fix (D-32) + 11 new SDK query verbs + D-31 deferral edits to ROADMAP/REQUIREMENTS
+- [ ] 05-02-PLAN.md — Daily-driver commands (CMD-01..05): execute-phase.md + quick.md rewrites + 5 integration tests
+- [ ] 05-03-PLAN.md — Lifecycle commands (CMD-06..09, CMD-11): undo/complete-milestone/code-review.md + agent prompt rewrites + 6 integration tests
+- [ ] 05-04-PLAN.md — Brownfield commands (CMD-10): synth-planning-fixture + 5 integration tests (D-34 coverage gap documented)
+- [ ] 05-05-PLAN.md — CI hardening + close: 7 flake fixes + 10-green soak + matrix flip + MIGR-02 cosmetic sweep + PROMPT-03 closure
 
 ## Progress
 
@@ -162,7 +167,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Bulk Call-Site Migration (Still Git-Only) | 12/12 | Plans Complete (ready for phase-level verifier) |  |
 | 3. jj Backend Core — Squash, Refs, Conflict | 7/7 | Complete | 2026-05-12 |
 | 4. Workspaces + Octopus Structure + Hooks | 7/7 | Complete | 2026-05-13 |
-| 5. Command Translations + Brownfield Validation + CI Hardening | 0/TBD | Not started | - |
+| 5. Command Translations + Brownfield Validation + CI Hardening | 0/5 | Planned (5 plans) | - |
 
 ### Phase 6: Brownfield jj Migration — sticky vcs.adapter flip + .planning SHA→change_id rewriter
 
@@ -175,6 +180,7 @@ Plans:
 - [ ] TBD (run /gsd-plan-phase 6 to break down)
 
 ---
+*Last updated: 2026-05-13 — Phase 5 planned (5 plans). Plans cover: P1 foundational infra (A3 D-32 fix + 11 new SDK query verbs + D-31 deferral edits moving BROWN-01/02 to Phase 6), P2 daily-driver CMD-01..05 + execute-phase.md/quick.md rewrites + 5 integration tests, P3 lifecycle CMD-06..09/11 + undo/complete-milestone/code-review + agent prompts + 6 tests (CMD-06 documents jj-destructive-undo semantic shift per Pitfall 6), P4 brownfield CMD-10 with synth-jj-fixtures + D-34 coverage-gap docs, P5 CI hardening + close (7 flake fixes + 10-green soak + required-blocking flip + MIGR-02 cosmetic sweep + PROMPT-03 trust-installer closure per D-37). Note: ROADMAP success criterion #3 will be amended by plan 05-01 per D-31 (BROWN dogfood re-bucketed to Phase 6); the legacy wording on line 149 remains in this file until 05-01 lands the edit.*
 *Last updated: 2026-05-13 — Phase 4 plan execution complete (7/7). jj workspace.{add,forget,prune,reap} bodies + acquireJjWriteLock + lazy octopus helpers + pre-commit/pre-push hook wiring + SDK query bridge `gsd-sdk query hooks.fire` + cr-01 raw-bookmark argv-injection fold-in landed. WS-01..13, HOOK-01..05, CI-04 (19 IDs) all marked Complete in REQUIREMENTS.md. Known gap: A3 colocated-pre-commit empirical refutation (plan 04-06) — D-10 no-op leaves colocated users without a pre-commit path; three fix paths documented in 04-LEARNINGS Open Q1, deferred. jj-native CI lane continues as allow-failure (D-22).*
 *Last updated: 2026-05-12 — Phase 3 plan execution complete (7/7). jj-colocated backend shipped: every adapter contract verb implemented; CI matrix lane active as allow-failure (CI-01 graduates to required-blocking in Phase 5); conflict()→conflicts() revset doc-bug fixed; bug-triage finalized (all 7 worktree-bug tests carries-verbatim). Format-migration tracker (03-CONTEXT.md) handed off to Phase 6.*
 *Last updated: 2026-05-11 — Phase 2 plan execution complete (12/12). ROADMAP Phase 2 success criteria 4 + 5 reframing is queued in `.planning/phases/02-bulk-call-site-migration-still-git-only/02-12-DEFERRED.md` with verbatim replacement text; the next phase-transition runner applies the splice mechanically per CONTEXT D-17.*
