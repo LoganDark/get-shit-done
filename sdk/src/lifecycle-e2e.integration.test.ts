@@ -25,6 +25,7 @@ import { GSDTools, resolveGsdToolsPath } from './gsd-tools.js';
 import { GSDEventStream } from './event-stream.js';
 import { GSDEventType, PhaseStepType } from './types.js';
 import type { GSDEvent, PhaseRunnerResult, RoadmapAnalysis } from './types.js';
+import { createVcsAdapter } from './vcs/index.js';
 
 // ─── CLI availability check ─────────────────────────────────────────────────
 
@@ -35,6 +36,8 @@ try {
 } catch {
   cliAvailable = false;
 }
+
+const e2eEnabled = process.env.GSD_ENABLE_E2E === '1';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const sdkPromptsDir = join(__dirname, '..', 'prompts');
@@ -55,7 +58,7 @@ const STEP_ORDER: Record<string, number> = {
 
 // ─── Test suite ──────────────────────────────────────────────────────────────
 
-describe.skipIf(!cliAvailable || !gsdToolsAvailable)('E2E Lifecycle: InitRunner → GSD.runPhase() full lifecycle', () => {
+describe.skipIf(!cliAvailable || !gsdToolsAvailable || !e2eEnabled)('E2E Lifecycle: InitRunner → GSD.runPhase() full lifecycle', () => {
   let tmpDir: string;
   let initSuccess: boolean = false;
   let phase1Number: string | null = null;
@@ -66,9 +69,12 @@ describe.skipIf(!cliAvailable || !gsdToolsAvailable)('E2E Lifecycle: InitRunner 
     tmpDir = await mkdtemp(join(tmpdir(), 'gsd-sdk-lifecycle-e2e-'));
 
     // Git init (required by InitRunner and phase lifecycle)
-    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
-    execSync('git config user.email "test@test.com"', { cwd: tmpDir, stdio: 'ignore' });
-    execSync('git config user.name "Test"', { cwd: tmpDir, stdio: 'ignore' });
+    const vcs = createVcsAdapter(tmpDir, { kind: 'git' });
+    if (vcs.kind === 'git') {
+      vcs.gitOnly.init();
+      vcs.gitOnly.configSet('user.email', 'test@test.com');
+      vcs.gitOnly.configSet('user.name', 'Test');
+    }
 
     tools = new GSDTools({
       projectDir: tmpDir,

@@ -1,0 +1,33 @@
+{
+  "id": "verify-ts-628-log-all",
+  "source": "sdk/src/query/verify.ts:628",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": []
+  },
+  "command": "git",
+  "args": [
+    "log",
+    "--oneline",
+    "--all",
+    "-50"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "0fcc62e initial",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "regex:^[0-9a-f]{7,} initial$"
+  }
+}

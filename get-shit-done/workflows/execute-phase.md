@@ -97,6 +97,7 @@ If the project uses git submodules, worktree isolation is unsafe **only when a p
 ```bash
 # Parse submodule paths from .gitmodules once (empty if no .gitmodules).
 # SUBMODULE_PATHS is a newline-separated list of repo-relative paths.
+# Note: `.gitmodules` is a git-specific config file; jj has no submodule concept yet. The `git config --file` invocation is read-only INI parsing on a flat file — keeping it raw (no D-33 cost; it is not a VCS state mutation).
 if [ -f .gitmodules ]; then
   SUBMODULE_PATHS=$(git config --file .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null | awk '{print $2}')
 else
@@ -176,7 +177,10 @@ Offer these recovery options:
 if [ "$MVP_MODE" = "true" ] && [ "$TDD_MODE" = "true" ]; then
   IS_BEHAVIOR_ADDING=$(gsd-sdk query task.is-behavior-adding "$TASK_FILE" --pick is_behavior_adding)
   if [ "$IS_BEHAVIOR_ADDING" = "true" ]; then
-    RED_COMMIT=$(git log --oneline --grep="^test(${PHASE_NUMBER}-${PLAN_ID}):" -- "**/*.test.*" "**/*.spec.*" "tests/" | head -1)
+    # `gsd-sdk query log` returns structured LogEntry[] JSON; we client-side filter on subject prefix (Phase 2 CR-02: --grep is parsed-but-unused at the SDK layer).
+    RED_COMMIT=$(gsd-sdk query log --max-count 200 --cwd . 2>/dev/null \
+      | jq -r --arg prefix "test(${PHASE_NUMBER}-${PLAN_ID}):" '.[] | select(.subject | startswith($prefix)) | (.hash[0:7] + " " + .subject)' \
+      | head -1)
     if [ -z "$RED_COMMIT" ]; then
       gsd-sdk query state.update last_gate_trip "${PLAN_ID}/${TASK_ID}" || true
       echo "MVP+TDD GATE TRIPPED: missing RED commit for ${PLAN_ID}/${TASK_ID}"
@@ -270,6 +274,7 @@ Check `branching_strategy` from init:
 Fork the new phase branch off `origin/HEAD` (the project's default branch), not the current HEAD — otherwise consecutive phases compound and stay unpushed (#2916). If `$BRANCH_NAME` already exists locally, reuse it as-is.
 
 ```bash
+# TODO(05-05 sweep): the branching block below mixes verbs that have no clean SDK substitute (symbolic-ref of refs/remotes/origin/HEAD, show-ref --verify, switch, fetch, merge --ff-only, checkout -b "$x" "$base") — these are git-only orchestration that PROMPT-01 cannot route through the adapter without first growing the corresponding workspace/ref-management verbs (WS-01/WS-02 territory). The whole block is git-mode-only by construction (branching_strategy != "none" implies a git working tree); jj equivalent will live in a sibling code path keyed off `vcs.kind`. Stays raw git until the WS-* verbs land.
 DEFAULT_BRANCH=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
 DEFAULT_BRANCH=${DEFAULT_BRANCH:-main}
 
@@ -281,7 +286,7 @@ else
       || { echo "ERROR: fetch origin/$DEFAULT_BRANCH failed and no local copy exists. Refusing to create '$BRANCH_NAME' off current HEAD (#2916)." >&2; exit 1; }
     echo "WARNING: fetch origin/$DEFAULT_BRANCH failed; using local copy as base." >&2
   fi
-  if [ -n "$(git status --porcelain)" ]; then
+  if [ -n "$(gsd-sdk query status --porcelain --cwd . 2>/dev/null | jq -r '.raw // ""')" ]; then
     echo "WARNING: Uncommitted changes will be carried onto '$BRANCH_NAME' (branched off origin/$DEFAULT_BRANCH, not previous HEAD)."
   else
     git switch --quiet "$DEFAULT_BRANCH" 2>/dev/null && git merge --ff-only --quiet "origin/$DEFAULT_BRANCH" 2>/dev/null || true
@@ -374,7 +379,8 @@ CROSS_AI_TIMEOUT=$(gsd-sdk query config-get workflow.cross_ai_timeout 2>/dev/nul
 
 2. **Check for dirty working tree before execution:**
    ```bash
-   if ! git diff --quiet HEAD 2>/dev/null; then
+   # gsd-sdk query diff parses --quiet but returns JSON; callers inspect `raw.length`.
+   if [ -n "$(gsd-sdk query diff --range HEAD --cwd . 2>/dev/null | jq -r '.raw // ""')" ]; then
      echo "WARNING: dirty working tree detected — the external AI command may produce uncommitted changes that conflict with existing modifications"
    fi
    ```
@@ -516,9 +522,9 @@ increases monotonically across waves. `{status}` is `complete` (success),
 
    Before spawning, capture the current HEAD:
    ```bash
-   EXPECTED_BASE=$(git rev-parse HEAD)
+   EXPECTED_BASE=$(gsd-sdk query head-ref --cwd . --pick head)
    DISPATCH_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-   EXPECTED_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+   EXPECTED_BRANCH=$(gsd-sdk query current-branch --cwd . --pick branch)
    if [ "${USE_WORKTREES_FOR_PLAN:-true}" != "false" ] && [ -z "${WAVE_WORKTREE_MANIFEST:-}" ]; then
      WAVE_WORKTREE_MANIFEST=$(mktemp "${TMPDIR:-/tmp}/gsd-worktree-wave-XXXXXX.json")
      printf '{"worktrees":[]}\n' > "$WAVE_WORKTREE_MANIFEST"
@@ -560,6 +566,7 @@ increases monotonically across waves. `{status}` is `complete` (success),
        that destroys concurrent commits in multi-active scenarios (#2924). Only after
        Step 1 passes is `git reset --hard` safe (#2015 — affects all platforms).
        ```bash
+       # TODO(05-05 sweep): this whole HEAD-assertion block is git-mode-only by construction — it runs inside a git worktree spawned by Claude Code's `isolation="worktree"` (the `worktree-agent-*` namespace, the `.git/config.lock` contention pattern from #2924, the protected-ref deny-list). The raw `git symbolic-ref` / `git rev-parse --abbrev-ref HEAD` calls have no clean SDK substitute: `gsd-sdk query current-branch` returns the bookmarks-pointing-at-HEAD array (Phase 2.1 D-15), not the single-branch-name shape this block needs. `git merge-base` has no SDK verb yet. The full block stays raw git until WS-01/WS-02 lands a jj-workspace equivalent prompt template; D-33 anti-pattern guard does NOT apply here (no backend conditional — git mode is the only path that reaches this prompt body).
        HEAD_REF=$(git symbolic-ref --quiet HEAD || echo "DETACHED")
        ACTUAL_BRANCH=$(git rev-parse --abbrev-ref HEAD)
        if [ "$HEAD_REF" = "DETACHED" ] || echo "$ACTUAL_BRANCH" | grep -Eq '^(main|master|develop|trunk|release/.*)$'; then
@@ -572,8 +579,8 @@ increases monotonically across waves. `{status}` is `complete` (success),
        fi
        ACTUAL_BASE=$(git merge-base HEAD {EXPECTED_BASE})
        if [ "$ACTUAL_BASE" != "{EXPECTED_BASE}" ]; then
-         git reset --hard {EXPECTED_BASE}
-         [ "$(git rev-parse HEAD)" != "{EXPECTED_BASE}" ] && { echo "ERROR: could not correct worktree base"; exit 1; }
+         gsd-sdk query reset --ref {EXPECTED_BASE} --mode hard --cwd .
+         [ "$(gsd-sdk query head-ref --cwd . --pick head)" != "{EXPECTED_BASE}" ] && { echo "ERROR: could not correct worktree base"; exit 1; }
        fi
        ```
        Per-commit HEAD/cwd-drift/path-guard: `agents/gsd-executor.md` steps 0/0a/0b + `references/worktree-path-safety.md` (in <execution_context>).
@@ -691,15 +698,22 @@ increases monotonically across waves. `{status}` is `complete` (success),
    ```bash
    # For each plan in this wave, check if the executor finished:
    SUMMARY_EXISTS=$(test -f "{phase_dir}/{plan_number}-{plan_padded}-SUMMARY.md" && echo "true" || echo "false")
-   COMMITS_FOUND=$(git log --oneline --all --grep="{phase_number}-{plan_padded}" --since="1 hour ago" | head -1)
-   COMMITS_SINCE_DISPATCH=$(git log "${EXPECTED_BRANCH}" --since="${DISPATCH_TS}" --oneline | head -1)
+   # gsd-sdk query log --all returns LogEntry[]; client-side filter on subject. (--since is parsed-but-unused; substring match on subject is sufficient as a spot-check.)
+   COMMITS_FOUND=$(gsd-sdk query log --all --max-count 50 --cwd . 2>/dev/null \
+     | jq -r --arg sub "{phase_number}-{plan_padded}" '.[] | select(.subject | contains($sub)) | (.hash[0:7] + " " + .subject)' \
+     | head -1)
+   # Stall-surveillance probe: any commit on the orchestrator's branch since dispatch?
+   # Adapter-mediated; LogEntry.date is ISO-8601, compared lexicographically against DISPATCH_TS.
+   COMMITS_SINCE_DISPATCH=$(gsd-sdk query log --range "${EXPECTED_BRANCH}" --max-count 50 --cwd . 2>/dev/null \
+     | jq -r --arg ts "${DISPATCH_TS}" '.[] | select(.date >= $ts) | (.hash[0:7] + " " + .subject)' \
+     | head -1)
    ```
 
    **If SUMMARY.md exists AND commits are found:** The agent completed successfully —
    treat as done and proceed to step 5. Log: `"✓ {Plan ID} completed (verified via spot-check — completion signal not received)"`
 
    **If SUMMARY.md does NOT exist after a reasonable wait:** The agent may still be
-   running or may have failed silently. Check `git log --oneline -5` for recent
+   running or may have failed silently. Check `gsd-sdk query log --max-count 5` for recent
    activity. If commits are still appearing, wait longer. If no activity, report
    the plan as failed and route to the failure handler in step 6.
 
@@ -713,14 +727,14 @@ increases monotonically across waves. `{status}` is `complete` (success),
    **This fallback applies automatically to all runtimes.** Claude Code's Agent() normally
    returns synchronously, but the fallback ensures resilience if it doesn't.
 
-5. **Post-wave hook validation (parallel mode only):** Hooks run on every executor commit by default (#2924); this post-wave run only fires when `workflow.worktree_skip_hooks=true` opted out of per-commit hooks:
+5. **Post-wave hook validation (parallel mode only):** Hooks run on every executor commit by default (#2924); this post-wave run only fires when `workflow.worktree_skip_hooks=true` opted out of per-commit hooks. The adapter handles backend-specific stashing (git stash on git side; jj working-copy auto-snapshot on jj side) — the SDK fire is shape-symmetric across both backends (D-33):
    ```bash
    SKIP_HOOKS=$(gsd-sdk query config-get workflow.worktree_skip_hooks 2>/dev/null || echo "false")
    if [ "$SKIP_HOOKS" = "true" ]; then
-     # Stash uncommitted changes under a named ref so we always pop (bare `git stash` strands them on hook/script failure).
+     # TODO(05-05 sweep): add `gsd-sdk query stash {push,pop}` verbs so the stash dance routes through the adapter; until then the stash lines stay raw git (no-op on jj where the working-copy auto-snapshot makes stashing unnecessary).
      STASHED=false
      if (! git diff --quiet || ! git diff --cached --quiet) && git stash push -u -m "gsd-post-wave-hook-$$" >/dev/null 2>&1; then STASHED=true; fi
-     git hook run pre-commit 2>&1 || echo "⚠ Pre-commit hooks failed — review before continuing"
+     gsd-sdk query hooks.fire pre-commit --cwd . 2>&1 || echo "⚠ Pre-commit hooks failed — review before continuing"
      [ "$STASHED" = "true" ] && (git stash pop >/dev/null 2>&1 || echo "⚠ Could not pop gsd-post-wave-hook stash — recover manually")
    fi
    ```
@@ -747,22 +761,40 @@ increases monotonically across waves. `{status}` is `complete` (success),
      exit 1
    }
 
-   # Guard: pin cleanup back to the primary worktree and fail on branch drift (#3174).
-   PRIMARY_WT=$(git worktree list --porcelain | awk '/^worktree /{print substr($0,10); exit}')
-   if [ -z "$PRIMARY_WT" ]; then
-     echo "FATAL: could not resolve primary worktree before cleanup" >&2
-     exit 1
-   fi
-   if [ -n "$PRIMARY_WT" ] && [ "$(pwd -P 2>/dev/null)" != "$(cd "$PRIMARY_WT" 2>/dev/null && pwd -P)" ]; then echo "⚠ Orchestrator CWD drifted to $(pwd) — pinning to $PRIMARY_WT before worktree cleanup (#3174)"; cd "$PRIMARY_WT" || { echo "FATAL: cannot cd to primary worktree $PRIMARY_WT" >&2; exit 1; }; fi
-   ORCH_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+   # Branch-drift guard (#3174-class). Adapter-mediated current-branch probe.
+   # NOTE(jj-port): upstream pinned the orchestrator CWD back to the primary
+   # worktree here via `git worktree list --porcelain`. The jj-port has no
+   # adapter verb for "primary workspace path" yet, and on jj the cwd IS the
+   # canonical workspace by convention — multi-workspace setups go through
+   # explicit `jj workspace forget`/`add` rather than ambient worktree drift.
+   # Restore the pin once `gsd-sdk query workspace-list --pick primary` exists.
+   ORCH_BRANCH=$(gsd-sdk query current-branch --cwd . --pick branch 2>/dev/null)
    [ -z "${EXPECTED_BRANCH:-}" ] || [ "$ORCH_BRANCH" = "$EXPECTED_BRANCH" ] || { echo "FATAL: orchestrator on '$ORCH_BRANCH' but expected '$EXPECTED_BRANCH' before worktree cleanup — refusing to merge (#3174-class drift)" >&2; exit 1; }
 
    if command -v gsd-sdk >/dev/null 2>&1; then
+     # On jj-port this routes to the stubbed wave-cleanup executor (returns
+     # `{ok:false, reason:'not_implemented_in_jj_port'}` and trips `|| exit 1`)
+     # until the seven required adapter verbs land — see the placeholder
+     # comment in get-shit-done/bin/lib/worktree-safety.cjs for the surface.
      gsd-sdk query worktree.cleanup-wave --manifest "$WAVE_WORKTREE_MANIFEST" || exit 1
    else
      echo "WARN: gsd-sdk unavailable; using manifest-scoped shell fallback (#3384)." >&2
    WT_PATHS_FILE=$(mktemp "${TMPDIR:-/tmp}/gsd-worktree-paths-XXXXXX")
    node -e 'const fs=require("fs");const p=process.env.WAVE_WORKTREE_MANIFEST;try{if(!p)throw new Error("WAVE_WORKTREE_MANIFEST is unset");if(!fs.existsSync(p))throw new Error("manifest does not exist");const s=fs.readFileSync(p,"utf8");if(!s.trim())throw new Error("manifest is empty");const j=JSON.parse(s);for(const w of j.worktrees||[])if(w.worktree_path)console.log(w.worktree_path)}catch(e){console.error(`ERROR: cannot read worktree manifest ${p||"(unset)"}: ${e.message}`);process.exit(1)}' > "$WT_PATHS_FILE" || { echo "BLOCKED: cannot read WAVE_WORKTREE_MANIFEST; refusing cleanup (#3384)." >&2; exit 1; }
+   # TODO(jj-port): the raw-git body below this point (git worktree list/remove,
+   # git merge --no-ff, git branch -D, git -C, git diff, git rm, git commit
+   # --amend) is the upstream shell fallback. On jj-port it is unreachable —
+   # gsd-sdk is always installed, so the `if command -v gsd-sdk` arm above
+   # always runs — but it lives in source until the wave-cleanup adapter verbs
+   # land and the entire fallback can be dropped. Do not migrate prematurely.
+    # List worktrees created by this wave's agents.
+    # Inclusion-based filter (#2774): match ONLY agent-spawned worktrees under
+    # `.claude/worktrees/agent-` (the namespace Claude Code's `isolation="worktree"`
+    # uses). The previous exclusion filter (`grep -v "$(pwd)$"`) destroyed the parent
+    # workspace's `.git` whenever the workspace itself was a worktree (multi-workspace
+    # setups, and the cross-drive Windows case where `git worktree list` reports the
+    # registry path on a different drive than `$(pwd)`).
+    # Read line-by-line so worktree paths containing whitespace are preserved (#2774).
    while IFS= read -r WT; do
      [ -z "$WT" ] && continue
      WT_BRANCH=$(git -C "$WT" rev-parse --abbrev-ref HEAD 2>/dev/null)
@@ -811,12 +843,14 @@ increases monotonically across waves. `{status}` is `complete` (success),
            git rm -f "$RESURRECTED" 2>/dev/null || true
          fi
        done
-       if ! git diff --quiet .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || \
+
+       # Amend merge commit with restored files if any changed
+       if [ -n "$(gsd-sdk query diff --name-only --cwd . -- .planning/STATE.md .planning/ROADMAP.md 2>/dev/null | jq -r '.nameOnly // [] | join("\n")')" ] || \
           [ -n "$DELETED_FILES" ]; then
          COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
          if [ "$COMMIT_DOCS" != "false" ]; then
-           git add .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || true
-           git commit --amend --no-edit 2>/dev/null || true
+           # commit --amend --no-edit equivalent: amend with the tracking files. SDK handler runs `git add -A -- <files>` internally; pre-staging `git add` is redundant.
+           gsd-sdk query commit --amend --files .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || true
          fi
        fi
        # Safety net: rescue uncommitted SUMMARY.md before worktree removal (#2070, #2838).
@@ -931,7 +965,7 @@ increases monotonically across waves. `{status}` is `complete` (success),
      done
 
      # Only commit tracking files if they actually changed
-     if ! git diff --quiet .planning/ROADMAP.md .planning/STATE.md 2>/dev/null; then
+     if [ -n "$(gsd-sdk query diff --name-only --cwd . -- .planning/ROADMAP.md .planning/STATE.md 2>/dev/null | jq -r '.nameOnly // [] | join("\n")')" ]; then
        gsd-sdk query commit "docs(phase-${PHASE_NUMBER}): update tracking after wave ${N}" --files .planning/ROADMAP.md .planning/STATE.md
      fi
    elif [ "${TEST_EXIT}" -eq 124 ]; then
@@ -987,7 +1021,7 @@ increases monotonically across waves. `{status}` is `complete` (success),
 
    For each SUMMARY.md:
    - Verify first 2 files from `key-files.created` exist on disk
-   - Check `git log --oneline --all --grep="{phase}-{plan}"` returns ≥1 commit
+   - Check `gsd-sdk query log --all --max-count 50 --cwd . | jq '[.[] | select(.subject | contains("{phase}-{plan}"))] | length'` returns ≥1
    - Check for `## Self-Check: FAILED` marker
 
    If ANY spot-check fails: report which plan failed, route to failure handler — ask "Retry plan?" or "Continue with remaining waves?"

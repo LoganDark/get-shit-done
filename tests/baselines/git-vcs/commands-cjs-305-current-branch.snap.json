@@ -1,0 +1,32 @@
+{
+  "id": "commands-cjs-305-current-branch",
+  "source": "get-shit-done/bin/lib/commands.cjs:305",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": []
+  },
+  "command": "git",
+  "args": [
+    "rev-parse",
+    "--abbrev-ref",
+    "HEAD"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "master",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "exact"
+  }
+}

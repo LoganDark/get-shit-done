@@ -18,34 +18,16 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { spawnSync } from 'node:child_process';
 import { GSDError } from '../errors.js';
+import { createVcsAdapter } from '../vcs/index.js';
 import { planningPaths, resolvePathUnderProject } from './helpers.js';
 import type { QueryHandler } from './utils.js';
 
-// ─── execGit ──────────────────────────────────────────────────────────────
-
-/**
- * Run a git command in the given working directory.
- *
- * Ported from core.cjs lines 531-542.
- *
- * @param cwd - Working directory for the git command
- * @param args - Git command arguments (e.g., ['commit', '-m', 'msg'])
- * @returns Object with exitCode, stdout, and stderr
- */
-export function execGit(cwd: string, args: string[]): { exitCode: number; stdout: string; stderr: string } {
-  const result = spawnSync('git', args, {
-    cwd,
-    stdio: 'pipe',
-    encoding: 'utf-8',
-  });
-  return {
-    exitCode: result.status ?? 1,
-    stdout: (result.stdout ?? '').toString().trim(),
-    stderr: (result.stderr ?? '').toString().trim(),
-  };
-}
+// Plan 02-08 (W5 fix from iteration 1 — prescriptive imports): this module's
+// previous local `execGit` shim (byte-equivalent to sdk/src/vcs/exec.ts:113-118)
+// has been deleted. All git invocations route through `createVcsAdapter` from
+// '../vcs/index.js' exclusively. The exec-level `execGit` re-export is NOT
+// imported here — call sites consume the higher-level adapter API surface.
 
 // ─── sanitizeCommitMessage ────────────────────────────────────────────────
 
@@ -139,35 +121,56 @@ export const commit: QueryHandler = async (args, projectDir, workstream) => {
     return { data: { committed: false, reason: '--files requires at least one path' } };
   }
 
-  // Compute pathspec once: the handler commits exactly the paths it staged,
+  // Compute the path scope once: the handler commits exactly these paths,
   // never anything that was pre-staged externally (#3061).
   const pathsToCommit = filePaths.length > 0 ? filePaths : ['.planning/'];
-  for (const file of pathsToCommit) {
-    // The `--` separator keeps any path that starts with `-` from being
-    // interpreted as a git option (e.g. a file literally named `-A`).
-    const addResult = execGit(projectDir, ['add', '--', file]);
-    if (addResult.exitCode !== 0) {
-      return { data: { committed: false, reason: addResult.stderr || `failed to stage ${file}`, exitCode: addResult.exitCode } };
-    }
+  // Plan 02-08: route through the VcsAdapter exclusively (W5 prescriptive).
+  // B-08 (Phase 6 follow-up): no `kind` override — `createVcsAdapter` now
+  // resolves the backend via env > sticky `vcs.adapter` config > auto-detect.
+  // The earlier `kind: 'git'` hardcode silently bypassed the migration's
+  // sticky-config flip, routing every commit through git on a jj-colocated
+  // repo and producing stranded `(no description set)` sibling commits
+  // when git HEAD advanced under jj's feet.
+  const vcs = createVcsAdapter(projectDir);
+
+  // Plan 2.1-04 (D-02 + D-04 + D-06): legacy path-scope field collapsed onto
+  // `files` with WC-state-capture semantics. The git backend's commit({files})
+  // now runs `git add -A -- <files>` (captures adds/mods/dels) then
+  // `git commit -m` (no -a), so the upstream `vcs.stage` loop is gone — the
+  // WC IS the source of truth, the adapter captures it on commit. The caller-
+  // side #2014 pre-probe migrates from `vcs.diff({staged:true,nameOnly:true})`
+  // to `vcs.status({porcelain:true})` filtering: any WC entry whose path
+  // starts with one of the requested scope paths is in-scope. If nothing
+  // surfaces, short-circuit before the commit call. The wording shifts
+  // from 'nothing staged' to 'nothing to commit' to reflect the new
+  // WC-state-capture semantic (there is no "staged but uncommitted"
+  // distinction from the handler's perspective).
+  const status = vcs.status({ porcelain: true });
+  // Bidirectional path-containment: a status entry overlaps the requested
+  // scope when either (a) the entry is INSIDE one of the requested paths
+  // (entry.startsWith(scope)) — e.g. scope=".planning/", entry=".planning/
+  // STATE.md" — or (b) the entry IS a directory that CONTAINS one of the
+  // requested paths (scope.startsWith(entry)) — e.g. entry=".planning/" (the
+  // un-recursed untracked-directory summary git emits in default mode) and
+  // scope=".planning/STATE.md". The latter form is required because `git
+  // status --porcelain` collapses fully-untracked directories to a single
+  // `?? <dir>/` entry rather than enumerating their files.
+  const surviving = status.entries.filter(e => pathsToCommit.some(p => e.path.startsWith(p) || p.startsWith(e.path)));
+  if (surviving.length === 0) {
+    return { data: { committed: false, reason: 'nothing to commit' } };
   }
+  const stagedFiles = surviving.map(e => e.path);
 
-  // Check if anything is staged within the pathspec we're about to commit.
-  const diffResult = execGit(projectDir, ['diff', '--cached', '--name-only', '--', ...pathsToCommit]);
-  const stagedFiles = diffResult.stdout ? diffResult.stdout.split('\n').filter(Boolean) : [];
-  if (stagedFiles.length === 0) {
-    return { data: { committed: false, reason: 'nothing staged' } };
-  }
-
-  // Build commit command. The trailing `-- pathsToCommit` ensures the commit
-  // captures only files within the requested scope, even when the caller's
-  // index already had unrelated entries staged before this handler ran.
-  const commitArgs: string[] = hasAmend
-    ? ['commit', '--amend', '--no-edit']
-    : ['commit', '-m', sanitized ?? ''];
-  if (hasNoVerify) commitArgs.push('--no-verify');
-  commitArgs.push('--', ...pathsToCommit);
-
-  const commitResult = execGit(projectDir, commitArgs);
+  // WC-state-capture: vcs.commit({files}) runs `git add -A -- <files>` then
+  // `git commit -m <msg>` (no -a), capturing exactly the requested scope's
+  // WC state (#3061 — pre-staged unrelated entries do not leak in because
+  // the commit's path scope stays bound to <files>).
+  const commitResult = vcs.commit({
+    message: sanitized ?? '',
+    amend: hasAmend,
+    noVerify: hasNoVerify,
+    files: pathsToCommit,
+  });
   if (commitResult.exitCode !== 0) {
     if (commitResult.stdout.includes('nothing to commit') || commitResult.stderr.includes('nothing to commit')) {
       return { data: { committed: false, reason: 'nothing to commit' } };
@@ -175,9 +178,16 @@ export const commit: QueryHandler = async (args, projectDir, workstream) => {
     return { data: { committed: false, reason: commitResult.stderr || 'commit failed', exitCode: commitResult.exitCode } };
   }
 
-  // Get short hash
-  const hashResult = execGit(projectDir, ['rev-parse', '--short', 'HEAD']);
-  const hash = hashResult.exitCode === 0 ? hashResult.stdout : null;
+  // vcs.commit already resolves HEAD's hash (full SHA). Compute the short form
+  // for caller-facing display via vcs.refs.resolveShort.
+  let hash: string | null = null;
+  try {
+    hash = vcs.refs.resolveShort(vcs.refs.head);
+  } catch {
+    // Resolution failure (e.g. rare detached-HEAD edge cases) is non-fatal —
+    // the commit landed; surface a null hash rather than a thrown error.
+    hash = null;
+  }
 
   return { data: { committed: true, hash, message: sanitized, files: stagedFiles } };
 };
@@ -207,9 +217,11 @@ export const checkCommit: QueryHandler = async (_args, projectDir, workstream) =
     // No config — default to allowing commits
   }
 
-  // Check staged files
-  const diffResult = execGit(projectDir, ['diff', '--cached', '--name-only']);
-  const stagedFiles = diffResult.stdout ? diffResult.stdout.split('\n').filter(Boolean) : [];
+  // Check staged files via the VcsAdapter (Plan 02-08 W5 — prescriptive).
+  // B-08: respect sticky `vcs.adapter` config — no `kind` override here.
+  const vcs = createVcsAdapter(projectDir);
+  const diffResult = vcs.diff({ staged: true, nameOnly: true });
+  const stagedFiles = diffResult.nameOnly;
 
   if (!commitDocs) {
     // If commit_docs is false, check if any .planning/ files are staged
@@ -289,28 +301,35 @@ export const commitToSubrepo: QueryHandler = async (args, projectDir, workstream
     }
 
     const fileArgs = files.length > 0 ? files : ['.'];
-    // The `--` separator keeps any path that starts with `-` from being
-    // interpreted as a git option (e.g. a file literally named `-A`).
-    const addResult = spawnSync('git', ['-C', projectDir, 'add', '--', ...fileArgs], { stdio: 'pipe', encoding: 'utf-8' });
-    if (addResult.status !== 0) {
-      return { data: { committed: false, reason: addResult.stderr || 'git add failed' } };
-    }
-
-    // Pathspec on the commit keeps the scope identical to what was just staged,
-    // so any pre-staged external changes do not leak in (#3061).
-    const commitResult = spawnSync(
-      'git', ['-C', projectDir, 'commit', '-m', sanitized, '--', ...fileArgs],
-      { stdio: 'pipe', encoding: 'utf-8' },
-    );
-    if (commitResult.status !== 0) {
+    // Plan 02-08 / 2.1-04: the pre-migration form `git -C <dir> …` becomes a
+    // per-call adapter rooted at the sub-repo (cwd-via-factory pattern). The
+    // `--` separator that protected against option-injection now lives inside
+    // vcs.commit's WC-state-capture implementation (`git add -A -- <files>`).
+    // The upstream `vcs.stage` call is gone — D-02 + D-04 collapse stage +
+    // commit into a single `vcs.commit({files})` call that captures the WC
+    // state of the requested paths. `files: fileArgs` keeps the scope
+    // identical to the requested paths so pre-staged external changes do not
+    // leak in (#3061).
+    // B-08: respect sticky `vcs.adapter` config — no `kind` override here.
+    const subVcs = createVcsAdapter(projectDir);
+    const commitResult = subVcs.commit({
+      message: sanitized,
+      files: fileArgs,
+    });
+    if (commitResult.exitCode !== 0) {
       return { data: { committed: false, reason: commitResult.stderr || 'commit failed' } };
     }
 
-    const hashResult = spawnSync(
-      'git', ['-C', projectDir, 'rev-parse', '--short', 'HEAD'],
-      { encoding: 'utf-8' },
-    );
-    const hash = hashResult.stdout.trim();
+    let hash: string;
+    try {
+      hash = subVcs.refs.resolveShort(subVcs.refs.head);
+    } catch {
+      // Mirror the pre-migration spawnSync shape: if rev-parse fails, surface
+      // an empty string (the original `hashResult.stdout.trim()` on a failed
+      // spawn would also yield ''). Callers treat empty-string hash as "set
+      // but unknown" — non-fatal.
+      hash = '';
+    }
     return { data: { committed: true, hash, message: sanitized } };
   } catch (err) {
     return { data: { committed: false, reason: String(err) } };

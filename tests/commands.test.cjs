@@ -8,7 +8,6 @@
 
 const { test, describe, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
-const { execSync } = require('node:child_process');
 const fs = require('fs');
 const path = require('path');
 const { runGsdTools, createTempProject, cleanup } = require('./helpers.cjs');
@@ -1130,7 +1129,11 @@ describe('resolve-model command', () => {
 
 describe('commit command', () => {
   const { createTempGitProject } = require('./helpers.cjs');
-  const { execSync } = require('child_process');
+  // Plan 02-09 D-06 paired retarget: tests in this describe block use the
+  // VcsAdapter (createVcsAdapter scoped to tmpDir) for setup AND post-state
+  // probes. The previous file-level execSync require is gone; the adapter
+  // surface (vcs.stage / vcs.commit / vcs.log) is the contract path.
+  const { createVcsAdapter } = require('../sdk/dist-cjs/vcs/index.js');
   let tmpDir;
 
   beforeEach(() => {
@@ -1159,8 +1162,10 @@ describe('commit command', () => {
   test('skips when .planning is gitignored', () => {
     // Add .planning/ to .gitignore and commit it so git recognizes the ignore
     fs.writeFileSync(path.join(tmpDir, '.gitignore'), '.planning/\n');
-    execSync('git add .gitignore', { cwd: tmpDir, stdio: 'pipe' });
-    execSync('git commit -m "add gitignore"', { cwd: tmpDir, stdio: 'pipe' });
+    const vcs = createVcsAdapter(tmpDir, { kind: 'git' });
+    // Plan 2.1-04: vcs.commit({files}) captures WC state via `git add -A --
+    // <files>` then `git commit -m`; the upstream stage is no longer required.
+    vcs.commit({ message: 'add gitignore', files: ['.gitignore'] });
 
     const result = runGsdTools('commit "test message"', tmpDir);
     assert.ok(result.success, `Command failed: ${result.error}`);
@@ -1192,17 +1197,23 @@ describe('commit command', () => {
     assert.ok(output.hash, 'should have a commit hash');
     assert.strictEqual(output.reason, 'committed');
 
-    // Verify via git log
-    const gitLog = execSync('git log --oneline -1', { cwd: tmpDir, encoding: 'utf-8' }).trim();
-    assert.ok(gitLog.includes('test: add test file'), 'git log should contain the commit message');
-    assert.ok(gitLog.includes(output.hash), 'git log should contain the returned hash');
+    // Verify via vcs.log post-state probe (D-06): the adapter's log entry
+    // exposes hash + subject; the prior `git log --oneline -1` shape combined
+    // those into a single line. Reconstruct the contains() check on the
+    // structured fields so the assertion is byte-identical to the prior shape.
+    const probeVcs = createVcsAdapter(tmpDir, { kind: 'git' });
+    const head = probeVcs.log({ maxCount: 1 })[0];
+    const oneline = `${head.hash.slice(0, 7)} ${head.subject}`;
+    assert.ok(oneline.includes('test: add test file'), 'log entry should contain the commit message');
+    assert.ok(oneline.includes(output.hash), 'log entry should contain the returned hash');
   });
 
   test('amend mode works without crashing', () => {
     // Create a file and commit it first
     fs.writeFileSync(path.join(tmpDir, '.planning', 'amend-file.md'), '# Initial\n');
-    execSync('git add .planning/amend-file.md', { cwd: tmpDir, stdio: 'pipe' });
-    execSync('git commit -m "initial file"', { cwd: tmpDir, stdio: 'pipe' });
+    const vcs = createVcsAdapter(tmpDir, { kind: 'git' });
+    // Plan 2.1-04: vcs.commit({files}) captures WC state; upstream stage gone.
+    vcs.commit({ message: 'initial file', files: ['.planning/amend-file.md'] });
 
     // Modify the file and amend
     fs.writeFileSync(path.join(tmpDir, '.planning', 'amend-file.md'), '# Amended\n');
@@ -1214,7 +1225,8 @@ describe('commit command', () => {
     assert.strictEqual(output.committed, true, 'amend should succeed');
 
     // Verify only 2 commits total (initial setup + amended)
-    const logCount = execSync('git log --oneline', { cwd: tmpDir, encoding: 'utf-8' }).trim().split('\n').length;
+    // Post-state probe via vcs.refs.countCommits replaces `git log --oneline | wc -l`.
+    const logCount = vcs.refs.countCommits({ rev: vcs.refs.head });
     assert.strictEqual(logCount, 2, 'should have 2 commits (initial + amended)');
   });
   test('creates strategy branch before first commit when branching_strategy is milestone', () => {
@@ -1598,33 +1610,47 @@ describe('stats command', () => {
   });
 
   test('reports git commit count and first commit date from repository history', () => {
-    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
-    execSync('git config user.email "test@example.com"', { cwd: tmpDir, stdio: 'pipe' });
-    execSync('git config user.name "Test User"', { cwd: tmpDir, stdio: 'pipe' });
+    // Plan 02-09 D-06 paired retarget: bootstrap via vcs.gitOnly.init/configSet
+    // (the gap-fill verbs from plan 02-03). Phase 2 D-03 gpgsign disablers
+    // preserved (commit.gpgsign / tag.gpgsign — without them gpg-signing hosts
+    // fail the bare `git commit` setup with "No secret key"). The two commits
+    // pin GIT_AUTHOR_DATE to assert the date-extraction path in cmdStats.
+    // Adapter has no env-injection seam for per-commit dates, so the dated
+    // commits stay on raw execSync (allowlisted via the gpgsign disabler
+    // pattern from plan 02-01); they are scope-narrowed to this single test.
+    const { createVcsAdapter } = require('../sdk/dist-cjs/vcs/index.js');
+    const vcs = createVcsAdapter(tmpDir, { kind: 'git' });
+    if (vcs.kind === 'git') {
+      vcs.gitOnly.init();
+      vcs.gitOnly.configSet('user.email', 'test@example.com');
+      vcs.gitOnly.configSet('user.name', 'Test User');
+      vcs.gitOnly.configSet('commit.gpgsign', 'false');
+      vcs.gitOnly.configSet('tag.gpgsign', 'false');
+    }
 
     fs.writeFileSync(path.join(tmpDir, '.planning', 'PROJECT.md'), '# Project\n');
-    execSync('git add -A', { cwd: tmpDir, stdio: 'pipe' });
-    execSync('git commit -m "initial commit"', {
-      cwd: tmpDir,
-      stdio: 'pipe',
-      env: {
-        ...process.env,
-        GIT_AUTHOR_DATE: '2026-01-01T00:00:00Z',
-        GIT_COMMITTER_DATE: '2026-01-01T00:00:00Z',
-      },
-    });
+    // Date-pinned commits via process.env injection: VcsAdapter.commit() has
+    // no per-call env seam, so we mutate process.env in a try/finally pair
+    // around vcs.commit (the adapter inherits process.env when spawning git).
+    // Restoring the prior values after each commit keeps sibling tests' dates
+    // clean. Plan 2.1-04: vcs.commit({files}) captures WC state directly so
+    // the upstream vcs.stage call is unnecessary.
+    const dateCommit = (relPath, isoDate, message) => {
+      const prevAuthor = process.env.GIT_AUTHOR_DATE;
+      const prevCommitter = process.env.GIT_COMMITTER_DATE;
+      process.env.GIT_AUTHOR_DATE = isoDate;
+      process.env.GIT_COMMITTER_DATE = isoDate;
+      try {
+        vcs.commit({ message, files: [relPath] });
+      } finally {
+        if (prevAuthor === undefined) delete process.env.GIT_AUTHOR_DATE; else process.env.GIT_AUTHOR_DATE = prevAuthor;
+        if (prevCommitter === undefined) delete process.env.GIT_COMMITTER_DATE; else process.env.GIT_COMMITTER_DATE = prevCommitter;
+      }
+    };
+    dateCommit('.planning/PROJECT.md', '2026-01-01T00:00:00Z', 'initial commit');
 
     fs.writeFileSync(path.join(tmpDir, 'README.md'), '# Updated\n');
-    execSync('git add README.md', { cwd: tmpDir, stdio: 'pipe' });
-    execSync('git commit -m "second commit"', {
-      cwd: tmpDir,
-      stdio: 'pipe',
-      env: {
-        ...process.env,
-        GIT_AUTHOR_DATE: '2026-02-01T00:00:00Z',
-        GIT_COMMITTER_DATE: '2026-02-01T00:00:00Z',
-      },
-    });
+    dateCommit('README.md', '2026-02-01T00:00:00Z', 'second commit');
 
     const result = runGsdTools('stats', tmpDir);
     assert.ok(result.success, `Command failed: ${result.error}`);
@@ -1763,6 +1789,10 @@ describe('stats command', () => {
 
 describe('check-commit command', () => {
   const { createTempGitProject } = require('./helpers.cjs');
+  // Plan 02-09 D-06 paired retarget: check-commit verifies the new vcs.diff
+  // probe path. Plan 2.1-04 (D-03): the vcs.stage adapter verb is gone, so
+  // pre-staging is synthesized via raw `git add` (this file is on the
+  // no-raw-git lint allowlist for tests/**/*.test.cjs).
   let tmpDir;
 
   beforeEach(() => {
@@ -1789,9 +1819,11 @@ describe('check-commit command', () => {
       path.join(tmpDir, '.planning', 'config.json'),
       JSON.stringify({ commit_docs: false })
     );
-    // Stage a non-planning file
+    // Stage a non-planning file. Plan 2.1-04 (D-03): vcs.stage is gone; use
+    // raw git here — this file is on the no-raw-git lint allowlist for tests.
+    const { execFileSync } = require('child_process');
     fs.writeFileSync(path.join(tmpDir, 'src.js'), 'console.log("hi")');
-    execSync('git add src.js', { cwd: tmpDir, stdio: 'pipe' });
+    execFileSync('git', ['add', '--', 'src.js'], { cwd: tmpDir, stdio: 'pipe' });
 
     const result = runGsdTools('check-commit', tmpDir);
     assert.ok(result.success, `Command failed: ${result.error}`);
@@ -1805,7 +1837,9 @@ describe('check-commit command', () => {
       JSON.stringify({ commit_docs: false })
     );
     fs.writeFileSync(path.join(tmpDir, '.planning', 'STATE.md'), '# State');
-    execSync('git add .planning/STATE.md', { cwd: tmpDir, stdio: 'pipe' });
+    // Plan 2.1-04 (D-03): vcs.stage is gone; raw git is lint-allowed here.
+    const { execFileSync } = require('child_process');
+    execFileSync('git', ['add', '--', '.planning/STATE.md'], { cwd: tmpDir, stdio: 'pipe' });
 
     const result = runGsdTools('check-commit', tmpDir);
     assert.ok(!result.success, 'should block commit');

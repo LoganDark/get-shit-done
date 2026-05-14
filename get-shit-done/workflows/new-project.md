@@ -117,11 +117,56 @@ All subsequent references to the project instruction file use `$INSTRUCTION_FILE
 
 **If `project_exists` is true:** Error — project already initialized. Use `/gsd:progress`.
 
-**If `has_git` is false:** Initialize git:
+**Greenfield VCS gate (ROADMAP SC #1 / #7 — Phase 6 plan 06-03):**
+
+Parse `$ARGUMENTS` for `--jj`, `--jj=native`, `--jj=colocated`, `--git`.
+
+Three signals drive the gate:
+
+- `has_git` — filesystem presence of `.git/` in the project directory. Comes from `gsd-sdk query init.new-project`.
+- `has_jj` — filesystem presence of `.jj/` in the project directory. Comes from `gsd-sdk query init.new-project` as a peer of `has_git` (Phase 6 plan 06-01).
+- `JJ_BINARY` — presence of the `jj` binary on the system `PATH`. Detected inline (no SDK extension) immediately before the matrix:
 
 ```bash
-git init
+if command -v jj >/dev/null 2>&1; then JJ_BINARY=1; else JJ_BINARY=0; fi
 ```
+
+The matrix branches on `has_git` and `has_jj`; `JJ_BINARY` is consulted only to phrase the fork-message ABORT correctly ("you have jj installed" vs. "neither jj nor git detected on this system").
+
+| `has_git` | `has_jj` | flag    | Action |
+|-----------|----------|---------|--------|
+| true      | false    | none    | **ABORT** with the fork-message (see §Fork-message below). Do not auto-detect. |
+| true      | false    | `--git` | Proceed with git backend. Emit the git-warning (see §Git-warning below). Do not touch `vcs.adapter` (Phase 3 D-17 sticky resolver default). |
+| true      | false    | `--jj`  | Run `jj git init --colocate`, set `vcs.adapter=jj` in `.planning/config.json`, proceed with jj backend. |
+| false     | true     | none    | Proceed with jj backend. Set `vcs.adapter=jj`. |
+| false     | true     | `--git` | Proceed with git backend. Emit the git-warning. No `git init` (`.git/` absent but `.jj/` present — user is in a native-jj setup; selecting git here is unusual but explicitly user-chosen). |
+| false     | true     | `--jj`  | Proceed with jj backend. Set `vcs.adapter=jj`. |
+| true      | true     | none    | Proceed with jj backend. Set `vcs.adapter=jj`. Both present — jj wins by default in this fork. |
+| true      | true     | `--git` | Proceed with git backend. Emit the git-warning. |
+| true      | true     | `--jj`  | Proceed with jj backend. Set `vcs.adapter=jj`. |
+| false     | false    | none    | **ABORT** with the fork-message (adapted to the "neither `.git/` nor `.jj/` detected" framing). Do not auto-init. |
+| false     | false    | `--git` | Run `git init`, proceed with git backend. Emit the git-warning. |
+| false     | false    | `--jj`  | Run `jj git init --colocate` (or `jj git init --no-colocate` when `--jj=native`), set `vcs.adapter=jj`, proceed with jj backend. |
+
+### §Fork-message (used for both ABORT cases)
+
+For `(has_git=true, has_jj=false, flag=none)` — i.e. `.git/` is present but `.jj/` is not, and the user passed no flag:
+
+> This fork of GSD exists for jj support. You have jj installed, but it was not detected in the project. If you want to initialize a GSD project with Git, then pass `--git`. Otherwise, run `jj git init` (or pass `--jj` to have GSD do it for you).
+
+For `(has_git=false, has_jj=false, flag=none)` — i.e. neither VCS is initialized in this directory:
+
+> This fork of GSD exists for jj support. Neither `.git/` nor `.jj/` was detected in this directory. If you want to initialize a GSD project with Git, then pass `--git`. Otherwise, run `jj git init` (or pass `--jj` to have GSD do it for you).
+
+When `JJ_BINARY=0` (jj binary not on `PATH`), adapt the opening of either message to reflect that — e.g. drop "You have jj installed" or change to "jj is not installed on this system; install it from https://jj-vcs.github.io/jj/ or pass `--git`". The substantive content — fork rationale + two-flag escape hatch — must remain in both adaptations.
+
+### §Git-warning (emitted whenever proceeding with git backend)
+
+Emit this warning to stderr (or the equivalent workflow-output channel) exactly once, immediately before the git-backend init step runs:
+
+> This fork of GSD exists for jj support. An effort was made to preserve existing git support as much as possible, but there may be new bugs that do not exist upstream. Complex workflows may exhibit unusual behavior.
+
+The 12-row matrix above is exhaustive — every `(has_git, has_jj) × {none, --git, --jj}` cell is explicit, with no `(any)` wildcards. There are two abort paths (both no-flag cases where the project's VCS intent is ambiguous), one fork-specific default (jj wins whenever `.jj/` is present), and one always-available escape hatch (`--git` is honored in every cell, always with the git-warning). This preserves the ROADMAP SC #1 / #7 anchor — no silent `git init` fallback, and the migration boundary (`/gsd-migrate-vcs`) remains invisible-default-free.
 
 ## 2. Brownfield Offer
 

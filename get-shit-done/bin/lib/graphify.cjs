@@ -2,7 +2,15 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execTool, execGit, platformWriteSync } = require('./shell-command-projection.cjs');
+const { execTool, platformWriteSync } = require('./shell-command-projection.cjs');
+// Plan 02-07: graphify.cjs migrated to VcsAdapter. Sites for `rev-parse HEAD`
+// and `rev-list --count A..B` are routed through vcs.refs.resolveShort and
+// vcs.refs.countCommits({rev: expr.range(...)}) respectively. The second is
+// the first production consumer of the expr.range factory from plan 02-03.
+// `execGit` from shell-command-projection.cjs is intentionally NOT imported
+// here — see `project_no_raw_git` rule: VCS reads/writes must route through
+// the adapter so jj-colocated workspaces aren't perturbed by ambient git.
+const { createVcsAdapter, expr } = require('../../../sdk/dist-cjs/vcs/index.js');
 
 // ─── Config Gate ─────────────────────────────────────────────────────────────
 
@@ -349,25 +357,55 @@ function graphifyQuery(cwd, term, options = {}) {
 const COMMIT_HASH_RE = /^[0-9a-f]{4,40}$/i;
 
 /**
- * Read git HEAD for the project at `cwd`. Returns the full commit hash on
- * success, or null when cwd is not a git repo / `git` is not on PATH.
+ * Read git HEAD for the project at `cwd`. Returns the resolved short commit
+ * hash on success, or null when cwd is not a git repo / HEAD is unresolvable.
+ *
+ * Plan 02-07: migrated from raw `git rev-parse HEAD` to
+ * `vcs.refs.resolveShort(vcs.refs.head)`. The previous shape returned the
+ * full 40-hex SHA; the new shape returns the auto-disambiguated short SHA.
+ * The two consumers in graphifyStatus() either (a) `.slice(0, 7)` it for
+ * display (no-op for already-short SHAs) or (b) feed it to countCommitsBetween
+ * which now accepts the short SHA via expr.rev() (4-40 hex validator).
  */
 function readGitHead(cwd) {
-  const r = execGit(['rev-parse', 'HEAD'], { cwd });
-  if (r.exitCode !== 0) return null;
-  return r.stdout.trim() || null;
+  try {
+    const vcs = createVcsAdapter(cwd, { kind: 'git' });
+    const sha = vcs.refs.resolveShort(vcs.refs.head);
+    return sha.trim() || null;
+  } catch (_e) {
+    return null;
+  }
 }
 
 /**
  * Count commits between `from` and `to` (exclusive..inclusive, like
  * `git rev-list --count A..B`). Returns null when either ref is unreachable
  * or the cwd is not a git repo.
+ *
+ * Plan 02-07: migrated from raw `git rev-list --count <from>..<to>` to
+ * `vcs.refs.countCommits({rev: expr.range(expr.rev(from), expr.rev(to))})`.
+ * This is the first production consumer of the expr.range factory introduced
+ * in plan 02-03. Both `from` and `to` are runtime SHA strings (`from` validated
+ * by COMMIT_HASH_RE upstream; `to` produced by readGitHead) so they wrap via
+ * expr.rev() per D-12 (no expr.raw escape hatch).
+ *
+ * Adapter contract differs subtly from the prior raw-git: `vcs.refs.countCommits`
+ * returns 0 on non-zero exit (e.g. unreachable ref). The original returned null
+ * on non-zero exit (preserving the tri-state on commit_stale: null = "we don't
+ * know"). To preserve the "unreachable -> null" semantic for tri-state callers,
+ * we pre-validate ref existence with vcs.refs.exists before computing the count.
  */
 function countCommitsBetween(cwd, from, to) {
-  const r = execGit(['rev-list', '--count', `${from}..${to}`], { cwd });
-  if (r.exitCode !== 0) return null;
-  const n = parseInt(r.stdout.trim(), 10);
-  return Number.isFinite(n) ? n : null;
+  try {
+    const vcs = createVcsAdapter(cwd, { kind: 'git' });
+    const fromExpr = expr.rev(from);
+    const toExpr = expr.rev(to);
+    if (!vcs.refs.exists(fromExpr) || !vcs.refs.exists(toExpr)) return null;
+    const n = vcs.refs.countCommits({ rev: expr.range(fromExpr, toExpr) });
+    return Number.isFinite(n) ? n : null;
+  } catch (_e) {
+    return null;
+  }
 }
 
 /**

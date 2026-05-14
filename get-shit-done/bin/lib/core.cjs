@@ -5,7 +5,21 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execGit, platformWriteSync, platformReadSync, platformEnsureDir } = require('./shell-command-projection.cjs');
+// Phase 2 review WR-01: `execSync` / `execFileSync` / `spawnSync` from
+// `child_process` were destructured here historically but the Phase 2 CLOSING
+// migration retired the last call sites in this file. Leaving the import open
+// kept a seam for future drift to reintroduce raw-git calls that the
+// `lint-vcs-no-raw-git` scanner (string-based) might not catch. Dropped.
+// Platform file I/O comes from upstream's shell-projection seam; `execGit`
+// is intentionally NOT imported (project_no_raw_git — all VCS reads/writes
+// must route through the adapter so jj-colocated workspaces aren't perturbed
+// by ambient git).
+const { platformWriteSync, platformReadSync, platformEnsureDir } = require('./shell-command-projection.cjs');
+// Plan 02-11 (CLOSING): VcsAdapter consumption from bin/lib/*.cjs via the
+// dist-cjs bridge. core.cjs is the LARGEST hotspot (2,036 LOC) and the FINAL
+// production-source file in Phase 2's call-site migration (D-02 smallest-to-
+// largest LOC ordering).
+const { createVcsAdapter } = require('../../../sdk/dist-cjs/vcs/index.js');
 const { MODEL_PROFILES, AGENT_TO_PHASE_TYPE, VALID_PHASE_TYPES, AGENT_DEFAULT_TIERS, VALID_AGENT_TIERS, nextTier } = require('./model-profiles.cjs');
 const { MODEL_ALIAS_MAP, RUNTIME_PROFILE_MAP, KNOWN_RUNTIMES, RUNTIMES_WITH_REASONING_EFFORT } = require('./model-catalog.cjs');
 const {
@@ -590,29 +604,152 @@ const _gitIgnoredCache = new Map();
 function isGitIgnored(cwd, targetPath) {
   const key = cwd + '::' + targetPath;
   if (_gitIgnoredCache.has(key)) return _gitIgnoredCache.get(key);
-  // --no-index checks .gitignore rules regardless of whether the file is tracked.
-  // Without it, git check-ignore returns "not ignored" for tracked files even when
-  // .gitignore explicitly lists them — a common source of confusion when .planning/
-  // was committed before being added to .gitignore.
-  // Array args (via the seam) prevent shell interpretation of special characters in
-  // file paths — avoids command injection via crafted path names.
-  const result = execGit(['check-ignore', '-q', '--no-index', '--', targetPath], { cwd });
-  const ignored = result.exitCode === 0;
-  _gitIgnoredCache.set(key, ignored);
-  return ignored;
+  try {
+    // Plan 02-11: vcs.refs.isIgnored(path) wraps `git check-ignore -q --no-index --
+    // <path>`. The adapter routes through execFileSync (no shell interpretation of
+    // special chars), preserving the command-injection guard. The `--no-index` flag
+    // is preserved by the backend implementation: it checks .gitignore rules
+    // regardless of whether the file is tracked, so .planning/ committed before
+    // being added to .gitignore still reports correctly.
+    const vcs = createVcsAdapter(cwd, { kind: 'git' });
+    const ignored = vcs.refs.isIgnored(targetPath);
+    _gitIgnoredCache.set(key, ignored);
+    return ignored;
+  } catch {
+    _gitIgnoredCache.set(key, false);
+    return false;
+  }
+}
+
+// ─── Markdown normalization ─────────────────────────────────────────────────
+
+/**
+ * Normalize markdown to fix common markdownlint violations.
+ * Applied at write points so GSD-generated .planning/ files are IDE-friendly.
+ *
+ * Rules enforced:
+ *   MD022 — Blank lines around headings
+ *   MD031 — Blank lines around fenced code blocks
+ *   MD032 — Blank lines around lists
+ *   MD012 — No multiple consecutive blank lines (collapsed to 2 max)
+ *   MD047 — Files end with a single newline
+ */
+function normalizeMd(content) {
+  if (!content || typeof content !== 'string') return content;
+
+  // Normalize line endings to LF for consistent processing
+  let text = content.replace(/\r\n/g, '\n');
+
+  const lines = text.split('\n');
+  const result = [];
+
+  // Pre-compute fence state in a single O(n) pass instead of O(n^2) per-line scanning
+  const fenceRegex = /^```/;
+  const insideFence = new Array(lines.length);
+  let fenceOpen = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (fenceRegex.test(lines[i].trimEnd())) {
+      if (fenceOpen) {
+        // This is a closing fence — mark as NOT inside (it's the boundary)
+        insideFence[i] = false;
+        fenceOpen = false;
+      } else {
+        // This is an opening fence
+        insideFence[i] = false;
+        fenceOpen = true;
+      }
+    } else {
+      insideFence[i] = fenceOpen;
+    }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const prev = i > 0 ? lines[i - 1] : '';
+    const prevTrimmed = prev.trimEnd();
+    const trimmed = line.trimEnd();
+    const isFenceLine = fenceRegex.test(trimmed);
+
+    // MD022: Blank line before headings (skip first line and frontmatter delimiters)
+    if (/^#{1,6}\s/.test(trimmed) && i > 0 && prevTrimmed !== '' && prevTrimmed !== '---') {
+      result.push('');
+    }
+
+    // MD031: Blank line before fenced code blocks (opening fences only)
+    if (isFenceLine && i > 0 && prevTrimmed !== '' && !insideFence[i] && (i === 0 || !insideFence[i - 1] || isFenceLine)) {
+      // Only add blank before opening fences (not closing ones)
+      if (i === 0 || !insideFence[i - 1]) {
+        result.push('');
+      }
+    }
+
+    // MD032: Blank line before lists (- item, * item, N. item, - [ ] item)
+    if (/^(\s*[-*+]\s|\s*\d+\.\s)/.test(line) && i > 0 &&
+        prevTrimmed !== '' && !/^(\s*[-*+]\s|\s*\d+\.\s)/.test(prev) &&
+        prevTrimmed !== '---') {
+      result.push('');
+    }
+
+    result.push(line);
+
+    // MD022: Blank line after headings
+    if (/^#{1,6}\s/.test(trimmed) && i < lines.length - 1) {
+      const next = lines[i + 1];
+      if (next !== undefined && next.trimEnd() !== '') {
+        result.push('');
+      }
+    }
+
+    // MD031: Blank line after closing fenced code blocks
+    if (/^```\s*$/.test(trimmed) && i > 0 && insideFence[i - 1] && i < lines.length - 1) {
+      const next = lines[i + 1];
+      if (next !== undefined && next.trimEnd() !== '') {
+        result.push('');
+      }
+    }
+
+    // MD032: Blank line after last list item in a block
+    if (/^(\s*[-*+]\s|\s*\d+\.\s)/.test(line) && i < lines.length - 1) {
+      const next = lines[i + 1];
+      if (next !== undefined && next.trimEnd() !== '' &&
+          !/^(\s*[-*+]\s|\s*\d+\.\s)/.test(next) &&
+          !/^\s/.test(next)) {
+        // Only add blank line if next line is not a continuation/indented line
+        result.push('');
+      }
+    }
+  }
+
+  text = result.join('\n');
+
+  // MD012: Collapse 3+ consecutive blank lines to 2
+  text = text.replace(/\n{3,}/g, '\n\n');
+
+  // MD047: Ensure file ends with exactly one newline
+  text = text.replace(/\n*$/, '\n');
+
+  return text;
 }
 
 // ─── Common path helpers ──────────────────────────────────────────────────────
 
 /**
- * Resolve the main worktree root when running inside a git worktree.
- * In a linked worktree, .planning/ lives in the main worktree, not in the linked one.
- * Returns the main worktree path, or cwd if not in a worktree.
+ * Resolve the main workspace root when running inside a linked workspace
+ * (git worktree or jj workspace — terminology is backend-specific).
+ * In a linked workspace, .planning/ lives in the main workspace, not in
+ * the linked one. Returns the main workspace path, or cwd if not in a
+ * linked workspace.
+ *
+ * Backend: the adapter (vcs.workspace.context() — see VcsWorkspace in
+ * sdk/src/vcs/types.ts) determines effectiveRoot. Phase 4 plan 04-02
+ * landed real multi-workspace semantics on jj.
  */
 function resolveWorktreeRoot(cwd) {
-  // Omit execGit so worktree-safety uses its own execGitDefault — that wrapper
-  // delegates to the seam and derives the `timedOut` field that pruneResult
-  // branches on below.
+  // Plan 02-11 (CLOSING): `deps.execGit` was rendered dead by 02-04's
+  // worktree-safety migration (resolveWorktreeContext now consumes
+  // deps.vcs). The default `vcs` is constructed inside the policy module;
+  // only `existsSync` remains as a test-injectable seam.
+
   const context = resolveWorktreeContext(cwd, {
     existsSync: fs.existsSync,
   });
@@ -620,11 +757,17 @@ function resolveWorktreeRoot(cwd) {
 }
 
 /**
- * Parse `git worktree list --porcelain` output into an array of
- * { path, branch } objects.  Entries with a detached HEAD (no branch line)
- * are skipped because we cannot safely reason about their merge status.
+ * Parse worktree-porcelain output into an array of { path, branch }
+ * objects. Entries with a detached HEAD (no branch line) are skipped
+ * because we cannot safely reason about their merge status.
  *
- * @param {string} porcelain - raw output from git worktree list --porcelain
+ * Post-Phase-2 (MIGR-02 cosmetic sweep, Phase 5 plan 05-05): the source
+ * of this porcelain is `vcs.workspace.list()` via the adapter — see
+ * sdk/src/vcs/types.ts VcsWorkspace. On git the adapter shells out to
+ * `git worktree list --porcelain`; on jj it shells `jj workspace list`
+ * and normalises the shape. Callers should NOT invoke raw git directly.
+ *
+ * @param {string} porcelain - raw porcelain output (adapter-sourced)
  * @returns {{ path: string, branch: string }[]}
  */
 function parseWorktreePorcelain(porcelain) {
@@ -632,16 +775,29 @@ function parseWorktreePorcelain(porcelain) {
 }
 
 /**
- * Clear stale worktree metadata references via `git worktree prune`.
+ * Clear stale worktree metadata references via the VCS adapter's
+ * workspace.prune() verb (see sdk/src/vcs/types.ts VcsWorkspace).
+ *
+ * MIGR-02 cosmetic sweep (Phase 5 plan 05-05): the implementation here
+ * already calls into deps.vcs via planWorktreePrune/executeWorktreePrunePlan
+ * — the only remaining `git worktree`-prefixed references in this file are
+ * documentation comments + the user-facing warning string below. On git,
+ * the underlying SDK verb shells `git worktree prune`; on jj, it routes to
+ * `vcs.workspace.prune()` (a documented no-op since jj has no native prune
+ * verb — see plan 04-01 D-29).
  *
  * Destructive linked-worktree removal is disabled by default for safety.
  *
- * @param {string} repoRoot - absolute path to the main (or any) worktree of
- *   the repository; used as `cwd` for git commands.
- * @returns {string[]} list of worktree paths that were removed (always empty)
+ * @param {string} repoRoot - absolute path to the main (or any) workspace of
+ *   the repository; used as `cwd` for the adapter call.
+ * @returns {string[]} list of workspace paths that were removed (always empty)
  */
 function pruneOrphanedWorktrees(repoRoot) {
   try {
+    // Plan 02-11 (CLOSING): `deps.execGit` was rendered dead by 02-04's
+    // worktree-safety migration (planWorktreePrune / executeWorktreePrunePlan
+    // both consume deps.vcs). Only the porcelain parser remains as an
+    // injectable seam.
     const plan = planWorktreePrune(
       repoRoot,
       { allowDestructive: false },
@@ -653,8 +809,9 @@ function pruneOrphanedWorktrees(repoRoot) {
       // Uses process.stderr.write to match the [gsd-tools] WARNING prefix style.
       process.stderr.write(
         '[gsd-tools] WARNING: worktree health check degraded' +
-        ' — git worktree prune timed out after 10s.' +
-        ' Orphaned worktree metadata may remain until the next successful run.\n'
+        ' — vcs.workspace.prune() timed out after 10s.' +
+        ' Orphaned worktree metadata may remain until the next successful run.' +
+        ' To diagnose, run: gsd-sdk query worktree-list\n'
       );
     }
   } catch { /* never crash the caller */ }
@@ -1798,6 +1955,7 @@ module.exports = {
   getJsonErrorMode,
   loadConfig,
   isGitIgnored,
+  normalizeMd,
   escapeRegex,
   normalizePhaseName,
   comparePhaseNum,

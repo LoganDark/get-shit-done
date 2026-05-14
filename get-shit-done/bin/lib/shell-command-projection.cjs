@@ -372,25 +372,11 @@ function _spawnResult(result, program) {
   };
 }
 
-function execGit(args, opts = {}) {
-  // Non-interactive defaults: a hung credential prompt or terminal-input
-  // probe must surface as a timeout, not block the tool forever. Callers
-  // can override via opts.env.
-  const env = {
-    ...process.env,
-    GIT_TERMINAL_PROMPT: '0',
-    GCM_INTERACTIVE: 'never',
-    ...(opts.env || {}),
-  };
-  const result = childProcess.spawnSync('git', args, {
-    cwd: opts.cwd,
-    env,
-    encoding: 'utf-8',
-    stdio: 'pipe',
-    timeout: opts.timeout ?? 10_000,
-  });
-  return _spawnResult(result, 'git');
-}
+// jj-port: upstream's `execGit` raw-git wrapper has been removed from the
+// shell-projection seam (project_no_raw_git). All VCS reads/writes route
+// through `createVcsAdapter()`. The other shell-projection helpers
+// (`execTool`, `execNpm`, `platformWriteSync`, etc.) remain — they cover
+// non-VCS subprocess and file I/O, which the rule does not touch.
 
 function execNpm(args, opts = {}) {
   const result = childProcess.spawnSync('npm', args, {
@@ -537,7 +523,6 @@ module.exports = {
   projectPersistentPathExportActions,
   buildWindowsShimTriple,
   formatSdkPathDiagnostic,
-  execGit,
   execNpm,
   execTool,
   probeTty,

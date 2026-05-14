@@ -377,6 +377,14 @@ const INIT_COMMAND_ALIASES = [
     ],
     "subcommand": "remove-workspace",
     "mutation": false
+  },
+  {
+    "canonical": "init.migrate-vcs",
+    "aliases": [
+      "init migrate-vcs"
+    ],
+    "subcommand": "migrate-vcs",
+    "mutation": false
   }
 ];
 
@@ -554,6 +562,11 @@ const ROADMAP_COMMAND_ALIASES = [
 
 const NON_FAMILY_COMMAND_ALIASES = [
   {
+    "canonical": "branch-list",
+    "aliases": [],
+    "mutation": false
+  },
+  {
     "canonical": "check-commit",
     "aliases": [],
     "mutation": true
@@ -603,6 +616,16 @@ const NON_FAMILY_COMMAND_ALIASES = [
     "mutation": true
   },
   {
+    "canonical": "current-branch",
+    "aliases": [],
+    "mutation": false
+  },
+  {
+    "canonical": "diff",
+    "aliases": [],
+    "mutation": false
+  },
+  {
     "canonical": "docs-init",
     "aliases": [],
     "mutation": true
@@ -645,6 +668,18 @@ const NON_FAMILY_COMMAND_ALIASES = [
     "mutation": true
   },
   {
+    "canonical": "head-ref",
+    "aliases": [],
+    "mutation": false
+  },
+  {
+    "canonical": "hooks.fire",
+    "aliases": [
+      "hooks fire"
+    ],
+    "mutation": true
+  },
+  {
     "canonical": "intel.patch-meta",
     "aliases": [
       "intel patch-meta"
@@ -680,6 +715,21 @@ const NON_FAMILY_COMMAND_ALIASES = [
     "mutation": true
   },
   {
+    "canonical": "log",
+    "aliases": [],
+    "mutation": false
+  },
+  {
+    "canonical": "merge",
+    "aliases": [],
+    "mutation": true
+  },
+  {
+    "canonical": "migrate-vcs",
+    "aliases": [],
+    "mutation": true
+  },
+  {
     "canonical": "milestone.complete",
     "aliases": [
       "milestone complete"
@@ -701,6 +751,11 @@ const NON_FAMILY_COMMAND_ALIASES = [
     "mutation": false
   },
   {
+    "canonical": "push",
+    "aliases": [],
+    "mutation": true
+  },
+  {
     "canonical": "requirements.mark-complete",
     "aliases": [
       "requirements mark-complete"
@@ -708,10 +763,30 @@ const NON_FAMILY_COMMAND_ALIASES = [
     "mutation": true
   },
   {
+    "canonical": "reset",
+    "aliases": [],
+    "mutation": true
+  },
+  {
+    "canonical": "restore",
+    "aliases": [],
+    "mutation": true
+  },
+  {
+    "canonical": "revert",
+    "aliases": [],
+    "mutation": true
+  },
+  {
     "canonical": "stats.json",
     "aliases": [
       "stats json"
     ],
+    "mutation": false
+  },
+  {
+    "canonical": "status",
+    "aliases": [],
     "mutation": false
   },
   {

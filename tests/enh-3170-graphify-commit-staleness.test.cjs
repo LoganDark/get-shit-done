@@ -23,9 +23,13 @@ const { describe, test, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
 const { createTempProject, createTempGitProject, cleanup } = require('./helpers.cjs');
 const { graphifyStatus } = require('../get-shit-done/bin/lib/graphify.cjs');
+// Plan 02-07 D-06 paired retarget: gitHead and commitEmpty test helpers
+// migrated from raw child_process git invocations to VcsAdapter calls. The
+// fixture itself is still a git repo (createTempGitProject), but every git
+// touch in this test file now routes through createVcsAdapter.
+const { createVcsAdapter } = require('../sdk/dist-cjs/vcs/index.js');
 
 function enableGraphify(planningDir) {
   const cfgPath = path.join(planningDir, 'config.json');
@@ -40,12 +44,18 @@ function writeGraph(planningDir, data) {
   fs.writeFileSync(path.join(graphsDir, 'graph.json'), JSON.stringify(data, null, 2));
 }
 
+// Plan 02-07: gitHead helper used to assert that `current_commit` reflects
+// HEAD, and to seed `built_at_commit` in the graph. Tests assert the
+// adapter's resolveShort matches the value graphifyStatus returns — both
+// now flow through the same vcs.refs.resolveShort(vcs.refs.head) path.
 function gitHead(cwd) {
-  return execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf-8' }).trim();
+  const vcs = createVcsAdapter(cwd, { kind: 'git' });
+  return vcs.refs.resolveShort(vcs.refs.head).trim();
 }
 
 function commitEmpty(cwd, message) {
-  execFileSync('git', ['commit', '--allow-empty', '-m', message], { cwd, stdio: 'pipe' });
+  const vcs = createVcsAdapter(cwd, { kind: 'git' });
+  vcs.commit({ message, allowEmpty: true });
 }
 
 const SAMPLE_NODES = [

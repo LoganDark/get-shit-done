@@ -1,0 +1,23 @@
+{
+  "id": "init-runner-ts-139-init",
+  "source": "sdk/src/init-runner.ts:139",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "mode": "fresh-dir",
+    "setup": []
+  },
+  "command": "git",
+  "args": [
+    "init"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "Initialized empty Git repository in /private/var/folders/sq/v1_sd6990ysgkqvckj68qcvw0000gn/T/gsd-baseline-chyLIf/.git/",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "regex:^(Initialized|Reinitialized) (empty )?Git repository in "
+  }
+}

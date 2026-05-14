@@ -1,0 +1,32 @@
+{
+  "id": "worktree-safety-cjs-80-list-porcelain",
+  "source": "get-shit-done/bin/lib/worktree-safety.cjs:80",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": []
+  },
+  "command": "git",
+  "args": [
+    "worktree",
+    "list",
+    "--porcelain"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "worktree /private/var/folders/sq/v1_sd6990ysgkqvckj68qcvw0000gn/T/gsd-baseline-j1IFJ3\nHEAD b52702d75f65e4d5077d0bc52ed34b832674d7c4\nbranch refs/heads/master",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "regex:^worktree [^\\n]+\\nHEAD [0-9a-f]{40}\\nbranch refs/heads/[^\\n]+$"
+  }
+}

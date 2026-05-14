@@ -1,0 +1,42 @@
+{
+  "id": "graphify-cjs-384-rev-list-count-range",
+  "source": "get-shit-done/bin/lib/graphify.cjs:384",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": [
+      "echo a > a.txt",
+      "git add a.txt",
+      "git commit -m c1",
+      "echo b > b.txt",
+      "git add b.txt",
+      "git commit -m c2",
+      "echo c > c.txt",
+      "git add c.txt",
+      "git commit -m c3"
+    ]
+  },
+  "command": "git",
+  "args": [
+    "rev-list",
+    "--count",
+    "HEAD~3..HEAD"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "3",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "exact"
+  }
+}

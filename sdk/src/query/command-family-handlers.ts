@@ -29,7 +29,7 @@ import {
   initExecutePhase, initPlanPhase, initNewMilestone, initQuick,
   initIngestDocs, initResume, initVerifyWork, initPhaseOp, initTodos,
   initMilestoneOp, initMapCodebase, initNewWorkspace,
-  initListWorkspaces, initRemoveWorkspace,
+  initListWorkspaces, initRemoveWorkspace, initMigrateVcs,
 } from './init.js';
 import { initNewProject, initProgress, initManager } from './init-complex.js';
 
@@ -113,5 +113,7 @@ export const FAMILY_HANDLERS: Record<string, Readonly<Record<string, QueryHandle
     'init.new-workspace': initNewWorkspace,
     'init.list-workspaces': initListWorkspaces,
     'init.remove-workspace': initRemoveWorkspace,
+    // Phase 6 plan 06-03: pre-flight probe for /gsd-migrate-vcs.
+    'init.migrate-vcs': initMigrateVcs,
   },
 };

@@ -1,0 +1,36 @@
+{
+  "id": "progress-ts-290-rev-list-root",
+  "source": "sdk/src/query/progress.ts:290",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": [
+      "echo a > a.txt",
+      "git add a.txt",
+      "git commit -m c1"
+    ]
+  },
+  "command": "git",
+  "args": [
+    "rev-list",
+    "--max-parents=0",
+    "HEAD"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "aa66cf34896b260b39cc43e80f5ca7310de74bad",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "regex:^[0-9a-f]{40}$"
+  }
+}

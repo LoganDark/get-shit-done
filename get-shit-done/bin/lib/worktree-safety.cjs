@@ -6,27 +6,15 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execGit: execGitSeam } = require('./shell-command-projection.cjs');
-
-// Default timeout for worktree-related git subprocess calls.
-// 10 s is generous enough for normal git operations on large repos while still
-// providing a deterministic failure path when git stalls (locked index, hung
-// remote, stalled NFS mount, etc.).  Callers can override via deps.timeout.
-const DEFAULT_GIT_TIMEOUT_MS = 10000;
-
-/**
- * Execute a git command via the shell-projection seam, with a derived
- * `timedOut` field. Tests inject mocks via deps.execGit using the new
- * (args, opts) shape — see worktree-safety-policy.test.cjs.
- *
- * Return shape: { exitCode, stdout, stderr, timedOut, error, signal }
- *   - timedOut: true when spawnSync reports SIGTERM + ETIMEDOUT
- */
-function execGitDefault(args, opts = {}) {
-  const result = execGitSeam(args, { ...opts, timeout: opts.timeout ?? DEFAULT_GIT_TIMEOUT_MS });
-  const timedOut = result.signal === 'SIGTERM' && result.error?.code === 'ETIMEDOUT';
-  return { ...result, timedOut };
-}
+// Plan 02-04 Task 1 (D-01 smoke-test): consume Phase 1's already-shipped
+// porcelain parser via the dist-cjs bridge from bin/lib/*.cjs.
+const { readWorktreeList: readPorcelainFromSdk } = require('../../../sdk/dist-cjs/vcs/parse/worktree-list.js');
+// Plan 02-04 Task 2: createVcsAdapter is the canonical entry point for
+// workspace.context (lines 122/123 migration) and workspace.prune (line 198
+// migration). ADR-0004 worktree seam is preserved via the deps = {} parameter
+// on readWorktreeList and resolveWorktreeContext: tests inject a fake vcs via
+// deps.vcs the same way they previously injected deps.execGit.
+const { createVcsAdapter } = require('../../../sdk/dist-cjs/vcs/index.js');
 
 function parseWorktreePorcelain(porcelain) {
   return parseWorktreeEntries(porcelain).filter((entry) => entry.branch).map((entry) => ({
@@ -56,41 +44,34 @@ function parseWorktreeListPaths(porcelain) {
 }
 
 function readWorktreeList(repoRoot, deps = {}) {
-  const execGit = deps.execGit || execGitDefault;
-  const listResult = execGit(['worktree', 'list', '--porcelain'], { cwd: repoRoot });
-  if (listResult.timedOut) {
-    // AC2 / AC4: surface timeout as a distinct reason so callers can emit a
-    // structured warning rather than silently treating the failure as a generic
-    // list error (PRED.k302 — error-swallowing-empty-sentinel).
-    return {
-      ok: false,
-      reason: 'git_timed_out',
-      porcelain: '',
-      entries: [],
-    };
+  // Plan 02-04 Tasks 1+2: consume Phase 1's already-shipped porcelain parser.
+  // ADR-0004 seam preserved (W4): deps = {} signature unchanged; tests can
+  // inject a fake adapter via deps.vcs whose workspace.list() returns the
+  // structured shape this function expects, OR provide deps.readPorcelain to
+  // override the porcelain reader directly (mirrors bug-3281 timeout mocks).
+  const readPorcelain = deps.readPorcelain || readPorcelainFromSdk;
+  const result = readPorcelain(repoRoot);
+  if (!result.ok) {
+    return { ok: false, reason: result.reason, porcelain: '', entries: [] };
   }
-  if (listResult.exitCode !== 0) {
-    const stderr = String(listResult.stderr || '');
-    return {
-      ok: false,
-      reason: /not a git repository|not a git repo/i.test(stderr)
-        ? 'not_a_git_repo'
-        : 'git_list_failed',
-      porcelain: '',
-      entries: [],
-    };
-  }
-
   return {
     ok: true,
     reason: 'ok',
-    porcelain: listResult.stdout,
-    entries: parseWorktreeEntries(listResult.stdout),
+    porcelain: result.porcelain,
+    entries: parseWorktreeEntries(result.porcelain),
   };
 }
 
 function resolveWorktreeContext(cwd, deps = {}) {
-  const execGit = deps.execGit || execGitDefault;
+  // Plan 02-04 Task 2: vcs.workspace.context() previously returned gitDir /
+  // gitCommonDir as path strings. Phase 2.1 D-18 moved those to GitOnlyOps:
+  // consumers now narrow on `vcs.kind === 'git'` and call
+  // vcs.gitOnly.gitDir() / vcs.gitOnly.gitCommonDir(). ADR-0004 seam preserved
+  // (W4): deps = {} signature unchanged; deps.vcs supersedes the prior
+  // deps.execGit. The narrow always succeeds at runtime because
+  // createVcsAdapter is pinned to kind:'git'; it exists for static
+  // type-checking against the VcsAdapter discriminated union.
+  const vcs = deps.vcs || createVcsAdapter(cwd, { kind: 'git' });
   const existsSync = deps.existsSync || fs.existsSync;
 
   // Local .planning takes precedence over linked-worktree remapping.
@@ -102,9 +83,16 @@ function resolveWorktreeContext(cwd, deps = {}) {
     };
   }
 
-  const gitDir = execGit(['rev-parse', '--git-dir'], { cwd });
-  const commonDir = execGit(['rev-parse', '--git-common-dir'], { cwd });
-  if (gitDir.exitCode !== 0 || commonDir.exitCode !== 0) {
+  try {
+    // 2.1 D-18: workspace.context() is called to surface the not-a-repo error
+    // path (formerly via gitDir/gitCommonDir rev-parse failure). The returned
+    // ctx is no longer needed for gitDir/gitCommonDir; only its throw behavior
+    // gates the not_git_repo short-circuit below.
+    vcs.workspace.context();
+  } catch {
+    // workspace.context() throws on non-repo cwd or when its underlying
+    // rev-parse calls fail (incl. timeout). Mirrors the prior `exitCode !== 0`
+    // fallback that returned `not_git_repo`.
     return {
       effectiveRoot: cwd,
       mode: 'current_directory',
@@ -112,14 +100,19 @@ function resolveWorktreeContext(cwd, deps = {}) {
     };
   }
 
-  const gitDirResolved = path.resolve(cwd, gitDir.stdout);
-  const commonDirResolved = path.resolve(cwd, commonDir.stdout);
-  if (gitDirResolved !== commonDirResolved) {
-    return {
-      effectiveRoot: path.dirname(commonDirResolved),
-      mode: 'linked_worktree_root',
-      reason: 'linked_worktree',
-    };
+  // 2.1 D-18: WorkspaceContext.{gitDir,gitCommonDir} moved to GitOnlyOps;
+  // narrow on vcs.kind === 'git' to access. The narrow is statically required
+  // and always succeeds at runtime (createVcsAdapter pinned to kind:'git').
+  if (vcs.kind === 'git') {
+    const gitDir = vcs.gitOnly.gitDir();
+    const gitCommonDir = vcs.gitOnly.gitCommonDir();
+    if (gitDir !== gitCommonDir) {
+      return {
+        effectiveRoot: path.dirname(gitCommonDir),
+        mode: 'linked_worktree_root',
+        reason: 'linked_worktree',
+      };
+    }
   }
 
   return {
@@ -159,7 +152,6 @@ function planWorktreePrune(repoRoot, options = {}, deps = {}) {
 }
 
 function executeWorktreePrunePlan(plan, deps = {}) {
-  const execGit = deps.execGit || execGitDefault;
   if (!plan || plan.action === 'skip') {
     return {
       ok: false,
@@ -178,7 +170,11 @@ function executeWorktreePrunePlan(plan, deps = {}) {
     };
   }
 
-  const result = execGit(['worktree', 'prune'], { cwd: plan.repoRoot });
+  // Plan 02-04 Task 2: vcs.workspace.prune() runs `git worktree prune`. The
+  // returned ExecResult preserves timedOut as a first-class field for the
+  // bug-3281 AC4 contract (caller must distinguish timeout from generic fail).
+  const vcs = deps.vcs || createVcsAdapter(plan.repoRoot, { kind: 'git' });
+  const result = vcs.workspace.prune();
   if (result.timedOut) {
     // AC4: surface timedOut as a first-class field so callers (e.g.
     // pruneOrphanedWorktrees in core.cjs) can log a structured WARNING rather
@@ -259,7 +255,9 @@ function snapshotWorktreeInventory(repoRoot, options = {}, deps = {}) {
   const statSync = deps.statSync || fs.statSync;
   const staleAfterMs = options.staleAfterMs ?? (60 * 60 * 1000);
   const nowMs = options.nowMs ?? Date.now();
-  const listed = listLinkedWorktreePaths(repoRoot, { execGit: deps.execGit || execGitDefault });
+  // Plan 02-04 Task 2: pass deps through verbatim so deps.vcs / deps.readPorcelain
+  // injection reaches the underlying readWorktreeList.
+  const listed = listLinkedWorktreePaths(repoRoot, deps);
   if (!listed.ok) {
     return {
       ok: false,
@@ -381,130 +379,34 @@ function planWorktreeWaveCleanup(repoRoot, manifest) {
   };
 }
 
-function gitResultOk(result) {
-  return result && result.exitCode === 0 && !result.timedOut;
-}
-
-function executeWorktreeWaveCleanupPlan(plan, deps = {}) {
-  const execGit = deps.execGit || execGitDefault;
+// jj-port placeholder: upstream's wave-cleanup executor shells out to seven
+// raw-git verbs (rev-parse, merge-base, diff --diff-filter=D, status -C,
+// merge --no-ff, worktree remove --force, branch -D). The jj-port rule is
+// "no raw git anywhere" (project_no_raw_git), so the executor is stubbed
+// until the VcsAdapter grows the needed verbs.
+//
+// To unblock this hook, the SDK adapter must add (in sdk/src/vcs/types.ts +
+// both git and jj backends):
+//   - refs.bookmarks.currentIn(cwd)             // -C <wt> rev-parse --abbrev-ref HEAD
+//   - refs.mergeBase(a, b)                      // merge-base HEAD <branch>
+//   - diff({ rev: <range>, diffFilter: 'D', nameOnly: true })  // deletions in branch
+//   - status({ porcelain: true, cwd: <wt> })    // -C <wt> status --porcelain
+//   - workspace.merge({ branch, message, ff: false })          // merge --no-ff -m
+//   - workspace.remove(path, { force: true })   // worktree remove --force
+//   - refs.bookmarks.delete(branch, { force: true })           // branch -D
+//
+// Once those land, restore the executor body from upstream (see git history
+// for the original shape) translated to adapter calls. The plan layer
+// (normalizeCleanupManifest / planWorktreeWaveCleanup) is pure logic and
+// stays unchanged — it's the executor that needs adapter wiring.
+function executeWorktreeWaveCleanupPlan(plan, _deps = {}) {
   const entries = Array.isArray(plan?.entries) ? plan.entries : [];
-  if (!plan || plan.action !== 'cleanup_wave' || entries.length === 0) {
-    return {
-      ok: false,
-      action: plan ? plan.action : 'skip',
-      reason: plan ? (plan.reason || 'missing_entries') : 'missing_plan',
-      entries: [],
-      pending: entries,
-    };
-  }
-
-  const results = [];
-  const pending = [];
-  let ok = true;
-
-  for (let i = 0; i < entries.length; i += 1) {
-    const entry = entries[i];
-    const result = {
-      ...entry,
-      status: 'pending',
-      reason: null,
-      stderr: '',
-    };
-
-    const branchCheck = execGit(['-C', entry.worktree_path, 'rev-parse', '--abbrev-ref', 'HEAD'], { cwd: plan.repoRoot });
-    if (!gitResultOk(branchCheck) || branchCheck.stdout.trim() !== entry.branch) {
-      result.status = 'blocked';
-      result.reason = 'branch_mismatch';
-      result.stderr = branchCheck?.stderr || '';
-      results.push(result);
-      pending.push(...entries.slice(i + 1));
-      ok = false;
-      break;
-    }
-
-    const mergeBase = execGit(['merge-base', 'HEAD', entry.branch], { cwd: plan.repoRoot });
-    if (!gitResultOk(mergeBase) || mergeBase.stdout.trim() !== entry.expected_base) {
-      result.status = 'blocked';
-      result.reason = 'base_mismatch';
-      result.stderr = mergeBase?.stderr || '';
-      results.push(result);
-      pending.push(...entries.slice(i + 1));
-      ok = false;
-      break;
-    }
-
-    const deletions = execGit(['diff', '--diff-filter=D', '--name-only', `HEAD...${entry.branch}`], { cwd: plan.repoRoot });
-    if (!gitResultOk(deletions)) {
-      result.status = 'blocked';
-      result.reason = 'deletion_check_failed';
-      result.stderr = deletions?.stderr || '';
-      results.push(result);
-      pending.push(...entries.slice(i + 1));
-      ok = false;
-      break;
-    }
-    if (deletions.stdout) {
-      result.status = 'blocked';
-      result.reason = 'branch_contains_deletions';
-      result.stderr = deletions.stdout;
-      results.push(result);
-      pending.push(...entries.slice(i + 1));
-      ok = false;
-      break;
-    }
-
-    const worktreeStatus = execGit(['-C', entry.worktree_path, 'status', '--porcelain', '--untracked-files=all'], { cwd: plan.repoRoot });
-    if (!gitResultOk(worktreeStatus) || worktreeStatus.stdout) {
-      result.status = 'blocked';
-      result.reason = 'worktree_dirty';
-      result.stderr = worktreeStatus?.stdout || worktreeStatus?.stderr || '';
-      results.push(result);
-      pending.push(...entries.slice(i + 1));
-      ok = false;
-      break;
-    }
-
-    const merge = execGit(['merge', entry.branch, '--no-ff', '--no-edit', '-m', `chore: merge executor worktree (${entry.branch})`], { cwd: plan.repoRoot });
-    if (!gitResultOk(merge)) {
-      result.status = 'blocked';
-      result.reason = 'merge_failed';
-      result.stderr = merge?.stderr || merge?.stdout || '';
-      results.push(result);
-      pending.push(...entries.slice(i + 1));
-      ok = false;
-      break;
-    }
-
-    const remove = execGit(['worktree', 'remove', entry.worktree_path, '--force'], { cwd: plan.repoRoot });
-    if (!gitResultOk(remove)) {
-      result.status = 'blocked';
-      result.reason = 'worktree_remove_failed';
-      result.stderr = remove?.stderr || '';
-      results.push(result);
-      pending.push(...entries.slice(i + 1));
-      ok = false;
-      break;
-    }
-
-    const branchDelete = execGit(['branch', '-D', entry.branch], { cwd: plan.repoRoot });
-    if (!gitResultOk(branchDelete)) {
-      result.status = 'warning';
-      result.reason = 'branch_delete_failed';
-      result.stderr = branchDelete?.stderr || '';
-      ok = false;
-    } else {
-      result.status = 'merged_removed';
-      result.reason = 'ok';
-    }
-    results.push(result);
-  }
-
   return {
-    ok,
-    action: plan.action,
-    reason: ok ? 'ok' : 'cleanup_blocked',
-    entries: results,
-    pending,
+    ok: false,
+    action: plan ? plan.action : 'skip',
+    reason: 'not_implemented_in_jj_port',
+    entries: [],
+    pending: entries,
   };
 }
 
@@ -558,6 +460,14 @@ module.exports = {
   snapshotWorktreeInventory,
   normalizeCleanupManifest,
   planWorktreeWaveCleanup,
+  // executeWorktreeWaveCleanupPlan is a jj-port placeholder — it returns
+  // {ok:false, reason:'not_implemented_in_jj_port'} until the VcsAdapter
+  // grows the seven verbs the upstream executor needs (see comment block
+  // above the stub for the required adapter surface).
   executeWorktreeWaveCleanupPlan,
   cmdWorktreeCleanupWave,
+  // [Rule 3 — Plan 01-03]: exposed for VcsAdapter.workspace.list (RESEARCH Pitfall 5).
+  // ADR-0004 names this module as the canonical owner of `git worktree` porcelain
+  // parsing; the VCS adapter consumes via DI rather than duplicating the parser.
+  readWorktreeList,
 };

@@ -21,4 +21,6 @@ export const INIT_COMMAND_MANIFEST: readonly CommandManifestEntry[] = [
   { family: 'init', canonical: 'init.new-workspace', aliases: ['init new-workspace'], mutation: false, outputMode: 'json' },
   { family: 'init', canonical: 'init.list-workspaces', aliases: ['init list-workspaces'], mutation: false, outputMode: 'json' },
   { family: 'init', canonical: 'init.remove-workspace', aliases: ['init remove-workspace'], mutation: false, outputMode: 'json' },
+  // Phase 6 plan 06-03: pre-flight probe for /gsd-migrate-vcs workflow markdown.
+  { family: 'init', canonical: 'init.migrate-vcs', aliases: ['init migrate-vcs'], mutation: false, outputMode: 'json' },
 ] as const;

@@ -1,0 +1,35 @@
+{
+  "id": "commands-cjs-994-diff-cached",
+  "source": "get-shit-done/bin/lib/commands.cjs:994",
+  "captured_at": "2026-05-09",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": [
+      "echo a > a.txt",
+      "git add a.txt"
+    ]
+  },
+  "command": "git",
+  "args": [
+    "diff",
+    "--cached",
+    "--name-only"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "a.txt",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "exact"
+  }
+}

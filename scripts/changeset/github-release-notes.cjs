@@ -30,7 +30,11 @@ const REMOVED_GROUPS = [
 ];
 
 function runGit(repo, args) {
-  return cp.execFileSync('git', args, {
+  // jj-port: dev-only changeset tooling for cutting upstream releases. The
+  // fork does not publish releases, so this never runs during workflow
+  // execution. Migrate to createVcsAdapter().refs.exists / .diff when/if
+  // the fork starts producing its own release notes.
+  return cp.execFileSync('git', args, { // vcs-lint:allow-git-here dev-only changeset tooling — never runs in fork workflow
     cwd: repo,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],

@@ -40,6 +40,26 @@ export const NON_FAMILY_COMMAND_MANIFEST: readonly NonFamilyCommandManifestEntry
 
   { canonical: 'task.is-behavior-adding', aliases: ['task is-behavior-adding'], mutation: false, outputMode: 'json' },
 
+  // Phase 4 plan 06 D-08: fireHook bridge for workflow markdown rewrites in Phase 5.
+  // `mutation: true` because firing a hook can have arbitrary side effects.
+  { canonical: 'hooks.fire', aliases: ['hooks fire'], mutation: true, outputMode: 'json' },
+
+  // Phase 5 plan 05-01 Task 3 (D-33 batch 1): 11 new VCS command verbs.
+  { canonical: 'push',           aliases: [], mutation: true,  outputMode: 'json' },
+  { canonical: 'reset',          aliases: [], mutation: true,  outputMode: 'json' },
+  { canonical: 'revert',         aliases: [], mutation: true,  outputMode: 'json' },
+  { canonical: 'log',            aliases: [], mutation: false, outputMode: 'json' },
+  { canonical: 'status',         aliases: [], mutation: false, outputMode: 'json' },
+  { canonical: 'diff',           aliases: [], mutation: false, outputMode: 'json' },
+  { canonical: 'branch-list',    aliases: [], mutation: false, outputMode: 'json' },
+  { canonical: 'head-ref',       aliases: [], mutation: false, outputMode: 'json' },
+  { canonical: 'current-branch', aliases: [], mutation: false, outputMode: 'json' },
+  { canonical: 'merge',          aliases: [], mutation: true,  outputMode: 'json' },
+  { canonical: 'restore',        aliases: [], mutation: true,  outputMode: 'json' },
+
+  // Phase 6 plan 06-03: bidirectional VCS migration command.
+  { canonical: 'migrate-vcs',    aliases: [], mutation: true,  outputMode: 'json' },
+
   { canonical: 'todo.match-phase', aliases: ['todo match-phase'], mutation: false, outputMode: 'json' },
 
   { canonical: 'uat.render-checkpoint', aliases: ['uat render-checkpoint'], mutation: false, outputMode: 'json' },

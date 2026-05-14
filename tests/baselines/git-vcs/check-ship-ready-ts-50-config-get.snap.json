@@ -1,0 +1,34 @@
+{
+  "id": "check-ship-ready-ts-50-config-get",
+  "source": "sdk/src/query/check-ship-ready.ts:50",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": [
+      "git config branch.main.merge refs/heads/main"
+    ]
+  },
+  "command": "git",
+  "args": [
+    "config",
+    "--get",
+    "branch.main.merge"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "refs/heads/main",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "exact"
+  }
+}

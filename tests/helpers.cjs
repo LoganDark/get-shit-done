@@ -87,18 +87,40 @@ function createTempGitProject(prefix = 'gsd-test-') {
   const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), prefix));
   fs.mkdirSync(path.join(tmpDir, '.planning', 'phases'), { recursive: true });
 
-  execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
-  execSync('git config user.email "test@test.com"', { cwd: tmpDir, stdio: 'pipe' });
-  execSync('git config user.name "Test"', { cwd: tmpDir, stdio: 'pipe' });
-  execSync('git config commit.gpgsign false', { cwd: tmpDir, stdio: 'pipe' });
+  // Phase 2 D-09 closing migration (plan 02-03 Task 4 / W2 fix): bootstrap
+  // (init + 3x config) now routes through `vcs.gitOnly.init()` and
+  // `vcs.gitOnly.configSet(...)`, retiring the last 4 raw-git calls in this
+  // function. After this commit createTempGitProject has zero raw-git
+  // invocations. The lazy `_loadVcs()` getter still defers the dist-cjs
+  // require until first call (pre-build-guard friendly for non-VCS tests).
+  const { vcs: vcsLib } = _loadVcs();
+  const vcs = vcsLib.createVcsAdapter(tmpDir, { kind: 'git' });
+  if (vcs.kind === 'git') {
+    vcs.gitOnly.init();
+    vcs.gitOnly.configSet('user.email', 'test@test.com');
+    vcs.gitOnly.configSet('user.name', 'Test');
+    vcs.gitOnly.configSet('commit.gpgsign', 'false');
+    // WR-04 (Phase 2 review): mirror the commit.test.ts:beforeEach Phase 2
+    // D-03 fix symmetrically. Any test that creates a temp project via
+    // this helper and exercises `vcs.gitOnly.createAnnotatedTag` would
+    // otherwise fail on developer machines with `tag.gpgsign = true` set
+    // globally (git tag -a refuses to write the tag object without a key).
+    vcs.gitOnly.configSet('tag.gpgsign', 'false');
+  }
 
   fs.writeFileSync(
     path.join(tmpDir, '.planning', 'PROJECT.md'),
     '# Project\n\nTest project.\n'
   );
 
-  execSync('git add -A', { cwd: tmpDir, stdio: 'pipe' });
-  execSync('git commit -m "initial commit"', { cwd: tmpDir, stdio: 'pipe' });
+  // Post-init commit via the same VcsAdapter instance (D-09 + Plan 2.1-04
+  // D-02/D-04). Plan 2.1-04 (D-03): the vcs.stage adapter verb is gone;
+  // vcs.commit({files: ['.']}) captures WC state via `git add -A -- .`
+  // (CR-01 `--` separator preserved inside the backend) then `git commit -m`.
+  // The prior WR-06 defense-in-depth split (explicit stage + bare commit)
+  // is no longer expressible; CR-01's `--` guard remains the option-injection
+  // safety for any `-`-prefixed file dropped before this helper runs.
+  vcs.commit({ message: 'initial commit', files: ['.'] });
 
   return tmpDir;
 }
@@ -148,7 +170,12 @@ function parseFrontmatter(content) {
   }
   const fields = {};
   for (const line of lines.slice(openIdx + 1, closeIdx)) {
-    const match = line.match(/^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/);
+    // WR-09: widen the leading-char class to include `_` so keys like
+    // `_internal:` are not silently dropped. Numeric leading chars are still
+    // rejected — frontmatter keys starting with a digit are unusual enough
+    // that we want them to surface (a frontmatter line shaped `123: foo`
+    // is more likely a mis-indented list item than a real key).
+    const match = line.match(/^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/);
     if (!match) continue; // skip block-list items, blank lines, comments
     const [, key, rawValue] = match;
     const value = rawValue.trim();
@@ -170,4 +197,196 @@ function isUsageOutput(text) {
   return /Usage:\s*gsd-tools/.test(text) && /Commands:/.test(text);
 }
 
-module.exports = { runGsdTools, createTempDir, createTempProject, createTempGitProject, cleanup, parseFrontmatter, isUsageOutput, TOOLS_PATH };
+// ─── VCS adapter test harness (Phase 1 plan 04) ─────────────────────────────
+// RESEARCH Pitfall 1: two-runner trap — node --test has no describe.for / test.extend.
+// RESEARCH Pitfall 3: pre-build guard — fail loudly with a recovery instruction.
+// RESEARCH Pitfall 6: BACKENDS_AVAILABLE and parseBackendsEnv MUST come from sdk/dist-cjs (single source).
+
+let _vcsModule = null;
+let _backendsModule = null;
+function _loadVcs() {
+  if (_vcsModule && _backendsModule) return { vcs: _vcsModule, backends: _backendsModule };
+  try {
+    _vcsModule = require('../sdk/dist-cjs/vcs/index.js');
+    _backendsModule = require('../sdk/dist-cjs/vcs/backends.js');
+  } catch (err) {
+    throw new Error(
+      'VCS adapter not built. Run: pnpm -F sdk build:cjs\n' +
+      '  Underlying error: ' + (err && err.message ? err.message : String(err))
+    );
+  }
+  return { vcs: _vcsModule, backends: _backendsModule };
+}
+
+const __VCS_TEST_ONLY_SYMBOL = Symbol.for('gsd.vcs.testOnly');
+
+function vcsTest(kindOrKinds, suiteFn) {
+  const { describe, before, after, beforeEach } = require('node:test');
+  const { vcs: vcsLib, backends } = _loadVcs();
+
+  let kinds;
+  if (kindOrKinds === 'auto') {
+    // B-4: parseBackendsEnv returns { available, requested, unavailable }.
+    const result = backends.parseBackendsEnv(process.env.GSD_TEST_BACKENDS);
+    if (result.requested.length > 0 && result.available.length === 0) {
+      const msg = '[GSD_TEST_BACKENDS] requested ' + JSON.stringify(result.requested) +
+        ' but none are in BACKENDS_AVAILABLE (' + JSON.stringify(backends.BACKENDS_AVAILABLE) +
+        '); 0 tests will run. Unavailable: ' + JSON.stringify(result.unavailable) + '.';
+      if (process.env.CI === 'true') throw new Error(msg);
+      process.stderr.write('WARN ' + msg + '\n');
+    }
+    kinds = result.available;
+  } else {
+    const requested = Array.isArray(kindOrKinds) ? kindOrKinds : [kindOrKinds];
+    kinds = requested.filter(function (k) { return backends.BACKENDS_AVAILABLE.includes(k); });
+    if (requested.length > 0 && kinds.length === 0) {
+      const msg = 'vcsTest(' + JSON.stringify(requested) + ') resolved to 0 backends; AVAILABLE=' + JSON.stringify(backends.BACKENDS_AVAILABLE);
+      if (process.env.CI === 'true') throw new Error(msg);
+      process.stderr.write('WARN ' + msg + '\n');
+    }
+  }
+
+  for (const kind of kinds) {
+    describe('vcs[' + kind + ']', () => {
+      let sharedDir = null;
+      let sharedAdapter = null;
+      let snapshotHandle = null;
+
+      before(() => {
+        // Phase 3 plan 03-01 Task 5: jj-colocated lane mirrors the
+        // vcs-fixture.ts ts-side dispatch. snapshot/restore is gated by
+        // BACKENDS_AVAILABLE_FOR_VERB per D-12 — plan 03-01's stub jj
+        // adapter throws VcsNotImplementedError on snapshot, so we
+        // probe the allowlist before invoking.
+        if (kind === 'git') {
+          sharedDir = createTempGitProject('gsd-vcs-cjs-');
+          sharedAdapter = vcsLib.createVcsAdapter(sharedDir, { kind: 'git' });
+        } else if (kind === 'jj-colocated') {
+          sharedDir = createTempDir('gsd-vcs-cjs-jj-');
+          const { execSync: ex } = require('node:child_process');
+          ex('jj git init --colocate', { cwd: sharedDir, stdio: 'pipe' });
+          ex('jj config set --repo user.email "test@test.com"', { cwd: sharedDir, stdio: 'pipe' });
+          ex('jj config set --repo user.name "Test"', { cwd: sharedDir, stdio: 'pipe' });
+          sharedAdapter = vcsLib.createVcsAdapter(sharedDir, { kind: 'jj' });
+        } else if (kind === 'jj-native') {
+          // Phase 4 plan 01 (D-22): non-colocated jj fixture. Empirically
+          // verified against jj 0.41.0: `--colocate` IS THE DEFAULT, so
+          // we MUST pass `--no-colocate` to suppress `.git` creation
+          // and produce a jj-native (non-colocated) repo. Plan-action's
+          // `--no-git` spelling was hypothetical; the actual 0.41 flag is
+          // `--no-colocate` (see `jj git init --help`).
+          sharedDir = createTempDir('gsd-vcs-cjs-jj-native-');
+          const { execSync: ex } = require('node:child_process');
+          ex('jj git init --no-colocate', { cwd: sharedDir, stdio: 'pipe' });
+          ex('jj config set --repo user.email "test@test.com"', { cwd: sharedDir, stdio: 'pipe' });
+          ex('jj config set --repo user.name "Test"', { cwd: sharedDir, stdio: 'pipe' });
+          sharedAdapter = vcsLib.createVcsAdapter(sharedDir, { kind: 'jj' });
+        } else {
+          throw new Error("backend '" + kind + "' not yet implemented (BACKENDS_AVAILABLE=" + backends.BACKENDS_AVAILABLE.join(',') + ')');
+        }
+        const testApi = sharedAdapter[__VCS_TEST_ONLY_SYMBOL];
+        if (!testApi) throw new Error('Adapter missing __vcsTestOnly namespace');
+        const snapshotAvailable = (
+          backends.BACKENDS_AVAILABLE_FOR_VERB &&
+          backends.BACKENDS_AVAILABLE_FOR_VERB['__vcsTestOnly.snapshot']
+        ) || [];
+        if (snapshotAvailable.includes(kind)) {
+          snapshotHandle = testApi.snapshot();
+        }
+      });
+
+      beforeEach(() => {
+        if (sharedAdapter && snapshotHandle) {
+          const testApi = sharedAdapter[__VCS_TEST_ONLY_SYMBOL];
+          testApi.restore(snapshotHandle);
+        }
+      });
+
+      after(() => {
+        if (sharedDir) cleanup(sharedDir);
+        sharedDir = null;
+        sharedAdapter = null;
+        snapshotHandle = null;
+      });
+
+      const handle = {
+        getKind: () => kind,
+        getCwd: () => sharedDir,
+        getVcs: () => sharedAdapter,
+      };
+      suiteFn(handle);
+    });
+  }
+}
+
+/**
+ * Phase 4 plan 02: multi-workspace contract fixture.
+ *
+ * Like vcsTest, but inside the per-describe `before`, creates `n` workspaces
+ * named `phase-04-subagent-{idx}` (1-indexed; mirrors D-04 zero-padded phase
+ * convention) BEFORE running suiteFn. The handle exposed to suiteFn gains a
+ * `getWorkspaces(): string[]` method returning the workspace NAMES (jj's
+ * `workspace.list()` entries reference the name, not the path).
+ *
+ * Workspaces are created under `<cwd>/.claude/jj-workspaces/<name>` — the
+ * D-16 layout. The single-workspace `vcsTest` snapshot/restore between tests
+ * still applies; workspaces created in `before` outlive individual `it`
+ * blocks within the describe.
+ *
+ * NB: workspace.add bodies are wired only on jj-colocated and jj-native (per
+ * plan 01's BACKENDS_AVAILABLE_FOR_VERB flip). On a git fixture, this factory
+ * will run vcs.workspace.add with the WorkspaceAdd shape — the `name` field
+ * is jj-specific but harmless on git (the type is optional). Callers wanting
+ * to exercise multi-workspace flows on jj only should pass `['jj-colocated',
+ * 'jj-native']` for kindOrKinds.
+ *
+ * @param {'git'|'jj-colocated'|'jj-native'|Array<'git'|'jj-colocated'|'jj-native'>} kindOrKinds
+ * @param {number} n - number of workspaces to pre-create per describe block
+ * @param {(handle: {
+ *   getKind: () => string,
+ *   getCwd: () => string,
+ *   getVcs: () => any,
+ *   getWorkspaces: () => string[],
+ * }) => void} suiteFn
+ */
+function vcsMultiWsTest(kindOrKinds, n, suiteFn) {
+  const { before, after } = require('node:test');
+  const { join } = require('node:path');
+  // Reuse vcsTest's mechanism: invoke vcsTest with a wrapping suiteFn that
+  // pre-creates n workspaces in a `before` block, then forwards the (now
+  // augmented) handle to the user's suiteFn.
+  vcsTest(kindOrKinds, (handle) => {
+    const workspaceNames = [];
+    before(() => {
+      for (let i = 1; i <= n; i += 1) {
+        const wsName = `phase-04-subagent-${i}`;
+        const wsPath = join(handle.getCwd(), '.claude/jj-workspaces', wsName);
+        // workspace.add does its own mkdir -p (plan 01 / D-17 / Pitfall 4) so
+        // the test fixture does NOT pre-create the parent.
+        handle.getVcs().workspace.add({ path: wsPath, name: wsName });
+        workspaceNames.push(wsName);
+      }
+    });
+    after(() => {
+      // Best-effort cleanup so a later vcsMultiWsTest call doesn't see leaked
+      // workspaces. Pitfall 3 means the on-disk dirs persist after forget —
+      // they live under the shared tmp dir which the parent `vcsTest`
+      // `after` will rm-rf in full.
+      for (const wsName of workspaceNames) {
+        try { handle.getVcs().workspace.forget(wsName); } catch { /* already forgotten */ }
+      }
+    });
+    handle.getWorkspaces = () => [...workspaceNames];
+    suiteFn(handle);
+  });
+}
+
+const _exports = {
+  runGsdTools, createTempDir, createTempProject, createTempGitProject, cleanup, parseFrontmatter, isUsageOutput, TOOLS_PATH,
+  vcsTest, vcsMultiWsTest,
+};
+Object.defineProperty(_exports, 'BACKENDS_AVAILABLE', { enumerable: true, get: () => _loadVcs().backends.BACKENDS_AVAILABLE });
+Object.defineProperty(_exports, 'BACKENDS_DECLARED', { enumerable: true, get: () => _loadVcs().backends.BACKENDS_DECLARED });
+Object.defineProperty(_exports, 'BACKENDS_AVAILABLE_FOR_VERB', { enumerable: true, get: () => _loadVcs().backends.BACKENDS_AVAILABLE_FOR_VERB });
+Object.defineProperty(_exports, 'parseBackendsEnv', { enumerable: true, get: () => _loadVcs().backends.parseBackendsEnv });
+module.exports = _exports;

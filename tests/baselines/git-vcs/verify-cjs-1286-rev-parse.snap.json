@@ -1,0 +1,31 @@
+{
+  "id": "verify-cjs-1286-rev-parse",
+  "source": "get-shit-done/bin/lib/verify.cjs:1286",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": []
+  },
+  "command": "git",
+  "args": [
+    "rev-parse",
+    "HEAD"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "3aa42d718172e5415668bfb4b553bdfaa0e3b11c",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "regex:^[0-9a-f]{40}$"
+  }
+}

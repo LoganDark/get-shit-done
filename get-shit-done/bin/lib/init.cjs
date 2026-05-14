@@ -4,7 +4,13 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execGit, platformWriteSync, platformReadSync } = require('./shell-command-projection.cjs');
+// Phase 2 review WR-01: `execSync` from `child_process` was destructured here
+// historically but the Phase 2 init.cjs migration retired all call sites.
+// Dropped to close the seam. `execGit` from shell-command-projection is also
+// intentionally NOT imported (project_no_raw_git) — VCS reads/writes route
+// through the adapter.
+const { platformWriteSync, platformReadSync } = require('./shell-command-projection.cjs');
+const { createVcsAdapter } = require('../../../sdk/dist-cjs/vcs/index.js');
 const { loadConfig, resolveModelInternal, findPhaseInternal, getRoadmapPhaseInternal, pathExistsInternal, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, normalizePhaseName, toPosixPath, output, error, checkAgentsInstalled, phaseTokenMatches } = require('./core.cjs');
 const { planningPaths, planningDir, planningRoot } = require('./planning-workspace.cjs');
 const { maskIfSecret } = require('./secrets.cjs');
@@ -1493,7 +1499,14 @@ function cmdInitProgress(cwd, raw) {
 }
 
 /**
- * Detect child git repos in a directory (one level deep).
+ * Detect child VCS repos in a directory (one level deep).
+ *
+ * MIGR-02 cosmetic sweep (Phase 5 plan 05-05): this helper currently only
+ * detects git-backed children (via `.git` presence) — the call-site uses
+ * `createVcsAdapter(..., { kind: 'git' })` to status-probe each. Detecting
+ * jj-backed children (`.jj` presence) is a future-work item beyond the
+ * Phase 5 scope; the current behavior matches pre-MIGR-02 semantics.
+ *
  * Returns array of { name, path, has_uncommitted } objects.
  */
 function detectChildRepos(dir) {
@@ -1506,8 +1519,12 @@ function detectChildRepos(dir) {
     const fullPath = path.join(dir, entry.name);
     const gitDir = path.join(fullPath, '.git');
     if (fs.existsSync(gitDir)) {
-      const statusResult = execGit(['status', '--porcelain'], { cwd: fullPath, timeout: 5000 });
-      const hasUncommitted = statusResult.exitCode === 0 && statusResult.stdout.length > 0;
+      let hasUncommitted = false;
+      try {
+        const vcs = createVcsAdapter(fullPath, { kind: 'git' });
+        const status = vcs.status({ porcelain: true });
+        hasUncommitted = status.entries.length > 0;
+      } catch { /* best-effort */ }
       repos.push({ name: entry.name, path: fullPath, has_uncommitted: hasUncommitted });
     }
   }
@@ -1521,9 +1538,17 @@ function cmdInitNewWorkspace(cwd, raw) {
   // Detect child git repos for interactive selection
   const childRepos = detectChildRepos(cwd);
 
-  // Check if git worktree is available
-  const gitVersion = execGit(['--version'], { timeout: 5000 });
-  const worktreeAvailable = gitVersion.exitCode === 0;
+  // Check if the VCS adapter has worktree/workspace primitives available.
+  // (MIGR-02 cosmetic sweep — comment-only update; the underlying call is
+  // already adapter-mediated via createVcsAdapter().gitOnly.version().)
+  let worktreeAvailable = false;
+  try {
+    const vcs = createVcsAdapter(cwd, { kind: 'git' });
+    if (vcs.kind === 'git') {
+      vcs.gitOnly.version();
+      worktreeAvailable = true;
+    }
+  } catch { /* no git at all */ }
 
   const result = {
     default_workspace_base: defaultBase,
@@ -1624,10 +1649,13 @@ function cmdInitRemoveWorkspace(cwd, name, raw) {
   for (const repo of repos) {
     const repoPath = path.join(wsPath, repo.name);
     if (!fs.existsSync(repoPath)) continue;
-    const statusResult = execGit(['status', '--porcelain'], { cwd: repoPath, timeout: 5000 });
-    if (statusResult.exitCode === 0 && statusResult.stdout.length > 0) {
-      dirtyRepos.push(repo.name);
-    }
+    try {
+      const vcs = createVcsAdapter(repoPath, { kind: 'git' });
+      const status = vcs.status({ porcelain: true });
+      if (status.entries.length > 0) {
+        dirtyRepos.push(repo.name);
+      }
+    } catch { /* best-effort */ }
   }
 
   const result = {

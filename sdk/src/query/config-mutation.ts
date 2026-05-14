@@ -32,8 +32,11 @@ import type { QueryHandler } from './utils.js';
 /**
  * Write config JSON atomically via temp file + rename to prevent
  * partial writes on process interruption.
+ *
+ * Exported for use by plans 06-02 / 06-03 (vcs.adapter flip + greenfield gate)
+ * per Phase 6 RESEARCH §"vcs.adapter Write Semantics" Option A.
  */
-async function atomicWriteConfig(configPath: string, config: Record<string, unknown>): Promise<void> {
+export async function atomicWriteConfig(configPath: string, config: Record<string, unknown>): Promise<void> {
   const tmpPath = configPath + '.tmp.' + process.pid;
   const content = JSON.stringify(config, null, 2) + '\n';
   try {
@@ -292,6 +295,20 @@ export const configSet: QueryHandler = async (args, projectDir, workstream) => {
 
   if (keyPath === 'ship.pr_body_sections') {
     validateShipPrBodySections(parsedValue);
+  }
+
+  // B-09: vcs.adapter is concrete-only on writes. `auto` is no longer a
+  // tolerated write value — the decision is locked-in at all times. To
+  // change the value, use `gsd-sdk query migrate-vcs --target git|jj`
+  // (which performs the planning-id rewrite alongside the flip).
+  const VALID_VCS_ADAPTER_VALUES = ['git', 'jj'];
+  if (keyPath === 'vcs.adapter' && !VALID_VCS_ADAPTER_VALUES.includes(String(parsedValue))) {
+    throw new GSDError(
+      `Invalid vcs.adapter value '${rawValue}'. Valid values: ${VALID_VCS_ADAPTER_VALUES.join(', ')}. ` +
+        `'auto' is no longer accepted on writes — to change the active backend use ` +
+        `\`gsd-sdk query migrate-vcs --target git|jj\` (which also rewrites .planning/ ids).`,
+      ErrorClassification.Validation,
+    );
   }
 
   // D6: Lock protection for read-modify-write (match CJS config.cjs:296)

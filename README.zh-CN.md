@@ -47,6 +47,27 @@ npx get-shit-done-cc@latest
 
 ---
 
+> [!NOTE]
+> **这是 GSD 的 Jujutsu 分支版本。**
+>
+> 如果你在看这个仓库，那你大概是想把 [Jujutsu (`jj`)](https://github.com/jj-vcs/jj) 和 GSD 配合使用。安装这个分支后:
+>
+> 1. 在你的项目里运行 `jj git init --colocate`(如果还没有 `.jj/` 目录)。
+> 2. 在你选用的 harness 里运行 `/gsd-migrate-vcs` —— 它会把已有的计划迁移到引用 jj change id,而不是 git commit id。
+>
+> 如果你不是在把已有的 GSD 项目迁移到 jj,那么只需在运行 `/gsd-new-project` 之前确保已经执行了 `jj git init`,GSD 就会自动识别并使用 Jujutsu 后端。
+>
+> 之后,GSD 的所有功能应当照常工作。如果发现 bug,请在这个 fork 上[提交 issue 或 pull request](https://github.com/LoganDark/get-shit-done/issues)。
+>
+> *(Note: Translated by Claude and may be inaccurate.)*
+
+> [!WARNING]
+> 在运行 GSD 操作前,你应当始终确保自己处于一个空的 revision 上。GSD 期望按需把改动 squash 下去,因为这正是 subagent 在原地工作的方式。这让你可以在历史内部工作,而不是只能在分支的 head 上工作 —— 只要它有一个空的 change 可以有效地用作 head。
+>
+> *(Note: Translated by Claude and may be inaccurate.)*
+
+---
+
 ## 我为什么做这个
 
 我是独立开发者。我不写代码，Claude Code 写。

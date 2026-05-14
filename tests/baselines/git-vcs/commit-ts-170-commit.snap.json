@@ -1,0 +1,37 @@
+{
+  "id": "commit-ts-170-commit",
+  "source": "sdk/src/query/commit.ts:170",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": [
+      "echo foo > foo.txt",
+      "git add -- foo.txt"
+    ]
+  },
+  "command": "git",
+  "args": [
+    "commit",
+    "-m",
+    "test",
+    "--",
+    "foo.txt"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "[master d444b6f] test\n 1 file changed, 1 insertion(+)\n create mode 100644 foo.txt",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "regex:^\\[[^ ]+ [0-9a-f]{7,}\\]"
+  }
+}

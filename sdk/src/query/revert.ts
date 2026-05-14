@@ -1,0 +1,146 @@
+/**
+ * sdk/src/query/revert.ts — Phase 5 plan 05-01 Task 2 (D-33 batch 1)
+ *
+ * SDK query bridge for "undo a commit". Cross-backend with a CRUCIAL semantic
+ * shift on the jj path:
+ *
+ *   - git: `git revert <rev>` writes a NEW inverse-content commit on top of
+ *     HEAD. Non-destructive — the original commit is still reachable, the
+ *     working tree has an additional commit applying the inverse diff.
+ *
+ *   - jj: `jj abandon <change_id>` REMOVES the commit from the visible
+ *     history (DESTRUCTIVE). Recovery path is `jj op restore <op>` against
+ *     the operation log — there is NO inverse-content primitive in jj 0.41.
+ *
+ * See 05-RESEARCH.md "Pitfall 6: jj idiom mismatch in CMD-06 undo semantics"
+ * for the rationale. CMD-06 in PROMPT rewrites accepts this destructive
+ * semantics shift; an inverse-content primitive on jj is deferred to
+ * JJOP-01 v2 (post-Phase 6).
+ *
+ * Callers must be aware: `gsd-sdk query revert <rev>` on a jj backend
+ * REWRITES HISTORY. Recovery via `jj op restore` only succeeds while the
+ * op-log retains the pre-abandon state.
+ *
+ * Usage:
+ *   gsd-sdk query revert HEAD
+ *   gsd-sdk query revert HEAD --no-commit          (git only — staged inverse)
+ *   gsd-sdk query revert <change_id> --cwd /path
+ *   gsd-sdk query revert <change_id> --force       (jj only — bypass immutability)
+ *   gsd-sdk query revert --abort                   (git only — drop mid-revert)
+ *
+ * Phase 5 plan 05-06 Task 2 (CR-04 fix): the `--abort` flag is now honoured.
+ * On git backend it dispatches `git revert --abort` via the new
+ * `gitOnly.revertAbort()` primitive. On jj backend it returns a documented
+ * no-op envelope (jj has no in-progress revert sequence).
+ *
+ * Phase 6 plan 06-04 (B-05): the `--force` flag passes `--ignore-immutable`
+ * to `jj abandon` so users can rewrite shared history when needed (e.g.
+ * after a remote-tracked bookmark advanced past the target commit). Default
+ * preserves jj's shared-history protection. Flag is parsed-but-ignored on
+ * git backend (git's revert has no immutability concept — every commit
+ * gets a non-destructive inverse).
+ */
+
+import { createVcsAdapter } from '../vcs/index.js';
+import { vcsExec } from '../vcs/exec.js';
+import type { QueryHandler } from './utils.js';
+
+export const revertQuery: QueryHandler = async (args, projectDir) => {
+  let cwd = projectDir;
+  let rev: string | undefined;
+  let noCommit = false;
+  let abort = false;
+  let force = false;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[i + 1];
+      i++;
+    } else if (args[i] === '--no-commit') {
+      noCommit = true;
+    } else if (args[i] === '--abort') {
+      abort = true;
+    } else if (args[i] === '--force') {
+      force = true;
+    } else if (!args[i].startsWith('--') && rev === undefined) {
+      rev = args[i];
+    }
+  }
+
+  const vcs = createVcsAdapter(cwd);
+
+  if (abort) {
+    if (vcs.kind === 'git') {
+      const r = vcs.gitOnly.revertAbort();
+      return {
+        data: {
+          ok: r.exitCode === 0,
+          exitCode: r.exitCode,
+          stdout: r.stdout,
+          stderr: r.stderr,
+          abort: true,
+          backend: 'git',
+        },
+      };
+    }
+    // jj path: no in-progress revert sequence to abort; documented no-op.
+    // Pitfall 6 — jj abandon is one-shot, there is no multi-step revert
+    // sequence to roll back. The undo workflow's conflict-recovery path
+    // is git-only by construction (jj abandon either succeeds or fails
+    // atomically), but the verb returns a typed no-op envelope so callers
+    // do not have to branch on backend kind.
+    return {
+      data: {
+        ok: true,
+        abort: true,
+        backend: 'jj',
+        note: 'jj has no in-progress revert sequence; abort is a no-op',
+      },
+    };
+  }
+
+  if (!rev) {
+    return { data: { ok: false, error: 'revert: positional <rev> argument required' } };
+  }
+
+  if (vcs.kind === 'git') {
+    const result = vcs.gitOnly.revert({ rev, noCommit });
+    return {
+      data: {
+        ok: result.exitCode === 0,
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        rev,
+        noCommit,
+        backend: 'git',
+      },
+    };
+  }
+
+  // jj path: destructive abandon (Pitfall 6 semantic shift, see header).
+  // `--no-commit` is meaningless here — jj abandon is one-shot history rewrite.
+  // `--force` adds `--ignore-immutable` so abandon can rewrite shared history
+  // (commits reachable from remote-tracked bookmarks etc.). Default preserves
+  // jj's shared-history protection (B-05: post-push undo fails by default with
+  // a clear native error pointing at jj's immutability docs).
+  const jjArgs = ['abandon', rev];
+  if (force) jjArgs.push('--ignore-immutable');
+  const result = vcsExec(cwd, 'jj', jjArgs);
+  return {
+    data: {
+      ok: result.exitCode === 0,
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      rev,
+      noCommit,
+      force,
+      backend: 'jj',
+      // Recovery hint for destructive-semantics callers (Pitfall 6):
+      // `jj op restore <op>` rolls back this abandon while the op-log
+      // retains the pre-abandon state.
+      destructive: true,
+    },
+  };
+};

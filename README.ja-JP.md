@@ -47,6 +47,27 @@ npx get-shit-done-cc@latest
 
 ---
 
+> [!NOTE]
+> **これは GSD の Jujutsu フォークです。**
+>
+> このリポジトリを見ているということは、おそらく [Jujutsu (`jj`)](https://github.com/jj-vcs/jj) と GSD を組み合わせて使いたいのでしょう。このフォークをインストールしたら:
+>
+> 1. プロジェクトで `jj git init --colocate` を実行します(`.jj/` ディレクトリがまだない場合)。
+> 2. 好みのハーネスで `/gsd-migrate-vcs` を実行します — 既存のプランを git commit id ではなく jj change id を参照する形に移行します。
+>
+> 既存の GSD プロジェクトを jj に移行するのではない場合は、`/gsd-new-project` を実行する前に `jj git init` を実行しておくだけで、GSD は自動的に Jujutsu バックエンドを検出して使用します。
+>
+> その後は、GSD のすべての機能が通常通り動作するはずです。バグを見つけた場合は、このフォークに[issue または pull request を作成](https://github.com/LoganDark/get-shit-done/issues)してください。
+>
+> *(Note: Translated by Claude and may be inaccurate.)*
+
+> [!WARNING]
+> GSD の操作を実行する前に、必ず空のリビジョンにいることを確認してください。GSD は変更を選択的に squash することを前提としており、これがサブエージェントがその場で動作する仕組みです。これにより、ブランチの head だけでなく履歴の中で作業できるようになります — head として効果的に使える空の change がある限り。
+>
+> *(Note: Translated by Claude and may be inaccurate.)*
+
+---
+
 ## なぜ作ったのか
 
 私はソロ開発者です。コードは自分で書きません — Claude Codeが書きます。

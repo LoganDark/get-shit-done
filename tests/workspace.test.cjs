@@ -13,6 +13,12 @@ const os = require('os');
 const { execSync } = require('child_process');
 const { runGsdTools, createTempProject, createTempDir, cleanup } = require('./helpers.cjs');
 const { detectChildRepos } = require('../get-shit-done/bin/lib/init.cjs');
+// Plan 02-09 D-06 paired retarget: workspace.test.cjs's setup blocks (init,
+// config, add, commit, worktree prune, worktree list) all route through the
+// VcsAdapter (vcs.gitOnly.init / vcs.gitOnly.configSet / vcs.stage /
+// vcs.commit / vcs.workspace.prune / vcs.workspace.list). Mirrors the
+// helpers.cjs::createTempGitProject migration shape from plan 02-03.
+const { createVcsAdapter } = require('../sdk/dist-cjs/vcs/index.js');
 
 // ─── detectChildRepos ────────────────────────────────────────────────────────
 
@@ -33,8 +39,8 @@ describe('detectChildRepos', () => {
     const repo2 = path.join(tmpDir, 'repo-b');
     fs.mkdirSync(repo1);
     fs.mkdirSync(repo2);
-    execSync('git init', { cwd: repo1, stdio: 'pipe' });
-    execSync('git init', { cwd: repo2, stdio: 'pipe' });
+    createVcsAdapter(repo1, { kind: 'git' }).gitOnly.init();
+    createVcsAdapter(repo2, { kind: 'git' }).gitOnly.init();
 
     const repos = detectChildRepos(tmpDir);
     assert.strictEqual(repos.length, 2);
@@ -47,7 +53,7 @@ describe('detectChildRepos', () => {
     const notRepo = path.join(tmpDir, 'just-a-dir');
     fs.mkdirSync(gitRepo);
     fs.mkdirSync(notRepo);
-    execSync('git init', { cwd: gitRepo, stdio: 'pipe' });
+    createVcsAdapter(gitRepo, { kind: 'git' }).gitOnly.init();
 
     const repos = detectChildRepos(tmpDir);
     assert.strictEqual(repos.length, 1);
@@ -57,7 +63,7 @@ describe('detectChildRepos', () => {
   test('skips hidden directories', () => {
     const hiddenRepo = path.join(tmpDir, '.hidden-repo');
     fs.mkdirSync(hiddenRepo);
-    execSync('git init', { cwd: hiddenRepo, stdio: 'pipe' });
+    createVcsAdapter(hiddenRepo, { kind: 'git' }).gitOnly.init();
 
     const repos = detectChildRepos(tmpDir);
     assert.strictEqual(repos.length, 0);
@@ -104,7 +110,7 @@ describe('init new-workspace', () => {
   test('detects child git repos in cwd', () => {
     const repo = path.join(tmpDir, 'my-repo');
     fs.mkdirSync(repo);
-    execSync('git init', { cwd: repo, stdio: 'pipe' });
+    createVcsAdapter(repo, { kind: 'git' }).gitOnly.init();
 
     const result = runGsdTools('init new-workspace', tmpDir);
     const data = JSON.parse(result.output);
@@ -228,18 +234,24 @@ describe('workspace worktree integration', () => {
     // Create a source git repo with a commit
     sourceRepo = path.join(tmpDir, 'source-repo');
     fs.mkdirSync(sourceRepo);
-    execSync('git init', { cwd: sourceRepo, stdio: 'pipe' });
-    execSync('git config user.email "test@test.com"', { cwd: sourceRepo, stdio: 'pipe' });
-    execSync('git config user.name "Test"', { cwd: sourceRepo, stdio: 'pipe' });
+    // Plan 02-09 D-06: bootstrap via vcs.gitOnly.init/configSet (mirrors
+    // helpers.cjs::createTempGitProject from plan 02-03). Phase 2 D-03
+    // gpgsign disablers preserved.
+    const sourceVcs = createVcsAdapter(sourceRepo, { kind: 'git' });
+    if (sourceVcs.kind === 'git') {
+      sourceVcs.gitOnly.init();
+      sourceVcs.gitOnly.configSet('user.email', 'test@test.com');
+      sourceVcs.gitOnly.configSet('user.name', 'Test');
+      sourceVcs.gitOnly.configSet('commit.gpgsign', 'false');
+    }
     fs.writeFileSync(path.join(sourceRepo, 'README.md'), '# Test Repo\n');
-    execSync('git add -A', { cwd: sourceRepo, stdio: 'pipe' });
-    execSync('git commit -m "initial"', { cwd: sourceRepo, stdio: 'pipe' });
+    sourceVcs.commit({ files: ['.'], message: 'initial' });
   });
 
   afterEach(() => {
     // Clean up worktrees before removing tmp dir
     try {
-      execSync('git worktree prune', { cwd: sourceRepo, stdio: 'pipe' });
+      createVcsAdapter(sourceRepo, { kind: 'git' }).workspace.prune();
     } catch { /* best-effort */ }
     cleanup(tmpDir);
   });
@@ -304,9 +316,15 @@ describe('workspace worktree integration', () => {
     // Verify worktree is gone
     assert.ok(!fs.existsSync(path.join(wsPath, 'source-repo')));
 
-    // Verify worktree list doesn't include it
-    const worktrees = execSync('git worktree list', { cwd: sourceRepo, encoding: 'utf8' });
-    assert.ok(!worktrees.includes('removable-ws'));
+    // Verify worktree list doesn't include it (post-state probe via
+    // vcs.workspace.list — returns parsed WorkspaceInfo[], so the assertion
+    // checks no entry path contains 'removable-ws' rather than substring-
+    // matching on the raw `git worktree list` text).
+    const worktrees = createVcsAdapter(sourceRepo, { kind: 'git' }).workspace.list();
+    assert.ok(
+      !worktrees.some(w => w.path.includes('removable-ws')),
+      `worktree list should not include 'removable-ws', got: ${JSON.stringify(worktrees)}`,
+    );
   });
 });
 

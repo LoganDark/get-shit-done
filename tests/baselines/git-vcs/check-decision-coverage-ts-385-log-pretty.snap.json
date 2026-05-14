@@ -1,0 +1,43 @@
+{
+  "id": "check-decision-coverage-ts-385-log-pretty",
+  "source": "sdk/src/query/check-decision-coverage.ts:385",
+  "captured_at": "2026-05-10",
+  "fixture": {
+    "init": "git init",
+    "config": [
+      "user.email=test@test.com",
+      "user.name=Test",
+      "commit.gpgsign=false",
+      "tag.gpgsign=false"
+    ],
+    "initial_commit": "git commit --allow-empty -m initial",
+    "setup": [
+      "echo a > a.txt",
+      "git add a.txt",
+      "git commit -m \"feat(auth): add login route\" -m \"Implements D-12 token rotation.\"",
+      "echo b > b.txt",
+      "git add b.txt",
+      "git commit -m \"fix(verify): handle empty hostname\" -m \"Closes review F7 path traversal guard.\"",
+      "echo c > c.txt",
+      "git add c.txt",
+      "git commit -m \"docs(plan): record D-08 mechanical-only\" -m \"Body line for D-08 honoring.\""
+    ]
+  },
+  "command": "git",
+  "args": [
+    "log",
+    "-n",
+    "200",
+    "--pretty=%s%n%b"
+  ],
+  "expected": {
+    "exitCode": 0,
+    "stdout": "docs(plan): record D-08 mechanical-only\nBody line for D-08 honoring.\n\nfix(verify): handle empty hostname\nCloses review F7 path traversal guard.\n\nfeat(auth): add login route\nImplements D-12 token rotation.\n\ninitial",
+    "stderr": "",
+    "timedOut": false,
+    "error": null
+  },
+  "match": {
+    "stdout": "exact"
+  }
+}

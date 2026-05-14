@@ -6,7 +6,18 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { loadConfig, normalizePhaseName, escapeRegex, findPhaseInternal, getMilestoneInfo, stripShippedMilestones, extractCurrentMilestone, output, error, checkAgentsInstalled, CONFIG_DEFAULTS, inspectWorktreeHealth } = require('./core.cjs');
-const { execGit, platformReadSync: safeReadFile, platformWriteSync } = require('./shell-command-projection.cjs');
+// `safeReadFile` is re-aliased onto upstream's `platformReadSync` (upstream
+// moved it out of core.cjs in the shell-projection refactor); `execGit` is
+// intentionally NOT imported (project_no_raw_git — VCS reads/writes route
+// through the adapter).
+const { platformReadSync: safeReadFile, platformWriteSync } = require('./shell-command-projection.cjs');
+// Plan 02-10: migrated from execGit re-export to VcsAdapter. Sites 71, 268,
+// 1305 use vcs.refs.exists(expr.rev(hash)) for cat-file -t probes (Blocker
+// 3 closure). Site 1224 uses vcs.log({allRefs:true}). Site 1286 uses
+// vcs.refs.exists(vcs.refs.head) for the repo-existence probe. Site 1309 uses
+// vcs.diff({rev: expr.rev(base), nameStatus: true}). The dist-cjs path is
+// the locked relative shape from plan 02-04 smoke-test (D-01).
+const { createVcsAdapter, expr } = require('../../../sdk/dist-cjs/vcs');
 const { planningDir } = require('./planning-workspace.cjs');
 const { extractFrontmatter, parseMustHavesBlock } = require('./frontmatter.cjs');
 const { writeStateMd } = require('./state.cjs');
@@ -64,13 +75,20 @@ function cmdVerifySummary(cwd, summaryPath, checkFileCount, raw) {
   }
 
   // Check 3: Commits exist
+  // Plan 02-10: Blocker 3 closure — runtime SHA wraps via expr.rev(hash).
+  // vcs.refs.exists returns boolean (true iff `cat-file -t <rev>` exits 0).
+  // The original probe also checked stdout==='commit' (vs 'tree'/'blob'/'tag');
+  // for SUMMARY-mentioned hashes the exit-0 path is dominated by commit
+  // objects, and tree/blob hashes shorter than 4 chars are rejected by
+  // expr.commit's SHA shape validation — preserving the spirit of the
+  // existing probe.
   const commitHashPattern = /\b[0-9a-f]{7,40}\b/g;
   const hashes = content.match(commitHashPattern) || [];
   let commitsExist = false;
   if (hashes.length > 0) {
+    const vcs = createVcsAdapter(cwd);
     for (const hash of hashes.slice(0, 3)) {
-      const result = execGit(['cat-file', '-t', hash], { cwd });
-      if (result.exitCode === 0 && result.stdout.trim() === 'commit') {
+      if (vcs.refs.exists(expr.rev(hash))) {
         commitsExist = true;
         break;
       }
@@ -263,11 +281,37 @@ function cmdVerifyReferences(cwd, filePath, raw) {
 function cmdVerifyCommits(cwd, hashes, raw) {
   if (!hashes || hashes.length === 0) { error('At least one commit hash required'); }
 
+  // Plan 02-10: Blocker 3 closure — runtime SHA wraps via expr.rev(hash).
+  // expr.commit validates SHA shape (4-40 hex chars); inputs that fail
+  // validation throw and route to invalid. Mirrors site 71's semantic shift
+  // (any reachable object — commit/tree/blob/tag — registers as "valid"; in
+  // practice CLI inputs are commit hashes). The expr.commit shape validation
+  // catches truly malformed inputs like 'not-a-sha' before reaching git.
+  //
+  // WR-07 (Phase 2 review): the result schema (`all_valid` / `valid` /
+  // `invalid` / `total`) is a vestigial commit-only name. The pre-migration
+  // `cat-file -t <hash>` probe checked `stdout.trim() === 'commit'`, so a
+  // tree/blob/tag hash that exists in the object store was classified
+  // `invalid`. `vcs.refs.exists(expr.rev(hash))` returns true for ANY
+  // reachable object — so a tree SHA hand-cited in a SUMMARY.md (rare but
+  // possible) is now reported `valid` where the old probe reported
+  // `invalid`. The phase context sanctions this shift (CLI inputs are
+  // commit SHAs in practice), but readers should be aware the
+  // `all_valid` / `valid` field names describe REACHABILITY, not
+  // commit-only existence. A future enhancement could add a
+  // `vcs.refs.objectType(rev)` verb and re-tighten the predicate to
+  // commit-only without breaking the JSON contract.
+  const vcs = createVcsAdapter(cwd);
   const valid = [];
   const invalid = [];
   for (const hash of hashes) {
-    const result = execGit(['cat-file', '-t', hash], { cwd });
-    if (result.exitCode === 0 && result.stdout.trim() === 'commit') {
+    let exists = false;
+    try {
+      exists = vcs.refs.exists(expr.rev(hash));
+    } catch {
+      exists = false; // expr.commit shape-validation throw → invalid
+    }
+    if (exists) {
       valid.push(hash);
     } else {
       invalid.push(hash);
@@ -907,7 +951,12 @@ function cmdValidateHealth(cwd, options, raw) {
     } catch { /* parse error already caught in Check 5 */ }
   }
 
-  // ─── Check 11: Stale / orphan git worktrees (#2167) ────────────────────────
+  // ─── Check 11: Stale / orphan workspaces (#2167) ──────────────────────────
+  // MIGR-02 cosmetic sweep (Phase 5 plan 05-05): inspectWorktreeHealth uses
+  // the VCS adapter (vcs.workspace.list / context — see VcsWorkspace in
+  // sdk/src/vcs/types.ts). On git this shells `git worktree list`; on jj it
+  // routes to `jj workspace list`. User-facing remediation strings prefer
+  // the cross-backend `gsd-sdk query worktree-list` form.
   try {
     const worktreeHealth = inspectWorktreeHealth(
       cwd,
@@ -915,37 +964,37 @@ function cmdValidateHealth(cwd, options, raw) {
       { execGit, existsSync: fs.existsSync, statSync: fs.statSync }
     );
     if (!worktreeHealth.ok) {
-      // AC2 / AC3: surface degraded-git state as a structured warning instead
+      // AC2 / AC3: surface degraded-vcs state as a structured warning instead
       // of silently suppressing it (PRED.k302 — error-swallowing-empty-sentinel).
       if (worktreeHealth.reason === 'git_timed_out') {
         addIssue('warning', 'W020',
-          'Worktree health check degraded: git worktree list timed out after 10s — orphan/stale worktrees could not be inspected',
-          'Run: git worktree list --porcelain to diagnose; check for .git/index.lock or a hung git process');
+          'Workspace health check degraded: vcs.workspace.list timed out after 10s — orphan/stale workspaces could not be inspected',
+          'Run: gsd-sdk query worktree-list to diagnose; check for a stuck lock or hung VCS process');
       }
       if (worktreeHealth.reason === 'git_list_failed') {
         addIssue('warning', 'W020',
-          'Worktree health check degraded: git worktree list failed — orphan/stale worktrees could not be inspected',
-          'Run: git worktree list --porcelain to diagnose; check git repository state and permissions');
+          'Workspace health check degraded: vcs.workspace.list failed — orphan/stale workspaces could not be inspected',
+          'Run: gsd-sdk query worktree-list to diagnose; check VCS repository state and permissions');
       }
       // Other non-ok reasons (not_a_git_repo) are silent — not meaningful for
-      // users who have no git repo.
+      // users who have no VCS repo or whose VCS is not configured.
     } else {
       for (const finding of worktreeHealth.findings) {
         if (finding.kind === 'orphan') {
           addIssue('warning', 'W017',
-            `Orphan git worktree: ${finding.path} (path no longer exists on disk)`,
-            'Run: git worktree prune');
+            `Orphan workspace: ${finding.path} (path no longer exists on disk)`,
+            'Run: gsd-sdk query worktree-prune (routes to vcs.workspace.prune)');
           continue;
         }
 
         if (finding.kind === 'stale') {
           addIssue('warning', 'W017',
-            `Stale git worktree: ${finding.path} (last modified ${finding.ageMinutes} minutes ago)`,
-            `Run: git worktree remove ${finding.path} --force`);
+            `Stale workspace: ${finding.path} (last modified ${finding.ageMinutes} minutes ago)`,
+            `Run: gsd-sdk query worktree-remove ${finding.path} (routes to vcs.workspace.forget on jj, git worktree remove on git)`);
         }
       }
     }
-  } catch { /* git worktree not available or not a git repo — skip silently */ }
+  } catch { /* vcs adapter or workspace.list not available — skip silently */ }
 
   // ─── Check 12: MILESTONES.md / archive snapshot drift (#2446) ─────────────
   const milestonesPath = path.join(planBase, 'MILESTONES.md');
@@ -1227,9 +1276,26 @@ function cmdVerifySchemaDrift(cwd, phaseArg, skipFlag, raw) {
   }
 
   // Also check git commit messages for push evidence
-  const gitLog = execGit(['log', '--oneline', '--all', '-50'], { cwd });
-  if (gitLog.exitCode === 0) {
-    executionLog += '\n' + gitLog.stdout;
+  // Plan 02-10: LogOpts.allRefs gap-fill from 02-03. Reconstruct the
+  // `--oneline`-equivalent from the structured LogEntry[] (short-sha +
+  // subject) since the legacy callers consume the joined stdout as a
+  // free-text grep target. CR-02 (Phase 2 review): the `format` field was
+  // declared but never honoured by the git backend — removed from LogOpts.
+  // The reconstruction below is NOT byte-identical to `git log --oneline`
+  // (hardcoded 7-char SHA vs `core.abbrev`, no decoration); it is good
+  // enough for substring grep over commit subjects.
+  const vcs = createVcsAdapter(cwd);
+  let logEntries = [];
+  try {
+    logEntries = vcs.log({ maxCount: 50, allRefs: true });
+  } catch {
+    logEntries = [];
+  }
+  if (logEntries.length > 0) {
+    const oneline = logEntries
+      .map((e) => `${(e.hash || '').slice(0, 7)} ${e.subject || ''}`)
+      .join('\n');
+    executionLog += '\n' + oneline;
   }
 
   const result = checkSchemaDrift(allFiles, executionLog, { skipCheck: !!skipFlag });
@@ -1288,9 +1354,31 @@ function cmdVerifyCodebaseDrift(cwd, raw) {
 
     const lastMapped = drift.readMappedCommit(structurePath);
 
-    // Verify we're inside a git repo and resolve the diff range.
-    const revProbe = execGit(['rev-parse', 'HEAD'], { cwd });
-    if (revProbe.exitCode !== 0) {
+    // Plan 02-10: VcsAdapter migration. Sites 1286 / 1305 / 1309 share one
+    // adapter instance. Site 1286: vcs.refs.exists(vcs.refs.head). Site 1305:
+    // vcs.refs.exists(expr.rev(base)) — Blocker 3 closure for the
+    // recorded-mapping reachability check. Site 1309: vcs.diff with the
+    // DiffOpts.nameStatus gap-fill from 02-03.
+    //
+    // WR-03 (Phase 2 review): the `vcs.refs.exists(vcs.refs.head)` probe is
+    // NOT a clean "is this a git repo?" predicate — it returns false for
+    // THREE distinct runtime states:
+    //   (a) cwd is not a git repo (`rev-parse HEAD` exits non-zero);
+    //   (b) cwd IS a git repo but HEAD does not yet resolve to a commit
+    //       (e.g. immediately after `git init`, before the first commit);
+    //   (c) the git binary is missing from PATH (vcsExec returns
+    //       non-zero exit).
+    // For codebase-drift detection the conflation is harmless — all three
+    // states deserve to skip the gate. Other callers wanting a TRUE repo
+    // probe should use `vcs.workspace.context()`, which throws cleanly on
+    // non-repo and succeeds for empty-repo OR populated-repo (closer to
+    // the `rev-parse --git-dir` shape).
+    const vcs = createVcsAdapter(cwd);
+
+    // Verify we're inside a git repo (or empty-init) and resolve the diff
+    // range. See WR-03 note above re. the three failure modes lumped into
+    // "not-a-git-repo".
+    if (!vcs.refs.exists(vcs.refs.head)) {
       emit({
         skipped: true,
         reason: 'not-a-git-repo',
@@ -1308,12 +1396,35 @@ function cmdVerifyCodebaseDrift(cwd, raw) {
       base = EMPTY_TREE;
     } else {
       // Verify the commit is reachable; if not, fall back to EMPTY_TREE.
-      const verify = execGit(['cat-file', '-t', base], { cwd });
-      if (verify.exitCode !== 0) base = EMPTY_TREE;
+      // expr.commit shape-validates the lastMapped SHA before probing.
+      let reachable = false;
+      try {
+        reachable = vcs.refs.exists(expr.rev(base));
+      } catch {
+        reachable = false;
+      }
+      if (!reachable) base = EMPTY_TREE;
     }
 
-    const diff = execGit(['diff', '--name-status', base, 'HEAD'], { cwd });
-    if (diff.exitCode !== 0) {
+    // vcs.diff with nameStatus:true returns DiffNameStatusEntry[] in
+    // result.nameStatus AND the raw stdout in result.raw. The downstream
+    // parser below was line-oriented over the raw stdout; preserve that
+    // shape for the mechanical-only D-08 invariant.
+    //
+    // The original args `['diff', '--name-status', base, 'HEAD']` is a
+    // two-rev diff. DiffOpts.rev takes a SINGLE RevisionExpr, so wrap the
+    // pair via expr.range(from, to) — the range factory from 02-03 emits
+    // `<base>..HEAD`, which yields the same `--name-status` output as the
+    // two-rev form for linear ancestor relationships (drift detection's
+    // base is always an ancestor of HEAD by construction).
+    let diffRaw;
+    try {
+      const diffResult = vcs.diff({
+        rev: expr.range(expr.rev(base), expr.head()),
+        nameStatus: true,
+      });
+      diffRaw = diffResult.raw;
+    } catch {
       emit({
         skipped: true,
         reason: 'git-diff-failed',
@@ -1327,7 +1438,7 @@ function cmdVerifyCodebaseDrift(cwd, raw) {
     const added = [];
     const modified = [];
     const deleted = [];
-    for (const line of diff.stdout.split(/\r?\n/)) {
+    for (const line of diffRaw.split(/\r?\n/)) {
       if (!line.trim()) continue;
       const m = line.match(/^([A-Z])\d*\t(.+?)(?:\t(.+))?$/);
       if (!m) continue;

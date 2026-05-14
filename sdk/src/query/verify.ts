@@ -328,13 +328,39 @@ export const verifyCommits: QueryHandler = async (args, projectDir) => {
     throw new GSDError('At least one commit hash required', ErrorClassification.Validation);
   }
 
-  const { execGit } = await import('./commit.js');
+  // Plan 02-10: migrated from execGit shim to VcsAdapter.
+  // Blocker 3 closure — runtime SHA wraps via expr.rev(hash). expr.commit
+  // shape-validates the SHA (4-40 hex chars); inputs that fail validation
+  // throw and route to invalid. Mirrors the verify.cjs:268 semantic shift
+  // (any reachable object — commit/tree/blob/tag — registers as "valid"; in
+  // practice CLI inputs are commit hashes).
+  //
+  // WR-07 (Phase 2 review): the result schema (`all_valid` / `valid` /
+  // `invalid` / `total`) is a vestigial commit-only name. The pre-migration
+  // `cat-file -t <hash>` probe checked `stdout.trim() === 'commit'`, so a
+  // tree/blob/tag hash that exists in the object store was classified
+  // `invalid`. `vcs.refs.exists(expr.rev(hash))` returns true for ANY
+  // reachable object — so a tree SHA hand-cited in a SUMMARY.md (rare but
+  // possible) is now reported `valid` where the old probe reported
+  // `invalid`. The phase context sanctions this shift (CLI inputs are
+  // commit SHAs in practice), but readers should be aware the
+  // `all_valid` / `valid` field names describe REACHABILITY, not
+  // commit-only existence. A future enhancement could add a
+  // `vcs.refs.objectType(rev)` verb and re-tighten the predicate to
+  // commit-only without breaking the JSON contract.
+  const { createVcsAdapter, expr } = await import('../vcs/index.js');
+  const vcs = createVcsAdapter(projectDir);
   const valid: string[] = [];
   const invalid: string[] = [];
 
   for (const hash of args) {
-    const result = execGit(projectDir, ['cat-file', '-t', hash]);
-    if (result.exitCode === 0 && result.stdout.trim() === 'commit') {
+    let exists = false;
+    try {
+      exists = vcs.refs.exists(expr.rev(hash));
+    } catch {
+      exists = false; // expr.commit shape-validation throw → invalid
+    }
+    if (exists) {
       valid.push(hash);
     } else {
       invalid.push(hash);
@@ -477,13 +503,25 @@ export const verifySummary: QueryHandler = async (args, projectDir) => {
     }
   }
 
-  const { execGit } = await import('./commit.js');
+  // Plan 02-10: migrated from execGit shim to VcsAdapter.
+  // Blocker 3 closure — runtime SHA wraps via expr.rev(hash). The original
+  // probe also matched stdout==='commit' (vs 'tree'/'blob'/'tag'); for
+  // SUMMARY-mentioned hashes the exit-0 path is dominated by commit objects,
+  // and tree/blob hashes shorter than 4 chars are rejected by expr.commit's
+  // SHA shape validation — preserving the spirit of the existing probe.
+  const { createVcsAdapter, expr } = await import('../vcs/index.js');
+  const vcs = createVcsAdapter(projectDir);
   const commitHashPattern = /\b[0-9a-f]{7,40}\b/g;
   const hashes = content.match(commitHashPattern) || [];
   let commitsExist = false;
   for (const hash of hashes.slice(0, 3)) {
-    const result = execGit(projectDir, ['cat-file', '-t', hash]);
-    if (result.exitCode === 0 && result.stdout.trim() === 'commit') {
+    let exists = false;
+    try {
+      exists = vcs.refs.exists(expr.rev(hash));
+    } catch {
+      exists = false;
+    }
+    if (exists) {
       commitsExist = true;
       break;
     }
@@ -564,7 +602,11 @@ export const verifySchemaDrift: QueryHandler = async (args, projectDir, workstre
   }
 
   const { checkSchemaDrift } = await import('./schema-detect.js');
-  const { execGit } = await import('./commit.js');
+  // Plan 02-10: migrated to VcsAdapter — site 628 uses LogOpts.allRefs
+  // gap-fill from 02-03; LogEntry[] is reconstructed to byte-equivalent
+  // `--oneline` output (short-sha + subject) since the legacy callers
+  // consume the joined stdout as a free-text grep target.
+  const { createVcsAdapter } = await import('../vcs/index.js');
 
   const phasesDir = planningPaths(projectDir, workstream).phases;
   if (!existsSync(phasesDir)) {
@@ -625,9 +667,22 @@ export const verifySchemaDrift: QueryHandler = async (args, projectDir, workstre
     executionLog += readFileSync(join(phaseDir, sf), 'utf-8') + '\n';
   }
 
-  const gitLog = execGit(projectDir, ['log', '--oneline', '--all', '-50']);
-  if (gitLog.exitCode === 0) {
-    executionLog += '\n' + gitLog.stdout;
+  // CR-02 (Phase 2 review): the `format` field was declared on LogOpts but
+  // never honoured — removed from the type. Reconstruct the `--oneline`-
+  // equivalent (NOT byte-identical to `git log --oneline`: hardcoded 7-char
+  // SHA, no decoration) from structured LogEntry[] for free-text grep below.
+  const vcs = createVcsAdapter(projectDir);
+  let logEntries: import('../vcs/types.js').LogEntry[] = [];
+  try {
+    logEntries = vcs.log({ maxCount: 50, allRefs: true });
+  } catch {
+    logEntries = [];
+  }
+  if (logEntries.length > 0) {
+    const oneline = logEntries
+      .map((e) => `${(e.hash || '').slice(0, 7)} ${e.subject || ''}`)
+      .join('\n');
+    executionLog += '\n' + oneline;
   }
 
   const result = checkSchemaDrift(allFiles, executionLog, { skipCheck: !!skipFlag });
