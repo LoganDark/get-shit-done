@@ -125,6 +125,10 @@ If FILES_OVERRIDE is set (from --files flag):
 ```bash
 if [ -n "$FILES_OVERRIDE" ]; then
   REVIEW_FILES=()
+  # TODO(05-05 sweep): `gsd-sdk query head-ref` does not yet expose `--show-toplevel`;
+  # falling back to `git rev-parse --show-toplevel` is git-mode-only by construction
+  # but the input is a colocated/git-only repo-root probe — on jj the equivalent
+  # is the same on-disk path (colocated mode shares the .git dir).
   REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
   
   for file_path in "${FILES_ARRAY[@]}"; do
@@ -208,28 +212,33 @@ fi
 If no SUMMARY.md files found OR no files extracted from them:
 ```bash
 if [ ${#REVIEW_FILES[@]} -eq 0 ]; then
-  # Compute diff base from phase commits — fail closed if no reliable base found
-  PHASE_COMMITS=$(git log --oneline --all --grep="${PADDED_PHASE}" --format="%H" 2>/dev/null)
-  
+  # Compute diff base from phase commits — fail closed if no reliable base found.
+  # The log query verb does not yet expose `--grep`/`--format` (LogOpts shape — Phase 2 CR-02);
+  # filter client-side on the structured `.subject` field.
+  PHASE_COMMITS=$(gsd-sdk query log --all --max-count 500 \
+    | jq -r ".data.entries[] | select(.subject | test(\"\\\(${PADDED_PHASE}\\\)|\\\(${PADDED_PHASE}-\")) | .hash" 2>/dev/null)
+
   if [ -n "$PHASE_COMMITS" ]; then
     DIFF_BASE=$(echo "$PHASE_COMMITS" | tail -1)^
     
-    # Verify the parent commit exists (first commit in repo has no parent)
+    # Verify the parent commit exists (first commit in repo has no parent).
+    # TODO(05-05 sweep): no `gsd-sdk query rev-parse` verb yet — head-ref.ts covers HEAD but not arbitrary revs.
     if ! git rev-parse "${DIFF_BASE}" >/dev/null 2>&1; then
       DIFF_BASE=$(echo "$PHASE_COMMITS" | tail -1)
     fi
-    
-    # Run git diff with specific exclusions (per D-03)
-    DIFF_FILES=$(git diff --name-only "${DIFF_BASE}..HEAD" -- . \
-      ':!.planning/' ':!ROADMAP.md' ':!STATE.md' \
-      ':!*-SUMMARY.md' ':!*-VERIFICATION.md' ':!*-PLAN.md' \
-      ':!package-lock.json' ':!yarn.lock' ':!Gemfile.lock' ':!poetry.lock' 2>/dev/null)
-    
+
+    # Run diff via SDK with specific exclusions (per D-03). The diff verb returns
+    # structured name-only output; exclusion patterns are applied client-side
+    # because `gsd-sdk query diff` does not yet expose pathspec-exclude pass-through.
+    DIFF_FILES=$(gsd-sdk query diff --name-only --range "${DIFF_BASE}..HEAD" \
+      | jq -r '.data.nameOnly[]' 2>/dev/null \
+      | grep -Ev '^\.planning/|^ROADMAP\.md$|^STATE\.md$|-SUMMARY\.md$|-VERIFICATION\.md$|-PLAN\.md$|^package-lock\.json$|^yarn\.lock$|^Gemfile\.lock$|^poetry\.lock$')
+
     while IFS= read -r file; do
       [ -n "$file" ] && REVIEW_FILES+=("$file")
     done <<< "$DIFF_FILES"
-    
-    echo "File scope: ${#REVIEW_FILES[@]} files from git diff (base: ${DIFF_BASE})"
+
+    echo "File scope: ${#REVIEW_FILES[@]} files from gsd-sdk query diff (base: ${DIFF_BASE})"
   else
     # Fail closed — no reliable diff base found. Do not use arbitrary HEAD~N.
     echo "Warning: No phase commits found for '${PADDED_PHASE}'. Cannot determine reliable diff scope."
@@ -326,7 +335,9 @@ REVIEW_PATH="${PHASE_DIR}/${PADDED_PHASE}-REVIEW.md"
 
 Compute DIFF_BASE for agent context (in case agent needs it):
 ```bash
-PHASE_COMMITS=$(git log --oneline --all --grep="${PADDED_PHASE}" --format="%H" 2>/dev/null)
+# Same SDK-routed log query + client-side subject filter as compute_file_scope.
+PHASE_COMMITS=$(gsd-sdk query log --all --max-count 500 \
+  | jq -r ".data.entries[] | select(.subject | test(\"\\\(${PADDED_PHASE}\\\)|\\\(${PADDED_PHASE}-\")) | .hash" 2>/dev/null)
 if [ -n "$PHASE_COMMITS" ]; then
   DIFF_BASE=$(echo "$PHASE_COMMITS" | tail -1)^
 else
