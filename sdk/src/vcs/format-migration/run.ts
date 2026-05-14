@@ -59,8 +59,9 @@
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
-import { realpathSync } from 'node:fs';
-import { relative, resolve as pathResolve, sep as pathSep } from 'node:path';
+import { existsSync, realpathSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { join, relative, resolve as pathResolve, sep as pathSep } from 'node:path';
 import { createVcsAdapter } from '../index.js';
 import { atomicWriteConfig } from '../../query/config-mutation.js';
 import {
@@ -178,6 +179,29 @@ export async function runMigration(
     if (conflicts.length > 0) {
       throw new Error(
         'migrate-vcs: in-tree conflicts present — resolve or pass --force',
+      );
+    }
+  }
+
+  // ─── Step 2.5: ensure jj backend exists (B-04) ──────────────────────
+  // When migrating TO jj on a plain git repo (no .jj/ yet), the jj backend
+  // doesn't exist and Step 9's vcs.commit() would fail with "no jj repo".
+  // Initialise it here. CONTEXT D-02 makes colocated the default;
+  // opts.native opts into `--no-colocate` (pure jj store, no .git/ interop).
+  //
+  // No-op when .jj/ already exists (re-runs of migrate-vcs, or repos where
+  // the user pre-initialised). Non-fatal-on-existing-jj is desired so the
+  // command remains idempotent at the structural level (Step 1's
+  // marker-probe owns content-level idempotency).
+  if (target === 'jj' && !existsSync(join(canonicalCwd, '.jj'))) {
+    const initArgs = opts.native
+      ? ['git', 'init', '--no-colocate']
+      : ['git', 'init', '--colocate'];
+    try {
+      execFileSync('jj', initArgs, { cwd: canonicalCwd, stdio: 'pipe' });
+    } catch (e) {
+      throw new Error(
+        `migrate-vcs: failed to initialise jj backend (${initArgs.join(' ')}): ${(e as Error).message}`,
       );
     }
   }
