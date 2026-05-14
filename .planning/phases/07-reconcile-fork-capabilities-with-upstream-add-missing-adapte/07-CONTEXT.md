@@ -50,16 +50,18 @@ Single phase, sequential prefix (verbs → executor wire) then parallel fan-out 
 
 ### Phase scope and sequencing
 
-- **D-10:** Single Phase 7 covers all five PROJECT.md deliverables. No split into Phase 7+8 or Phase 7+7.1 INSERTED — the work is one cohesive "reconcile with the merge" story, and v1.1 is a small milestone where coordination overhead doesn't pay off.
+*Decisions D-10..D-13 are orchestration-level — honored by the wave structure across plans 01–05, not per-task trackable. Tagged [informational] for decision-coverage gate purposes.*
 
-- **D-11:** Sequential prefix → parallel fan-out:
+- **D-10 [informational]:** Single Phase 7 covers all five PROJECT.md deliverables. No split into Phase 7+8 or Phase 7+7.1 INSERTED — the work is one cohesive "reconcile with the merge" story, and v1.1 is a small milestone where coordination overhead doesn't pay off.
+
+- **D-11 [informational]:** Sequential prefix → parallel fan-out:
 	- Plan 1 (sequential): Land the 7 adapter verbs (types.ts + git backend + jj backend + contract tests per verb). Mechanical pattern, but verbs must exist before downstream wiring.
 	- Plan 2 (sequential): Wire `worktree.cleanup-wave` executor at `get-shit-done/bin/lib/worktree-safety.cjs` to use the new verbs. Removes the `not_implemented_in_jj_port` stub.
 	- Plans 3+ (parallel-eligible): workflow .md `else`-branch removal, `github-release-notes.cjs` migration, upstream test-surface triage. Independent work that can fan out.
 
-- **D-12:** Parallelization fan-in path uses Phase 4's `octopus.ts` + `reap.ts` SDK helpers directly. **Do NOT dogfood the new wave-cleanup executor for Phase 7's own execution.** Clean separation — wave-cleanup is for workflow-driven cleanup (`/gsd-quick`, `/gsd-execute-phase` `else`-branch fallback), the SDK's internal octopus path is for executor-internal fan-in. Different consumers, different code paths.
+- **D-12 [informational]:** Parallelization fan-in path uses Phase 4's `octopus.ts` + `reap.ts` SDK helpers directly. **Do NOT dogfood the new wave-cleanup executor for Phase 7's own execution.** Clean separation — wave-cleanup is for workflow-driven cleanup (`/gsd-quick`, `/gsd-execute-phase` `else`-branch fallback), the SDK's internal octopus path is for executor-internal fan-in. Different consumers, different code paths.
 
-- **D-13:** This is the first parallelization dogfood on this repo. Per user: migration is complete (v1.0 shipped), so the `project_no_parallelization_yet` rule no longer applies. Planner is free to fan out independent plans.
+- **D-13 [informational]:** This is the first parallelization dogfood on this repo. Per user: migration is complete (v1.0 shipped), so the `project_no_parallelization_yet` rule no longer applies. Planner is free to fan out independent plans.
 
 ### Test-surface triage policy
 

@@ -517,24 +517,28 @@ function executeWorktreeWaveCleanupPlan(plan, _deps = {}) {
 | A8 | The wave-cleanup manifest entry shape (`worktree_path`, `branch`, `expected_base`) is stable and pre-populated by the workflow before this executor runs | §Code Examples; §System Architecture Diagram | Low — manifest is upstream-shaped, populated by `/gsd-execute-phase` and `/gsd-quick` workflows; reading `planWorktreeWaveCleanup` (worktree-safety.cjs:311-360) confirms the shape |
 | A9 | Strict-green test triage (D-14/D-15) is achievable in Phase 7 without an 8th verb | §Summary | Medium — depends on whether the few VCS-touching tests (`shell-command-projection-dispatch` execGit call at line 48 with `/tmp/definitely-not-a-git-repo-8675309`) reveal divergent error-text expectations on jj. The `execGit` helper is by name git-specific; tests of it stay git-only — but if a test expects a specific git error string from a non-repo and that path fires on jj-colocated CI somehow, fix may require an adapter touch. Mitigation: planner schedules triage as Plan 5+ with budget to escalate to Phase 7.1 INSERTED |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`workspace.merge`'s message-on-conflict shape.**
+   - RESOLVED: Set message via `-m` on `jj new` (Pattern 3 default). Mirrors Phase 3 `commit()` conflict-path behavior — leaves description set even when conflicted.
    - What we know: D-02 locks `{ok:false, conflicted:true, change_id}` return shape. SQUASH-06 says don't auto-abandon.
    - What's unclear: should the conflicted change still get its description set (so subsequent `jj log` shows a meaningful subject), or should it be left with empty description?
    - Recommendation: set description (current Pattern 3 does this via `-m` to `jj new`). Phase 3's `commit()` conflict path leaves description set; mirror that.
 
 2. **Per-verb contract-test depth.**
+   - RESOLVED: 2-3 tests for multi-branch verbs (`workspace.merge`, `workspace.remove`, `mergeBase`, `diff{diffFilter}`, `bookmarks.delete{force}`); 1 happy-path test for low-branch verbs (`currentBookmarksIn`, `status{cwd}`, `readBlob`). Mirrors Phase 1/3 precedent.
    - What we know: CONTEXT.md `<deferred>` defers this to planner.
    - What's unclear: should each verb have a happy-path test only, or also a failure-mode test (e.g., `workspace.merge` with conflicted result, `bookmarks.delete` with `force:true` on already-deleted)?
    - Recommendation: happy path + at least one explicit failure-mode test per verb. The 5 verbs with multiple branches (`merge`, `remove`, `mergeBase`, `diff{diffFilter}`, `bookmarks.delete{force}`) need 2-3 tests each; the 2 with one branch (`currentBookmarksIn`, `status{cwd}`) need 1.
 
 3. **`expr.range` shape with mergeBase output on jj.**
+   - RESOLVED: Smoke-tested in Plan 01 Task 3 via dedicated test in `jj-workspace.test.ts` that feeds `mergeBase` output back into `expr.range(expr.rev(<change_id>), expr.rev(<branch>))` and asserts `vcs.diff` produces a well-formed result.
    - What we know: D-05 locks `mergeBase` returns `change_id` on jj. `expr.range` is the consumer per CONTEXT canonical refs.
    - What's unclear: does `expr.range(expr.rev('<change_id>'), expr.rev(branch))` translate cleanly to `<change_id>..<branch_rev>` revset on jj backend, and identically to `<commit_hash>..<branch_ref>` on git?
    - Recommendation: write a smoke test in Plan 1 confirming the round-trip. Phase 2-03 `toJjRev` recursive range translation handles `range:<encoded>..<encoded>` (see STATE.md log: "range:<encoded>..<encoded> recursive translation in toGitRev/toJjRev avoids extending parseExpr"), so this should "just work" — but verify in a smoke test before depending on it across all 7 verbs.
 
 4. **Should `vcs.refs.readBlob(ref, path)` be added as a proactive 8th verb?**
+   - RESOLVED: Folded into Plan 01 as VCS-15 — proactive scoping (the gap is already known via RESEARCH, not triage-surfaced). D-16 escape hatch reserved for actual triage discoveries in Plan 5.
    - What we know: github-release-notes.cjs:71 needs `show <ref>:<file>` semantics. CONTEXT D-16 caps Phase 7 at 7 verbs and spawns Phase 7.1 INSERTED for 8th-verb needs.
    - What's unclear: is reaching for this verb during Plan 4 (github-release-notes migration) a "discovered need" that justifies Phase 7.1, or a "predictable need" that should be scoped into Phase 7's plan?
    - Recommendation: surface in discuss-phase as a possible Plan 1 addition. If user says yes, fold into Plan 1 verb-batch. If no, Plan 4 design accommodates the diff-and-checkout workaround AND has a documented `Phase 7.1 INSERTED` escape hatch.
