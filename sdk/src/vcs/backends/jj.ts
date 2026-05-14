@@ -236,20 +236,38 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       mergedStderr = `${squashRes.stderr}\n[hash-probe failed]: ${hashRes.stderr || hashRes.stdout}`;
     }
 
-    // HOOK-02 / HOOK-03 / D-10 (Phase 4 plan 06): pre-commit fires AFTER
-    // squash success, BEFORE bookmark advance.
+    // HOOK-02 / HOOK-03 / D-32 (Phase 5 plan 05-01): pre-commit fires AFTER
+    // squash success, BEFORE bookmark advance, UNCONDITIONALLY (modulo the
+    // GSD_HOOK_SKIP_COLOCATED=1 escape hatch).
     //
-    // Colocated detection (D-10): when both .git and .jj exist at cwd, git's
-    // own .git/hooks/pre-commit fires automatically via colocation when
-    // post-squash jj git export updates .git (A3 assumption — observed by
-    // jj-hooks.test.ts regression test).
+    // Phase 5 plan 05-01 retires the D-10 colocated no-op. The original D-10
+    // assumption (A3) held that git's own .git/hooks/pre-commit would fire
+    // automatically via colocation when post-squash `jj git export` updated
+    // .git. Phase 4 plan 04-06 empirically refuted A3 on jj 0.41 colocated
+    // mode — the export does NOT auto-fire .git/hooks/pre-commit after
+    // `jj squash`. Without this fix, colocated dogfood users (the dominant
+    // local-dev configuration) get no pre-commit at all.
     //
-    // Non-colocated: adapter shells .githooks/<stage> directly via fireHook.
+    // D-32 escape hatch: `GSD_HOOK_SKIP_COLOCATED=1` suppresses the fire in
+    // colocated mode. Intended for the (currently hypothetical) case where a
+    // future jj release adds auto-fire in colocated mode and the adapter's
+    // direct fire would produce a duplicate. Idempotent hook bodies make this
+    // moot in practice; the env var exists so developers can opt out without
+    // a code change. NOT a security control — it is a developer-convenience
+    // override (Pitfall 3 / threat T-05.01-04: accept-disposition).
     //
-    // noVerify (HOOK-01 contract): skips the fire entirely.
+    // Non-colocated jj-native: adapter shells .githooks/<stage> directly via
+    // fireHook (unchanged behaviour).
+    //
+    // noVerify (HOOK-01 contract): skips the fire entirely on both backends.
     if (!input.noVerify) {
+      const skipColocated = process.env.GSD_HOOK_SKIP_COLOCATED === '1';
       const isColocated = existsSync(join(cwd, '.git')) && existsSync(join(cwd, '.jj'));
-      if (!isColocated) {
+      // D-32 / A3 fix: always fire pre-commit; D-10 colocated no-op retired.
+      // GSD_HOOK_SKIP_COLOCATED=1 is the escape hatch for the case where a
+      // future jj release adds auto-fire behavior in colocated mode and
+      // produces duplicate fires.
+      if (!(skipColocated && isColocated)) {
         const hookRes = fireHook(cwd, 'pre-commit', { stagedFiles: input.files });
         if (hookRes.exitCode !== 0) {
           // T-03.04-03 mitigation pattern: squash already succeeded; report
@@ -259,8 +277,6 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
           mergedStderr = `${mergedStderr}\n[pre-commit hook failed]: ${hookRes.stderr || hookRes.stdout}`;
         }
       }
-      // colocated: no-op (A3 assumption — git's own hook firing kicks in via
-      // post-squash jj git export).
     }
 
     // D-01 / D-04: bookmark advance. The squash already succeeded; an
