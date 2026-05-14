@@ -218,6 +218,20 @@ export const configSet: QueryHandler = async (args, projectDir, workstream) => {
     );
   }
 
+  // B-09: vcs.adapter is concrete-only on writes. `auto` is no longer a
+  // tolerated write value — the decision is locked-in at all times. To
+  // change the value, use `gsd-sdk query migrate-vcs --target git|jj`
+  // (which performs the planning-id rewrite alongside the flip).
+  const VALID_VCS_ADAPTER_VALUES = ['git', 'jj'];
+  if (keyPath === 'vcs.adapter' && !VALID_VCS_ADAPTER_VALUES.includes(String(parsedValue))) {
+    throw new GSDError(
+      `Invalid vcs.adapter value '${rawValue}'. Valid values: ${VALID_VCS_ADAPTER_VALUES.join(', ')}. ` +
+        `'auto' is no longer accepted on writes — to change the active backend use ` +
+        `\`gsd-sdk query migrate-vcs --target git|jj\` (which also rewrites .planning/ ids).`,
+      ErrorClassification.Validation,
+    );
+  }
+
   // D6: Lock protection for read-modify-write (match CJS config.cjs:296)
   const paths = planningPaths(projectDir, workstream);
   const lockPath = await acquireStateLock(paths.config);

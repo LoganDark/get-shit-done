@@ -74,7 +74,11 @@ export const VALID_CONFIG_KEYS: ReadonlySet<string> = new Set([
   // #3162 — documented top-level key: controls model ID resolution for non-Claude runtimes
   'resolve_model_ids',
   // Phase 6 plan 06-01 — sticky VCS adapter selector (Phase 3 D-17 storage location).
-  // Legal write values: git | jj. (auto is read-time-only — index.ts:70.)
+  // Phase 6 B-09 — concrete-only writes. Legal write values: `git` | `jj`.
+  // `auto` is read-tolerated for legacy configs (see `index.ts:lockInVcsAdapter`
+  // which auto-upgrades to a concrete value on first encounter) but REJECTED
+  // on writes by `config-mutation.ts:configSet` with a typed error pointing
+  // at `migrate-vcs` as the canonical way to change the active backend.
   'vcs.adapter',
 ]);
 
