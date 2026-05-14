@@ -95,13 +95,36 @@ describe('migrateVcsQuery', () => {
 		expect(d.error).toMatch(/already on jj — pass --target git/);
 	});
 
-	it('refuses same-direction migration (current=git, target=git)', async () => {
+	it('defers same-direction to runMigration so marker-probe fast-exit is reachable (B-03)', async () => {
+		// B-03 fix: same-direction (target===currentAdapter) is no longer
+		// refused at the verb level. runMigration owns the decision: marker
+		// present → {ok:true, migrated:false}; marker absent → throws.
 		readFileMock.mockResolvedValue(JSON.stringify({ vcs: { adapter: 'git' } }));
+		runMigrationMock.mockRejectedValue(new Error('already on git (previousAdapter=git)'));
 		const res = await migrateVcsQuery(['--target', 'git', '--cwd', '/tmp/x'], '/tmp/x');
-		expect(runMigrationMock).not.toHaveBeenCalled();
+		expect(runMigrationMock).toHaveBeenCalledTimes(1);
 		const d = res.data as { ok: boolean; error: string };
 		expect(d.ok).toBe(false);
 		expect(d.error).toMatch(/already on git/);
+	});
+
+	it('returns marker-probe fast-exit when same-direction migration is already migrated (B-03)', async () => {
+		// Marker-probe contract: runMigration sees the migration marker on
+		// HEAD and returns {ok:true, migrated:false} instead of erroring.
+		readFileMock.mockResolvedValue(JSON.stringify({ vcs: { adapter: 'jj' } }));
+		runMigrationMock.mockResolvedValue({
+			...SUCCESS_RESULT,
+			migrated: false,
+			filesChanged: 0,
+			filesScanned: 0,
+			previousAdapter: 'jj',
+			newAdapter: 'jj',
+		});
+		const res = await migrateVcsQuery(['--target', 'jj', '--cwd', '/tmp/x'], '/tmp/x');
+		expect(runMigrationMock).toHaveBeenCalledTimes(1);
+		const d = res.data as { ok: boolean; migrated: boolean };
+		expect(d.ok).toBe(true);
+		expect(d.migrated).toBe(false);
 	});
 
 	it('refuses --target jj when jj binary missing', async () => {

@@ -91,10 +91,10 @@ export const migrateVcsQuery: QueryHandler = async (args, projectDir) => {
     };
   }
 
-  // Refuse same-direction migration (currentAdapter === target).
-  if (target === currentAdapter) {
-    return { data: { ok: false, error: `migrate-vcs: already on ${target}` } };
-  }
+  // Same-direction handling is delegated to runMigration so the marker-probe
+  // fast-exit (06-02 idempotency contract) is reachable: when HEAD carries the
+  // migration marker, same-direction returns {ok:true, migrated:false}; when
+  // not, runMigration throws the explicit "already on ${target}" error.
 
   // Pre-flight: target=jj requires jj binary available.
   if (target === 'jj') {
