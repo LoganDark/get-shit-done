@@ -732,9 +732,15 @@ function normalizeMd(content) {
 // ─── Common path helpers ──────────────────────────────────────────────────────
 
 /**
- * Resolve the main worktree root when running inside a git worktree.
- * In a linked worktree, .planning/ lives in the main worktree, not in the linked one.
- * Returns the main worktree path, or cwd if not in a worktree.
+ * Resolve the main workspace root when running inside a linked workspace
+ * (git worktree or jj workspace — terminology is backend-specific).
+ * In a linked workspace, .planning/ lives in the main workspace, not in
+ * the linked one. Returns the main workspace path, or cwd if not in a
+ * linked workspace.
+ *
+ * Backend: the adapter (vcs.workspace.context() — see VcsWorkspace in
+ * sdk/src/vcs/types.ts) determines effectiveRoot. Phase 4 plan 04-02
+ * landed real multi-workspace semantics on jj.
  */
 function resolveWorktreeRoot(cwd) {
   // Plan 02-11 (CLOSING): `deps.execGit` was rendered dead by 02-04's
@@ -748,11 +754,17 @@ function resolveWorktreeRoot(cwd) {
 }
 
 /**
- * Parse `git worktree list --porcelain` output into an array of
- * { path, branch } objects.  Entries with a detached HEAD (no branch line)
- * are skipped because we cannot safely reason about their merge status.
+ * Parse worktree-porcelain output into an array of { path, branch }
+ * objects. Entries with a detached HEAD (no branch line) are skipped
+ * because we cannot safely reason about their merge status.
  *
- * @param {string} porcelain - raw output from git worktree list --porcelain
+ * Post-Phase-2 (MIGR-02 cosmetic sweep, Phase 5 plan 05-05): the source
+ * of this porcelain is `vcs.workspace.list()` via the adapter — see
+ * sdk/src/vcs/types.ts VcsWorkspace. On git the adapter shells out to
+ * `git worktree list --porcelain`; on jj it shells `jj workspace list`
+ * and normalises the shape. Callers should NOT invoke raw git directly.
+ *
+ * @param {string} porcelain - raw porcelain output (adapter-sourced)
  * @returns {{ path: string, branch: string }[]}
  */
 function parseWorktreePorcelain(porcelain) {
@@ -760,13 +772,22 @@ function parseWorktreePorcelain(porcelain) {
 }
 
 /**
- * Clear stale worktree metadata references via `git worktree prune`.
+ * Clear stale worktree metadata references via the VCS adapter's
+ * workspace.prune() verb (see sdk/src/vcs/types.ts VcsWorkspace).
+ *
+ * MIGR-02 cosmetic sweep (Phase 5 plan 05-05): the implementation here
+ * already calls into deps.vcs via planWorktreePrune/executeWorktreePrunePlan
+ * — the only remaining `git worktree`-prefixed references in this file are
+ * documentation comments + the user-facing warning string below. On git,
+ * the underlying SDK verb shells `git worktree prune`; on jj, it routes to
+ * `vcs.workspace.prune()` (a documented no-op since jj has no native prune
+ * verb — see plan 04-01 D-29).
  *
  * Destructive linked-worktree removal is disabled by default for safety.
  *
- * @param {string} repoRoot - absolute path to the main (or any) worktree of
- *   the repository; used as `cwd` for git commands.
- * @returns {string[]} list of worktree paths that were removed (always empty)
+ * @param {string} repoRoot - absolute path to the main (or any) workspace of
+ *   the repository; used as `cwd` for the adapter call.
+ * @returns {string[]} list of workspace paths that were removed (always empty)
  */
 function pruneOrphanedWorktrees(repoRoot) {
   try {
@@ -785,8 +806,9 @@ function pruneOrphanedWorktrees(repoRoot) {
       // Uses process.stderr.write to match the [gsd-tools] WARNING prefix style.
       process.stderr.write(
         '[gsd-tools] WARNING: worktree health check degraded' +
-        ' — git worktree prune timed out after 10s.' +
-        ' Orphaned worktree metadata may remain until the next successful run.\n'
+        ' — vcs.workspace.prune() timed out after 10s.' +
+        ' Orphaned worktree metadata may remain until the next successful run.' +
+        ' To diagnose, run: gsd-sdk query worktree-list\n'
       );
     }
   } catch { /* never crash the caller */ }

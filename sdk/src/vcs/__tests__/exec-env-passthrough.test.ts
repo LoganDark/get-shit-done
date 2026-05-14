@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,11 +10,25 @@ import { vcsExec } from '../exec.js';
  * Verifies that JJ-07 (`JJ_USER`/`JJ_EMAIL` propagation from commit() to
  * the spawned jj child) is supported at the substrate layer. The jj.ts
  * `envOpts()` helper in plan 03-04 Task 2 consumes this contract.
+ *
+ * Phase 5 plan 05-05 flake-fix: Pattern B (random-prefix mkdtemp) +
+ * vi.unstubAllEnvs() afterEach to guarantee no process.env leakage into
+ * the next test file when vitest runs files concurrently. None of the
+ * tests below currently use vi.stubEnv, but the afterEach is belt-and-
+ * suspenders against a regression where someone adds one.
  */
 describe('Phase 3 JJ-07: vcsExec env passthrough', () => {
   let dir: string;
   beforeAll(() => {
-    dir = mkdtempSync(join(tmpdir(), 'gsd-exec-env-'));
+    dir = mkdtempSync(
+      join(
+        tmpdir(),
+        `gsd-exec-env-${Math.random().toString(36).slice(2, 10)}-`,
+      ),
+    );
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
   afterAll(() => {
     if (dir) rmSync(dir, { recursive: true, force: true });

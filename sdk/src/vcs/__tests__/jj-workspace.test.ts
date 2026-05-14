@@ -31,14 +31,24 @@ try {
   // jj not on PATH; entire suite skips.
 }
 
-describe.skipIf(!jjAvailable)(
+// Phase 5 plan 05-05 flake-fix: Pattern A (describe.sequential) on every
+// multi-workspace describe block in this file — `jj workspace list` is a
+// global per-repo state, so concurrent `it()` blocks within a describe leak
+// each other's mutations. Pattern B (random-prefix mkdtemp) is applied to
+// every `mkdtempSync` call site to avoid parallel-test-file tmpdir collisions.
+describe.sequential.skipIf(!jjAvailable)(
   'Phase 3 plan 03-06 Task 1 — workspace.list() on jj (live)',
   () => {
     let dir: string;
     let vcs: ReturnType<typeof createJjAdapter>;
 
     beforeAll(() => {
-      dir = mkdtempSync(join(tmpdir(), 'gsd-vcs-ws-list-'));
+      dir = mkdtempSync(
+        join(
+          tmpdir(),
+          `gsd-vcs-ws-list-${Math.random().toString(36).slice(2, 10)}-`,
+        ),
+      );
       execSync('jj git init --colocate', { cwd: dir, stdio: 'pipe' });
       execSync('jj config set --repo user.email "test@test.com"', {
         cwd: dir,
@@ -178,7 +188,13 @@ describe('Phase 4 plan 04-01 — workspace.add/forget/prune real bodies + reap/a
 // ─────────────────────────────────────────────────────────────────────────────
 
 function seedJjColocatedRepo(): string {
-  const d = mkdtempSync(join(tmpdir(), 'gsd-vcs-ws-p4-'));
+  // Phase 5 plan 05-05 flake-fix: Pattern B — random-prefix mkdtemp.
+  const d = mkdtempSync(
+    join(
+      tmpdir(),
+      `gsd-vcs-ws-p4-${Math.random().toString(36).slice(2, 10)}-`,
+    ),
+  );
   execSync('jj git init --colocate', { cwd: d, stdio: 'pipe' });
   execSync('jj config set --repo user.email "test@test.com"', { cwd: d, stdio: 'pipe' });
   execSync('jj config set --repo user.name "Test"', { cwd: d, stdio: 'pipe' });
@@ -187,7 +203,7 @@ function seedJjColocatedRepo(): string {
   return d;
 }
 
-describe.skipIf(!jjAvailable)(
+describe.sequential.skipIf(!jjAvailable)(
   'jj workspace.add — Phase 4 plan 01 bodies (multi-workspace)',
   () => {
     let dir: string;
@@ -249,7 +265,7 @@ describe.skipIf(!jjAvailable)(
   },
 );
 
-describe.skipIf(!jjAvailable)(
+describe.sequential.skipIf(!jjAvailable)(
   'jj workspace.forget — Phase 4 plan 01 body',
   () => {
     let dir: string;
@@ -288,7 +304,7 @@ describe.skipIf(!jjAvailable)(
   },
 );
 
-describe.skipIf(!jjAvailable)(
+describe.sequential.skipIf(!jjAvailable)(
   'jj workspace.prune — Phase 4 plan 01 documented no-op',
   () => {
     let dir: string;
@@ -313,7 +329,7 @@ describe.skipIf(!jjAvailable)(
   },
 );
 
-describe.skipIf(!jjAvailable)(
+describe.sequential.skipIf(!jjAvailable)(
   'jj workspace.reap — Phase 4 plan 04 real body (boundary marker)',
   () => {
     let dir: string;

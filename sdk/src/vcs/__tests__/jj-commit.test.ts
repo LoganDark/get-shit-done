@@ -33,7 +33,13 @@ try {
   jjAvailable = false;
 }
 
-describe.skipIf(!jjAvailable)('Phase 3 plan 03-04 — jj commit() semantics', () => {
+// Phase 5 plan 05-05 flake-fix: Pattern A (describe.sequential) — this suite
+// exercises squash + post-squash hook-fire timing per Phase 5 plan 05-01,
+// and uses a single shared `dir` across all `it()` blocks. Concurrent
+// in-suite execution caused jj working-copy contention and intermittent
+// snapshot/restore races. Pattern B (random-prefix mkdtemp) guards against
+// parallel-test-file tmpdir collisions.
+describe.sequential.skipIf(!jjAvailable)('Phase 3 plan 03-04 — jj commit() semantics', () => {
   let dir: string;
   let vcs: ReturnType<typeof createJjAdapter>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -47,7 +53,12 @@ describe.skipIf(!jjAvailable)('Phase 3 plan 03-04 — jj commit() semantics', ()
   };
 
   beforeAll(() => {
-    dir = mkdtempSync(join(tmpdir(), 'gsd-vcs-commit-'));
+    dir = mkdtempSync(
+      join(
+        tmpdir(),
+        `gsd-vcs-commit-${Math.random().toString(36).slice(2, 10)}-`,
+      ),
+    );
     execSync('jj git init --colocate', { cwd: dir, stdio: 'pipe' });
     execSync('jj config set --repo user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
     execSync('jj config set --repo user.name "Test"', { cwd: dir, stdio: 'pipe' });
