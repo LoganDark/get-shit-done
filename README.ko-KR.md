@@ -47,6 +47,27 @@ npx get-shit-done-cc@latest
 
 ---
 
+> [!NOTE]
+> **이것은 GSD의 Jujutsu 포크입니다.**
+>
+> 이 저장소를 보고 있다면 아마도 [Jujutsu (`jj`)](https://github.com/jj-vcs/jj)와 GSD를 함께 사용하려는 것일 겁니다. 이 포크를 설치한 다음:
+>
+> 1. 프로젝트에서 `jj git init --colocate`를 실행하세요 (아직 `.jj/` 디렉토리가 없는 경우).
+> 2. 선호하는 하네스에서 `/gsd-migrate-vcs`를 실행하세요 — 기존 플랜이 git commit id 대신 jj change id를 참조하도록 마이그레이션합니다.
+>
+> 기존 GSD 프로젝트를 jj로 마이그레이션하는 게 아니라면, `/gsd-new-project`를 실행하기 전에 `jj git init`만 실행해두면 GSD가 자동으로 Jujutsu 백엔드를 감지하고 사용합니다.
+>
+> 그 후에는 GSD의 모든 기능이 평소대로 작동해야 합니다. 버그를 발견하면 이 포크에 [issue 또는 pull request를 열어주세요](https://github.com/LoganDark/get-shit-done/issues).
+>
+> *(Note: Translated by Claude and may be inaccurate.)*
+
+> [!WARNING]
+> GSD 작업을 실행하기 전에 항상 빈 리비전 위에 있는지 확인해야 합니다. GSD는 변경 사항을 선택적으로 squash하는 것을 전제로 하며, 이것이 서브에이전트가 제자리에서 작동하는 방식입니다. 이를 통해 브랜치의 head에서만이 아니라 히스토리 안에서 작업할 수 있습니다 — head로 효과적으로 사용할 빈 change가 있는 한.
+>
+> *(Note: Translated by Claude and may be inaccurate.)*
+
+---
+
 ## 왜 만들었나
 
 저는 솔로 개발자입니다. 코드는 제가 아니라 Claude Code가 씁니다.

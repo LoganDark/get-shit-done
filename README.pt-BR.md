@@ -47,6 +47,27 @@ npx get-shit-done-cc@latest
 
 ---
 
+> [!NOTE]
+> **Este é um fork Jujutsu do GSD.**
+>
+> Se você está vendo este repositório, provavelmente quer usar [Jujutsu (`jj`)](https://github.com/jj-vcs/jj) com o GSD. Depois de instalar este fork:
+>
+> 1. Rode `jj git init --colocate` no seu projeto (se ainda não tiver um diretório `.jj/`).
+> 2. Rode `/gsd-migrate-vcs` no seu harness preferido — ele migra seus planos existentes para referenciar change ids do jj em vez de commit ids do git.
+>
+> Se você não está migrando um projeto GSD existente para jj, basta garantir que rodou `jj git init` antes de executar `/gsd-new-project`, e o GSD deve detectar e usar o backend Jujutsu automaticamente.
+>
+> Depois disso, todos os recursos do GSD devem funcionar como esperado. Se encontrar bugs, por favor [abra uma issue ou pull request](https://github.com/LoganDark/get-shit-done/issues) neste fork.
+>
+> *(Note: Translated by Claude and may be inaccurate.)*
+
+> [!WARNING]
+> Você deve garantir que sempre esteja em uma revisão vazia antes de rodar operações do GSD. O GSD espera fazer squash das mudanças seletivamente, pois é assim que os subagentes trabalham no local. Isso permite que você trabalhe dentro do histórico em vez de apenas no head de um branch, desde que ele tenha uma change vazia para usar efetivamente como head.
+>
+> *(Note: Translated by Claude and may be inaccurate.)*
+
+---
+
 ## Por que eu criei isso
 
 Sou desenvolvedor solo. Eu não escrevo código — o Claude Code escreve.
