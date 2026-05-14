@@ -74,8 +74,8 @@ Before editing ANY file for a finding, establish safe rollback capability.
 3. **Verify fix:** Apply 3-tier verification strategy (see verification_strategy).
 
 4. **On verification failure:**
-   - Run `git checkout -- {file}` for EACH file in `touched_files`.
-   - This is safe: the fix has NOT been committed yet (commit happens only after verification passes). `git checkout --` reverts only the uncommitted in-progress change for that file and does not affect commits from prior findings.
+   - Run `gsd-sdk query restore <file>` for EACH file in `touched_files` (verb added in plan 05-01; on jj backend dispatches `jj restore --from @-`).
+   - This is safe: the fix has NOT been committed yet (commit happens only after verification passes). `gsd-sdk query restore` reverts only the uncommitted in-progress change for that file and does not affect commits from prior findings.
    - **DO NOT use Write tool for rollback** — a partial write on tool failure leaves the file corrupted with no recovery path.
 
 5. **After rollback:**
@@ -84,7 +84,7 @@ Before editing ANY file for a finding, establish safe rollback capability.
    - Document failure details in skip reason.
    - Continue with next finding.
 
-**Rollback scope:** Per-finding only. Files modified by prior (already committed) findings are NOT touched during rollback — `git checkout --` only reverts uncommitted changes.
+**Rollback scope:** Per-finding only. Files modified by prior (already committed) findings are NOT touched during rollback — `gsd-sdk query restore` only reverts uncommitted changes.
 
 **Key constraint:** Each finding is independent. Rollback for finding N does NOT affect commits from findings 1 through N-1.
 
@@ -220,22 +220,21 @@ The cleanup tail (commit fixes -> remove worktree -> drop recovery sentinel) MUS
 # Derive worktree path from padded_phase (parsed from config in next step,
 # but the shell snippet below is illustrative — adapt once config is parsed).
 # In practice: parse padded_phase from config first, then run:
-branch=$(git branch --show-current)
-test -n "$branch" || { echo "Detached HEAD is not supported for review-fix (#2686)"; exit 1; }
+branch=$(gsd-sdk query current-branch | jq -r '.data.bookmarks[0] // .data.current // empty')
+test -n "$branch" || { echo "Detached HEAD / anonymous head is not supported for review-fix (#2686)"; exit 1; }
 
 # Recovery-sentinel handling (#2839):
 # Path is ${phase_dir}/.review-fix-recovery-pending.json. If it already exists,
-# a previous run was interrupted between fix commits and `git worktree remove`.
+# a previous run was interrupted between fix commits and worktree-remove.
 # The pre-existing sentinel records the orphan worktree_path, branch, and
 # padded_phase so this run can complete recovery before starting fresh.
 sentinel="${phase_dir}/.review-fix-recovery-pending.json"
 if [ -f "$sentinel" ]; then
   echo "Detected pre-existing recovery sentinel from a prior interrupted run: $sentinel"
   # Recovery must extract BOTH worktree_path AND reviewfix_branch (#3001 CR):
-  # if a prior run died after `git worktree remove` but before
-  # `git branch -D`, the orphan branch survives and clutters `git branch`
-  # output forever. Emit both fields newline-separated so we can read them
-  # independently.
+  # if a prior run died after worktree-remove but before branch-delete,
+  # the orphan branch survives and clutters branch-list output forever.
+  # Emit both fields newline-separated so we can read them independently.
   prior_recovery=$(node -e '
     const fs = require("fs");
     try {
@@ -248,6 +247,10 @@ if [ -f "$sentinel" ]; then
   ' "$sentinel")
   prior_wt="$(printf '%s' "$prior_recovery" | sed -n '1p')"
   prior_branch="$(printf '%s' "$prior_recovery" | sed -n '2p')"
+  # TODO(05-05 sweep): no `gsd-sdk query workspace --list` / `--forget` verb yet —
+  # the adapter exposes `vcs.workspace.list/forget` but the query CLI shim is missing.
+  # Until then, the orphan-worktree probe uses git-mode `git worktree list --porcelain`;
+  # on jj-colocated the same path works (jj worktrees are a different layer — `.jj/repo/store/op_store/...`).
   if [ -n "$prior_wt" ] && git worktree list --porcelain | grep -q "^worktree $prior_wt$"; then
     echo "Removing orphan worktree from prior run: $prior_wt"
     git worktree remove "$prior_wt" --force || true
@@ -256,6 +259,8 @@ if [ -f "$sentinel" ]; then
     # Best-effort: branch may already be gone (cleaned by an earlier
     # partial recovery, or never created if `git worktree add -b` itself
     # failed). `|| true` keeps recovery non-fatal.
+    # TODO(05-05 sweep): no `gsd-sdk query branch-delete` verb yet — adapter has
+    # `vcs.refs.bookmarks.delete(name)` but the query CLI shim is missing.
     echo "Removing orphan reviewfix branch from prior run: $prior_branch"
     git branch -D "$prior_branch" 2>/dev/null || true
   fi
@@ -272,6 +277,15 @@ wt=$(mktemp -d "/tmp/sv-${padded_phase}-reviewfix-XXXXXX")
 # history with $branch up to the moment of creation, so commits made
 # inside the worktree fast-forward $branch on cleanup.
 reviewfix_branch="gsd-reviewfix/${padded_phase}-$$"
+# The original was:
+#   git worktree add -b "$reviewfix_branch" "$wt" "$branch"
+# Two-step replacement (today's adapter shape; branch-create field is gap-flagged below):
+<!-- TODO: branch-create gap fill — VcsWorkspace.add lacks branch: {name, create} per Open Q4 — plan 05-05 sweep -->
+# TODO(05-05 sweep): no `gsd-sdk query workspace --add ... --at-revision` verb yet;
+# adapter has `vcs.workspace.add({path, baseRef, name?})` but no branch-create field
+# (Path B locked: do not gap-fill adapter in this plan). Until then, retain git-mode
+# `git worktree add -b` for the review-fix agent — colocated jj users share the same
+# git worktree machinery so the call works on both backends with no semantic drift.
 git worktree add -b "$reviewfix_branch" "$wt" "$branch"
 
 # Write the recovery sentinel ONLY AFTER `git worktree add` succeeds.
@@ -312,17 +326,23 @@ Concrete steps:
 # rewrite history if the user committed to $branch concurrently; on
 # divergence, this fails loudly and the temp branch is left for the
 # user to inspect/merge manually. We deliberately resolve the main repo
-# path via `git worktree list --porcelain` rather than assuming $PWD,
+# path via the worktree-list output rather than assuming $PWD,
 # because the agent ran inside $wt.
 # Strip the literal "worktree " prefix and print the rest of the line, then
 # exit on the first match. This preserves paths that contain spaces
 # (awk '$2' would truncate "/path/with spaces/repo" to "/path/with").
+# TODO(05-05 sweep): no `gsd-sdk query workspace --list` verb yet —
+# `vcs.workspace.list()` exists in the adapter but the query CLI shim is missing.
 main_repo="$(git worktree list --porcelain | awk '/^worktree / { sub(/^worktree /, ""); print; exit }')"
 ff_status=0
-# Capture the exit code of `git merge` directly. `if ! cmd; then ff_status=$?`
+# Capture the exit code of merge directly. `if ! cmd; then ff_status=$?`
 # captures the exit code of the `!` operator (always 1 when the inner cmd
 # failed) — masking the real merge exit code. Use the success/else split
 # instead so $? in the else-branch is the merge command's exit code.
+# TODO(05-05 sweep): `gsd-sdk query merge` does not yet expose `--ff-only`
+# pass-through (verb added in 05-01 with --squash/--no-ff/--no-commit only);
+# until then this ff-only merge stays git-mode. Colocated-jj callers go through
+# the same git worktree machinery, so the surface is shared.
 if git -C "$main_repo" merge --ff-only "$reviewfix_branch" 2>&1; then
   ff_status=0
 else
@@ -338,11 +358,15 @@ fi
 # first, then worktree remove), an interruption between the two steps
 # would leave NO sentinel and an orphan worktree — exactly the bug from
 # #2839.
+# TODO(05-05 sweep): no `gsd-sdk query workspace --forget` / `--remove` verb yet —
+# `vcs.workspace.forget(path)` exists in the adapter but the query CLI shim is missing.
 git worktree remove "$wt" --force
 
 # Step 3: delete the temp branch ONLY if the fast-forward succeeded. If
 # it didn't, leaving the branch lets the user inspect/merge manually.
 if [ "$ff_status" -eq 0 ]; then
+  # TODO(05-05 sweep): no `gsd-sdk query branch-delete` verb yet —
+  # `vcs.refs.bookmarks.delete(name)` exists in the adapter but the query CLI shim is missing.
   git -C "$main_repo" branch -D "$reviewfix_branch" || true
 fi
 
@@ -418,7 +442,7 @@ For each finding in sorted order:
 **b. Record files to touch (for rollback):**
 - For EVERY file about to be modified:
   - Record file path in `touched_files` list for this finding
-  - No pre-capture needed — rollback uses `git checkout -- {file}` which is atomic
+  - No pre-capture needed — rollback uses `gsd-sdk query restore <file>` (verb added in plan 05-01; atomic; on jj backend dispatches `jj restore --from @-`)
 
 **c. Determine if fix applies:**
 - Compare current code state to what reviewer described
@@ -474,7 +498,7 @@ gsd-sdk query commit "fix(02): CR-01 ..." --files \
 
 **Extract commit hash:**
 ```bash
-COMMIT_HASH=$(git rev-parse --short HEAD)
+COMMIT_HASH=$(gsd-sdk query head-ref | jq -r '.data.head // empty' | cut -c1-7)
 ```
 
 **If commit FAILS after successful edit:**
@@ -592,7 +616,7 @@ _Iteration: {N}_
 
 **DO read the actual source file** before applying any fix — never blindly apply REVIEW.md suggestions without understanding current code state.
 
-**DO record which files will be touched** before every fix attempt — this is your rollback list. Rollback is `git checkout -- {file}`, not content capture.
+**DO record which files will be touched** before every fix attempt — this is your rollback list. Rollback is `gsd-sdk query restore <file>`, not content capture.
 
 **DO commit each fix atomically** — one commit per finding, listing ALL modified file paths after the commit message.
 
@@ -605,7 +629,7 @@ _Iteration: {N}_
 
 **DO skip findings that cannot be applied cleanly** — do not force broken fixes. Mark as skipped with clear reason.
 
-**DO rollback using `git checkout -- {file}`** — atomic and safe since the fix has not been committed yet. Do NOT use Write tool for rollback (partial write on tool failure corrupts the file).
+**DO rollback using `gsd-sdk query restore <file>`** — atomic and safe since the fix has not been committed yet. Do NOT use Write tool for rollback (partial write on tool failure corrupts the file).
 
 **DO NOT modify files unrelated to the finding** — scope each fix narrowly to the issue at hand.
 
@@ -658,10 +682,10 @@ Fixes are committed **per-finding**. This has operational implications:
 - [ ] Each fix committed atomically with `fix({padded_phase}): {id} {description}` format
 - [ ] All modified files listed after each commit message (multi-file fix support)
 - [ ] REVIEW-FIX.md created with accurate counts, status, and iteration number
-- [ ] No source files left in broken state (failed fixes rolled back via git checkout)
+- [ ] No source files left in broken state (failed fixes rolled back via `gsd-sdk query restore`)
 - [ ] No partial or uncommitted changes remain after execution
 - [ ] Verification performed for each fix (minimum: re-read, preferred: syntax check)
-- [ ] Safe rollback used `git checkout -- {file}` (atomic, not Write tool)
+- [ ] Safe rollback used `gsd-sdk query restore <file>` (atomic, not Write tool)
 - [ ] Skipped findings documented with specific skip reasons
 - [ ] Project conventions from CLAUDE.md respected during fixes
 

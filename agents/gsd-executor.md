@@ -351,7 +351,7 @@ Completed Tasks table gives continuation agent context. Commit hashes verify wor
 <continuation_handling>
 If spawned as continuation agent (`<completed_tasks>` in prompt):
 
-1. Verify previous commits exist: `git log --oneline -5`
+1. Verify previous commits exist: `gsd-sdk query log --max-count 5 | jq -r '.data.entries[] | (.hash[0:7] + " " + .subject)'`
 2. DO NOT redo completed tasks
 3. Start from resume point in prompt
 4. Handle based on checkpoint type: after human-action → verify it worked; after human-verify → continue; after decision → implement selected option
@@ -377,7 +377,7 @@ When the plan frontmatter has `type: tdd`, the entire plan follows the RED/GREEN
 
 **Fail-fast rule:** If a test passes unexpectedly during the RED phase (before any implementation), STOP. The feature may already exist or the test is not testing what you think. Investigate and fix the test before proceeding to GREEN. Do NOT skip RED by proceeding with a passing test.
 
-**Gate sequence validation:** After completing the plan, verify in git log:
+**Gate sequence validation:** After completing the plan, verify in the log (`gsd-sdk query log`):
 1. A `test(...)` commit exists (RED gate)
 2. A `feat(...)` commit exists after it (GREEN gate)
 3. Optionally a `refactor(...)` commit exists after GREEN (REFACTOR gate)
@@ -412,7 +412,14 @@ After each task completes (verification passed, done criteria met), commit immed
 **0a. cwd-drift assertion (worktree mode only, MANDATORY before staging — #3097):**
 A prior Bash call may have `cd`'d out of the worktree into the main repo. When that happens
 `[ -f .git ]` is false (main repo's `.git` is a directory), silently skipping all worktree guards.
-Capture the spawn-time toplevel via a sentinel on first commit, then verify on every subsequent commit:
+Capture the spawn-time toplevel via a sentinel on first commit, then verify on every subsequent commit.
+
+# TODO(05-05 sweep): `gsd-sdk query head-ref` does not yet expose `--git-dir` / `--show-toplevel`
+# / `--abbrev-ref HEAD` / `--symbolic-ref HEAD` flag pass-throughs. The Claude Code worktree
+# guards below are git-mode-only by construction (`.git` is a git-specific file in linked
+# worktree mode; `.git/worktrees/<name>` is the git layout; the `worktree-agent-*` branch
+# namespace is enforced by the parallel-executor harness which runs on the git backend).
+# Once the query verb gains those flag pass-throughs, route these probes through the SDK.
 ```bash
 WT_GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
 case "$WT_GIT_DIR" in
@@ -474,12 +481,13 @@ if [ -f .git ]; then  # worktree
 fi
 ```
 
-**1. Check modified files:** `git status --short`
+**1. Check modified files:** `gsd-sdk query status --porcelain | jq -r '.data.raw // .data.stdout // ""'`
 
-**2. Stage task-related files individually** (NEVER `git add .` or `git add -A`):
+**2. Identify task-related files individually** (NEVER bulk-stage; list specific paths to the commit verb):
 ```bash
-git add src/api/auth.ts
-git add src/types/user.ts
+# The SDK commit verb runs `git add -A -- <files>` (or the jj equivalent — WC-state-capture
+# per Plan 2.1-04 D-02/D-04/D-06) internally; pre-staging is redundant. Build a path list:
+TASK_FILES=(src/api/auth.ts src/types/user.ts)
 ```
 
 **3. Commit type:**
@@ -505,27 +513,30 @@ Returns JSON with per-repo commit hashes: `{ committed: true, repos: { "backend"
 
 **Otherwise (standard single-repo):**
 ```bash
-git commit -m "{type}({phase}-{plan}): {concise task description}
+gsd-sdk query commit "{type}({phase}-{plan}): {concise task description}
 
 - {key change 1}
 - {key change 2}
-"
+" --files "${TASK_FILES[@]}"
 ```
 
 **5. Record hash:**
-- **Single-repo:** `TASK_COMMIT=$(git rev-parse --short HEAD)` — track for SUMMARY.
+- **Single-repo:** `TASK_COMMIT=$(gsd-sdk query head-ref | jq -r '.data.head // empty' | cut -c1-7)` — track for SUMMARY.
 - **Multi-repo (sub_repos):** Extract hashes from `commit-to-subrepo` JSON output (`repos.{name}.hash`). Record all hashes for SUMMARY (e.g., `backend@abc1234, frontend@def5678`).
 
-**6. Post-commit deletion check:** After recording the hash, verify the commit did not accidentally delete tracked files:
+**6. Post-commit deletion check:** After recording the hash, verify the commit did not accidentally delete tracked files. The diff verb does not yet expose `--diff-filter` pass-through (sweep TODO), so client-side filter on the name-status output:
 ```bash
-DELETIONS=$(git diff --diff-filter=D --name-only HEAD~1 HEAD 2>/dev/null || true)
+# TODO(05-05 sweep): `gsd-sdk query diff` does not yet expose --diff-filter pass-through;
+# until then, filter the name-status output for `D` rows client-side.
+DELETIONS=$(gsd-sdk query diff --name-status --range "HEAD~1..HEAD" \
+  | jq -r '.data.nameStatus[]? | select(.status == "D") | .path' 2>/dev/null || true)
 if [ -n "$DELETIONS" ]; then
   echo "WARNING: Commit includes file deletions: $DELETIONS"
 fi
 ```
 Intentional deletions (e.g., removing a deprecated file as part of the task) are expected — document them in the Summary. Unexpected deletions are a Rule 1 bug: revert and fix before proceeding.
 
-**7. Check for untracked files:** After running scripts or tools, check `git status --short | grep '^??'`. For any new untracked files: commit if intentional, add to `.gitignore` if generated/runtime output. Never leave generated files untracked.
+**7. Check for untracked files:** After running scripts or tools, inspect the SDK status output: `gsd-sdk query status --porcelain | jq -r '.data.entries[]? | select(.status == "??") | .path'`. For any new untracked files: commit if intentional, add to `.gitignore` if generated/runtime output. Never leave generated files untracked.
 </task_commit_protocol>
 
 <destructive_git_prohibition>
@@ -554,11 +565,11 @@ back, those deletions appear on the main branch, destroying prior-wave work (#20
 
 If you need to discard changes to a specific file you modified during this task, use:
 ```bash
-git checkout -- path/to/specific/file
+gsd-sdk query restore path/to/specific/file
 ```
 Never use blanket reset or clean operations that affect the entire working tree.
 
-To inspect what is untracked vs. genuinely new, use `git status --short` and evaluate each
+To inspect what is untracked vs. genuinely new, use `gsd-sdk query status --porcelain | jq -r '.data.raw // .data.stdout // ""'` and evaluate each
 file individually. If a file appears untracked but is not part of your task, leave it alone.
 </destructive_git_prohibition>
 
@@ -626,7 +637,9 @@ After writing SUMMARY.md, verify claims before proceeding.
 
 **2. Check commits exist:**
 ```bash
-git log --oneline --all | grep -q "{hash}" && echo "FOUND: {hash}" || echo "MISSING: {hash}"
+gsd-sdk query log --all --max-count 500 \
+  | jq -r '.data.entries[].hash[0:7]' \
+  | grep -q "{hash}" && echo "FOUND: {hash}" || echo "MISSING: {hash}"
 ```
 
 **3. Append result to SUMMARY.md:** `## Self-Check: PASSED` or `## Self-Check: FAILED` with missing items listed.
