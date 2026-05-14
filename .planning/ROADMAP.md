@@ -200,6 +200,22 @@ Plans:
 - Migration command naming: `/gsd-migrate-vcs`, `/gsd-vcs-migrate-to-jj`, or roll into existing `/gsd-config` with a `--migrate-to-jj` subcommand?
 
 ---
+
+## Milestone: v1.1 first upstream sync
+
+*Reconcile fork capabilities with the upstream code surface brought in by the May 2026 merge — fill adapter gaps and bring new upstream test surfaces green on jj. v1.0 shipped 2026-05-14 (8/8 phases). See MILESTONES.md for the v1.0 retrospective.*
+
+### Phase 7: Reconcile fork capabilities with upstream - add missing adapter operations, ensure new tests are passing, etc
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 6
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 7 to break down)
+
+---
 *Last updated: 2026-05-13 — Phase 5 planned (5 plans). Plans cover: P1 foundational infra (A3 D-32 fix + 11 new SDK query verbs + D-31 deferral edits moving BROWN-01/02 to Phase 6), P2 daily-driver CMD-01..05 + execute-phase.md/quick.md rewrites + 5 integration tests, P3 lifecycle CMD-06..09/11 + undo/complete-milestone/code-review + agent prompts + 6 tests (CMD-06 documents jj-destructive-undo semantic shift per Pitfall 6), P4 brownfield CMD-10 with synth-jj-fixtures + D-34 coverage-gap docs, P5 CI hardening + close (7 flake fixes + 10-green soak + required-blocking flip + MIGR-02 cosmetic sweep + PROMPT-03 trust-installer closure per D-37). Note: ROADMAP success criterion #3 will be amended by plan 05-01 per D-31 (BROWN dogfood re-bucketed to Phase 6); the legacy wording on line 149 remains in this file until 05-01 lands the edit.*
 *Last updated: 2026-05-13 — Phase 4 plan execution complete (7/7). jj workspace.{add,forget,prune,reap} bodies + acquireJjWriteLock + lazy octopus helpers + pre-commit/pre-push hook wiring + SDK query bridge `gsd-sdk query hooks.fire` + cr-01 raw-bookmark argv-injection fold-in landed. WS-01..13, HOOK-01..05, CI-04 (19 IDs) all marked Complete in REQUIREMENTS.md. Known gap: A3 colocated-pre-commit empirical refutation (plan 04-06) — D-10 no-op leaves colocated users without a pre-commit path; three fix paths documented in 04-LEARNINGS Open Q1, deferred. jj-native CI lane continues as allow-failure (D-22).*
 *Last updated: 2026-05-12 — Phase 3 plan execution complete (7/7). jj-colocated backend shipped: every adapter contract verb implemented; CI matrix lane active as allow-failure (CI-01 graduates to required-blocking in Phase 5); conflict()→conflicts() revset doc-bug fixed; bug-triage finalized (all 7 worktree-bug tests carries-verbatim). Format-migration tracker (03-CONTEXT.md) handed off to Phase 6.*

@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: milestone_complete
-stopped_at: Phase 5 context gathered
-last_updated: "2026-05-14T07:21:41.528Z"
-last_activity: 2026-05-14 -- Phase 06 execution started
+milestone: v1.1
+milestone_name: first upstream sync
+status: planning
+last_updated: "2026-05-14T11:53:03.576Z"
+last_activity: 2026-05-14
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 56
-  completed_plans: 53
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,16 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 06 — brownfield-jj-migration-sticky-vcs-adapter-flip-planning-sha
+**Current focus:** Phase 07 — reconcile fork capabilities with upstream (v1.1 first upstream sync)
 
 ## Current Position
 
-Phase: 06
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-05-14
-
-Progress: [██████████] 100%
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-14 — Milestone v1.1 started
 
 ## Performance Metrics
 
@@ -88,6 +85,7 @@ Progress: [██████████] 100%
 - Phase 2.1 inserted after Phase 2: VCS Abstraction Audit — Drop Git-Only Concepts (URGENT)
 - Phase 6 added: Brownfield jj Migration — sticky vcs.adapter flip (Phase 3 D-17) + .planning SHA→change_id rewriter (Phase 3 D-19 tracker consumer)
 - Phase 03.1 inserted after Phase 3: make tests run faster (URGENT)
+- Phase 7 added: Reconcile fork capabilities with upstream — adapter operations for the wave-cleanup placeholder (7 verbs documented in worktree-safety.cjs stub), drop raw-git fallback blocks from execute-phase.md / quick.md, and bring new upstream test surfaces (shell-projection, installer-migrations, SDK-first seams) green on the jj-port
 
 ### Decisions
 

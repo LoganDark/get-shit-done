@@ -8,6 +8,20 @@ A hard fork of [`gsd-build/get-shit-done`](https://github.com/gsd-build/get-shit
 
 **Every upstream GSD command works correctly on a jj-only repo without git** — the user can run their full GSD workflow (new project, plan, execute, ship, hotfix, complete-milestone, multi-workspace) against a jj backend with no degradation in behavior or test coverage.
 
+## Current Milestone: v1.1 first upstream sync
+
+**Goal:** Reconcile fork capabilities with the upstream code surface brought in by the May 2026 merge — fill the adapter gaps the merge exposed and bring new upstream test surfaces green on jj.
+
+**Target work:**
+
+- 7 VcsAdapter verbs to unblock the wave-cleanup executor (`refs.bookmarks.currentIn`, `refs.mergeBase`, `diff{diffFilter}`, scoped `status`, `workspace.merge`, `workspace.remove`, `bookmarks.delete`) — git + jj backends each.
+- Drop raw-git `else`-branch fallbacks from `workflows/execute-phase.md` and `workflows/quick.md` once the adapter verbs land.
+- Wire `gsd-sdk query worktree.cleanup-wave` through the new verbs (the executor is currently a `not_implemented_in_jj_port` stub).
+- Verify upstream's new test surfaces (`shell-projection`, `installer-migrations`, SDK-first seams refactor) pass on the jj-port — or document deltas.
+- Decide on `scripts/changeset/github-release-notes.cjs` (currently lint-annotated as dev-only; may migrate to adapter or delete since the fork doesn't publish releases).
+
+**Key context:** v1.0 shipped (8/8 phases, 100%). This is the first sync-and-reconcile cycle; expect more v1.x cycles as upstream continues to land structural refactors. Phase 7 already provisioned in ROADMAP.md.
+
 ## Requirements
 
 ### Validated
