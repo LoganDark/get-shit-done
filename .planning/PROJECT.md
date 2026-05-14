@@ -159,4 +159,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 **Phase 1 complete (2026-05-09):** Adapter Foundation + Git Backend landed — `sdk/src/vcs/` houses the `VcsAdapter` discriminated-union contract, `createGitAdapter` answers every method byte-identically to the pre-migration `execSync('git …')` baselines, the parameterized two-runner harness (vitest + node:test) is wired with a single source-of-truth `BACKENDS_AVAILABLE`, and the no-raw-git lint guard (whole-repo default-deny) is enforced in CI. Phase 2 (bulk call-site migration) is unblocked.
 
-*Last updated: 2026-05-09 after Phase 1 completion*
+*Last updated: 2026-05-14
