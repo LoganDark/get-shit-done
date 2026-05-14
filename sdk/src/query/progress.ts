@@ -284,7 +284,11 @@ export const statsJson: QueryHandler = async (args, projectDir, workstream) => {
   let gitCommits = 0;
   let gitFirstCommitDate: string | null = null;
   try {
-    const vcs = createVcsAdapter(projectDir, { kind: 'git' });
+    // B-08: no `kind` override — respect sticky `vcs.adapter` so
+    // countCommits/rootCommits read from the configured backend.
+    // Variable name retains the `git` prefix for backward field-compat;
+    // a future rename to `vcsCommits` is non-breaking-API safe.
+    const vcs = createVcsAdapter(projectDir);
     gitCommits = vcs.refs.countCommits({ rev: vcs.refs.head });
     const roots = vcs.refs.rootCommits({ rev: vcs.refs.head });
     if (roots.length > 0) {

@@ -379,7 +379,10 @@ export const checkDecisionCoveragePlan: QueryHandler = async (args, projectDir, 
  */
 async function recentCommitMessages(projectDir: string, limit = 200): Promise<string> {
   try {
-    const vcs = createVcsAdapter(projectDir, { kind: 'git' });
+    // B-08: no `kind` override — respect sticky `vcs.adapter` so the
+    // log read comes from the configured backend (decision coverage
+    // applies equally to jj-colocated repos).
+    const vcs = createVcsAdapter(projectDir);
     const entries = vcs.log({ maxCount: limit });
     // Reconstruct the byte-equivalent text the prior `git log --pretty=%s%n%b`
     // call produced: each entry is `subject\nbody` (body may be empty),

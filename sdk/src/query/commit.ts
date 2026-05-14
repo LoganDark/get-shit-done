@@ -125,7 +125,13 @@ export const commit: QueryHandler = async (args, projectDir, workstream) => {
   // never anything that was pre-staged externally (#3061).
   const pathsToCommit = filePaths.length > 0 ? filePaths : ['.planning/'];
   // Plan 02-08: route through the VcsAdapter exclusively (W5 prescriptive).
-  const vcs = createVcsAdapter(projectDir, { kind: 'git' });
+  // B-08 (Phase 6 follow-up): no `kind` override — `createVcsAdapter` now
+  // resolves the backend via env > sticky `vcs.adapter` config > auto-detect.
+  // The earlier `kind: 'git'` hardcode silently bypassed the migration's
+  // sticky-config flip, routing every commit through git on a jj-colocated
+  // repo and producing stranded `(no description set)` sibling commits
+  // when git HEAD advanced under jj's feet.
+  const vcs = createVcsAdapter(projectDir);
 
   // Plan 2.1-04 (D-02 + D-04 + D-06): legacy path-scope field collapsed onto
   // `files` with WC-state-capture semantics. The git backend's commit({files})
@@ -212,7 +218,8 @@ export const checkCommit: QueryHandler = async (_args, projectDir, workstream) =
   }
 
   // Check staged files via the VcsAdapter (Plan 02-08 W5 — prescriptive).
-  const vcs = createVcsAdapter(projectDir, { kind: 'git' });
+  // B-08: respect sticky `vcs.adapter` config — no `kind` override here.
+  const vcs = createVcsAdapter(projectDir);
   const diffResult = vcs.diff({ staged: true, nameOnly: true });
   const stagedFiles = diffResult.nameOnly;
 
@@ -303,7 +310,8 @@ export const commitToSubrepo: QueryHandler = async (args, projectDir, workstream
     // state of the requested paths. `files: fileArgs` keeps the scope
     // identical to the requested paths so pre-staged external changes do not
     // leak in (#3061).
-    const subVcs = createVcsAdapter(projectDir, { kind: 'git' });
+    // B-08: respect sticky `vcs.adapter` config — no `kind` override here.
+    const subVcs = createVcsAdapter(projectDir);
     const commitResult = subVcs.commit({
       message: sanitized,
       files: fileArgs,

@@ -39,7 +39,9 @@ export const checkShipReady: QueryHandler = async (args, projectDir) => {
   let base_branch: string | null = null;
   let remote_configured = false;
   try {
-    const vcs = createVcsAdapter(projectDir, { kind: 'git' });
+    // B-08: no `kind` override — respect sticky `vcs.adapter` so
+    // ship-readiness probes read from the configured backend.
+    const vcs = createVcsAdapter(projectDir);
     try {
       const porcelain = vcs.status({ porcelain: true });
       clean_tree = porcelain.raw === '';

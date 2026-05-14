@@ -1008,7 +1008,9 @@ export const initNewWorkspace: QueryHandler = async (_args, projectDir) => {
       if (existsSync(join(fullPath, '.git'))) {
         let hasUncommitted = false;
         try {
-          const vcs = createVcsAdapter(fullPath, { kind: 'git' });
+          // B-08: no `kind` override — respect sticky `vcs.adapter` so a
+          // jj-colocated child repo's status comes from jj, not raw git.
+          const vcs = createVcsAdapter(fullPath);
           const status = vcs.status({ porcelain: true });
           hasUncommitted = status.entries.length > 0;
         } catch { /* best-effort */ }
@@ -1019,6 +1021,14 @@ export const initNewWorkspace: QueryHandler = async (_args, projectDir) => {
 
   let worktreeAvailable = false;
   try {
+    // B-08 audit: `kind: 'git'` is INTENTIONAL here. This probes whether
+    // the `git` binary is installed for the `git worktree` feature —
+    // it's a backend-feature probe, not a primary-VCS operation. The
+    // `if (vcs.kind === 'git')` guard is structurally always true under
+    // the override; it stays as a defensive type-narrowing affirmation.
+    // Future cleanup: replace with a direct child_process probe for
+    // git --version so the worktree-availability probe stops creating
+    // an adapter at all.
     const vcs = createVcsAdapter(projectDir, { kind: 'git' });
     if (vcs.kind === 'git') {
       vcs.gitOnly.version();
@@ -1141,7 +1151,9 @@ export const initRemoveWorkspace: QueryHandler = async (args, _projectDir) => {
     const repoPath = join(wsPath, repo.name as string);
     if (!existsSync(repoPath)) continue;
     try {
-      const vcs = createVcsAdapter(repoPath, { kind: 'git' });
+      // B-08: no `kind` override — respect sticky `vcs.adapter` so a
+      // jj-colocated workspace repo's status comes from jj, not raw git.
+      const vcs = createVcsAdapter(repoPath);
       const status = vcs.status({ porcelain: true });
       if (status.entries.length > 0) {
         dirtyRepos.push(repo.name as string);

@@ -139,6 +139,16 @@ export class InitRunner {
         // Plan 02-06 Task 4: flip async `await this.execGit(['init'])`
         // to sync `vcs.gitOnly.init()` after the git-kind narrow (D-07).
         // The containing method stays async for its other awaits.
+        //
+        // B-08 audit: `kind: 'git'` is INTENTIONAL here. This branch only
+        // fires when `!has_git` (no `.git/` directory exists yet) and
+        // explicitly runs `git init` to bootstrap. The `vcs.gitOnly.init()`
+        // method is git-specific by type-narrowing; respecting a sticky
+        // `vcs.adapter: jj` config here would land us in a code path that
+        // doesn't exist (`jj.gitOnly` is `undefined`). The decision of
+        // whether to ALSO `jj git init --colocate` afterwards is the
+        // greenfield gate's responsibility (`/gsd-new-project` workflow),
+        // not init-runner's.
         if (!projectInfo.has_git) {
           const vcs = createVcsAdapter(this.projectDir, { kind: 'git' });
           if (vcs.kind === 'git') vcs.gitOnly.init();
