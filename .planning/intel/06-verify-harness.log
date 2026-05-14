@@ -1,0 +1,168 @@
+=== 06-verify-harness v2 — Thu May 14 02:06:31 PDT 2026 ===
+Repo HEAD: b47c7630e7b689df678290a17ed2b62f028aa6bb
+HARNESS_BASE=/var/folders/sq/v1_sd6990ysgkqvckj68qcvw0000gn/T/gsd-verify-dncs
+jj: jj 0.41.0-cfdadb380babf004a3c0f1f0177335756011b3a1-b3506b213cbf53c2298f710d32cb8eb358f1592a-76bbc6fca7d4a30646004c9179e367ec220c5194-a83b55d79bfad0dd003ac92d9df6f41ff888e2a8
+git: git version 2.50.1 (Apple Git-155)
+
+--- Step 1: bare filesystem-path upstream ---
+  · Bare upstream HEAD=f6d8d695280a8e613cdffd7578ba6f10f0d9f61b branch=main
+
+--- Step 2: sibling clones ---
+  · CLONE_GIT HEAD=f6d8d695280a8e613cdffd7578ba6f10f0d9f61b
+  · CLONE_JJ  HEAD=f6d8d695280a8e613cdffd7578ba6f10f0d9f61b
+
+--- Step 3: B-04 — migrate-vcs --target jj on plain git repo (no manual jj init) ---
+{
+  "ok": true,
+  "migrated": true,
+  "filesChanged": 0,
+  "filesScanned": 0,
+  "orphans": {
+    "count": 0,
+    "ancestorResolved": 0,
+    "unresolvable": 0,
+    "reportPath": "/private/var/folders/sq/v1_sd6990ysgkqvckj68qcvw0000gn/T/gsd-verify-dncs/clone-jj/.planning/intel/06-migration-report.md"
+  },
+  "previousAdapter": "git",
+  "newAdapter": "jj",
+  "commitHash": "6e36b22721d859a382be51de6e7742687ba2bbc7"
+}
+  ✓ PASS: B-04 — unforced migrate-vcs --target jj succeeded on plain git repo (no prior jj git init needed)
+  ✓ PASS: .jj/ directory exists post-migrate
+  ✓ PASS: vcs.adapter flipped to jj
+
+--- Step 4: B-03 — same-direction re-run returns migrated:false ---
+{
+  "ok": true,
+  "migrated": false,
+  "filesChanged": 0,
+  "filesScanned": 0,
+  "orphans": {
+    "count": 0,
+    "ancestorResolved": 0,
+    "unresolvable": 0,
+    "reportPath": ""
+  },
+  "previousAdapter": "jj",
+  "newAdapter": "jj",
+  "commitHash": "6e36b22721d859a382be51de6e7742687ba2bbc7"
+}
+  ✓ PASS: B-03 — marker-probe returned ok:true migrated:false
+
+--- Step 5: B-02 revert — local bookmark should NOT be auto-tracked ---
+  jj bookmark list output:
+    main: slsuouop d87802cb test: seed .planning/config.json
+  · B-02 — neither pattern matched; jj bookmark list shape may differ
+
+--- Step 6: commit cycle — SDK on git AND jj ---
+  [git] edit + commit (positional message + --files)
+    {
+      "committed": true,
+      "hash": "ee51fdb",
+      "message": "feat: first git-side commit via SDK",
+      "files": [
+        "README.md"
+      ]
+    }
+  ✓ PASS: git-side SDK commit succeeded
+  · CLONE_GIT new HEAD: ee51fdbbc867be1c3978cdd50f44f846befe7679
+  [jj] edit + commit (positional message + --files)
+    {
+      "committed": true,
+      "hash": "b2f5253",
+      "message": "feat: first jj-side commit via SDK",
+      "files": [
+        "README.md"
+      ]
+    }
+  ✓ PASS: jj-side SDK commit succeeded
+  · CLONE_JJ new HEAD: b2f525320d19d5c45201d186149cdb0a87c2bdce
+  jj log -r '@-' summary:
+    Reset the working copy parent to the new Git HEAD.
+    swomvwlyuzmowqxrtyrorzvpxwpoqroz feat: first jj-side commit via SDK
+
+--- Step 7: push cycle ---
+  [git] git push origin main
+    To /var/folders/sq/v1_sd6990ysgkqvckj68qcvw0000gn/T/gsd-verify-dncs/upstream.git
+       f6d8d69..ee51fdb  main -> main
+  ✓ PASS: git push advanced upstream/main
+  · Rolled upstream back to seed HEAD for clean jj push test
+  [jj] track + push
+    Warning: <bookmark>@<remote> syntax is deprecated, use `<bookmark> --remote=<remote>` instead.
+    Started tracking 1 remote bookmarks.
+    Moved 1 bookmarks to swomvwly b2f52532 main* | feat: first jj-side commit via SDK
+    Changes to push to origin:
+      bookmark: main [move forward from f6d8d695280a to b2f525320d19]
+  ✓ PASS: jj git push advanced upstream/main
+
+--- Step 8: pull cycle (third clone) ---
+  · third clone HEAD before fetch: b2f525320d19d5c45201d186149cdb0a87c2bdce
+  · third clone HEAD after fetch+reset: b2f525320d19d5c45201d186149cdb0a87c2bdce
+  ✓ PASS: third clone caught upstream state (round-trip via filesystem-path remote OK)
+
+--- Step 9: revert on git — expect inverse-commit, original preserved in log ---
+    {
+      "ok": true,
+      "exitCode": 0,
+      "stdout": "[main 0fb6e2e] Revert \"feat: first git-side commit via SDK\"
+     Date: Thu May 14 02:06:35 2026 -0700
+     1 file changed, 1 deletion(-)",
+      "stderr": "",
+      "rev": "HEAD",
+      "noCommit": false,
+      "backend": "git"
+    }
+  · git HEAD pre-revert:  ee51fdbbc867be1c3978cdd50f44f846befe7679
+  · git HEAD post-revert: 0fb6e2e59ed74930f6e46c6cf2a5db061ab0f862
+  ✓ PASS: git revert advanced HEAD (inverse commit landed)
+  ✓ PASS: git revert preserved original commit in history (CMD-06 git semantics)
+  ✓ PASS: git revert removed the edit from WC
+
+--- Step 10: revert on jj — TWO paths: (a) default refuses immutable, (b) --force overrides ---
+  · jj HEAD pre-revert (git sha): b2f525320d19d5c45201d186149cdb0a87c2bdce
+  · jj @- change_id pre-revert: swomvwlyuzmowqxrtyrorzvpxwpoqroz
+  [10a] default (no --force) — expect refusal because commit is reachable from remote-tracked bookmark
+    {
+      "ok": false,
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Error: Commit b2f525320d19 is immutable\nHint: Could not modify commit: swomvwly b2f52532 main | feat: first jj-side commit via SDK\nHint: Immutable commits are used to protect shared history.\nHint: For more information, see:\n      - https://docs.jj-vcs.dev/latest/config/#set-of-immutable-commits\n      - `jj help -k config`, \"Set of immutable commits\"\nHint: This operation would rewrite 1 immutable commits.",
+      "rev": "swomvwlyuzmowqxrtyrorzvpxwpoqroz",
+      "noCommit": false,
+      "force": false,
+      "backend": "jj",
+      "destructive": true
+    }
+  ✓ PASS: B-05 default — jj refused to abandon immutable commit with the documented error (CMD-06 + jj shared-history protection both upheld)
+  ✓ PASS: B-05 default — state unchanged after refusal
+  [10b] --force — expect jj abandon --ignore-immutable to succeed (destructive rewrite of shared history)
+    {
+      "ok": true,
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": "Abandoned 1 commits:\n  swomvwly b2f52532 main | feat: first jj-side commit via SDK\nDeleted bookmarks: main\nRebased 1 descendant commits onto parents of abandoned commits\nWorking copy  (@) now at: owvkyzwr cbde0acc (empty) (no description set)\nParent commit (@-)      : krylronw 6e36b227 chore(vcs): migrate git -> jj [gsd-migrate-vcs v1]\nAdded 0 files, modified 1 files, removed 0 files\nHint: Deleted bookmarks can be pushed by name or all at once with `jj git push --deleted`.",
+      "rev": "swomvwlyuzmowqxrtyrorzvpxwpoqroz",
+      "noCommit": false,
+      "force": true,
+      "backend": "jj",
+      "destructive": true
+    }
+  ✓ PASS: B-05 --force — jj abandon with --ignore-immutable succeeded
+  ✓ PASS: post-force-abandon: change removed from visible history (CMD-06 jj destructive semantics)
+  ✓ PASS: jj op log retains abandon operation (recovery: jj op restore <prev>)
+
+--- Step 11: SDK ↔ raw-git baseline-parity (50 captured snapshots) ---
+       ✓ GIT-02 byte-identity baselines (B-1) > commit-ts-170-commit matches sdk/src/query/commit.ts:170  318ms
+       ✓ GIT-02 byte-identity baselines (B-1) > commit-ts-301-commit-c-form matches sdk/src/query/commit.ts:301  335ms
+    
+    
+     Test Files  1 passed (1)
+          Tests  50 passed (50)
+       Start at  02:06:36
+       Duration  8.46s (transform 64ms, setup 0ms, collect 85ms, tests 8.22s, environment 0ms, prepare 48ms)
+  ✓ PASS: Git backend parity confirmed:       Tests  50 passed (50)
+
+===============================================
+VERDICT: ALL CHECKS PASSED
+Evidence log: /tmp/06-verify-harness.log
+===============================================
