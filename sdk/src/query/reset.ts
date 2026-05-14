@@ -9,6 +9,12 @@
  * Usage:
  *   gsd-sdk query reset --ref HEAD~1 --mode hard
  *   gsd-sdk query reset --ref HEAD --mode soft --cwd /path
+ *   gsd-sdk query reset --ref HEAD --mode mixed -- .planning/
+ *
+ * Phase 5 plan 05-06 Task 2 (CR-03 fix): trailing positionals after `--` are
+ * collected into `paths` and forwarded to `gitOnly.reset({paths})`. Without
+ * this, the workflow's `gsd-sdk query reset --ref HEAD --mode mixed -- .planning/`
+ * silently dropped the pathspec and reset the entire index.
  */
 
 import { createVcsAdapter } from '../vcs/index.js';
@@ -25,9 +31,17 @@ export const resetQuery: QueryHandler = async (args, projectDir) => {
   let cwd = projectDir;
   let ref: string | undefined;
   let mode: ResetMode | undefined;
+  const paths: string[] = [];
 
+  let inPaths = false;
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--cwd' && args[i + 1]) {
+    if (inPaths) {
+      paths.push(args[i]);
+      continue;
+    }
+    if (args[i] === '--') {
+      inPaths = true;
+    } else if (args[i] === '--cwd' && args[i + 1]) {
       cwd = args[i + 1];
       i++;
     } else if (args[i] === '--ref' && args[i + 1]) {
@@ -66,7 +80,11 @@ export const resetQuery: QueryHandler = async (args, projectDir) => {
     };
   }
 
-  const result = vcs.gitOnly.reset({ ref, mode });
+  const result = vcs.gitOnly.reset({
+    ref,
+    mode,
+    paths: paths.length > 0 ? paths : undefined,
+  });
   return {
     data: {
       ok: result.exitCode === 0,
@@ -75,6 +93,7 @@ export const resetQuery: QueryHandler = async (args, projectDir) => {
       stderr: result.stderr,
       ref,
       mode,
+      paths: paths.length > 0 ? paths : undefined,
     },
   };
 };

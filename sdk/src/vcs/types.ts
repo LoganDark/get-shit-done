@@ -360,13 +360,27 @@ export interface GitOnlyOps {
    */
   revert(opts: { rev: string; noCommit: boolean }): ExecResult;
   /**
+   * Phase 5 plan 05-06 Task 1 (CR-04 fix): drop an in-progress `git revert`
+   * sequence. Wraps `git revert --abort`. Does NOT throw on non-zero exit —
+   * caller inspects `exitCode` (zero = sequence dropped, non-zero = no
+   * sequence in progress / git failure). The jj backend has no in-progress
+   * revert sequence, so the `gsd-sdk query revert --abort` shim returns a
+   * documented no-op envelope on jj WITHOUT calling this method.
+   */
+  revertAbort(): ExecResult;
+  /**
    * Plan 05-01 Task 2 (D-33 batch 1, Rule 3 blocking issue closure): git-side
    * reset / merge / restore primitives that the new `gsd-sdk query reset|merge|
    * restore` shims wrap. No parallel jj method — the SDK shims return a clean
    * "not supported on jj backend" error after `vcs.kind === 'jj'` narrowing
    * fails. Args are always built via array (no shell-string concatenation).
+   *
+   * Phase 5 plan 05-06 Task 1 (CR-03 fix): path-scoped reset support. When
+   * `paths` is non-empty, the impl appends `-- <paths>` to the git argv so
+   * only those index entries are touched. Empty/missing → whole-index reset
+   * (current behavior).
    */
-  reset(opts: { ref: string; mode: 'soft' | 'mixed' | 'hard' }): ExecResult;
+  reset(opts: { ref: string; mode: 'soft' | 'mixed' | 'hard'; paths?: string[] }): ExecResult;
   merge(opts: { ref: string; squash?: boolean; noFf?: boolean; noCommit?: boolean }): ExecResult;
   restore(opts: { files: string[]; from?: string }): ExecResult;
   // D-12: NO `raw` escape hatch in Phase 1. Add specific verbs as Phase 2 migration discovers them.

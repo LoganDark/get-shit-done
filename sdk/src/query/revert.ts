@@ -25,6 +25,12 @@
  *   gsd-sdk query revert HEAD
  *   gsd-sdk query revert HEAD --no-commit          (git only — staged inverse)
  *   gsd-sdk query revert <change_id> --cwd /path
+ *   gsd-sdk query revert --abort                   (git only — drop mid-revert)
+ *
+ * Phase 5 plan 05-06 Task 2 (CR-04 fix): the `--abort` flag is now honoured.
+ * On git backend it dispatches `git revert --abort` via the new
+ * `gitOnly.revertAbort()` primitive. On jj backend it returns a documented
+ * no-op envelope (jj has no in-progress revert sequence).
  */
 
 import { createVcsAdapter } from '../vcs/index.js';
@@ -35,6 +41,7 @@ export const revertQuery: QueryHandler = async (args, projectDir) => {
   let cwd = projectDir;
   let rev: string | undefined;
   let noCommit = false;
+  let abort = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--cwd' && args[i + 1]) {
@@ -42,16 +49,49 @@ export const revertQuery: QueryHandler = async (args, projectDir) => {
       i++;
     } else if (args[i] === '--no-commit') {
       noCommit = true;
+    } else if (args[i] === '--abort') {
+      abort = true;
     } else if (!args[i].startsWith('--') && rev === undefined) {
       rev = args[i];
     }
+  }
+
+  const vcs = createVcsAdapter(cwd);
+
+  if (abort) {
+    if (vcs.kind === 'git') {
+      const r = vcs.gitOnly.revertAbort();
+      return {
+        data: {
+          ok: r.exitCode === 0,
+          exitCode: r.exitCode,
+          stdout: r.stdout,
+          stderr: r.stderr,
+          abort: true,
+          backend: 'git',
+        },
+      };
+    }
+    // jj path: no in-progress revert sequence to abort; documented no-op.
+    // Pitfall 6 — jj abandon is one-shot, there is no multi-step revert
+    // sequence to roll back. The undo workflow's conflict-recovery path
+    // is git-only by construction (jj abandon either succeeds or fails
+    // atomically), but the verb returns a typed no-op envelope so callers
+    // do not have to branch on backend kind.
+    return {
+      data: {
+        ok: true,
+        abort: true,
+        backend: 'jj',
+        note: 'jj has no in-progress revert sequence; abort is a no-op',
+      },
+    };
   }
 
   if (!rev) {
     return { data: { ok: false, error: 'revert: positional <rev> argument required' } };
   }
 
-  const vcs = createVcsAdapter(cwd);
   if (vcs.kind === 'git') {
     const result = vcs.gitOnly.revert({ rev, noCommit });
     return {

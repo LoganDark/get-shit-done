@@ -1,6 +1,11 @@
 /**
  * Unit tests for pushQuery (Plan 05-01 Task 2, D-33 batch 1).
  * Mocks createVcsAdapter to assert argv parsing + adapter delegation shape.
+ *
+ * Plan 05-06 Task 2 (WR-03 fix): adapter assertion expects encoded
+ * `bookmark:<name>` RevisionExpr, not the bare argv string — pushQuery now
+ * wraps the --bookmark argv via expr.bookmark() before forwarding to
+ * vcs.push().
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -32,17 +37,26 @@ describe('pushQuery', () => {
     expect(res.data).toMatchObject({ ok: true, exitCode: 0 });
   });
 
-  it('parses --remote, --bookmark, --force and validates refname', async () => {
+  it('WR-03 fix: --bookmark feature/x is wrapped via expr.bookmark before forwarding', async () => {
     const res = await pushQuery(
       ['--remote', 'origin', '--bookmark', 'feature/x', '--force'],
       '/repo',
     );
     expect(pushMock).toHaveBeenCalledWith({
       remote: 'origin',
-      ref: 'feature/x',
+      ref: 'bookmark:feature/x',
       force: true,
     });
     expect(res.data).toMatchObject({ ok: true, remote: 'origin', bookmark: 'feature/x', force: true });
+  });
+
+  it('WR-03 fix: --bookmark release/v1.0 also encodes through expr.bookmark', async () => {
+    await pushQuery(['--remote', 'origin', '--bookmark', 'release/v1.0'], '/repo');
+    expect(pushMock).toHaveBeenCalledWith({
+      remote: 'origin',
+      ref: 'bookmark:release/v1.0',
+      force: false,
+    });
   });
 
   it('honours --cwd override', async () => {
