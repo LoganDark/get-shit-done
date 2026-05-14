@@ -273,10 +273,10 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | CMD-11 | Phase 5 | Pending |
 | PROMPT-01 | Phase 5 | Pending |
 | PROMPT-02 | Phase 5 | Pending |
-| PROMPT-03 | Phase 5 | Pending |
+| PROMPT-03 | Phase 5 | Complete (Phase 5 plan 05-05 — trust-installer closure per D-37; no per-runtime smoke matrix added; source-of-truth Claude markdown is processed by `bin/install.js` transform pipeline for 15+ runtimes) |
 | BROWN-01 | Phase 6 | Pending (re-bucketed from Phase 5 per Phase 5 CONTEXT D-31) |
 | BROWN-02 | Phase 6 | Pending (re-bucketed from Phase 5 per Phase 5 CONTEXT D-31) |
-| CI-03 | Phase 5 | Pending |
+| CI-03 | Phase 5 | Complete (Phase 5 plan 05-05 — docs note landed in `.github/workflows/test.yml` header block: GitHub Actions workflows stay on git per the permanent architectural boundary — GitHub *is* git) |
 
 **Coverage:**
 - v1 requirements: 86 total (across 15 categories) — note: original footer reported "78 across 13" but actual content sums to 86 across 15 sections (SQUASH and BROWN are separate top-level sections, plus larger per-category sizes than initially summarized). Reconcile at next phase transition.

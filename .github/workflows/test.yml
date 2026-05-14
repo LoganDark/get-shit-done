@@ -1,5 +1,21 @@
 name: Tests
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CI-03 (Phase 5 plan 05-05 — D-37 / D-38 docs decision):
+# GitHub Actions workflows themselves stay on git — GitHub *is* git. The jj
+# port covers the GSD CLI + SDK that USERS run locally / in workspaces; it
+# does NOT extend to the workflow runtime (canary.yml, release-sdk.yml,
+# hotfix.yml, branch-cleanup.yml, auto-branch.yml, and this file). These
+# workflows run on github.com infrastructure where the working repo is
+# always a git checkout, so the underlying git invocations in their shell
+# steps remain idiomatic and are NOT routed through the VCS adapter.
+#
+# This is a permanent architectural boundary, NOT a deferred port. The jj
+# backend's value is local developer ergonomics + parallel-workspace
+# performance; CI runners are ephemeral single-checkout containers where
+# that value does not apply.
+# ─────────────────────────────────────────────────────────────────────────────
+
 on:
   push:
     branches:
@@ -61,6 +77,14 @@ jobs:
     # CI-01 graduates to required-blocking in Phase 5 (per D-11). Phase 4
     # plan 01 (D-22) adds the jj-native lane with the same allow-failure
     # posture; both graduate together in Phase 5.
+    #
+    # Phase 5 plan 05-05 (D-36 step 2): the flake-fix patches landed in
+    # commit df821bae across 7 jj-* test files. The soak window is tracked
+    # in .planning/intel/ci-jj-soak.md and graduation flips the conditional
+    # below to `false` once 10 consecutive green nightly runs land on both
+    # lanes. See the proposed-but-not-yet-landed flip in 05-05-SUMMARY.md.
+    # The CI-03 boundary (GitHub Actions stays on git) is documented in the
+    # header block at the top of this file.
     continue-on-error: ${{ matrix.backend == 'jj-colocated' || matrix.backend == 'jj-native' }}
 
     strategy:
