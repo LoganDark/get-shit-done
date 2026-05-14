@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_plan
+status: executing
 stopped_at: Phase 5 context gathered
-last_updated: "2026-05-14T03:02:39.242Z"
-last_activity: 2026-05-14 -- Phase 05 execution started
+last_updated: "2026-05-14T07:21:41.528Z"
+last_activity: 2026-05-14 -- Phase 06 execution started
 progress:
   total_phases: 8
   completed_phases: 7
-  total_plans: 49
-  completed_plans: 45
+  total_plans: 56
+  completed_plans: 53
   percent: 88
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 05 — command-translations-brownfield-validation-ci-hardening
+**Current focus:** Phase 06 — brownfield-jj-migration-sticky-vcs-adapter-flip-planning-sha
 
 ## Current Position
 
-Phase: 06
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-14
+Phase: 06 (brownfield-jj-migration-sticky-vcs-adapter-flip-planning-sha) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 06
+Last activity: 2026-05-14 -- Phase 06 execution started
 
 Progress: [██████████] 100%
 
