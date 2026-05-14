@@ -149,12 +149,15 @@ Plans:
   3. Brownfield commands (`/gsd-map-codebase`, `/gsd-import`, `/gsd-ingest-docs`, `/gsd-resume-work`, `/gsd-pause-work`, `/gsd-ship`, `/gsd-pr-branch`, `/gsd-undo`) pass integration tests against synthetic jj fixtures covering each command's decision tree; full dogfood validation against this repo's jj backend is re-bucketed to Phase 6 per CONTEXT D-31 (depends on the Phase 6 SHA→change_id rewriter).
   4. The first weekly upstream rebase performed after brownfield validation is recorded with conflict count and a brief retro; CI matrix graduates jj-backend tests from allow-failure to required-blocking; GitHub Actions workflows (`canary`, `release-sdk`, `hotfix`, `branch-cleanup`, `auto-branch`, etc.) remain git-side per CI-03 and are explicitly flagged in the docs as "stays on git — GitHub *is* git".
   5. The full v1 commitment holds: every upstream GSD command works correctly on a jj-only repo without git, with no regression in test coverage on the git side and no `.skip` accumulation on either side.
-**Plans**: 5 plans
+**Plans**: 8 plans (5 original + 3 gap-closure)
 - [x] 05-01-PLAN.md — Foundational infra: A3 fix (D-32) + 11 new SDK query verbs + D-31 deferral edits to ROADMAP/REQUIREMENTS
 - [x] 05-02-PLAN.md — Daily-driver commands (CMD-01..05): execute-phase.md + quick.md rewrites + 5 integration tests
 - [x] 05-03-PLAN.md — Lifecycle commands (CMD-06..09, CMD-11): undo/complete-milestone/code-review.md + agent prompt rewrites + 6 integration tests
 - [x] 05-04-PLAN.md — Brownfield commands (CMD-10): synth-planning-fixture + 5 integration tests (D-34 coverage gap documented)
 - [x] 05-05-PLAN.md — CI hardening + close: 7 flake fixes + 10-green soak + matrix flip + MIGR-02 cosmetic sweep + PROMPT-03 closure
+- [ ] 05-06-PLAN.md — Gap closure: SDK contract fixes (CR-02 RevisionExpr cast in log/diff; WR-03 in push; CR-03 reset paths; CR-04 revert --abort) + black-box integration test against built gsd-sdk binary
+- [ ] 05-07-PLAN.md — Gap closure: CR-01 24-site `.data.X → .X` workflow + agent sweep across undo/complete-milestone/code-review/gsd-executor/gsd-code-fixer + CR-06 path-traversal boundary fix in code-review.md
+- [ ] 05-08-PLAN.md — Gap closure: REQUIREMENTS.md status-table propagation for CMD-01..11 + PROMPT-01..02 (PR-01 process gap)
 
 ## Progress
 
