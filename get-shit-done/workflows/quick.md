@@ -161,6 +161,7 @@ If the project uses git submodules, worktree isolation is unsafe **only when the
 # executor stages any path that falls inside SUBMODULE_PATHS, it must abort
 # the commit and surface the conflict rather than silently corrupting the
 # submodule state.
+# Note: `.gitmodules` is a git-specific config file; jj has no submodule concept yet. The `git config --file` invocation is read-only INI parsing on a flat file — keeping it raw (no D-33 cost; it is not a VCS state mutation).
 if [ -f .gitmodules ]; then
   SUBMODULE_PATHS=$(git config --file .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null | awk '{print $2}')
 else
@@ -188,6 +189,7 @@ compound on top of each other and stay unpushed (#2916). If `$branch_name`
 already exists locally, reuse it as-is so resumed work is not rebased.
 
 ```bash
+# TODO(05-05 sweep): the quick-task branching block below mixes git-only orchestration verbs (symbolic-ref of refs/remotes/origin/HEAD, show-ref --verify, switch, fetch, merge --ff-only, checkout -b "$x" "$base") that have no current SDK substitute and depend on WS-01/WS-02. Block is git-mode-only by construction (quick-task branching applies when branch_name is set, which today only fires on git backend); no D-33 backend conditional needed.
 DEFAULT_BRANCH=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
 DEFAULT_BRANCH=${DEFAULT_BRANCH:-main}
 
@@ -207,7 +209,7 @@ else
     echo "WARNING: git fetch origin $DEFAULT_BRANCH failed; using the local copy of origin/$DEFAULT_BRANCH as base." >&2
   fi
 
-  if [ -n "$(git status --porcelain)" ]; then
+  if [ -n "$(gsd-sdk query status --porcelain --cwd . 2>/dev/null | jq -r '.raw // ""')" ]; then
     echo "WARNING: Uncommitted changes present. Carrying them onto the new quick-task branch — they will be branched off origin/$DEFAULT_BRANCH (not the previous-task HEAD)."
   else
     # Best-effort: fast-forward the local default branch so subsequent local
@@ -636,22 +638,20 @@ Skip this step entirely if `USE_WORKTREES === "false"` (non-worktree mode: PLAN.
 if [ "${USE_WORKTREES}" != "false" ]; then
   COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
   if [ "$COMMIT_DOCS" != "false" ]; then
-    git add "${QUICK_DIR}/${quick_id}-PLAN.md"
-    # No-op skip if nothing actually staged (idempotent re-runs).
-    if git diff --cached --quiet -- "${QUICK_DIR}/${quick_id}-PLAN.md"; then
-      echo "ℹ Pre-dispatch PLAN.md commit skipped (no staged changes)"
+    # CMD-05: single squash on orchestrator @ (no phase setup, no workspace, no octopus).
+    # The SDK query commit verb routes through vcs.commit({files, message, noVerify});
+    # adapter handles git-add ↔ jj-squash translation. --no-verify is forwarded when
+    # workflow.worktree_skip_hooks=true (Phase 4 plan 04-06 honored both sides).
+    SKIP_HOOKS=$(gsd-sdk query config-get workflow.worktree_skip_hooks 2>/dev/null || echo "false")
+    if [ "$SKIP_HOOKS" = "true" ]; then
+      gsd-sdk query commit "docs(${quick_id}): pre-dispatch plan for ${DESCRIPTION}" --files "${QUICK_DIR}/${quick_id}-PLAN.md" --no-verify \
+        || { echo "ERROR: pre-dispatch PLAN.md commit failed (--no-verify path). Aborting before executor dispatch." >&2; exit 1; }
     else
-      # Run hooks normally (#2924). If a project opts out via
-      # workflow.worktree_skip_hooks=true, honor that opt-in only.
-      SKIP_HOOKS=$(gsd-sdk query config-get workflow.worktree_skip_hooks 2>/dev/null || echo "false")
-      if [ "$SKIP_HOOKS" = "true" ]; then
-        git commit --no-verify -m "docs(${quick_id}): pre-dispatch plan for ${DESCRIPTION}" -- "${QUICK_DIR}/${quick_id}-PLAN.md" \
-          || { echo "ERROR: pre-dispatch PLAN.md commit failed (--no-verify path). Aborting before executor dispatch." >&2; exit 1; }
-      else
-        git commit -m "docs(${quick_id}): pre-dispatch plan for ${DESCRIPTION}" -- "${QUICK_DIR}/${quick_id}-PLAN.md" \
-          || { echo "ERROR: pre-dispatch PLAN.md commit failed — likely a pre-commit hook failure. Fix the hook output above (or set workflow.worktree_skip_hooks=true to bypass) and re-run." >&2; exit 1; }
-      fi
+      gsd-sdk query commit "docs(${quick_id}): pre-dispatch plan for ${DESCRIPTION}" --files "${QUICK_DIR}/${quick_id}-PLAN.md" \
+        || { echo "ERROR: pre-dispatch PLAN.md commit failed — likely a pre-commit hook failure. Fix the hook output above (or set workflow.worktree_skip_hooks=true to bypass) and re-run." >&2; exit 1; }
     fi
+    # Idempotent re-runs: if there is nothing staged, sdk/src/query/commit.ts returns
+    # ok=true with the existing-HEAD hash (no-op semantics) — no special-case probe needed.
   fi
 fi
 ```
@@ -662,7 +662,7 @@ fi
 
 Capture current HEAD before spawning (used for worktree branch check):
 ```bash
-EXPECTED_BASE=$(git rev-parse HEAD)
+EXPECTED_BASE=$(gsd-sdk query head-ref --cwd . --pick head)
 ```
 
 Spawn gsd-executor with plan reference:
@@ -678,6 +678,7 @@ FIRST ACTION before any other work: verify this worktree's HEAD is bound to a pe
 branch and that the branch is based on the correct commit.
 
 Step 1 — HEAD attachment assertion (MANDATORY, runs before any reset/commit):
+  # TODO(05-05 sweep): the HEAD-attachment block is git-mode-only by construction — runs inside a Claude Code-spawned git worktree, the `worktree-agent-*` namespace is git-side, and `gsd-sdk query current-branch` returns the bookmarks-pointing-at-HEAD array (Phase 2.1 D-15) not the single-branch-name shape this block needs. Stays raw git until WS-01/WS-02 grows a jj-workspace equivalent prompt template; no D-33 backend conditional needed (git mode is the only path that reaches this prompt body).
   HEAD_REF=$(git symbolic-ref --quiet HEAD || echo "DETACHED")
   ACTUAL_BRANCH=$(git rev-parse --abbrev-ref HEAD)
   if [ "$HEAD_REF" = "DETACHED" ] || echo "$ACTUAL_BRANCH" | grep -Eq '^(main|master|develop|trunk|release/.*)$'; then
@@ -693,10 +694,11 @@ Step 1 — HEAD attachment assertion (MANDATORY, runs before any reset/commit):
   fi
 
 Step 2 — Base correctness (only after Step 1 passes):
+  # TODO(05-05 sweep): no `gsd-sdk query merge-base` verb yet; the merge-base check stays raw git. The `git reset --hard` and HEAD-readback rewrite to the SDK forms below.
   Run: git merge-base HEAD ${EXPECTED_BASE}
   If the result differs from ${EXPECTED_BASE}, hard-reset to the correct base (safe — Step 1 confirmed HEAD is on a per-agent branch and the worktree is fresh):
-    git reset --hard ${EXPECTED_BASE}
-  Then verify: if [ "$(git rev-parse HEAD)" != "${EXPECTED_BASE}" ]; then echo "ERROR: Could not correct worktree base"; exit 1; fi
+    gsd-sdk query reset --ref ${EXPECTED_BASE} --mode hard --cwd .
+  Then verify: if [ "$(gsd-sdk query head-ref --cwd . --pick head)" != "${EXPECTED_BASE}" ]; then echo "ERROR: Could not correct worktree base"; exit 1; fi
 
 This corrects a known issue where EnterWorktree creates branches from main instead of the feature branch HEAD (#2015) and prevents the destructive HEAD-on-master self-recovery path (#2924).
 </worktree_branch_check>
@@ -722,7 +724,7 @@ list, so the guard runs at commit time:
 \`\`\`bash
 SUBMODULE_PATHS=\"${SUBMODULE_PATHS}\"
 if [ -n \"\$SUBMODULE_PATHS\" ]; then
-  STAGED=\$(git diff --cached --name-only)
+  STAGED=\$(gsd-sdk query diff --cached --name-only --cwd . 2>/dev/null | jq -r '.nameOnly // [] | .[]')
   for sm_raw in \$SUBMODULE_PATHS; do
     sm=\"\${sm_raw#./}\"
     sm=\"\${sm%/}\"
@@ -766,6 +768,7 @@ SUMMARY.md and stop — the user must rerun with worktrees disabled.
 After executor returns:
 1. **Worktree cleanup:** If the executor ran with `isolation="worktree"`, merge the worktree branch back and clean up:
    ```bash
+   # TODO(05-05 sweep): the entire worktree-cleanup block below relies on git-worktree lifecycle verbs (git worktree list/remove/unlock, git -C "$WT", git merge --no-ff, git branch -D, git diff --diff-filter, git rm, git commit --amend, git log --follow) that have no current SDK substitute. The jj-workspace equivalent (WS-01/WS-02 — vcs.workspace.list/add/forget/prune) is wired in the adapter but PROMPT-01 has not yet routed this block through it; merge-back semantics is git-specific. Block stays raw git until WS-* lands. Gated by USE_WORKTREES != false, which today only fires on git backend.
    # Find worktrees created by the executor.
    # Inclusion-based filter (#2774): match ONLY agent-spawned worktrees under
    # `.claude/worktrees/agent-` (the namespace Claude Code's `isolation="worktree"`
@@ -822,12 +825,12 @@ After executor returns:
          fi
        done
 
-       if ! git diff --quiet .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || \
+       if [ -n "$(gsd-sdk query diff --name-only --cwd . -- .planning/STATE.md .planning/ROADMAP.md 2>/dev/null | jq -r '.nameOnly // [] | join("\n")')" ] || \
           [ -n "$DELETED_FILES" ]; then
          COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
          if [ "$COMMIT_DOCS" != "false" ]; then
-           git add .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || true
-           git commit --amend --no-edit 2>/dev/null || true
+           # commit --amend --no-edit equivalent: amend the previous commit with the staged tracking files. SDK handler runs `git add -A -- <files>` internally so the pre-staging `git add` is redundant.
+           gsd-sdk query commit --amend --files .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || true
          fi
        fi
 
@@ -889,11 +892,12 @@ If `"false"`, skip with message "Code review skipped (workflow.code_review=false
 **Scope files from executor's commits:**
 ```bash
 # Find the diff base: last commit before quick task started
-# Use git log to find commits referencing the quick task id, then take the parent of the oldest
-QUICK_COMMITS=$(git log --oneline --format="%H" --grep="${quick_id}" 2>/dev/null)
+# gsd-sdk query log returns LogEntry[]; client-side filter on subject to find quick-task commits.
+QUICK_COMMITS=$(gsd-sdk query log --max-count 200 --cwd . 2>/dev/null \
+  | jq -r --arg sub "${quick_id}" '.[] | select(.subject | contains($sub)) | .hash')
 if [ -n "$QUICK_COMMITS" ]; then
   DIFF_BASE=$(echo "$QUICK_COMMITS" | tail -1)^
-  # Verify parent exists (guard against first commit in repo)
+  # TODO(05-05 sweep): no `gsd-sdk query rev-parse` verb yet; the parent-resolution probe (used to detect "first commit in repo" so we can fall back) stays raw git for now. Read-only — D-33 anti-pattern guard not engaged.
   git rev-parse "${DIFF_BASE}" >/dev/null 2>&1 || DIFF_BASE=$(echo "$QUICK_COMMITS" | tail -1)
 else
   # No commits found for this quick task — skip review
@@ -901,7 +905,8 @@ else
 fi
 
 if [ -n "$DIFF_BASE" ]; then
-  CHANGED_FILES=$(git diff --name-only "${DIFF_BASE}..HEAD" -- . ':!.planning' 2>/dev/null | tr '\n' ' ')
+  CHANGED_FILES=$(gsd-sdk query diff --name-only --range "${DIFF_BASE}..HEAD" --cwd . -- . ':!.planning' 2>/dev/null \
+    | jq -r '.nameOnly // [] | .[]' | tr '\n' ' ')
 else
   CHANGED_FILES=""
 fi
@@ -1045,22 +1050,23 @@ Build file list:
 - If `${QUICK_DIR}/${quick_id}-deferred-items.md` exists: `${QUICK_DIR}/${quick_id}-deferred-items.md`
 
 ```bash
-# Explicitly stage all artifacts before commit — PLAN.md may be untracked
-# if the executor ran without worktree isolation and committed docs early
-# Filter .planning/ files from staging if commit_docs is disabled (#1783)
+# gsd-sdk query commit captures WC state for the supplied --files internally
+# (Plan 2.1-04 D-02/D-04/D-06: handler runs `vcs.commit({files})` which does
+# `git add -A -- <files>` then `git commit -m`). The pre-staging `git add` is
+# no longer needed. Filter .planning/ files from the file list if commit_docs
+# is disabled (#1783).
 COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
 if [ "$COMMIT_DOCS" = "false" ]; then
   file_list_filtered=$(echo "${file_list}" | tr ' ' '\n' | grep -v '^\.planning/' | tr '\n' ' ')
-  git add ${file_list_filtered} 2>/dev/null
+  gsd-sdk query commit "docs(quick-${quick_id}): ${DESCRIPTION}" --files ${file_list_filtered}
 else
-  git add ${file_list} 2>/dev/null
+  gsd-sdk query commit "docs(quick-${quick_id}): ${DESCRIPTION}" --files ${file_list}
 fi
-gsd-sdk query commit "docs(quick-${quick_id}): ${DESCRIPTION}" --files ${file_list}
 ```
 
 Get final commit hash:
 ```bash
-commit_hash=$(git rev-parse --short HEAD)
+commit_hash=$(gsd-sdk query head-ref --cwd . --pick head | cut -c1-7)
 ```
 
 Display completion output:
