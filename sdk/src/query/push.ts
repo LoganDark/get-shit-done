@@ -14,9 +14,15 @@
  *   gsd-sdk query push --remote origin --bookmark feature/x
  *   gsd-sdk query push --remote origin --bookmark feature/x --force
  *   gsd-sdk query push --cwd /path/to/repo
+ *
+ * Phase 5 plan 05-06 Task 2 (WR-03 fix): the raw `--bookmark` argv is now
+ * wrapped via `expr.bookmark()` before being handed to the adapter — D-12
+ * forbids raw passthrough. `validateRefname` already gates the input shape,
+ * so the structured factory does not double-throw on legitimate input.
  */
 
 import { createVcsAdapter } from '../vcs/index.js';
+import { expr } from '../vcs/expr.js';
 import { validateRefname } from '../vcs/refs-validator.js';
 import type { QueryHandler } from './utils.js';
 import type { RevisionExpr } from '../vcs/types.js';
@@ -42,9 +48,11 @@ export const pushQuery: QueryHandler = async (args, projectDir) => {
     }
   }
 
+  let ref: RevisionExpr | undefined;
   if (bookmark !== undefined) {
     try {
       validateRefname(bookmark);
+      ref = expr.bookmark(bookmark);
     } catch (err) {
       return {
         data: {
@@ -56,11 +64,25 @@ export const pushQuery: QueryHandler = async (args, projectDir) => {
   }
 
   const vcs = createVcsAdapter(cwd);
-  const result = vcs.push({
-    remote,
-    ref: bookmark as unknown as RevisionExpr | undefined,
-    force,
-  });
+
+  let result;
+  try {
+    result = vcs.push({
+      remote,
+      ref,
+      force,
+    });
+  } catch (err) {
+    return {
+      data: {
+        ok: false,
+        error: (err as Error).message,
+        remote,
+        bookmark,
+        force,
+      },
+    };
+  }
 
   return {
     data: {

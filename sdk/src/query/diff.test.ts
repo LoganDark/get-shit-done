@@ -1,10 +1,15 @@
 /**
  * Unit tests for diffQuery (Plan 05-01 Task 2, D-33 batch 1).
+ *
+ * Plan 05-06 Task 2 (CR-02 fix): assertions updated to expect encoded
+ * RevisionExpr strings at the adapter boundary (parseRangeArg shared with
+ * log.ts).
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const diffMock = vi.fn();
+const logMock = vi.fn();
 const createVcsAdapterMock = vi.fn();
 
 vi.mock('../vcs/index.js', () => ({
@@ -15,9 +20,19 @@ import { diffQuery } from './diff.js';
 
 beforeEach(() => {
   diffMock.mockReset();
+  logMock.mockReset();
   createVcsAdapterMock.mockReset();
-  createVcsAdapterMock.mockReturnValue({ kind: 'git', diff: diffMock });
+  createVcsAdapterMock.mockReturnValue({
+    kind: 'git',
+    diff: diffMock,
+    // parseRangeArg may call vcs.log() to resolve HEAD~N.
+    log: logMock,
+  });
   diffMock.mockReturnValue({ raw: '', nameOnly: [], nameStatus: undefined });
+  logMock.mockReturnValue([
+    { hash: 'a'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's0' },
+    { hash: 'b'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's1' },
+  ]);
 });
 
 describe('diffQuery', () => {
@@ -28,11 +43,25 @@ describe('diffQuery', () => {
     });
   });
 
-  it('parses --cached → staged, --range → rev, --name-only, --name-status', async () => {
-    await diffQuery(['--cached', '--range', 'HEAD~1..HEAD', '--name-only', '--name-status'], '/repo');
+  it('parses --cached → staged, --name-only, --name-status', async () => {
+    await diffQuery(['--cached', '--name-only', '--name-status'], '/repo');
     expect(diffMock).toHaveBeenCalledWith({
-      staged: true, nameOnly: true, nameStatus: true, rev: 'HEAD~1..HEAD', paths: undefined,
+      staged: true, nameOnly: true, nameStatus: true, rev: undefined, paths: undefined,
     });
+  });
+
+  it('CR-02 fix: --range HEAD~1..HEAD encodes through expr.range/rev/head', async () => {
+    await diffQuery(['--range', 'HEAD~1..HEAD', '--name-only'], '/repo');
+    const call = diffMock.mock.calls[0][0];
+    expect(typeof call.rev).toBe('string');
+    expect(call.rev).toMatch(/^range:rev:[0-9a-f]+\.\.head:$/);
+    expect(call.nameOnly).toBe(true);
+  });
+
+  it('CR-02 fix: --range with empty side returns ok:false envelope (no throw)', async () => {
+    const res = await diffQuery(['--range', 'HEAD..'], '/repo');
+    expect(res.data).toMatchObject({ ok: false });
+    expect((res.data as { error: string }).error).toMatch(/malformed range|one side empty/);
   });
 
   it('consumes trailing positionals after -- as paths', async () => {

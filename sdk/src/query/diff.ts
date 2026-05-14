@@ -15,9 +15,15 @@
  *   gsd-sdk query diff --range HEAD~1..HEAD
  *   gsd-sdk query diff --cached --name-only
  *   gsd-sdk query diff --name-status -- file1 file2
+ *
+ * Phase 5 plan 05-06 Task 2 (CR-02 fix): the raw `--range` argv flows through
+ * `parseRangeArg` (shared with log.ts) before being handed to the adapter —
+ * D-12 forbids `expr.raw()`. Malformed input surfaces as a typed error
+ * envelope instead of throwing through the dispatch boundary.
  */
 
 import { createVcsAdapter } from '../vcs/index.js';
+import { parseRangeArg } from './log.js';
 import type { QueryHandler } from './utils.js';
 import type { RevisionExpr } from '../vcs/types.js';
 
@@ -55,13 +61,40 @@ export const diffQuery: QueryHandler = async (args, projectDir) => {
   }
 
   const vcs = createVcsAdapter(cwd);
-  const result = vcs.diff({
-    staged,
-    nameOnly,
-    nameStatus,
-    rev: range as unknown as RevisionExpr | undefined,
-    paths: paths.length > 0 ? paths : undefined,
-  });
+
+  let rev: RevisionExpr | undefined;
+  if (range !== undefined) {
+    try {
+      rev = parseRangeArg(range, vcs);
+    } catch (err) {
+      return {
+        data: {
+          ok: false,
+          error: (err as Error).message,
+          range,
+        },
+      };
+    }
+  }
+
+  let result;
+  try {
+    result = vcs.diff({
+      staged,
+      nameOnly,
+      nameStatus,
+      rev,
+      paths: paths.length > 0 ? paths : undefined,
+    });
+  } catch (err) {
+    return {
+      data: {
+        ok: false,
+        error: (err as Error).message,
+        range,
+      },
+    };
+  }
 
   return {
     data: {

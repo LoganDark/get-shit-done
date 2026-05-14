@@ -92,26 +92,28 @@ describe.skipIf(!jjAvailable)('CMD-09 (/gsd-ship) — jj-colocated', () => {
 		expect(names).toContain('release/v1.0');
 	});
 
-	it('Test 2: pushQuery argv-parsing surface — validateRefname accepts release/v1.0 and the verb forwards to the adapter', async () => {
-		// The CMD-09 explicit-push pattern relies on the pushQuery verb
-		// accepting `--remote <r> --bookmark <b>` argv. Two surfaces matter
-		// for this test:
-		//   1. validateRefname accepts 'release/v1.0' (verified inline below).
-		//   2. The verb forwards the bookmark string to vcs.push({ref}). On
-		//      the jj backend, vcs.push() runs toJjRev(ref) which rejects
-		//      bare-string refnames — known constraint of the verb's
-		//      RevisionExpr round-trip (raw strings need expr.bookmark()
-		//      wrapping for the jj-rev parser). The integration test pins
-		//      this contract: the verb DID forward the argv, and the
-		//      adapter's expected error fires.
-		//   This proves the argv-parsing + delegation surface; the
-		//   bare-string-to-jj-rev gap is a pre-existing pushQuery
-		//   constraint (Phase 5 plan 05-05 sweep — adapt `pushQuery` to
-		//   wrap the bookmark via expr.bookmark() before forwarding to
-		//   vcs.push()).
-		await expect(
-			pushQuery(['--remote', 'origin', '--bookmark', 'release/v1.0'], dir),
-		).rejects.toThrow(/Invalid RevisionExpr/);
+	it('Test 2 (Plan 05-06 Task 2 — WR-03 closure): pushQuery wraps --bookmark via expr.bookmark and returns a structured envelope (no Invalid RevisionExpr throw)', async () => {
+		// Plan 05-06 closed the WR-03 gap by routing the --bookmark argv
+		// through expr.bookmark() inside pushQuery before forwarding to
+		// vcs.push(). The verb now accepts `release/v1.0` and forwards an
+		// encoded `bookmark:release/v1.0` RevisionExpr; whether the actual
+		// push succeeds depends on the tmp repo's remote config (this test
+		// does not configure a remote, so push exit-code is non-zero but
+		// the SDK contract holds — NO Invalid RevisionExpr throw at the
+		// SDK boundary).
+		const res = await pushQuery(
+			['--remote', 'origin', '--bookmark', 'release/v1.0'],
+			dir,
+		);
+		expect(res.data).toBeDefined();
+		expect(typeof (res.data as { ok: boolean }).ok).toBe('boolean');
+		// The bookmark argv round-trips into the envelope per pushQuery contract.
+		expect((res.data as { bookmark?: string }).bookmark).toBe('release/v1.0');
+		// No Invalid RevisionExpr leakage in stderr (push may have failed for
+		// remote-not-configured reasons, but NOT for the WR-03 cast-and-pray
+		// reason that this test previously bug-locked).
+		const stderr = (res.data as { stderr?: string }).stderr ?? '';
+		expect(stderr).not.toMatch(/Invalid RevisionExpr/);
 	});
 
 	it('Test 3: no-auto-push invariant — vcs.commit does NOT trigger push (explicit-push contract)', () => {
