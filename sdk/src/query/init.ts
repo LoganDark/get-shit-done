@@ -1175,6 +1175,7 @@ export const initIngestDocs: QueryHandler = async (_args, projectDir) => {
     project_exists: pathExists(projectDir, '.planning/PROJECT.md'),
     planning_exists: pathExists(projectDir, '.planning'),
     has_git: pathExists(projectDir, '.git'),
+    has_jj: pathExists(projectDir, '.jj'),    // Phase 6 plan 06-01 — parity with initNewProject
     project_path: '.planning/PROJECT.md',
     commit_docs: config.commit_docs,
   };
