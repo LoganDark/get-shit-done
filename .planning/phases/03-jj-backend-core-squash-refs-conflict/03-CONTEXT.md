@@ -87,13 +87,13 @@ Land `sdk/src/vcs/backends/jj.ts` implementing the full adapter contract against
 
 ### Existing surfaces (discovered during Phase 3 scout — pre-implementation)
 
-- `.planning/STATE.md` — performance/velocity table + accumulated context prose — git SHA hex (e.g., `ae56863a`, `1900dfc9`) referenced in `last_activity`, recent-commit notes, plan-completion entries → jj change_id prefixes — **one-shot rewrite** by migration command (read git SHA, resolve to change_id via `vcs.jjOnly.commitIdOf` inverse, replace inline).
+- `.planning/STATE.md` — performance/velocity table + accumulated context prose — git SHA hex (e.g., `vtnolxpzlkkytzykynnttxmvpylqzuzt`, `wkvrsyruvromoxumlmqxnxvssqnnmzxz`) referenced in `last_activity`, recent-commit notes, plan-completion entries → jj change_id prefixes — **one-shot rewrite** by migration command (read git SHA, resolve to change_id via `vcs.jjOnly.commitIdOf` inverse, replace inline).
 - `.planning/phases/*/SUMMARY.md`, `LEARNINGS.md`, `REVIEW.md`, `REVIEW-FIX.md`, `VERIFICATION.md`, `PATTERNS.md` — prose mentions of commit SHAs (Phase 1/2 docs reference merge commits, fix commits, baseline commits) → change_id prefixes — **one-shot rewrite**; prose regex-pluck SHAs, resolve, replace.
 - gsd-sdk phase manifests (whatever the SDK writes internally under `.planning/` to track phase state) — planner audits exact format and adds entries — current shape TBD → target TBD — likely **dual-write window** during transition, then read-time translator.
 - gsd-sdk `query commit` JSON output / commit-recording paths — fields TBD by planner — git SHA → change_id — **one-shot rewrite** of any persisted output.
 - `.planning/ROADMAP.md` — does NOT currently encode SHAs (verified during scout). No entry needed unless a new format encoding is added.
 - `.planning/PROJECT.md` / `.planning/REQUIREMENTS.md` — do NOT currently encode SHAs (verified). No entry.
-- `.planning/intel/*.md` — prose mentions only where SHAs are referenced as historical context (e.g., `intel/git-touchpoints.md` may cite git's pnpm-migration commit `ae56863a`); regex-pluck during migration.
+- `.planning/intel/*.md` — prose mentions only where SHAs are referenced as historical context (e.g., `intel/git-touchpoints.md` may cite git's pnpm-migration commit `vtnolxpzlkkytzykynnttxmvpylqzuzt`); regex-pluck during migration.
 - `.planning/research/*.md` — prose mentions only (Phase 0 research artifacts); regex-pluck during migration.
 
 ### Net-new surfaces introduced in Phase 3 (finalized at phase close — 2026-05-12)

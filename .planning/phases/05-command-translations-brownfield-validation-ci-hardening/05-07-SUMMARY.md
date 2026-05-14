@@ -55,8 +55,8 @@ Two atomic commits land all gap closure work:
 
 | Task | Commit | What | Sites |
 |------|--------|------|-------|
-| 1 | `a2806707` | Drop `.data.` prefix from 24 jq paths across 5 workflow/agent files | 24 |
-| 2 | `4c24f4d5` | Boundary-form path-traversal guard + hard-reject on realpath failure in code-review.md | 1 |
+| 1 | `yumzpzlnmlynzokkkptnnmkouvwnytlu` | Drop `.data.` prefix from 24 jq paths across 5 workflow/agent files | 24 |
+| 2 | `zrxtolonqxsyntmwymlrzpmuntrnyxnq` | Boundary-form path-traversal guard + hard-reject on realpath failure in code-review.md | 1 |
 
 ### Task 1 — CR-01 jq path sweep (24 sites)
 

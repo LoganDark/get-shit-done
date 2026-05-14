@@ -143,7 +143,7 @@ The stderr warning is harmless; exit code is 0.
 
 **Pitfall 9 still honoured** because there is now NO `jj workspace list` probe in the lock-acquisition path — there cannot be an auto-snapshot recursion on the wrong cwd because there is no probe at all. `mainRepoRoot` stays on the API as forward-compat for a future jj version that surfaces a probe-able `stale` field.
 
-This was applied as a Rule-1 fix in commit `5d63b07d` after Task 1's initial implementation baked in the predicate `/"stale"\s*:\s*true/.test(probe.stdout)`. The test suite re-ran clean after the pivot.
+This was applied as a Rule-1 fix in commit `vypwxvyuwsrtvnosrntmxvmoyzzllykk` after Task 1's initial implementation baked in the predicate `/"stale"\s*:\s*true/.test(probe.stdout)`. The test suite re-ran clean after the pivot.
 
 ## Concurrent-Acquire Test Approach
 
@@ -172,7 +172,7 @@ The child-process variant is the only viable approach. The `beforeAll` builds `s
 - **Issue:** Task 1's initial implementation used `if (probe.exitCode === 0 && /"stale"\s*:\s*true/.test(probe.stdout))` to gate the `jj workspace update-stale` invocation. The regex would never match because jj 0.41's JSON template emits no `stale` field. D-21 stale-WC recovery would have silently never run.
 - **Fix:** Pivoted to unconditional `jj workspace update-stale` per the plan-action's documented fallback (04-03-PLAN.md lines 248-249). The command is a no-op when the WC is fresh (verified). Removed the dead probe and its surrounding regex predicate. Updated JSDoc to record the empirical finding.
 - **Files modified:** `sdk/src/vcs/jj/lock.ts`
-- **Commit:** `5d63b07d`
+- **Commit:** `vypwxvyuwsrtvnosrntmxvmoyzzllykk`
 
 ### Rule 3 (auto-fix blocking issues) — boundary marker test flips
 
@@ -182,7 +182,7 @@ The child-process variant is the only viable approach. The `beforeAll` builds `s
 - **Issue:** Plan 04-02 SUMMARY explicitly noted that boundary-marker tests in `jj-workspace.test.ts`, `jj-skeleton.test.ts`, and `backends.test.ts` still asserted `'acquireWriteLock still throws VcsNotImplementedError'` and `BACKENDS_AVAILABLE_FOR_VERB['acquireWriteLock']).toEqual(['git'])`. With plan 03's real body landing, those assertions would now FAIL — CI would go red.
 - **Fix:** Mirrored the plan-01 wired-in pattern (`.not.toThrow(VcsNotImplementedError)`) for the two `acquireWriteLock` boundary tests, with try-blocks that release the handle if the call somehow succeeds. Updated `backends.test.ts` to assert the three-backend frozen array.
 - **Files modified:** `sdk/src/vcs/__tests__/jj-workspace.test.ts`, `sdk/src/vcs/__tests__/jj-skeleton.test.ts`, `sdk/src/vcs/__tests__/backends.test.ts`
-- **Commit:** `60cd5fc8`
+- **Commit:** `vzywprzvslrnttlkwumvlrzzszqkxqrl`
 
 ### Rule 2 (auto-add missing critical functionality) — none
 
@@ -231,11 +231,11 @@ The child-process variant is the only viable approach. The `beforeAll` builds `s
 
 ## Commits
 
-- `5b091636` feat(04-03): land acquireJjWriteLock RAII primitive in sdk/src/vcs/jj/lock.ts
-- `a645b377` feat(04-03): delegate jj.acquireWriteLock to sidecar + flip allowlist
-- `60cd5fc8` test(04-03): flip Phase 4 plan 01 boundary markers for acquireWriteLock
-- `687e5a3a` test(04-03): contract tests for acquireJjWriteLock
-- `5d63b07d` fix(04-03): invoke jj workspace update-stale unconditionally (jj 0.41 has no stale field)
+- `xqoowlpvvuywqxnzwqzzpwxuqkonlvzs` feat(04-03): land acquireJjWriteLock RAII primitive in sdk/src/vcs/jj/lock.ts
+- `psqvvplsrzksoutoqunzqwynwwzyztpr` feat(04-03): delegate jj.acquireWriteLock to sidecar + flip allowlist
+- `vzywprzvslrnttlkwumvlrzzszqkxqrl` test(04-03): flip Phase 4 plan 01 boundary markers for acquireWriteLock
+- `xnvwtqvwzownstzsuwrmqlyttxkqwoxw` test(04-03): contract tests for acquireJjWriteLock
+- `vypwxvyuwsrtvnosrntmxvmoyzzllykk` fix(04-03): invoke jj workspace update-stale unconditionally (jj 0.41 has no stale field)
 
 ## Open Questions / Follow-ups
 

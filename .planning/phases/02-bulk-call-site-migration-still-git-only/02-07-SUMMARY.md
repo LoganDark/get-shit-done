@@ -63,7 +63,7 @@ completed: 2026-05-10
 - **Started:** 2026-05-10T22:04Z (approx)
 - **Tasks:** 1 (`tdd="false"` — pure mechanical migration)
 - **Files modified:** 4 source/test/tooling files + 2 baseline JSON
-- **Commits on phase/02-migration:** 1 (`06960968`)
+- **Commits on phase/02-migration:** 1 (`xzwwsnsuzoouqoxvlrulozqwpxxlnqvl`)
 
 ## Accomplishments
 
@@ -198,7 +198,7 @@ None — no external configuration changed.
 
 ## Self-Check: PASSED
 
-- Commit `06960968` exists on `phase/02-migration`: confirmed via `git log --oneline -3`.
+- Commit `xzwwsnsuzoouqoxvlrulozqwpxxlnqvl` exists on `phase/02-migration`: confirmed via `git log --oneline -3`.
 - `cd sdk && pnpm build && pnpm build:cjs` both exit 0: confirmed.
 - `cd sdk && pnpm exec vitest run src/vcs/__tests__/` → 141/141 pass: confirmed.
 - `cd sdk && pnpm exec vitest run src/vcs/__tests__/baseline-parity.test.ts` → 24/24 pass: confirmed.

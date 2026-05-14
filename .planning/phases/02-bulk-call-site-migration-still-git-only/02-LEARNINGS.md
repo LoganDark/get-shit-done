@@ -16,7 +16,7 @@ missing_artifacts: []
 ## Decisions
 
 ### Mechanical-Only Invariant (D-08) Honored Throughout
-Every commit maintains strict mechanical-only edits: call-site replacements only, no surrounding-logic refactors. Anchored on Phase 1 commit `aeb7d471`; per-file commit + paired-test atomicity per D-05/D-06 enforced at commit-message level.
+Every commit maintains strict mechanical-only edits: call-site replacements only, no surrounding-logic refactors. Anchored on Phase 1 commit `orvtoxuzxltsqrqlpvrkttqrqykntnqv`; per-file commit + paired-test atomicity per D-05/D-06 enforced at commit-message level.
 
 **Rationale:** Keeps rebase surface clean for the eventual user-driven upstream merge; enables the D-16 hotspot audit to verify the invariant via mechanical-edit-shape grep.
 **Source:** 02-04-SUMMARY.md, 02-11-AUDIT.md
@@ -172,7 +172,7 @@ D-12 broken-lint-on-branch model: `phase/02-migration` stays broken (exits 1) wh
 ## Patterns
 
 ### Per-File Commit + Paired-Test Atomic Shape
-Every migration lands as a single commit: source file + paired test + capture-vcs-baselines.cjs entry + baseline-parity dispatch clause + baseline JSON (D-05 per-file, D-06 paired atomicity). Anchored on Phase 1 commit `aeb7d471`.
+Every migration lands as a single commit: source file + paired test + capture-vcs-baselines.cjs entry + baseline-parity dispatch clause + baseline JSON (D-05 per-file, D-06 paired atomicity). Anchored on Phase 1 commit `orvtoxuzxltsqrqlpvrkttqrqykntnqv`.
 
 **When to use:** Every Branch-by-Abstraction migration in Phase 3+. Reverting one file's migration reverts its tests too — clean rebase history.
 **Source:** 02-04-SUMMARY.md through 02-11-SUMMARY.md

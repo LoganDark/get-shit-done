@@ -71,8 +71,8 @@ Phase 3 wrap-up per CONTEXT.md D-10g ("end-of-phase plan: flip baseline-parity a
 
 | # | Task | Commit | Files |
 |---|------|--------|-------|
-| 1 | Land CI matrix axis + jj install step (CI-01, CI-02) | `756a36fb` | `.github/workflows/test.yml` |
-| 2 | Doc-fix conflict() → conflicts() across REQUIREMENTS / ROADMAP / 03-CONTEXT | `97103eb2` | `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, `.planning/phases/03-jj-backend-core-squash-refs-conflict/03-CONTEXT.md` |
+| 1 | Land CI matrix axis + jj install step (CI-01, CI-02) | `tlkwmqszqntlmvrzvvyxvyntvotlqqpl` | `.github/workflows/test.yml` |
+| 2 | Doc-fix conflict() → conflicts() across REQUIREMENTS / ROADMAP / 03-CONTEXT | `kuvsmlkqmropkxoqoyklwvxmlvopusrt` | `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, `.planning/phases/03-jj-backend-core-squash-refs-conflict/03-CONTEXT.md` |
 | 3 | Phase-close invariant battery + REQUIREMENTS/ROADMAP/STATE/triage-doc finalization | (this commit) | `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, `.planning/STATE.md`, `.planning/phases/03-jj-backend-core-squash-refs-conflict/03-CONTEXT.md`, `docs/test-triage/jj-bugs.md`, `.planning/phases/03-jj-backend-core-squash-refs-conflict/03-07-SUMMARY.md` |
 
 ## Invariant Battery Results
@@ -320,6 +320,6 @@ All claimed files exist; all claimed commits exist in git log:
 - `.planning/phases/03-jj-backend-core-squash-refs-conflict/03-CONTEXT.md` — FOUND
 - `docs/test-triage/jj-bugs.md` — FOUND
 - `.planning/phases/03-jj-backend-core-squash-refs-conflict/03-07-SUMMARY.md` — FOUND
-- Commit `756a36fb` (Task 1: CI matrix activation) — FOUND in `git log --all`
-- Commit `97103eb2` (Task 2: conflict()→conflicts() doc fix) — FOUND in `git log --all`
+- Commit `tlkwmqszqntlmvrzvvyxvyntvotlqqpl` (Task 1: CI matrix activation) — FOUND in `git log --all`
+- Commit `kuvsmlkqmropkxoqoyklwvxmlvopusrt` (Task 2: conflict()→conflicts() doc fix) — FOUND in `git log --all`
 - Task 3 commit is created by this final commit step (below).

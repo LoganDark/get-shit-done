@@ -169,7 +169,7 @@ None — no external configuration changed.
 
 ## Self-Check: PASSED
 
-- Both 2 commits exist on `phase/02-migration` in order (`27b2e664`, `630b2a76`): confirmed via `git log --oneline -4`.
+- Both 2 commits exist on `phase/02-migration` in order (`rnlttvkwtvznwysuqquxwknsmyokkuxw`, `klwlslwwnrrvnxuxxorlomzpqnuztpzq`): confirmed via `git log --oneline -4`.
 - `cd sdk && pnpm build && pnpm build:cjs` both exit 0: confirmed.
 - `cd sdk && pnpm exec vitest run src/vcs/__tests__/` → 129/129 pass (12 baseline-parity tests, 16 adapter-contract, 46 git-backend, 5 index, others): confirmed.
 - `cd sdk && pnpm exec vitest run src/query/init.test.ts` → 37/37 pass: confirmed.

@@ -85,9 +85,9 @@ completed: 2026-05-13
 
 ## Task Commits
 
-1. **Task 1: Extend GitOnlyOps + git.ts backend with paths + revertAbort primitives** — `3ea5c4d6` (feat)
-2. **Task 2: Wire SDK query shims to new primitives — close CR-02/CR-03/CR-04/WR-03** — `5319ec27` (fix)
-3. **Task 3: Black-box integration test — invoke built gsd-sdk binary against tmp repo** — `8fc77daf` (test)
+1. **Task 1: Extend GitOnlyOps + git.ts backend with paths + revertAbort primitives** — `ywyrtzzxoxnmoutsortwzrzlpsksplox` (feat)
+2. **Task 2: Wire SDK query shims to new primitives — close CR-02/CR-03/CR-04/WR-03** — `quyrsyznyxmlrvtvoqvvytyrpwkvkqmm` (fix)
+3. **Task 3: Black-box integration test — invoke built gsd-sdk binary against tmp repo** — `upnmrksvzsnmpntxtopnxwnspxkoorkv` (test)
 
 ## Files Created/Modified
 
@@ -129,7 +129,7 @@ None — plan executed exactly as written. Two plan-checker concerns were proact
 
 ## Issues Encountered
 
-**One self-inflicted scare during smoke-testing the built binary** (NOT a deviation; recovered before any commits): during Task 3 setup I ran a `mktemp -d -t gsd-check` invocation that, due to a missing `X` count, was rejected by macOS mktemp and silently fell back to a path collision with the worktree's own git root. The subsequent `git init -b main` reinitialized the worktree's `.git` directory and a follow-up `git commit` landed two garbage commits (167856a1 + 53be0a1c) on top of Task 2. Recovered immediately via `git reset --mixed 5319ec27` + `git checkout -- .planning/STATE.md README.md` + `rm code.ts`. No data loss; the two garbage commits are NOT in the final commit graph (verified via `git log --oneline -5` showing `8fc77daf` → `5319ec27` → `3ea5c4d6` → `90855ffe`).
+**One self-inflicted scare during smoke-testing the built binary** (NOT a deviation; recovered before any commits): during Task 3 setup I ran a `mktemp -d -t gsd-check` invocation that, due to a missing `X` count, was rejected by macOS mktemp and silently fell back to a path collision with the worktree's own git root. The subsequent `git init -b main` reinitialized the worktree's `.git` directory and a follow-up `git commit` landed two garbage commits (167856a1 + 53be0a1c) on top of Task 2. Recovered immediately via `git reset --mixed 5319ec27` + `git checkout -- .planning/STATE.md README.md` + `rm code.ts`. No data loss; the two garbage commits are NOT in the final commit graph (verified via `git log --oneline -5` showing `upnmrksvzsnmpntxtopnxwnspxkoorkv` → `quyrsyznyxmlrvtvoqvvytyrpwkvkqmm` → `ywyrtzzxoxnmoutsortwzrzlpsksplox` → `smxssmupqulonpzqyoutssqlzsllpsmo`).
 
 **Lesson:** always use `mktemp -d` with explicit `XXXXXX` template suffix (or rely on the test harness's mkdtempSync which does this correctly). The integration test I wrote uses `mkdtempSync(path.join(tmpdir(), 'gsd-sdk-binshape-'))` which is safe.
 
@@ -154,9 +154,9 @@ The no-raw-git lint guard (`scripts/lint-vcs-no-raw-git.cjs`) exits 0 against th
 - `.planning/phases/05-command-translations-brownfield-validation-ci-hardening/05-06-SUMMARY.md` — being created now
 
 **Commits verified:**
-- `3ea5c4d6` (Task 1) — FOUND in git log
-- `5319ec27` (Task 2) — FOUND in git log
-- `8fc77daf` (Task 3) — FOUND in git log
+- `ywyrtzzxoxnmoutsortwzrzlpsksplox` (Task 1) — FOUND in git log
+- `quyrsyznyxmlrvtvoqvvytyrpwkvkqmm` (Task 2) — FOUND in git log
+- `upnmrksvzsnmpntxtopnxwnspxkoorkv` (Task 3) — FOUND in git log
 
 **Acceptance criteria verified:**
 - `grep -rE 'as unknown as RevisionExpr' sdk/src/query/` → 0 hits

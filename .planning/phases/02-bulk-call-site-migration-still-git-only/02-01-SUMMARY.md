@@ -59,7 +59,7 @@ completed: 2026-05-10
 
 Each task was committed atomically on `phase/02-migration`:
 
-1. **Task 1: Add gpgsign disablers to commit.test.ts beforeEach** — `d593d40e` (fix)
+1. **Task 1: Add gpgsign disablers to commit.test.ts beforeEach** — `rulrvmvoypsluwwlsokvplqrtosypzqx` (fix)
 
 **Plan metadata commit:** (final docs commit, see git log)
 
@@ -101,9 +101,9 @@ None — no external configuration changed.
 ## Self-Check: PASSED
 
 - `sdk/src/query/commit.test.ts` exists and contains both new `git config (commit|tag).gpgsign false` lines in the `beforeEach` block: confirmed via `git diff main..HEAD`.
-- Commit `d593d40e` exists on `phase/02-migration`: confirmed via `git log --oneline -3`.
+- Commit `rulrvmvoypsluwwlsokvplqrtosypzqx` exists on `phase/02-migration`: confirmed via `git log --oneline -3`.
 - `cd sdk && pnpm exec vitest run src/query/commit.test.ts` exits 0 with 21/21 passing: confirmed in execution output (Test Files 1 passed (1); Tests 21 passed (21)).
-- Diff scope: only `sdk/src/query/commit.test.ts` modified in commit `d593d40e` (no other file touched). 3 added lines, 0 removed.
+- Diff scope: only `sdk/src/query/commit.test.ts` modified in commit `rulrvmvoypsluwwlsokvplqrtosypzqx` (no other file touched). 3 added lines, 0 removed.
 - Branch: `phase/02-migration` per D-12.
 
 ---

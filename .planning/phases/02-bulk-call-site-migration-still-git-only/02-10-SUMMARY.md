@@ -78,8 +78,8 @@ Hotspot-pair migration: `verify.cjs` (1,390 LOC; 6 sites) and its byte-symmetric
 
 | Task | Commit | Files | Description |
 |------|--------|-------|-------------|
-| 1 | `b34700a3` | 10 | verify.cjs source + paired verify.test.cjs + capture-vcs-baselines.cjs (9 entries added) + baseline-parity.test.ts (3 dispatch clauses) + 6 verify-cjs baselines |
-| 2 | `1c1a8072` | 4 | verify.ts source + 3 verify-ts baselines (auto-dispatch via Task 1's args-shape clauses) |
+| 1 | `qyrxzrqzykokxsuusnprpnnpkpskkszv` | 10 | verify.cjs source + paired verify.test.cjs + capture-vcs-baselines.cjs (9 entries added) + baseline-parity.test.ts (3 dispatch clauses) + 6 verify-cjs baselines |
+| 2 | `vmzqtuzsovlsyqvvxywoutyooktsyqxv` | 4 | verify.ts source + 3 verify-ts baselines (auto-dispatch via Task 1's args-shape clauses) |
 
 Both commits land on `phase/02-migration` per D-05 (one commit per source file).
 

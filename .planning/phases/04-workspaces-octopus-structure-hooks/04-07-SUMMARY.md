@@ -63,11 +63,11 @@ D-24 / cr-01 fold-in: lift the refname validator from `sdk/src/vcs/expr.ts:38-61
 
 | Task | Name | Commit |
 | ---- | ---- | ------ |
-| 1 | Lift validateBookmarkName to sdk/src/vcs/refs-validator.ts + update expr.ts to re-import | `48474535` |
-| 2 | Thread validateRefname + `--` separator through jj.ts AND git.ts bookmarks.{create,move,delete,exists} | `ed81ce3f` |
-| 3 | Write refname-validator argv-injection rejection tests (43 cases, both backends) | `04baef12` |
-| 4 | Close cr-01 todo (move pending/ → closed/ with closure note) + run Phase 4 invariant battery | `0d6fd5a3` |
-| 5 | Update REQUIREMENTS.md (19 IDs flipped to Complete) + ROADMAP.md (7/7 Complete) + write 04-LEARNINGS.md (159 lines) | `92579a5b` |
+| 1 | Lift validateBookmarkName to sdk/src/vcs/refs-validator.ts + update expr.ts to re-import | `mvtmznypuzqyykostmvsnwvrvoqvntns` |
+| 2 | Thread validateRefname + `--` separator through jj.ts AND git.ts bookmarks.{create,move,delete,exists} | `urxotrnwklxtqklrrnpwutymywotlusy` |
+| 3 | Write refname-validator argv-injection rejection tests (43 cases, both backends) | `kvswqsuqnrzlyvslvuypnxzpqvznuwkl` |
+| 4 | Close cr-01 todo (move pending/ → closed/ with closure note) + run Phase 4 invariant battery | `krllrytmwqoowzoooyrzmtpynxxultll` |
+| 5 | Update REQUIREMENTS.md (19 IDs flipped to Complete) + ROADMAP.md (7/7 Complete) + write 04-LEARNINGS.md (159 lines) | `mvnlwyprmokrwnylomrvrlopuruunomo` |
 
 ## Key Artifacts
 
@@ -199,8 +199,8 @@ Files exist:
 
 Commits exist (verified via `git log --oneline -6`):
 
-- `48474535` refactor(04-07): lift validateBookmarkName to refs-validator shared module ✓
-- `ed81ce3f` fix(04-07): thread validateRefname + `--` separator through bookmark write paths ✓
-- `04baef12` test(04-07): argv-injection rejection contract on both backends ✓
-- `0d6fd5a3` chore(04-07): close cr-01 todo + run Phase 4 invariant battery ✓
-- `92579a5b` docs(04-07): mark Phase 4 complete in REQUIREMENTS + ROADMAP + write LEARNINGS ✓
+- `mvtmznypuzqyykostmvsnwvrvoqvntns` refactor(04-07): lift validateBookmarkName to refs-validator shared module ✓
+- `urxotrnwklxtqklrrnpwutymywotlusy` fix(04-07): thread validateRefname + `--` separator through bookmark write paths ✓
+- `kvswqsuqnrzlyvslvuypnxzpqvznuwkl` test(04-07): argv-injection rejection contract on both backends ✓
+- `krllrytmwqoowzoooyrzmtpynxxultll` chore(04-07): close cr-01 todo + run Phase 4 invariant battery ✓
+- `mvnlwyprmokrwnylomrvrlopuruunomo` docs(04-07): mark Phase 4 complete in REQUIREMENTS + ROADMAP + write LEARNINGS ✓

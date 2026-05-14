@@ -91,8 +91,8 @@ completed: 2026-05-14
 
 Each task was committed atomically:
 
-1. **Task 1: SDK verb handler + initMigrateVcs + catalog/manifest registration + unit tests** — `9385f5e4` (feat)
-2. **Task 2: Workflow markdown + new-project.md greenfield gate + black-box integration test** — `9c2ab23c` (feat)
+1. **Task 1: SDK verb handler + initMigrateVcs + catalog/manifest registration + unit tests** — `nkwpmrqvzrxomltpvrnzpmwnssoonyom` (feat)
+2. **Task 2: Workflow markdown + new-project.md greenfield gate + black-box integration test** — `vmsqztukxsztmkvpommqoznmsqlltmow` (feat)
 
 ## Files Created/Modified
 
@@ -185,14 +185,14 @@ The `<step name="preflight">` block calls `gsd-sdk query init.migrate-vcs` exact
 - **Issue:** The plan's `<action>` block instructed editing only `command-manifest.init.ts` for the init.migrate-vcs registration. After the manifest edit, the verb was discoverable as an alias but the dispatcher would not have a handler binding — `command-family-handlers.ts:FAMILY_HANDLERS.init` is the canonical-name → `QueryHandler` map. The plan's PATTERNS reference at lines 156-157 mentioned "find the analogous registration site" but didn't name the second file.
 - **Fix:** Edited `command-family-handlers.ts` to import `initMigrateVcs` from `./init.js` and add `'init.migrate-vcs': initMigrateVcs` to the `init:` subobject. The fix is mechanical (mirrors every other init.* handler) and necessary for the handler to be reachable at runtime.
 - **Verification:** Integration test cases that depend on init.migrate-vcs (the workflow markdown's preflight step) would fail without the binding; the test that exercises the migrate-vcs verb directly doesn't depend on it but it's still required for the slash-command flow.
-- **Committed in:** `9385f5e4` (Task 1) — added alongside the catalog/manifest edits.
+- **Committed in:** `nkwpmrqvzrxomltpvrnzpmwnssoonyom` (Task 1) — added alongside the catalog/manifest edits.
 
 **2. [Rule 3 - Blocking] command-aliases.generated.ts + .cjs drift after manifest edits**
 - **Found during:** Task 1 (post-edit `git status`)
 - **Issue:** Editing the manifest source files (`command-manifest.init.ts`, `command-manifest.non-family.ts`) does NOT auto-regenerate the alias files. Running tests would still pass (the generated files are checked in as static source), but `check:alias-drift` would catch the drift in CI. The plan didn't mention regeneration.
 - **Fix:** Ran `npx tsx sdk/scripts/gen-command-aliases.ts` from the SDK directory. The generator wrote both the TS and CJS variants. Diff confirmed both files now contain the migrate-vcs / init.migrate-vcs entries.
 - **Verification:** `git diff sdk/src/query/command-aliases.generated.ts get-shit-done/bin/lib/command-aliases.generated.cjs` showed exactly the new entries, no other drift.
-- **Committed in:** `9385f5e4` (Task 1) — both generated files in the same commit as the manifest sources.
+- **Committed in:** `nkwpmrqvzrxomltpvrnzpmwnssoonyom` (Task 1) — both generated files in the same commit as the manifest sources.
 
 ### Plan-author Documentation Drift (no auto-fix applied)
 
@@ -242,8 +242,8 @@ Verified all claims:
 - `get-shit-done/workflows/migrate-vcs.md` ✓
 
 **Commits exist:**
-- `9385f5e4` (Task 1 SDK verb + init handler + catalog/manifest) ✓
-- `9c2ab23c` (Task 2 workflow markdown + new-project.md + integration test) ✓
+- `nkwpmrqvzrxomltpvrnzpmwnssoonyom` (Task 1 SDK verb + init handler + catalog/manifest) ✓
+- `vmsqztukxsztmkvpommqoznmsqlltmow` (Task 2 workflow markdown + new-project.md + integration test) ✓
 
 **Verification gates from plan Tasks 1 & 2:**
 - `grep 'migrate-vcs' sdk/src/query/command-static-catalog-foundation.ts` → 2 hits (import + tuple); plus an inline comment ✓

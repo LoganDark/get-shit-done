@@ -69,11 +69,11 @@ Replaced plan 02's frozen `createGitAdapterStub` with a real `createGitAdapter(c
 
 | Task | Name                                                                                    | Commit     |
 | ---- | --------------------------------------------------------------------------------------- | ---------- |
-| 1    | Implement sdk/src/vcs/backends/git.ts (full GitVcsAdapter) + 16 tdd happy-path tests    | `61fd5dc5` |
-| 2    | Wire createGitAdapter into createVcsAdapter; scaffold tests/baselines/git-vcs/          | `75385751` |
-| 3    | Capture 5 byte-identity baselines + baseline-parity test + CJS smoke test               | `b94a492d` |
+| 1    | Implement sdk/src/vcs/backends/git.ts (full GitVcsAdapter) + 16 tdd happy-path tests    | `nutxnmqvsnxqyutrtnnnpvpvurqxwpvz` |
+| 2    | Wire createGitAdapter into createVcsAdapter; scaffold tests/baselines/git-vcs/          | `mltnrvymummqwkqttkpqvxsulwswnrwo` |
+| 3    | Capture 5 byte-identity baselines + baseline-parity test + CJS smoke test               | `vrmvnqrszznoovwnlpokpqkxozrrkzmt` |
 
-(RED-phase test commit: `1d8c42de`.)
+(RED-phase test commit: `ywwnurlrosvwlwqooxsxvuluynrzzwys`.)
 
 ## File Tree (this plan)
 
@@ -198,7 +198,7 @@ The allowlist for plan 05 should at minimum include:
 - **Fix:** Added `readWorktreeList` to the module's `module.exports` block with a deviation comment pointing back to ADR-0004 (the policy-seam owner role) and Plan 01-03 (the consumer-introducing plan).
 - **Files modified:** `get-shit-done/bin/lib/worktree-safety.cjs` (1 line + 4-line comment block).
 - **Why this is Rule 3, not Rule 4:** No architectural change. ADR-0004 already names this module the canonical owner of `git worktree` porcelain parsing — we just promoted an internal helper to the module's public surface to match the documented seam contract. No new dependencies, no behavior change for existing consumers.
-- **Commit:** `61fd5dc5` (bundled with Task 1's GREEN — the task that introduced the consumer).
+- **Commit:** `nutxnmqvsnxqyutrtnnnpvpvurqxwpvz` (bundled with Task 1's GREEN — the task that introduced the consumer).
 
 **2. [Rule 1 — Bug] Test fixture missed `tag.gpgsign false` config**
 
@@ -206,7 +206,7 @@ The allowlist for plan 05 should at minimum include:
 - **Issue:** The local `~/.gitconfig` has `tag.gpgsign = true` globally. The test fixture set `commit.gpgsign false` but not `tag.gpgsign`, so `git tag -a` tried (and failed) to GPG-sign in CI/fresh-checkout-style environments without a secret key.
 - **Fix:** Added `git config tag.gpgsign false` to the test's `initRepo` helper. Same fix applied to `capture-vcs-baselines.cjs` and `baseline-parity.test.ts` for consistency.
 - **Files modified:** `sdk/src/vcs/__tests__/git-backend.test.ts`, `sdk/src/vcs/__tests__/baseline-parity.test.ts`, `tests/__tools__/capture-vcs-baselines.cjs`.
-- **Commit:** `61fd5dc5` (bundled with Task 1's GREEN).
+- **Commit:** `nutxnmqvsnxqyutrtnnnpvpvurqxwpvz` (bundled with Task 1's GREEN).
 
 **3. [Rule 1 — Bug] findConflicts working-copy test staged the conflict markers — `git diff --check` operates on UNSTAGED working-tree changes vs the index**
 
@@ -214,7 +214,7 @@ The allowlist for plan 05 should at minimum include:
 - **Issue:** The test staged the conflict-marker version of the file with `git add`. `git diff --check` (no `--cached`) compares working tree against index — when staged, there's no working-tree diff, so no markers detected.
 - **Fix:** Removed the `git add` after writing markers. Now the test commits a clean version, modifies the working tree to inject markers, and `git diff --check` reports them.
 - **Files modified:** `sdk/src/vcs/__tests__/git-backend.test.ts`.
-- **Commit:** `61fd5dc5` (bundled with Task 1's GREEN).
+- **Commit:** `nutxnmqvsnxqyutrtnnnpvpvurqxwpvz` (bundled with Task 1's GREEN).
 
 **4. [Rule 1 — Bug] workspace.add test path comparison failed on macOS due to /var → /private/var symlink resolution**
 
@@ -222,7 +222,7 @@ The allowlist for plan 05 should at minimum include:
 - **Issue:** macOS resolves `/var` to `/private/var` via symlink. `git worktree list` records the canonical (resolved) path; the test's `mkdtempSync(tmpdir() + …)` returned the unresolved path. Direct equality failed.
 - **Fix:** Use `realpathSync(wtPath)` on both sides of the comparison so symlink resolution is normalized.
 - **Files modified:** `sdk/src/vcs/__tests__/git-backend.test.ts`.
-- **Commit:** `61fd5dc5` (bundled with Task 1's GREEN).
+- **Commit:** `nutxnmqvsnxqyutrtnnnpvpvurqxwpvz` (bundled with Task 1's GREEN).
 
 **5. [Rule 3 — Blocking] Dual-build module specifier resolution (TS1343 + ESM/CJS interop + `node -e` edge case)**
 
@@ -234,7 +234,7 @@ The allowlist for plan 05 should at minimum include:
   3. If both fail (e.g. `node -e` in CJS host), fall back to `process.cwd() + '/'` so `createRequire` at least gets an absolute path.
 - **Files modified:** `sdk/src/vcs/backends/git.ts` (24-line `getCallerSpecifier` helper).
 - **Why this is Rule 3, not Rule 4:** No architectural change. The dual-build is fixed (ESM dist + CJS dist-cjs from a single source) — this is the existing convention from plan 01-02's exec/types/index. We're just making the new file work under the same convention. No alternative was a real architectural decision; this is mechanical TS-config plumbing.
-- **Commit:** `61fd5dc5` (bundled with Task 1's GREEN).
+- **Commit:** `nutxnmqvsnxqyutrtnnnpvpvurqxwpvz` (bundled with Task 1's GREEN).
 
 **6. [Rule 1 — Bug] index.test.ts had assertion against deleted stub behavior**
 
@@ -242,7 +242,7 @@ The allowlist for plan 05 should at minimum include:
 - **Issue:** Plan 02's index.test.ts asserted that every method on the stub-returned VcsAdapter throws "not yet implemented". Plan 03 explicitly replaces the stub — that assertion is no longer applicable. Without an update, the test fails on the now-real `vcs.commit({message:'x'})` (which actually runs `git commit`).
 - **Fix:** Replaced the assertion with `gitOnly.version() returns a real 'git version …' string` — exercises the real wiring, validates plan 03's swap-in, and locks in the contract that plan 02 forecast.
 - **Files modified:** `sdk/src/vcs/__tests__/index.test.ts`.
-- **Commit:** `75385751` (Task 2).
+- **Commit:** `mltnrvymummqwkqttkpqvxsulwswnrwo` (Task 2).
 
 ### Verification Block Re-Interpretation
 
@@ -299,10 +299,10 @@ Files modified (verified via git log):
 - `get-shit-done/bin/lib/worktree-safety.cjs` — `readWorktreeList` now exported
 
 Commits:
-- `1d8c42de` (RED) — failing git-backend.test.ts
-- `61fd5dc5` (Task 1 GREEN) — createGitAdapter implementation + test fixes
-- `75385751` (Task 2) — wired createVcsAdapter to real backend; baselines dir scaffold
-- `b94a492d` (Task 3) — captured baselines + parity test + CJS smoke
+- `ywwnurlrosvwlwqooxsxvuluynrzzwys` (RED) — failing git-backend.test.ts
+- `nutxnmqvsnxqyutrtnnnpvpvurqxwpvz` (Task 1 GREEN) — createGitAdapter implementation + test fixes
+- `mltnrvymummqwkqttkpqvxsulwswnrwo` (Task 2) — wired createVcsAdapter to real backend; baselines dir scaffold
+- `vrmvnqrszznoovwnlpokpqkxozrrkzmt` (Task 3) — captured baselines + parity test + CJS smoke
 
 Test results:
 - `pnpm exec vitest run --project unit src/vcs/__tests__/`: 7 files, **53 tests passed** (5 baseline-parity + 16 git-backend + the 32 carried over from plan 02).

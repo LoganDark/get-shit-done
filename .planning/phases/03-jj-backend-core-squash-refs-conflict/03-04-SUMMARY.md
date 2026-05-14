@@ -83,8 +83,8 @@ completed: 2026-05-11
 
 | # | Task | Commit | Files |
 |---|------|--------|-------|
-| 1 | Extend ExecOptions with env passthrough (JJ-07 substrate) | `c7d89cac` | 1 created (exec-env-passthrough.test.ts) + 1 modified (exec.ts) |
-| 2 | Land squash-based commit() body + flip commit allowlist + integration tests | `dafe6004` | 1 created (jj-commit.test.ts) + 4 modified (jj.ts, backends.ts, jj-skeleton.test.ts, backends.test.ts) |
+| 1 | Extend ExecOptions with env passthrough (JJ-07 substrate) | `wnqtsvsqlxvmrqpyowrwtyzvyxtqzvln` | 1 created (exec-env-passthrough.test.ts) + 1 modified (exec.ts) |
+| 2 | Land squash-based commit() body + flip commit allowlist + integration tests | `rtqqvrxvxsstwrkvxtzwlvuxtsmzuutt` | 1 created (jj-commit.test.ts) + 4 modified (jj.ts, backends.ts, jj-skeleton.test.ts, backends.test.ts) |
 
 ## Files Created/Modified
 
@@ -122,7 +122,7 @@ completed: 2026-05-11
 - **Issue:** The plan sketched the bookmark-target probe as `jj bookmark list 'gsd/phase-3' -T 'target.commit_id() ++ "\n"'`. In jj 0.41 the keyword is `normal_target` (the resolved single-target accessor for non-divergent bookmarks); `target` is not a top-level template keyword.
 - **Fix:** Replaced both probes (gsd/ + rawName) with `normal_target.commit_id() ++ "\n"`. Verified locally against a fresh `jj git init --colocate` + `jj bookmark set rawname -r @- -B` setup before re-running the suite.
 - **Files modified:** `sdk/src/vcs/__tests__/jj-commit.test.ts`
-- **Committed in:** `dafe6004` (Task 2 — bundled with the test creation since this is a test-internal fix)
+- **Committed in:** `rtqqvrxvxsstwrkvxtzwlvuxtsmzuutt` (Task 2 — bundled with the test creation since this is a test-internal fix)
 
 **2. [Rule 1 — Bug] WR-01 regex in integration test missed the `}` between `[]` and `)`**
 
@@ -130,7 +130,7 @@ completed: 2026-05-11
 - **Issue:** The regex sketched as `/files:\[\]\) is ambiguous/` requires `[]` immediately followed by `)`. The actual error text is `commit({files:[]}) is ambiguous; ...` — there's a `}` between `]` and `)`.
 - **Fix:** Updated regex to `/files:\[\]\}\) is ambiguous/`. Verified via `node -e "..."` before re-running the suite.
 - **Files modified:** `sdk/src/vcs/__tests__/jj-commit.test.ts`
-- **Committed in:** `dafe6004` (Task 2)
+- **Committed in:** `rtqqvrxvxsstwrkvxtzwlvuxtsmzuutt` (Task 2)
 
 ### Environmental Constraints
 
@@ -233,8 +233,8 @@ Plan 03-06 (`push`/`fetch` + workspace contract stubs) is unblocked:
   - `sdk/src/vcs/__tests__/exec-env-passthrough.test.ts` ✓
   - `sdk/src/vcs/__tests__/jj-commit.test.ts` ✓
 - All 2 task commits exist in `git log --oneline`:
-  - `c7d89cac` (Task 1) ✓
-  - `dafe6004` (Task 2) ✓
+  - `wnqtsvsqlxvmrqpyowrwtyzvyxtqzvln` (Task 1) ✓
+  - `rtqqvrxvxsstwrkvxtzwlvuxtsmzuutt` (Task 2) ✓
 
 ---
 *Phase: 03-jj-backend-core-squash-refs-conflict*

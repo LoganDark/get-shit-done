@@ -127,12 +127,12 @@ completed: 2026-05-10
 
 Each task committed atomically on `phase/02-migration`:
 
-1. **Task 1 RED:** `7797aa7d` — `test(02-03): add failing tests for 10 ref/bookmark/stage verbs (RED)`
-2. **Task 1 GREEN:** `38fe0ba7` — `feat(02-03): add 10 ref/bookmark/stage verbs to VcsAdapter (gap-fill)`
-3. **Task 2 RED:** `dcef58ef` — `test(02-03): add failing tests for expr.range/commit + 8 workspace/gitOnly/options gaps (RED)`
-4. **Task 2 GREEN:** `925ac507` — `feat(02-03): add expr.range + expr.commit + 8 workspace/gitOnly/options gap-fills`
-5. **Task 3:** `390c2f9f` — `test(02-03): adapter contract tests for new symmetric verbs (incl. expr.commit, workspace.context shape)`
-6. **Task 4:** `cf59c6cb` — `refactor(02-03): tests/helpers.cjs createTempGitProject — retire init+config raw-git (W2)`
+1. **Task 1 RED:** `pkqrupsvwxvzmwurlnypkyupouurlmuv` — `test(02-03): add failing tests for 10 ref/bookmark/stage verbs (RED)`
+2. **Task 1 GREEN:** `xopmxpnovxrumpwmstxrssmkwyywvmuk` — `feat(02-03): add 10 ref/bookmark/stage verbs to VcsAdapter (gap-fill)`
+3. **Task 2 RED:** `onknqvnvnokmmxwlyovvrvtmtqnkvytn` — `test(02-03): add failing tests for expr.range/commit + 8 workspace/gitOnly/options gaps (RED)`
+4. **Task 2 GREEN:** `rrlrpmstllnpznqrzukzyxllyuqwxmos` — `feat(02-03): add expr.range + expr.commit + 8 workspace/gitOnly/options gap-fills`
+5. **Task 3:** `wknnvswqtzkylmuvpqrsloxlmrvtuknq` — `test(02-03): adapter contract tests for new symmetric verbs (incl. expr.commit, workspace.context shape)`
+6. **Task 4:** `pspsomrnzzvyptvoyzlpywmtoqrunuqo` — `refactor(02-03): tests/helpers.cjs createTempGitProject — retire init+config raw-git (W2)`
 
 Note: Tasks 1 and 2 each used a TDD RED/GREEN pair. Task 3 was a pure additive contract-test commit (the symmetric properties under test were already implemented in Tasks 1-2). Task 4 was a single mechanical commit (no test cycle — the existing 182-test core suite is the regression net).
 
@@ -190,7 +190,7 @@ None — no external configuration changed.
 
 ## Self-Check: PASSED
 
-- All 6 commits exist on `phase/02-migration` in order (`7797aa7d`, `38fe0ba7`, `dcef58ef`, `925ac507`, `390c2f9f`, `cf59c6cb`): confirmed via `git log --oneline -8`.
+- All 6 commits exist on `phase/02-migration` in order (`pkqrupsvwxvzmwurlnypkyupouurlmuv`, `xopmxpnovxrumpwmstxrssmkwyywvmuk`, `onknqvnvnokmmxwlyovvrvtmtqnkvytn`, `rrlrpmstllnpznqrzukzyxllyuqwxmos`, `wknnvswqtzkylmuvpqrsloxlmrvtuknq`, `pspsomrnzzvyptvoyzlpywmtoqrunuqo`): confirmed via `git log --oneline -8`.
 - `cd sdk && pnpm exec vitest run src/vcs/__tests__/` exits 0 with 122/122 tests passing: confirmed in execution output.
 - `cd sdk && pnpm build && pnpm build:cjs` both exit 0: confirmed in execution output.
 - `node --test tests/core.test.cjs` exits 0 with 182/182 passing: confirmed in execution output.

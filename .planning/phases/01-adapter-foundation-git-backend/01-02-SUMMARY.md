@@ -63,10 +63,10 @@ Landed the TypeScript adapter contract and exec/expr/factory primitives — `Vcs
 
 | Task | Name                                                                    | Commit     |
 | ---- | ----------------------------------------------------------------------- | ---------- |
-| 1    | Create exec.ts (vcsExec + VcsExecError) + types.ts (full surface)       | `c978a0c2` |
-| 2    | Create expr.ts + parse/{git-rev,jj-rev}.ts (factories + translators)    | `6561d0c7` |
-| 3    | Create backends.ts + hook-bridge.ts + index.ts (createVcsAdapter)       | `29135e71` |
-| 4    | Add types-gitonly.test-d.ts (static D-07 narrowing assertions)          | `747d25a4` |
+| 1    | Create exec.ts (vcsExec + VcsExecError) + types.ts (full surface)       | `rorltztvzpzmvmwuvrxlvsztnxzklyvx` |
+| 2    | Create expr.ts + parse/{git-rev,jj-rev}.ts (factories + translators)    | `vroosrlwkryoookookzsqsvzknnkvwtv` |
+| 3    | Create backends.ts + hook-bridge.ts + index.ts (createVcsAdapter)       | `wqonnmwpovzyoupskkuwkrxpuykurltw` |
+| 4    | Add types-gitonly.test-d.ts (static D-07 narrowing assertions)          | `zoxqntmltqxynpmkxtxvznvxqmkyxzkn` |
 
 ## Final File Tree
 
@@ -207,7 +207,7 @@ The following stubs in `sdk/src/vcs/index.ts` are designed to be replaced by pla
 - **Fix:** Updated `sdk/package.json`'s `build:cjs` script to chain a one-line `node -e ...` that writes `dist-cjs/package.json` containing `{"type": "commonjs"}`. Also updated `prepublishOnly` to invoke `pnpm run build:cjs` (so the shim is regenerated on publish, not just on local dev). Verified before/after: post-fix, `Object.keys(require('.../exec.js'))` → `['DEFAULT_VCS_TIMEOUT_MS', 'VcsExecError', 'vcsExec', 'execGit']`.
 - **Why this is Rule 3 (not Rule 4):** No architectural change. The shim is a 2-line static JSON file that closes a gap between the existing tsconfig override (`module: commonjs`) and the published artifact's runtime resolution. Any reader of plan 01-01's SUMMARY would expect dist-cjs to be require-able; that expectation was unmet without the shim, and the verify command in the plan implicitly relies on it.
 - **Files modified:** `sdk/package.json` (build:cjs + prepublishOnly scripts).
-- **Commit:** `c978a0c2` (bundled with Task 1 since Task 1's verify command was the first to surface the issue).
+- **Commit:** `rorltztvzpzmvmwuvrxlvsztnxzklyvx` (bundled with Task 1 since Task 1's verify command was the first to surface the issue).
 
 **2. [Cleanup] Deleted `sdk/src/vcs/_placeholder.ts`**
 
@@ -215,7 +215,7 @@ The following stubs in `sdk/src/vcs/index.ts` are designed to be replaced by pla
 - **Issue:** Plan 01-01 introduced `_placeholder.ts` solely to satisfy tsc's `TS18003: No inputs were found` guard when `tsconfig.cjs.json` was scoped to an empty `src/vcs/`. Once Tasks 1–3 of this plan populate the directory with real modules, the placeholder is dead weight.
 - **Fix:** `git rm sdk/src/vcs/_placeholder.ts`. Verified clean rebuild from a wiped `dist-cjs/` produces only the real artifacts (no `_placeholder.{js,d.ts}` remnants).
 - **Files removed:** `sdk/src/vcs/_placeholder.ts`.
-- **Commit:** `29135e71` (bundled with Task 3 — the task that landed the last set of real source files justifying the deletion).
+- **Commit:** `wqonnmwpovzyoupskkuwkrxpuykurltw` (bundled with Task 3 — the task that landed the last set of real source files justifying the deletion).
 - **Note:** Plan 01-01's SUMMARY explicitly forecast this deletion ("Plan 01-02 may delete it once real adapter modules land"). No surprise here.
 
 ### Verification Block Re-Interpretation
@@ -270,9 +270,9 @@ These stubs are intentional and tracked. Each one fails loudly at runtime (or ha
 - `sdk/src/vcs/__tests__/types-gitonly.test-d.ts` exists
 - `sdk/src/vcs/_placeholder.ts` removed (verified absent)
 - All 8 dist-cjs artifacts compile and load via require()
-- Commit `c978a0c2` exists (Task 1)
-- Commit `6561d0c7` exists (Task 2)
-- Commit `29135e71` exists (Task 3)
-- Commit `747d25a4` exists (Task 4)
+- Commit `rorltztvzpzmvmwuvrxlvsztnxzklyvx` exists (Task 1)
+- Commit `vroosrlwkryoookookzsqsvzknnkvwtv` exists (Task 2)
+- Commit `wqonnmwpovzyoupskkuwkrxpuykurltw` exists (Task 3)
+- Commit `zoxqntmltqxynpmkxtxvznvxqmkyxzkn` exists (Task 4)
 - 32 vitest unit tests pass
 - `tsc --noEmit -p tsconfig.json` exits 0

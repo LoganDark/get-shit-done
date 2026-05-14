@@ -70,17 +70,17 @@ A3 fix landed in jj.commit() (D-32, retiring Phase 4 D-10); 11 cross-backend SDK
 
 ## Task-by-task
 
-### Task 1 — A3 fix (commit `37a5b054`)
+### Task 1 — A3 fix (commit `zmpxylxlnnwplqpzonqzxqmqqqolvonu`)
 
 Already in tree from prior executor invocation. The 10-line block at `sdk/src/vcs/backends/jj.ts:250-264` was replaced verbatim per 05-PATTERNS.md: the colocated no-op branch was retired; `fireHook(cwd, 'pre-commit', { stagedFiles: input.files })` now fires unconditionally after every `jj squash`, modulo the `GSD_HOOK_SKIP_COLOCATED=1` env escape hatch.
 
 `sdk/src/vcs/__tests__/jj-hooks.test.ts:157-179` had its colocated-mode describe block renamed and the marker-file assertion inverted from `toBe(false)` → `toBe(true)`; a new `it()` case added for the env-override path. The full file passes under jj 0.41 colocated mode locally and in CI.
 
-### Task 1.5 — `vcs.gitOnly.revert` (commit `822c9322`)
+### Task 1.5 — `vcs.gitOnly.revert` (commit `qqmqrnmvszvlpvrxkusyyktppuqtlrwv`)
 
 Already in tree from prior executor invocation. Added the `revert(opts: { rev: string; noCommit: boolean }): ExecResult` method signature to `GitOnlyOps` in `sdk/src/vcs/types.ts`, an implementation in the git backend's `gitOnly` Object.freeze block, and a paired test file `sdk/src/vcs/__tests__/git-revert.test.ts` with two test cases (default inverse-commit, `--no-commit` staged-only). This is the foundational primitive that Task 2's `revert.ts` SDK query shim wraps on the git path.
 
-### Task 2 — 11 SDK query verb shims + paired tests (commit `e5b5c932`)
+### Task 2 — 11 SDK query verb shims + paired tests (commit `wtozwslstwynrskmppyoynrvlsuozvkv`)
 
 11 new files in `sdk/src/query/`, each mirroring the canonical `hooks.ts` shape (manual argv-scan loop, `createVcsAdapter()` dispatch, uniform `{ ok, exitCode, stdout, stderr, ... }` data shape). 11 paired vitest files use `vi.mock('../vcs/index.js', ...)` to assert argv parsing + adapter delegation in isolation.
 
@@ -102,7 +102,7 @@ One-line per verb:
 
 50 unit tests added across 11 test files; all pass under vitest. TypeScript clean. `lint-vcs-no-raw-git` 0 violations.
 
-### Task 3 — Catalog + manifest registration + D-31 deferral edits (commit `5936b841`)
+### Task 3 — Catalog + manifest registration + D-31 deferral edits (commit `xsvryzkuqxwmunqnkrwtxluvnuvpppkn`)
 
 Registered all 11 new verbs in:
 - `sdk/src/query/command-static-catalog-foundation.ts`: 11 new imports near the top, 11 new entries in the `MUTATION_SURFACES_STATIC_CATALOG` Map (kebab-case canonical names).
@@ -126,7 +126,7 @@ Catalog/resolution/topology tests pass (3 test files, 10 assertions).
 - **Issue:** The plan called for `reset.ts` / `merge.ts` / `restore.ts` to dispatch through `vcs.gitOnly.reset(...)`, `vcs.gitOnly.merge(...)`, and `vcs.gitOnly.restore(...)`, but these methods did not exist on the `GitOnlyOps` interface (only `revert` was added in Task 1.5 explicitly). Without them, the three new shims would not compile against the typed adapter contract, and the alternative of shelling out via `child_process` is prohibited by Pitfall 5.
 - **Fix:** Added three new method signatures to `GitOnlyOps` in `sdk/src/vcs/types.ts` (mirroring the `revert` extension shape from Task 1.5) and implementations in the git backend's `gitOnly` Object.freeze block, alphabetically grouped with the existing entries. No new shell-string concatenation in any path; args always built via array.
 - **Files modified:** `sdk/src/vcs/types.ts`, `sdk/src/vcs/backends/git.ts`
-- **Commit:** `e5b5c932` (folded into Task 2 because the methods are inseparable from the SDK shims that consume them)
+- **Commit:** `wtozwslstwynrskmppyoynrvlsuozvkv` (folded into Task 2 because the methods are inseparable from the SDK shims that consume them)
 
 **2. `--from` revspec on `restore` accepts only refname-shape values**
 - **Found during:** Task 2 test authoring
@@ -147,10 +147,10 @@ All shims accept `--cwd` as a universal override; mutation verbs return `{ ok, e
 ## Self-Check: PASSED
 
 Verified all 4 commits present:
-- `37a5b054` Task 1 (A3 fix)
-- `822c9322` Task 1.5 (vcs.gitOnly.revert)
-- `e5b5c932` Task 2 (11 verb shims + tests)
-- `5936b841` Task 3 (registration + D-31 edits)
+- `zmpxylxlnnwplqpzonqzxqmqqqolvonu` Task 1 (A3 fix)
+- `qqmqrnmvszvlpvrxkusyyktppuqtlrwv` Task 1.5 (vcs.gitOnly.revert)
+- `wtozwslstwynrskmppyoynrvlsuozvkv` Task 2 (11 verb shims + tests)
+- `xsvryzkuqxwmunqnkrwtxluvnuvpppkn` Task 3 (registration + D-31 edits)
 
 Verified key files exist (sampled):
 - `sdk/src/query/push.ts` FOUND

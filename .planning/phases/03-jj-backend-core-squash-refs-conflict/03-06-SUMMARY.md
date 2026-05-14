@@ -225,8 +225,8 @@ speculation.
 
 **Commits:**
 
-- `ef129f44` — `feat(03-06): jj backend push/fetch + workspace.list/context bodies`
-- `fb4a0471` — `docs(03-06): TEST-08 triage — populate 7 bug-test verdicts on jj-colocated`
+- `vxltuwukqlqzpqxyslunlkprvzlvzxxy` — `feat(03-06): jj backend push/fetch + workspace.list/context bodies`
+- `rluttsmnspkuontvlxpztrpoxouwrosv` — `docs(03-06): TEST-08 triage — populate 7 bug-test verdicts on jj-colocated`
 
 Both commits verified present via `git log --oneline -5`.
 

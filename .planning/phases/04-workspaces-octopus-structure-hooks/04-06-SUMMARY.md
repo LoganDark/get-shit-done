@@ -180,21 +180,21 @@ Wire `fireHook` (exported in plan 01) into `commit()` on the jj backend with D-1
 - **Issue:** The plan-action sketched a return shape `{error: '...', code: 'INVALID_ARGS'}` for hooks.ts. The canonical `QueryHandler` signature in `sdk/src/query/utils.ts` returns `Promise<QueryResult<T>>` where `QueryResult = {data: T, format?: 'json' | 'text'}` — there is no sibling `error` or `code` field. Following the plan-sketch would have produced a type error (`error` not assignable to `QueryResult`) and a runtime drift from every other handler.
 - **Fix:** Mirrored the existing handler dialect (see `commit.ts`, `check-commit.ts`): errors are returned as `{data: {ok: false, error: '...'}}`. The smoke test exercises the missing-stage and invalid-stage paths and confirms the shape.
 - **Files modified:** `sdk/src/query/hooks.ts`
-- **Commit:** `e85430e2`
+- **Commit:** `splyuxlqqlykuzwmporszsuquvxvssxm`
 
 **2. [Rule 3 — Blocking] Command registration spans 3 files, not 1**
 - **Found during:** Task 3 (reading `command-manifest.ts` — discovered it's an aggregator of family-specific manifests; the non-family commands live in `command-manifest.non-family.ts` and handlers are bound in `command-static-catalog-foundation.ts` / `-domain.ts`)
 - **Issue:** The plan-action said "register the handler in `sdk/src/query/command-manifest.ts`". That file is a family-aggregator and doesn't accept non-family entries directly. The correct registration surface is the trio: (a) `command-manifest.non-family.ts` for metadata, (b) `command-static-catalog-foundation.ts` for handler binding, (c) regen of `command-aliases.generated.{ts,cjs}` to propagate to CJS routing.
 - **Fix:** Added entries to all three files; ran the generator script (`pnpm exec tsx sdk/scripts/gen-command-aliases.ts`) to keep CJS in sync. The plan's spirit (a single registration site mirroring `commit`) is honoured — there really is one logical registration, just split across three derived artefacts by the repo's existing manifest architecture.
 - **Files modified:** `sdk/src/query/command-manifest.non-family.ts`, `sdk/src/query/command-static-catalog-foundation.ts`, `sdk/src/query/command-aliases.generated.ts`, `get-shit-done/bin/lib/command-aliases.generated.cjs`
-- **Commit:** `e85430e2`
+- **Commit:** `splyuxlqqlykuzwmporszsuquvxvssxm`
 
 **3. [Rule 3 — Blocking] `jj git init --no-git` → `--no-colocate`**
 - **Found during:** Task 4 (writing the non-colocated fixture in `jj-hooks.test.ts`)
 - **Issue:** The plan-action sketch in Task 4 used `jj git init --no-git` for the non-colocated fixture. Plan 04-01's SUMMARY already documented that this flag does not exist on jj 0.41; the correct form is `jj git init --no-colocate`. Following the plan-sketch verbatim would have failed at test setup.
 - **Fix:** Used `jj git init --no-colocate` in the test fixture. Comment cites plan 04-01's empirical lock.
 - **Files:** `sdk/src/vcs/__tests__/jj-hooks.test.ts`
-- **Commit:** `001019b3`
+- **Commit:** `rutnvwoswqppzzrrwxqlztwxrowntuzk`
 
 ### Rule 1 / Rule 2 / Rule 4 — none in this plan
 
@@ -244,10 +244,10 @@ No new pre-existing issues surfaced during this plan's execution. The pre-existi
 - `get-shit-done/bin/lib/command-aliases.generated.cjs` — regenerated (CJS mirror)
 
 **Commits:**
-- `c9f2627c` feat(04-06): wire fireHook pre-commit into jj.ts commit() with D-10 colocated no-op
-- `f79b3e7a` feat(04-06): add firePrePushHook sidecar + wire pre-push into jj.ts push()
-- `e85430e2` feat(04-06): add gsd-sdk query hooks.fire bridge for Phase 5 PROMPT-* rewrites
-- `001019b3` test(04-06): contract suite for hook firing — HOOK-01..05, D-10, CI-04
+- `kpyrlqurlnwtvryowqqrxqpyxxnzkmmu` feat(04-06): wire fireHook pre-commit into jj.ts commit() with D-10 colocated no-op
+- `nzkmotoukusvmmorqntqmxpllvulnwnn` feat(04-06): add firePrePushHook sidecar + wire pre-push into jj.ts push()
+- `splyuxlqqlykuzwmporszsuquvxvssxm` feat(04-06): add gsd-sdk query hooks.fire bridge for Phase 5 PROMPT-* rewrites
+- `rutnvwoswqppzzrrwxqlztwxrowntuzk` test(04-06): contract suite for hook firing — HOOK-01..05, D-10, CI-04
 
 ## Next Phase Readiness
 

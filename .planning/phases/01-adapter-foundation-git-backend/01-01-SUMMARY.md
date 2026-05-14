@@ -42,8 +42,8 @@ Established the `sdk/dist-cjs/` build target — a narrow `tsc -p tsconfig.cjs.j
 
 | Task | Name                                                              | Commit     |
 | ---- | ----------------------------------------------------------------- | ---------- |
-| 1    | Create sdk/tsconfig.cjs.json (narrow CJS build config)            | `f694ba24` |
-| 2    | Wire scripts/files array; .gitignore; root pretest verified       | `b0bca2f4` |
+| 1    | Create sdk/tsconfig.cjs.json (narrow CJS build config)            | `wozorqzmoxtootkwlwsoumympskpxwyl` |
+| 2    | Wire scripts/files array; .gitignore; root pretest verified       | `ouylvwxlyykyvnvwzyrktknztrzvtztn` |
 
 ## Final State of Key Artifacts
 
@@ -152,7 +152,7 @@ The "must_haves.truths" claims from the plan frontmatter all hold:
 - **Fix:** Created `sdk/src/vcs/_placeholder.ts` — a minimal `export {}` stub with a JSDoc preamble explaining its purpose and lifecycle. Initial attempt used `.placeholder.ts` (dotfile) but tsc's default glob excludes dotfiles, so renamed to `_placeholder.ts` (verified the glob picks it up by inspecting `sdk/dist-cjs/vcs/`).
 - **Why this is Rule 3 (not Rule 4):** No architectural change — the placeholder is a single one-line module that satisfies tsc's input requirement until plan 01-02 of this phase lands the real `sdk/src/vcs/index.ts`, `types.ts`, etc. Plan 01-02 explicitly creates files in this directory and will make the placeholder redundant. The placeholder contains no behavior, no types, no API surface — it is purely scaffolding.
 - **Files modified:** `sdk/src/vcs/_placeholder.ts` (created)
-- **Commit:** `b0bca2f4` (bundled with the rest of Task 2)
+- **Commit:** `ouylvwxlyykyvnvwzyrktknztrzvtztn` (bundled with the rest of Task 2)
 - **Forward note for plan 01-02:** Once `sdk/src/vcs/index.ts` and the other adapter modules exist, `_placeholder.ts` may be deleted (its existence is no longer load-bearing). Plan 01-02 can include the deletion in its commit if desired; otherwise the file is harmless and will continue to compile to a no-op CJS module.
 
 ### Verification Block Re-Interpretation
@@ -186,7 +186,7 @@ No new `threat_flag:` items.
 - ✅ `sdk/src/vcs/_placeholder.ts` exists at expected path
 - ✅ `sdk/package.json` modified (verified scripts + files array)
 - ✅ `.gitignore` modified (verified `sdk/dist-cjs/` entry on line 60)
-- ✅ Commit `f694ba24` exists (`feat(01-01): add narrow CJS tsconfig for src/vcs/`)
-- ✅ Commit `b0bca2f4` exists (`feat(01-01): wire CJS build pipeline …`)
+- ✅ Commit `wozorqzmoxtootkwlwsoumympskpxwyl` exists (`feat(01-01): add narrow CJS tsconfig for src/vcs/`)
+- ✅ Commit `ouylvwxlyykyvnvwzyrktknztrzvtztn` exists (`feat(01-01): wire CJS build pipeline …`)
 - ✅ `pnpm -F sdk build` exits 0 (both passes run)
 - ✅ `sdk/dist-cjs/` directory created by tsc

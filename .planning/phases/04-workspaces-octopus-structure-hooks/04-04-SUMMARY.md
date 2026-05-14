@@ -192,7 +192,7 @@ Land the real `workspace.reap()` body in `sdk/src/vcs/jj/reap.ts` (UPSTREAM-02 s
 - **Issue:** Three test bodies in `sdk/src/vcs/__tests__/{backends,jj-workspace,jj-skeleton}.test.ts` explicitly pinned the Phase-4-plan-01 deferred state ("workspace.reap still throws VcsNotImplementedError", "BACKENDS_AVAILABLE_FOR_VERB['workspace.reap']).toEqual(['git'])", plus a live-jj describe-block asserting `toThrow(/Phase 4 plan 04 owns the real body/)`). These were the explicit gates Phase-4-plan-01 installed for this plan to flip; without flipping them, the verb-shape commit is incomplete and CI is red.
 - **Fix:** Mirrored the plan-01/plan-03 boundary-flip pattern. Inline `toThrow(VcsNotImplementedError)` assertions flipped to `.not.toThrow(VcsNotImplementedError)` with a try-block that re-throws only the stub class. The `backends.test.ts` allowlist assertion updated to the three-backend frozen array. The `jj-workspace.test.ts` live-jj `Phase 4 plan 04 owns the real body` describe-block was rewired: title changed from "Phase 4 plan 01 bodies (multi-workspace, allowlist gate)" to "Phase 4 plan 04 real body (boundary marker)"; the assertion changed from `toThrow(/Phase 4 plan 04 owns the real body/)` to a smoke assertion against `result.abandoned/.incomplete === []` (no subagent workspaces matching the prefix exist in the test fixture).
 - **Files modified:** `sdk/src/vcs/__tests__/backends.test.ts`, `sdk/src/vcs/__tests__/jj-workspace.test.ts`, `sdk/src/vcs/__tests__/jj-skeleton.test.ts`
-- **Commit:** `0efe745e` (Task 3 commit)
+- **Commit:** `kuuorxkptqvmnokxmolylrmlsmmmlslq` (Task 3 commit)
 
 ### Rule 1 / Rule 2 / Rule 4 — none in this plan
 
@@ -243,10 +243,10 @@ When running the full SDK vitest suite (`GSD_TEST_BACKENDS=jj-colocated pnpm vit
 - `sdk/src/vcs/__tests__/jj-skeleton.test.ts` — inline assertion flip + comment refresh
 
 **Commits:**
-- `3e29f68f` feat(04-04): add incomplete-work.md crash queue read/write module
-- `678dc1f3` feat(04-04): land performJjReap sidecar for workspace.reap real body
-- `0efe745e` feat(04-04): wire workspace.reap real bodies + commit() phase-merge gate
-- `3cb274ac` test(04-04): contract suite for workspace.reap + D-14 phase-merge gate
+- `ukvossqlznvnssnzyttxlpppnuvzxpku` feat(04-04): add incomplete-work.md crash queue read/write module
+- `plzvtxyvxmwuxvsrvoorurqkolwwtzyy` feat(04-04): land performJjReap sidecar for workspace.reap real body
+- `kuuorxkptqvmnokxmolylrmlsmmmlslq` feat(04-04): wire workspace.reap real bodies + commit() phase-merge gate
+- `kurvmkosmozpolzlxtmurwrumtptlyks` test(04-04): contract suite for workspace.reap + D-14 phase-merge gate
 
 ## Next Phase Readiness
 

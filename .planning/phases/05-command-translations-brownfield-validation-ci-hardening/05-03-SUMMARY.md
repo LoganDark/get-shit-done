@@ -228,9 +228,9 @@ No stub patterns introduced. The workflow rewrites are mechanical (UPSTREAM-03) 
 
 ## Self-Check: PASSED
 
-- ✓ Task 1 commit `9790957d` present: `feat(05-03): rewrite undo.md + complete-milestone.md + code-review.md to be VCS-agnostic (D-33, Task 1)`
-- ✓ Task 2 commit `79a78a6a` present: `feat(05-03): rewrite gsd-code-fixer.md + gsd-executor.md to be VCS-agnostic (PROMPT-02, Task 2)`
-- ✓ Task 3 commit `a77984cd` present: `test(05-03): add CMD-06..09 + CMD-04-spillover + CMD-11 lifecycle integration tests against jj-colocated fixtures (Task 3)`
+- ✓ Task 1 commit `lvvtuptszsyustkzpotpzqzkkyzvtlqo` present: `feat(05-03): rewrite undo.md + complete-milestone.md + code-review.md to be VCS-agnostic (D-33, Task 1)`
+- ✓ Task 2 commit `xlzvzrymotwmluouyvquuspmknlyysqr` present: `feat(05-03): rewrite gsd-code-fixer.md + gsd-executor.md to be VCS-agnostic (PROMPT-02, Task 2)`
+- ✓ Task 3 commit `uxlnslotxtotrzvowzqrvwzsozlrylvn` present: `test(05-03): add CMD-06..09 + CMD-04-spillover + CMD-11 lifecycle integration tests against jj-colocated fixtures (Task 3)`
 - ✓ All 6 new test files exist on disk under `sdk/src/vcs/__tests__/cmd-*-jj.test.ts`
 - ✓ All 18 tests pass under jj 0.41.0 (vitest exit 0; 8.55s total)
 - ✓ Type-check clean (`pnpm tsc --noEmit` exit 0)

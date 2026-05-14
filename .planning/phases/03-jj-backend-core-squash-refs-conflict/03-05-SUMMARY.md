@@ -137,8 +137,8 @@ Exit code: 0.
 
 | # | Task | Commit | Files |
 |---|------|--------|-------|
-| 1 | log/status/diff bodies + parseJjStatus + parseDiffSummary + staged audit | `933de7d0` | 6 (2 created + 4 modified) |
-| 2 | findConflicts body + enumerateConflictedPaths + allowlist flip | `43c28b7d` | 5 (1 created + 4 modified) |
+| 1 | log/status/diff bodies + parseJjStatus + parseDiffSummary + staged audit | `ywywkzxnxsllyznmvpzmpttyxqptlvop` | 6 (2 created + 4 modified) |
+| 2 | findConflicts body + enumerateConflictedPaths + allowlist flip | `tskllypzrupovztpuutsxmrppokktsnm` | 5 (1 created + 4 modified) |
 
 ## Files Created/Modified
 
@@ -177,7 +177,7 @@ Exit code: 0.
 - **Fix:** Replaced each affected `toThrow(VcsNotImplementedError)` test with a `not.toThrow(VcsNotImplementedError)` form wrapped in a try/catch that re-throws only if the exception is a `VcsNotImplementedError` instance (mirrors plan 03-04 / 03-03's was-stub-now-wired pattern). The try/catch swallows any legitimate `VcsExecError` from invoking against a non-existent cwd in unit-test mode.
 - **Files modified:** `sdk/src/vcs/__tests__/jj-skeleton.test.ts` (4 tests)
 - **Verification:** All jj-skeleton.test.ts tests pass.
-- **Committed in:** `933de7d0` (Task 1) for log/status/diff; `43c28b7d` (Task 2) for findConflicts.
+- **Committed in:** `ywywkzxnxsllyznmvpzmpttyxqptlvop` (Task 1) for log/status/diff; `tskllypzrupovztpuutsxmrppokktsnm` (Task 2) for findConflicts.
 
 **2. [Rule 1 — Bug] `backends.test.ts` allowlist assertion outdated**
 
@@ -186,7 +186,7 @@ Exit code: 0.
 - **Fix:** Replaced the assertions with explicit per-verb `expect(...).toEqual(['git', 'jj-colocated'])` for each of log/status/diff/findConflicts; added `push`/`fetch` assertions pinning the deliberately-not-yet-flipped verbs at `['git']`; renamed the test description to reflect plan 03-05 reality.
 - **Files modified:** `sdk/src/vcs/__tests__/backends.test.ts`
 - **Verification:** All 12 backends.test.ts tests pass.
-- **Committed in:** `933de7d0` (Task 1) + `43c28b7d` (Task 2) — split because the description string was updated in both commits.
+- **Committed in:** `ywywkzxnxsllyznmvpzmpttyxqptlvop` (Task 1) + `tskllypzrupovztpuutsxmrppokktsnm` (Task 2) — split because the description string was updated in both commits.
 
 ### Environmental Constraints
 
@@ -280,8 +280,8 @@ Plan 03-07 (end-of-phase wrap-up):
   - `sdk/src/vcs/__tests__/jj-findconflicts.test.ts` ✓
   - `.planning/phases/03-jj-backend-core-squash-refs-conflict/03-05-AUDIT.md` ✓
 - All 2 task commits exist in `git log --oneline`:
-  - `933de7d0` (Task 1) ✓
-  - `43c28b7d` (Task 2) ✓
+  - `ywywkzxnxsllyznmvpzmpttyxqptlvop` (Task 1) ✓
+  - `tskllypzrupovztpuutsxmrppokktsnm` (Task 2) ✓
 
 ---
 *Phase: 03-jj-backend-core-squash-refs-conflict*

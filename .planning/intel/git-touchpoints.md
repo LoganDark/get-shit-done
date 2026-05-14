@@ -133,7 +133,7 @@ Rough mental sizing (not a roadmap, just scope intuition):
 ## Caveats
 
 - Counts are upper bounds — multi-language doc files inflate (zh-CN, ja-JP, ko-KR, pt-BR mirrors of english docs).
-- This snapshot reflects upstream `ae56863a` (pnpm migration). Refresh after each upstream pull before major planning.
+- This snapshot reflects upstream `vtnolxpzlkkytzykynnttxmvpylqzuzt` (pnpm migration). Refresh after each upstream pull before major planning.
 - "git mentions in markdown" overcounts because the same workflow doc is mirrored across i18n locales.
 
 ## Refresh Command

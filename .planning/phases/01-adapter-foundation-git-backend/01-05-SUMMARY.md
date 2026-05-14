@@ -55,9 +55,9 @@ Landed the load-bearing "no raw git anywhere" lint guard (VCS-07 / D-17 / D-18 /
 
 | Task | Name                                                                           | Commit     |
 | ---- | ------------------------------------------------------------------------------ | ---------- |
-| 1    | Create scripts/lint-vcs-no-raw-git.allow.json (initial allowlist)              | `9c1344e8` |
-| 2    | Create scripts/lint-vcs-no-raw-git.cjs + tests/lint-vcs-no-raw-git-fixture     | `08d58390` (GREEN), `56ca4c9b` (RED) |
-| 3    | Wire the lint guard into .github/workflows/test.yml lint-tests job             | `438836d1` |
+| 1    | Create scripts/lint-vcs-no-raw-git.allow.json (initial allowlist)              | `nnquxytmlsmkxklzpwulsvtnoquqpttu` |
+| 2    | Create scripts/lint-vcs-no-raw-git.cjs + tests/lint-vcs-no-raw-git-fixture     | `rqpokornstvytxrwvxuysprrnnwrymqn` (GREEN), `ypwvturxtklnvmuxnzqwpvtmkvqzmwqv` (RED) |
+| 3    | Wire the lint guard into .github/workflows/test.yml lint-tests job             | `zyqvxpynsyysouoylsymxsoszmmvwvnm` |
 
 ## Allowlist Final Size
 
@@ -165,7 +165,7 @@ D-19 is honored: CI-only integration; not run pre-commit. The conventions (`shel
 - **Fix:** Added `sdk/src/init-runner.ts` to the allowlist `files[]` array.
 - **Files modified:** `scripts/lint-vcs-no-raw-git.allow.json`.
 - **Why this is Rule 2, not Rule 4:** No architectural change — this is the same migration-target category as `sdk/src/query/init.ts` (its sibling); the allowlist was simply missing one Phase 2 target.
-- **Commit:** `08d58390` (bundled with Task 2's GREEN — the task that surfaced the violation).
+- **Commit:** `rqpokornstvytxrwvxuysprrnnwrymqn` (bundled with Task 2's GREEN — the task that surfaced the violation).
 
 **2. [Rule 2 — Critical correctness] Allowlist missed integration-test files**
 
@@ -174,7 +174,7 @@ D-19 is honored: CI-only integration; not run pre-commit. The conventions (`shel
 - **Fix:** Added `sdk/src/**/*.integration.test.ts` glob to the allowlist `globs[]` array. The wildcard form covers all current and future integration tests under `sdk/src/`.
 - **Files modified:** `scripts/lint-vcs-no-raw-git.allow.json`.
 - **Why this is Rule 2:** Same as #1 — the allowlist was missing legitimate fixture-seeding sites that the planner did not enumerate.
-- **Commit:** `9c1344e8` (Task 1 — included from inception).
+- **Commit:** `nnquxytmlsmkxklzpwulsvtnoquqpttu` (Task 1 — included from inception).
 
 **3. [Rule 2 — Critical correctness] Allowlist missed `tests/__tools__/capture-vcs-baselines.cjs`**
 
@@ -183,7 +183,7 @@ D-19 is honored: CI-only integration; not run pre-commit. The conventions (`shel
 - **Fix:** Added `tests/__tools__/capture-vcs-baselines.cjs` explicitly to the allowlist `files[]` array.
 - **Files modified:** `scripts/lint-vcs-no-raw-git.allow.json`.
 - **Why this is Rule 2:** Same as #1/#2 — legitimate fixture site missing from the enumerated allowlist.
-- **Commit:** `9c1344e8` (Task 1 — included from inception).
+- **Commit:** `nnquxytmlsmkxklzpwulsvtnoquqpttu` (Task 1 — included from inception).
 
 **4. [Rule 2 — Self-documentation] Listed `tests/vcs-cjs-smoke.test.cjs` explicitly**
 
@@ -191,7 +191,7 @@ D-19 is honored: CI-only integration; not run pre-commit. The conventions (`shel
 - **Issue:** Already covered by the `tests/**/*.test.cjs` glob, but worth listing explicitly for self-documentation alongside `tests/vcs-adapter-contract.test.cjs` (plan 04) — both are CJS-side smoke tests that init tmp git repos.
 - **Fix:** Added explicit entry to `files[]`.
 - **Why this is Rule 2 (not stylistic):** Reviewers reading the allowlist diff for future PRs benefit from the explicit entry; no glob coverage change.
-- **Commit:** `9c1344e8` (Task 1).
+- **Commit:** `nnquxytmlsmkxklzpwulsvtnoquqpttu` (Task 1).
 
 ### Verification Block Re-Interpretation
 
@@ -233,10 +233,10 @@ Files modified (verified via `git diff` and `git log`):
 - `.gitignore` — `__lint-fixture-vcs-*` belt-and-suspenders entry added
 
 Commits:
-- `9c1344e8` (Task 1) — allowlist JSON
-- `56ca4c9b` (Task 2 RED) — failing fixture test
-- `08d58390` (Task 2 GREEN) — scanner implementation + allowlist refinement
-- `438836d1` (Task 3) — CI workflow integration
+- `nnquxytmlsmkxklzpwulsvtnoquqpttu` (Task 1) — allowlist JSON
+- `ypwvturxtklnvmuxnzqwpvtmkvqzmwqv` (Task 2 RED) — failing fixture test
+- `rqpokornstvytxrwvxuysprrnnwrymqn` (Task 2 GREEN) — scanner implementation + allowlist refinement
+- `zyqvxpynsyysouoylsymxsoszmmvwvnm` (Task 3) — CI workflow integration
 
 Test results:
 - `node scripts/lint-vcs-no-raw-git.cjs`: exit 0, 880 files scanned, 0 violations on Phase 1 land state.
@@ -246,7 +246,7 @@ Test results:
 ## TDD Gate Compliance
 
 Task 2 followed RED → GREEN sequence:
-1. RED commit `56ca4c9b` (test only) — fixture test fails because `scripts/lint-vcs-no-raw-git.cjs` does not exist (`MODULE_NOT_FOUND`).
-2. GREEN commit `08d58390` — scanner implementation; all 3 fixture tests pass; production scan exits 0.
+1. RED commit `ypwvturxtklnvmuxnzqwpvtmkvqzmwqv` (test only) — fixture test fails because `scripts/lint-vcs-no-raw-git.cjs` does not exist (`MODULE_NOT_FOUND`).
+2. GREEN commit `rqpokornstvytxrwvxuysprrnnwrymqn` — scanner implementation; all 3 fixture tests pass; production scan exits 0.
 
 No REFACTOR commit needed — the GREEN implementation matches the locked pattern from `scripts/lint-no-source-grep.cjs` and the plan's verbatim spec.

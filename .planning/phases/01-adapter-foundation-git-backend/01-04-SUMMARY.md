@@ -58,9 +58,9 @@ Built the dual-runner parameterized contract harness — vitest `describe.for(se
 
 | Task | Name                                                                                                       | Commit     |
 | ---- | ---------------------------------------------------------------------------------------------------------- | ---------- |
-| 1    | vitest fixture (vcs-fixture.ts) + parameterized contract suite (adapter-contract.test.ts)                  | `ef6872aa` |
-| 2    | tests/helpers.cjs vcsTest harness + tests/vcs-adapter-contract.test.cjs (node --test variant)              | `e20b468e` |
-| 3    | scripts/check-skip-count.cjs (TEST-06) + .github/workflows/test.yml integration                            | `746e27cc` |
+| 1    | vitest fixture (vcs-fixture.ts) + parameterized contract suite (adapter-contract.test.ts)                  | `xsxoqostylwpoxyzvooxlwzwrqmquykl` |
+| 2    | tests/helpers.cjs vcsTest harness + tests/vcs-adapter-contract.test.cjs (node --test variant)              | `otvwsmxutyvynvtpusqworvslvslotzt` |
+| 3    | scripts/check-skip-count.cjs (TEST-06) + .github/workflows/test.yml integration                            | `vqwwqlrpyxssusotroznnpkyqzxrlqrr` |
 
 ## File Tree (this plan)
 
@@ -234,9 +234,9 @@ Files modified (verified via git log):
 - `.github/workflows/test.yml` — fetch-depth: 0 on checkout + new check-skip-count step
 
 Commits:
-- `ef6872aa` (Task 1) — vitest fixture + parameterized contract suite
-- `e20b468e` (Task 2) — CJS vcsTest harness + node --test contract suite
-- `746e27cc` (Task 3) — check-skip-count.cjs + workflow integration
+- `xsxoqostylwpoxyzvooxlwzwrqmquykl` (Task 1) — vitest fixture + parameterized contract suite
+- `otvwsmxutyvynvtpusqworvslvslotzt` (Task 2) — CJS vcsTest harness + node --test contract suite
+- `vqwwqlrpyxssusotroznnpkyqzxrlqrr` (Task 3) — check-skip-count.cjs + workflow integration
 
 Test results:
 - `pnpm exec vitest run --project unit src/vcs/__tests__/adapter-contract.test.ts`: **12 tests passed**.

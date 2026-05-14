@@ -79,9 +79,9 @@ metrics:
 
 Each task was committed atomically:
 
-1. **Task 1: Replace jj-workspace.test.ts stub block with real multi-workspace contract assertions** — `affd41ec` (test)
-2. **Task 2: Add vcsMultiWsTest fixture factory to tests/helpers.cjs** — `976d57cd` (feat)
-3. **Task 3: WS-13 audit — append multi-workspace verdicts for bug-3097/3099/2774/2075** — `e8f9390c` (docs)
+1. **Task 1: Replace jj-workspace.test.ts stub block with real multi-workspace contract assertions** — `vyptxvoqwurnrypxvnwkxqkmrpvwyzmt` (test)
+2. **Task 2: Add vcsMultiWsTest fixture factory to tests/helpers.cjs** — `xzxqmuuvzryzllozxqrooupnkmtytzwq` (feat)
+3. **Task 3: WS-13 audit — append multi-workspace verdicts for bug-3097/3099/2774/2075** — `wmrzvlkrzwtwwlrkosrlktkppospmtup` (docs)
 
 (No plan-metadata commit — worktree executor; orchestrator commits SUMMARY.md + this plan's `.planning/` updates after merge.)
 
@@ -119,9 +119,9 @@ This is a YAGNI judgement, not an auto-fix or a missed step. Documented here so 
 
 ## Issues Encountered
 
-**Worktree base-check exit code 1 at agent startup.** The `<worktree_branch_check>` block's `[ "$(git rev-parse HEAD)" != "39e38ce1" ]` comparison compares the full SHA against the short SHA `39e38ce1`, so the check always considers them "unequal" and the prior `git reset --hard 39e38ce1` is run a second time (no-op because HEAD is already at that ref), but the `[ ... ]` test exits 1 and the whole conditional exits the calling script. This is a benign false-positive — the worktree was correctly seated and HEAD was on the per-agent branch as expected. I confirmed via `git rev-parse HEAD` returning the full SHA and matching the spawn base, then proceeded with task execution. Not a Rule-1 fix because the check is in the agent prompt, not in the executor's task surface — file as orchestrator-side documentation polish for a follow-up if it bites others.
+**Worktree base-check exit code 1 at agent startup.** The `<worktree_branch_check>` block's `[ "$(git rev-parse HEAD)" != "39e38ce1" ]` comparison compares the full SHA against the short SHA `lyzvmpwmolkkoyvnkylkzsmwtspltxpo`, so the check always considers them "unequal" and the prior `git reset --hard 39e38ce1` is run a second time (no-op because HEAD is already at that ref), but the `[ ... ]` test exits 1 and the whole conditional exits the calling script. This is a benign false-positive — the worktree was correctly seated and HEAD was on the per-agent branch as expected. I confirmed via `git rev-parse HEAD` returning the full SHA and matching the spawn base, then proceeded with task execution. Not a Rule-1 fix because the check is in the agent prompt, not in the executor's task surface — file as orchestrator-side documentation polish for a follow-up if it bites others.
 
-**SDK dist-cjs absent at startup.** The worktree base was the post-merge state of plan 04-01 (`39e38ce1`), but `sdk/dist-cjs/` was not in the working tree (build output is gitignored). Task 2's verify command requires the dist-cjs build because `tests/helpers.cjs._loadVcs()` requires from `sdk/dist-cjs/vcs/index.js`. I ran `cd sdk && pnpm build:cjs` (657ms install + tsc) before the Task 2 verify; this is normal worktree setup, not a plan deviation.
+**SDK dist-cjs absent at startup.** The worktree base was the post-merge state of plan 04-01 (`lyzvmpwmolkkoyvnkylkzsmwtspltxpo`), but `sdk/dist-cjs/` was not in the working tree (build output is gitignored). Task 2's verify command requires the dist-cjs build because `tests/helpers.cjs._loadVcs()` requires from `sdk/dist-cjs/vcs/index.js`. I ran `cd sdk && pnpm build:cjs` (657ms install + tsc) before the Task 2 verify; this is normal worktree setup, not a plan deviation.
 
 ## User Setup Required
 

@@ -169,14 +169,14 @@ Deferred per plan:
 - **Issue:** Five test bodies in `backends.test.ts`, `jj-skeleton.test.ts`, `jj-workspace.test.ts`, and `adapter-contract.test.ts` explicitly pinned the Phase 3 deferred state ("workspace.add still throws VcsNotImplementedError (Phase 4 owns)", "BACKENDS_AVAILABLE is [git, jj-colocated] in Phase 3", "parseBackendsEnv('jj-native') yields empty intersection in Phase 3"). These were the explicit gates Phase-3 planners installed for Phase 4 to flip; without flipping them, the verb-shape commit is incomplete and CI is red.
 - **Fix:** Mirrored the wired-in-plan-03-03/03-05/03-06 probe pattern: `.not.toThrow(VcsNotImplementedError)` for the newly-active verbs; `.not.toThrow()` for workspace.prune (documented no-op); new `.toThrow(VcsNotImplementedError)` assertions for workspace.reap and acquireWriteLock to maintain the deferred-stub invariant for the new verbs. backends.test.ts expanded to include the new verb keys.
 - **Files modified:** `sdk/src/vcs/__tests__/backends.test.ts`, `sdk/src/vcs/__tests__/jj-skeleton.test.ts`, `sdk/src/vcs/__tests__/jj-workspace.test.ts`, `sdk/src/vcs/__tests__/adapter-contract.test.ts`
-- **Commits:** `bdca4b6c`, `1d708dec`
+- **Commits:** `vptmrtkorpvsvkwmkukqozrulzlukzln`, `psyltotovwzkwwynxwntxrytmqzqlnto`
 
 **2. [Rule 3 - Blocking] Empirically corrected the jj-native init flag from `--no-git` to `--no-colocate`**
 - **Found during:** Task 3 (writing the jj-native dispatch branch in tests/helpers.cjs)
 - **Issue:** The plan action speculated `jj git init --no-git` as the non-colocated init form. Empirically verified against jj 0.41.0: `--no-git` is not a valid flag; the actual non-colocated flag is `--no-colocate` (and `--colocate` IS THE DEFAULT on 0.41, so it MUST be explicitly disabled). The bare form `jj init` is also unsupported (yields "unrecognized subcommand 'init'").
 - **Fix:** Used `jj git init --no-colocate` in both `tests/helpers.cjs` and `sdk/src/vcs/__tests__/vcs-fixture.ts`. Comment in helpers.cjs records the empirical verification for future readers.
 - **Files modified:** `tests/helpers.cjs`, `sdk/src/vcs/__tests__/vcs-fixture.ts`
-- **Commit:** `c5d3038d`
+- **Commit:** `uqtnmwpxlnymtomnpolrvuovtuysxysk`
 
 ### Rule 2 (auto-add missing critical functionality) — none in this plan
 
@@ -220,11 +220,11 @@ Additionally, `jj-parsers.test.ts` reported one GPG-environmental flake during a
 - `tests/helpers.cjs` — +13 / -2 (jj-native vcsTest dispatch via `jj git init --no-colocate`)
 
 **Commits:**
-- `ae38f396` feat(04-01): extend VcsAdapter type surface for Phase 4 workspaces
-- `dddd7b11` feat(04-01): replace jj workspace stubs with real bodies + extend git mirror
-- `c5d3038d` feat(04-01): flip allowlist, export fireHook, add jj-native CI lane + fixtures
-- `bdca4b6c` test(04-01): flip Phase 3 boundary-marker tests to Phase 4 active state
-- `1d708dec` test(04-01): flip adapter-contract parseBackendsEnv(jj-native) boundary
+- `ssqzwumplsrzzonppkzuwqpwwwrprnyp` feat(04-01): extend VcsAdapter type surface for Phase 4 workspaces
+- `uxruxrrpnpyowslpqzrvvoprrlyywyok` feat(04-01): replace jj workspace stubs with real bodies + extend git mirror
+- `uqtnmwpxlnymtomnpolrvuovtuysxysk` feat(04-01): flip allowlist, export fireHook, add jj-native CI lane + fixtures
+- `vptmrtkorpvsvkwmkukqozrulzlukzln` test(04-01): flip Phase 3 boundary-marker tests to Phase 4 active state
+- `psyltotovwzkwwynxwntxrytmqzqlnto` test(04-01): flip adapter-contract parseBackendsEnv(jj-native) boundary
 
 ## Self-Check: PASSED
 

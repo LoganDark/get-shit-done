@@ -80,7 +80,7 @@ completed: 2026-05-09
 
 # Phase 02 Plan 09: Migrate get-shit-done/bin/lib/commands.cjs to VcsAdapter Summary
 
-**Two atomic commits on `phase/02-migration` close 14 raw-git sites in `get-shit-done/bin/lib/commands.cjs` (1,028 LOC; the third-largest hotspot file in the migration). Per W1 split, Task 1 (`2a9ac2c0`) lands 13 new baselines as a separate pre-stage commit; Task 2 (`4093a4b1`) lands the source migration + 3 paired test retargets in a single 5-file commit. cmdCommit's 7 sites (lines 305/308/310/330/332/339/352), commitFilesIfDeletion's 3 sites (398/402/413), cmdStats's 4 sites (917/921/924/994) all swap to the VcsAdapter API. Pitfall 2 (D-08) preserved: the `if/else` deletion-vs-add block stays as TWO adapter calls (vcs.unstage / vcs.stage). Blocker-3 closed in production: cmdStats site 924 wraps the runtime SHA via `expr.commit()` — first production consumer of expr.commit outside the SDK layer (extends 02-06's progress.ts cookbook to a `bin/lib/*.cjs` runtime path). #2014 invariant preserved via stagedOrUnstaged tracking: explicit --files with all-missing entries short-circuits to nothing_to_commit BEFORE calling vcs.commit (avoids the `git commit -- <missing-path>` deletion-recording bug). 5 new baseline-parity dispatch clauses (checkout -b / checkout / rm --cached / add no-`--` / commit -m no-`--`) bring 13 baselines into the parity assertion. Lint state on `phase/02-migration` drops to 2 violations / 1 file (was 3 / 2). All 130 paired tests pass; all 162 SDK vcs tests pass (45 baseline-parity, was 32; +13).**
+**Two atomic commits on `phase/02-migration` close 14 raw-git sites in `get-shit-done/bin/lib/commands.cjs` (1,028 LOC; the third-largest hotspot file in the migration). Per W1 split, Task 1 (`omumxtytvpmqnystsrxqvkkulnvnkpxq`) lands 13 new baselines as a separate pre-stage commit; Task 2 (`kmvryuzmpxrslyupnmptzvopqzywynzl`) lands the source migration + 3 paired test retargets in a single 5-file commit. cmdCommit's 7 sites (lines 305/308/310/330/332/339/352), commitFilesIfDeletion's 3 sites (398/402/413), cmdStats's 4 sites (917/921/924/994) all swap to the VcsAdapter API. Pitfall 2 (D-08) preserved: the `if/else` deletion-vs-add block stays as TWO adapter calls (vcs.unstage / vcs.stage). Blocker-3 closed in production: cmdStats site 924 wraps the runtime SHA via `expr.commit()` — first production consumer of expr.commit outside the SDK layer (extends 02-06's progress.ts cookbook to a `bin/lib/*.cjs` runtime path). #2014 invariant preserved via stagedOrUnstaged tracking: explicit --files with all-missing entries short-circuits to nothing_to_commit BEFORE calling vcs.commit (avoids the `git commit -- <missing-path>` deletion-recording bug). 5 new baseline-parity dispatch clauses (checkout -b / checkout / rm --cached / add no-`--` / commit -m no-`--`) bring 13 baselines into the parity assertion. Lint state on `phase/02-migration` drops to 2 violations / 1 file (was 3 / 2). All 130 paired tests pass; all 162 SDK vcs tests pass (45 baseline-parity, was 32; +13).**
 
 ## Performance
 
@@ -88,7 +88,7 @@ completed: 2026-05-09
 - **Started:** 2026-05-09T22:35Z (approx)
 - **Tasks:** 2 (both `tdd="false"` — pure mechanical migration)
 - **Files modified:** 6 source/test/tooling files + 13 baseline JSON
-- **Commits on phase/02-migration:** 2 (Task 1 `2a9ac2c0` + Task 2 `4093a4b1`)
+- **Commits on phase/02-migration:** 2 (Task 1 `omumxtytvpmqnystsrxqvkkulnvnkpxq` + Task 2 `kmvryuzmpxrslyupnmptzvopqzywynzl`)
 
 ## Accomplishments
 
@@ -166,8 +166,8 @@ Two atomic commits on `phase/02-migration`:
 
 | # | Hash       | Files | Subject                                                                        |
 |--:|------------|------:|--------------------------------------------------------------------------------|
-| 1 | `2a9ac2c0` |    14 | chore(02-09): pre-stage baseline capture for commands.cjs (13 baselines)       |
-| 2 | `4093a4b1` |     5 | refactor(02-09): migrate get-shit-done/bin/lib/commands.cjs to VcsAdapter       |
+| 1 | `omumxtytvpmqnystsrxqvkkulnvnkpxq` |    14 | chore(02-09): pre-stage baseline capture for commands.cjs (13 baselines)       |
+| 2 | `kmvryuzmpxrslyupnmptzvopqzywynzl` |     5 | refactor(02-09): migrate get-shit-done/bin/lib/commands.cjs to VcsAdapter       |
 
 ## Files Created/Modified
 
@@ -211,7 +211,7 @@ Two atomic commits on `phase/02-migration`:
 - **Fix:** Added a `stagedOrUnstaged` tracking array. When explicit --files were passed AND every entry was missing (stagedOrUnstaged.length === 0), short-circuit to `{committed: false, reason: 'nothing_to_commit'}` BEFORE calling vcs.commit. Otherwise, pass `pathspec: stagedOrUnstaged` (only paths that were actually staged or unstaged) to vcs.commit, so the pathspec doesn't include missing-file entries.
 - **Files modified:** `get-shit-done/bin/lib/commands.cjs`
 - **Verification:** all 3 tests in `tests/commit-files-deletion.test.cjs` pass; the `entries` returned by `vcs.diff({range, nameStatus})` no longer include `D .planning/STATE.md` for the missing-file scenarios.
-- **Commit:** Task 2 (`4093a4b1`)
+- **Commit:** Task 2 (`kmvryuzmpxrslyupnmptzvopqzywynzl`)
 
 ### Rule 4 (architectural) deviations
 
@@ -283,8 +283,8 @@ None — no external configuration changed.
 
 ## Self-Check: PASSED
 
-- Commit `2a9ac2c0` (Task 1) exists on `phase/02-migration`: confirmed via `git log --oneline -3`.
-- Commit `4093a4b1` (Task 2) exists on `phase/02-migration`: confirmed via `git log --oneline -3`.
+- Commit `omumxtytvpmqnystsrxqvkkulnvnkpxq` (Task 1) exists on `phase/02-migration`: confirmed via `git log --oneline -3`.
+- Commit `kmvryuzmpxrslyupnmptzvopqzywynzl` (Task 2) exists on `phase/02-migration`: confirmed via `git log --oneline -3`.
 - All 13 baselines exist at `tests/baselines/git-vcs/commands-cjs-{305,308,310,330,332,339,352,398,402,413,917,921,924}-*.snap.json` and parse as JSON: confirmed.
 - `cd sdk && pnpm build && pnpm build:cjs` both exit 0: confirmed.
 - `cd sdk && pnpm exec vitest run src/vcs/__tests__/` → 162/162 pass (was 149 in 02-08; +13): confirmed.

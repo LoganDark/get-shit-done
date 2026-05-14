@@ -166,7 +166,7 @@ None — no external configuration changed.
 
 ## Self-Check: PASSED
 
-- All 2 commits exist on `phase/02-migration` in order (`b12e7ffe`, `3b3de44e`): confirmed via `git log --oneline -3`.
+- All 2 commits exist on `phase/02-migration` in order (`uqpylnuouvqpryznxkkwxrskrxrnswxo`, `suoyulsoqztzowprmlnnkzxmzxlwwmtk`): confirmed via `git log --oneline -3`.
 - `cd sdk && pnpm build && pnpm build:cjs` both exit 0: confirmed.
 - `cd sdk && pnpm exec vitest run src/vcs/__tests__/` → 126/126 pass (including 9 baseline-parity tests with 4 new dispatch clauses): confirmed.
 - `node --test tests/orphan-worktree-detection.test.cjs tests/prune-orphaned-worktrees.test.cjs tests/bug-2774-worktree-cleanup-workspace-safety.test.cjs tests/bug-3281-worktree-git-timeout.test.cjs` → 27/27 pass: confirmed.

@@ -81,9 +81,9 @@ completed: 2026-05-12
 
 | # | Task | Commit | Files |
 |---|------|--------|-------|
-| 1 | Pin 5 NDJSON fixtures for snapshot tests | `9b7bdbbd` | 5 created |
-| 2 | Production parsers + snapshot tests | `fab5539a` | 1 created + 4 modified |
-| 3 | __vcsTestOnly snapshot/restore body + allowlist flip | `265dc528` | 1 created + 4 modified |
+| 1 | Pin 5 NDJSON fixtures for snapshot tests | `mkmxuyonnpztkkmtxsqlywssstkqqmlx` | 5 created |
+| 2 | Production parsers + snapshot tests | `mxuqyttvxqsurlswtttulwovsxrwopxy` | 1 created + 4 modified |
+| 3 | __vcsTestOnly snapshot/restore body + allowlist flip | `tyupluxtpqwmyolsknstqptsolwltpqs` | 1 created + 4 modified |
 
 ## Files Created/Modified
 
@@ -127,7 +127,7 @@ completed: 2026-05-12
 - **Issue:** Existing test at line 38 asserted `BACKENDS_AVAILABLE_FOR_VERB['__vcsTestOnly.snapshot']` deep-equals `['git']`. Task 3's allowlist flip invalidates this — the test would fail at compile-after-Task-3.
 - **Fix:** Updated both expectations to `['git', 'jj-colocated']` with an inline comment explaining the plan 03-02 flip.
 - **Files modified:** `sdk/src/vcs/__tests__/backends.test.ts`
-- **Committed in:** `265dc528` (Task 3)
+- **Committed in:** `tyupluxtpqwmyolsknstqptsolwltpqs` (Task 3)
 
 **2. [Rule 1 - Bug] `sdk/src/vcs/__tests__/jj-skeleton.test.ts` stub-throw expectation outdated**
 
@@ -135,7 +135,7 @@ completed: 2026-05-12
 - **Issue:** Existing test at line 125 asserted `t.snapshot()` and `t.restore()` throw `VcsNotImplementedError`. Task 3's real body wiring replaces the stub — `snapshot()` now attempts a real `jj op log` call against `/tmp/never-exists` (fails with `VcsExecError`, not `VcsNotImplementedError`).
 - **Fix:** Replaced the throw-assertion with two new tests: (a) the verbs are wired (do NOT throw `VcsNotImplementedError`), and (b) `restore()` kind-mismatch guard fires synchronously without needing a real binary spawn.
 - **Files modified:** `sdk/src/vcs/__tests__/jj-skeleton.test.ts`
-- **Committed in:** `265dc528` (Task 3)
+- **Committed in:** `tyupluxtpqwmyolsknstqptsolwltpqs` (Task 3)
 
 **3. [Rule 3 - Blocking] `VcsExecError` constructor signature in PATTERNS.md sketch did not match real `exec.ts`**
 
@@ -143,7 +143,7 @@ completed: 2026-05-12
 - **Issue:** PATTERNS.md / RESEARCH sketched a single-fields-object constructor (`new VcsExecError({message, bin, args, ...})`). The real signature in `sdk/src/vcs/exec.ts:51-76` is `constructor(message: string, fields: {exitCode, stdout, stderr, timedOut, args})` — two args, no `bin` field. Following the sketch verbatim would fail TypeScript compilation.
 - **Fix:** Used the real `(message, fields)` signature throughout jj-id.ts and the snapshot/restore body in jj.ts. The `bin` is implicit (jj is the only consumer).
 - **Files modified:** `sdk/src/vcs/parse/jj-id.ts`, `sdk/src/vcs/backends/jj.ts`
-- **Committed in:** `fab5539a` (Task 2) + `265dc528` (Task 3)
+- **Committed in:** `mxuqyttvxqsurlswtttulwovsxrwopxy` (Task 2) + `tyupluxtpqwmyolsknstqptsolwltpqs` (Task 3)
 
 ### Environmental Constraints
 
@@ -212,9 +212,9 @@ Plan 03-03 (refs / bookmarks) is unblocked:
   - sdk/src/vcs/__tests__/jj-parsers.test.ts ✓
   - sdk/src/vcs/__tests__/jj-snapshot-restore.test.ts ✓
 - All 3 task commits exist in `git log --oneline`:
-  - `9b7bdbbd` (Task 1) ✓
-  - `fab5539a` (Task 2) ✓
-  - `265dc528` (Task 3) ✓
+  - `mkmxuyonnpztkkmtxsqlywssstkqqmlx` (Task 1) ✓
+  - `mxuqyttvxqsurlswtttulwovsxrwopxy` (Task 2) ✓
+  - `tyupluxtpqwmyolsknstqptsolwltpqs` (Task 3) ✓
 
 ---
 *Phase: 03-jj-backend-core-squash-refs-conflict*

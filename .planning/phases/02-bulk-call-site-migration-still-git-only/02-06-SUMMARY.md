@@ -219,7 +219,7 @@ None — no external configuration changed.
 
 ## Self-Check: PASSED
 
-- All 4 commits exist on `phase/02-migration` in ascending-LOC order (`9ade44a2`, `1c8da8e5`, `c49cd1ac`, `2144b879`): confirmed via `git log --oneline -6`.
+- All 4 commits exist on `phase/02-migration` in ascending-LOC order (`spstkkxrutunksswnqpouvklymxoquwq`, `ounrvxnzymrqsoomrulprkolrvlwpqsy`, `ktptvsmutrsooxwutqomxnwwmqqvonoo`, `xwqlntpokllunxrtxpuuuzzpnmlplsvs`): confirmed via `git log --oneline -6`.
 - `cd sdk && pnpm build && pnpm build:cjs` both exit 0: confirmed.
 - `cd sdk && pnpm exec vitest run src/vcs/__tests__/` → 135/135 pass: confirmed.
 - `cd sdk && pnpm exec vitest run src/query/check-ship-ready.test.ts` → 5/5 pass: confirmed.

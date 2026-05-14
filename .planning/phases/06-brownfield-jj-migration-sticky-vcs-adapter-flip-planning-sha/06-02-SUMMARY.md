@@ -91,8 +91,8 @@ completed: 2026-05-14
 
 ## Task Commits
 
-1. **Task 1: Foundation layer (types + walk + rewrite + resolve + pure-function tests)** — `b2c968a5` (feat)
-2. **Task 2: Orchestration layer (orphan + report + run + index + integration tests)** — `26ebc9d4` (feat)
+1. **Task 1: Foundation layer (types + walk + rewrite + resolve + pure-function tests)** — `ovzmrqzutnzxrmnpwzqvmounyqmwoqtk` (feat)
+2. **Task 2: Orchestration layer (orphan + report + run + index + integration tests)** — `pylrvokomylnlxqrntopqozoyotttrlu` (feat)
 
 ## Files Created/Modified
 
@@ -148,28 +148,28 @@ Both `round-trip.test.ts` cases passed on first verified run:
 - **Issue:** The plan's pseudo-code in `<action>` says `await newVcs.hooks.fire('pre-commit', ctx)`. But Phase 2.1 D-07 explicitly REMOVED the public `hooks` namespace from the adapter — see `sdk/src/vcs/types.ts:332-336` ("the public hooks namespace interface has been DELETED"). The actual API surface for explicit-fire is the standalone `fireHook(cwd, stage, ctx?)` helper in `sdk/src/vcs/hook-bridge.ts`, exported per Phase 4 plan 06 D-07.
 - **Fix:** `import { fireHook } from '../hook-bridge.js'` and call `fireHook(canonicalCwd, 'pre-commit')` before the jj-target commit.
 - **Verification:** Real jj round-trip commits succeed; no hook present on the synth fixture so the call returns exit-0 (per hook-bridge.ts:22-24 — "if (!existsSync(hookPath)) return {exitCode:0,...}").
-- **Committed in:** `26ebc9d4`
+- **Committed in:** `pylrvokomylnlxqrntopqozoyotttrlu`
 
 **2. [Rule 1 - Bug] Plan API `vcs.status({scope:'working-copy'})` does not exist**
 - **Found during:** Task 2 (run.ts initial draft)
 - **Issue:** Plan pseudo-code calls `vcs.status({scope:'working-copy'})`. But `StatusOpts` has only `porcelain?: boolean` — no `scope` field. (`findConflicts` is the method that takes `{scope: 'all'|'working-copy'}`.)
 - **Fix:** Use `vcs.status()` (default returns WC entries on both backends) and check `entries.length > 0`.
 - **Verification:** Pre-flight refusal still tests for dirty WC; both backends honor it.
-- **Committed in:** `26ebc9d4`
+- **Committed in:** `pylrvokomylnlxqrntopqozoyotttrlu`
 
 **3. [Rule 1 - Bug] Plan pseudo-code treats sync methods as Promise-returning**
 - **Found during:** Task 2 (run.ts compilation)
 - **Issue:** Plan uses `await vcs.log(...)`, `await vcs.status(...)`, `await vcs.commit(...)`. But the VcsAdapter contract makes all these methods synchronous (see `sdk/src/vcs/types.ts:234-242` — return types are bare `LogEntry[]`, `StatusResult`, `CommitResult`, `ConflictResult[]`, not `Promise<...>`).
 - **Fix:** Removed the `await` keywords; treats the return values as immediate. Awaiting a non-Promise is a no-op in JS, so the plan's pseudo-code would also have worked at runtime — but type-stripping it makes the intent clearer for the next reader.
 - **Verification:** `pnpm build` succeeds; tests pass.
-- **Committed in:** `26ebc9d4`
+- **Committed in:** `pylrvokomylnlxqrntopqozoyotttrlu`
 
 **4. [Rule 1 - Bug] Plan probes `head[0]?.message ?? head[0]?.subject` — only `subject` exists on LogEntry**
 - **Found during:** Task 2 (TypeScript compilation)
 - **Issue:** `LogEntry` shape (sdk/src/vcs/types.ts:109-116) has fields `hash`, `parents`, `author`, `date`, `subject`, optional `body` — no `message`. The plan's marker-probe pseudo-code references both `.message` and `.subject` as a fallback chain.
 - **Fix:** Use `entry.subject` directly. The migration commit message is a single-line subject (no body), so `subject` carries the full marker text.
 - **Verification:** Round-trip test confirms `subject.includes(MIGRATION_COMMIT_MARKER)` is true after first migration.
-- **Committed in:** `26ebc9d4`
+- **Committed in:** `pylrvokomylnlxqrntopqozoyotttrlu`
 
 ### Rule 3 — Blocking Issues
 
@@ -179,7 +179,7 @@ Both `round-trip.test.ts` cases passed on first verified run:
 - **Fix:** Excluded `src/vcs/format-migration/**` from the CJS include list in `sdk/tsconfig.cjs.json`. The exclusion is documented inline with a `$phase6_comment` field explaining the rationale (no CJS consumer for the rewriter; plan 06-03 verb handler is ESM-only).
 - **Verification:** `pnpm build` exits 0 on a clean `rm -rf dist dist-cjs && pnpm build`. `dist/vcs/format-migration/` exists (ESM), `dist-cjs/vcs/format-migration/` does NOT exist (intentional).
 - **Note on plan-stated invariant:** The plan's verification block included `node -e "const m=require('./sdk/dist-cjs/vcs/format-migration/index.js'); console.log(Object.keys(m))"` and expected `['runMigration','MIGRATION_COMMIT_MARKER']`. This invariant is **not satisfied** post-fix — the dist-cjs path does not exist. The plan-author's CJS-consumer assumption was incorrect. The ESM-side equivalent is satisfied: `node --input-type=module -e "import('./sdk/dist/vcs/format-migration/index.js').then(m => console.log(Object.keys(m)))"` prints `['MIGRATION_COMMIT_MARKER','runMigration']`.
-- **Committed in:** `26ebc9d4` (alongside the run.ts source that triggered the build break)
+- **Committed in:** `pylrvokomylnlxqrntopqozoyotttrlu` (alongside the run.ts source that triggered the build break)
 
 **6. [Rule 3 - Blocking] jj fileset parser rejects absolute paths whose realpath escapes the repo root**
 - **Found during:** Task 2 (round-trip test first run)
@@ -188,21 +188,21 @@ Both `round-trip.test.ts` cases passed on first verified run:
   1. `runMigration` realpathSyncs `cwd` once at the top (`canonicalCwd = realpathSync(resolve(cwd))`) and uses `canonicalCwd` for ALL downstream calls (createVcsAdapter, walkInScope, planningPaths, emitReport, fireHook). This guarantees walk and planningPaths share the same canonical-path prefix.
   2. Added `toRepoRelative(abs, cwd)` helper that converts every commit-file path to repo-relative POSIX form before passing to `vcs.commit({files:[...]})`. Defensive — falls back to absolute on `..` leak.
 - **Verification:** Round-trip test passes (1.5s total for 2 cases). jj-side commits land cleanly.
-- **Committed in:** `26ebc9d4`
+- **Committed in:** `pylrvokomylnlxqrntopqozoyotttrlu`
 
 **7. [Rule 3 - Blocking] Marker-probe reads empty `@` on jj after `jj squash -m`**
 - **Found during:** Task 2 (round-trip test second-flip case)
 - **Issue:** First call to `runMigration(dir, 'jj', {force:true})` succeeded (config flipped, commit landed). Second call (idempotency probe) FAILED with `migrate-vcs: already on jj (previousAdapter=jj)` — the marker probe couldn't find the marker. Root cause: `vcs.log({maxCount:1})` on jj with no revset returns the working-copy commit `@`, which is EMPTY after a `jj squash -m` operation (squash lands the message on `@-`, leaves `@` empty for further work).
 - **Fix:** Marker probe is now backend-asymmetric — `maxCount:2` on jj (catches both `@` and `@-`), `maxCount:1` on git. `.find(e => e.subject.includes(MARKER))` selects the entry carrying the marker.
 - **Verification:** Round-trip idempotency probe yields `{ok:true, migrated:false, filesChanged:0}`.
-- **Committed in:** `26ebc9d4`
+- **Committed in:** `pylrvokomylnlxqrntopqozoyotttrlu`
 
 **8. [Rule 1 - Test-correctness] Synthetic test IDs must be shape-valid for `expr.rev`**
 - **Found during:** Task 2 (`orphan.test.ts` initial run)
 - **Issue:** Initial test IDs (`'orphanShaXYZ'`, `'parent1'`, `'p1'`, `'orphan'`) violate `expr.rev`'s permissive validator regex `/^[0-9a-fA-F]{4,40}$|^[k-z]{4,40}$/`. The walker calls `expr.parents(expr.rev(cursor))` on every iteration, so synthetic IDs in tests have to look like real SHAs or change_ids.
 - **Fix:** Replaced placeholder IDs with shape-valid hex strings (`'abcd1234'`, `'deadbeef'`, `'abcd0001'`...`'abcd0004'`) and `[k-z]` change_id strings (`'kxnzlnrntwou'`, `'mnopqrstuvwx'`, `'lmnopqrstuvw'`). MAX_DEPTH test generates fresh shape-valid hex via `stepCount.toString(16).padStart(8, '0')`.
 - **Verification:** All 6 orphan.test.ts cases green.
-- **Committed in:** `26ebc9d4`
+- **Committed in:** `pylrvokomylnlxqrntopqozoyotttrlu`
 
 ### Plan-author Documentation Drift (no auto-fix applied)
 
@@ -275,8 +275,8 @@ Verified all claims:
 - `sdk/src/vcs/format-migration/__tests__/round-trip.test.ts` ✓
 
 **Commits exist:**
-- `b2c968a5` (Task 1 foundation layer) ✓
-- `26ebc9d4` (Task 2 orchestration layer + integration tests) ✓
+- `ovzmrqzutnzxrmnpwzqvmounyqmwoqtk` (Task 1 foundation layer) ✓
+- `pylrvokomylnlxqrntopqozoyotttrlu` (Task 2 orchestration layer + integration tests) ✓
 
 **Verification gates from plan Task 2:**
 - `grep -E "expr\.parents\(expr\.rev\(" sdk/src/vcs/format-migration/orphan.ts` returns 2 hits (1 prose + 1 code) ✓

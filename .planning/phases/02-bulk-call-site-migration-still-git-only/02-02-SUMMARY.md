@@ -71,9 +71,9 @@ completed: 2026-05-09
 
 Each task committed atomically on `phase/02-migration`:
 
-1. **Task 1: tests/helpers.cjs createTempGitProject commits via VcsAdapter** — `743d50db` (refactor)
-2. **Task 2: day-one allowlist shrink — remove 9 entries (D-13)** — `1ac03962` (chore)
-3. **Task 3: create sdk/src/vcs/jj/ sidecar surface (UPSTREAM-02 / D-15)** — `300dd02f` (feat)
+1. **Task 1: tests/helpers.cjs createTempGitProject commits via VcsAdapter** — `qszplluromkztykynpzvxvxrxonntorn` (refactor)
+2. **Task 2: day-one allowlist shrink — remove 9 entries (D-13)** — `xrxkqmpqkurxqonpyvqxotvontznlxzz` (chore)
+3. **Task 3: create sdk/src/vcs/jj/ sidecar surface (UPSTREAM-02 / D-15)** — `skqmpzxlzlnouvqvrwwuwzwxxkmvwtlp` (feat)
 
 **Plan metadata commit:** (final docs commit — see git log entry created after this SUMMARY.md is written)
 
@@ -118,7 +118,7 @@ This inventory + the file/violation map is the canonical reference for downstrea
 
 None — plan executed exactly as written.
 
-A minor observational note (not a deviation): `git diff main..HEAD -- scripts/lint-vcs-no-raw-git.allow.json` shows the allowlist file as wholly new (because `main` predates Phase 1's allowlist creation in commit `9c1344e8`). The acceptance criterion's spirit (only removals) was honored — verified instead via `git diff HEAD~1 HEAD -- scripts/lint-vcs-no-raw-git.allow.json` which shows exactly 9 `-` lines and 0 `+` lines.
+A minor observational note (not a deviation): `git diff main..HEAD -- scripts/lint-vcs-no-raw-git.allow.json` shows the allowlist file as wholly new (because `main` predates Phase 1's allowlist creation in commit `nnquxytmlsmkxklzpwulsvtnoquqpttu`). The acceptance criterion's spirit (only removals) was honored — verified instead via `git diff HEAD~1 HEAD -- scripts/lint-vcs-no-raw-git.allow.json` which shows exactly 9 `-` lines and 0 `+` lines.
 
 ## Issues Encountered
 
@@ -140,7 +140,7 @@ None — no external configuration changed.
 - `tests/helpers.cjs::createTempGitProject` contains `createVcsAdapter` and `vcs.commit({` calls, signature unchanged (line 86): confirmed via grep.
 - `scripts/lint-vcs-no-raw-git.allow.json` no longer contains any of the 9 removed entries; all Phase 1 keepers (`sdk/src/vcs/exec.ts`, `sdk/src/vcs/backends/git.ts`, `tests/helpers.cjs`) remain: confirmed via `node -e "..."` verification one-liner from plan §verify.
 - `sdk/src/vcs/jj/.gitkeep` exists, contains `UPSTREAM-02` and `Phase 3` strings, has 3 lines: confirmed via `test -f && grep -q && wc -l`.
-- All three commits exist on `phase/02-migration` in order: `743d50db`, `1ac03962`, `300dd02f`: confirmed via `git log --oneline -3`.
+- All three commits exist on `phase/02-migration` in order: `qszplluromkztykynpzvxvxrxonntorn`, `xrxkqmpqkurxqonpyvqxotvontznlxzz`, `skqmpzxlzlnouvqvrwwuwzwxxkmvwtlp`: confirmed via `git log --oneline -3`.
 - `node --test tests/core.test.cjs` exits 0 with 182/182 passing: confirmed in execution output (Tests 182, pass 182, fail 0).
 - `cd sdk && pnpm build && pnpm build:cjs` both succeed: confirmed in execution output (no errors).
 - `node scripts/lint-vcs-no-raw-git.cjs` exits 1 with 14 violations across 8 files: confirmed (this is the expected D-12 broken-lint state, recorded in the inventory table above).

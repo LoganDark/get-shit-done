@@ -58,7 +58,7 @@ Every artifact in Phase 2 has a strong in-tree analog from Phase 1's just-landed
 |---|---|---|---|---|
 | `sdk/src/vcs/jj/.gitkeep` (NEW) | config (placeholder) | n/a | (no existing `.gitkeep`; closest precedent is the **deleted** `sdk/src/vcs/_placeholder.ts`) | role-match (Phase 1 plan 01-02 created the same kind of zero-conflict surface and then deleted it) |
 | `tests/helpers.cjs` (MODIFY — `createTempGitProject` becomes adapter-aware) | test-helper (CJS) | n/a | self (lines 86-104 + 183-197 lazy-loader) | exact |
-| `scripts/lint-vcs-no-raw-git.allow.json` (MODIFY — day-one shrink) | config (allowlist data) | n/a | self (initial commit `9c1344e8` "feat(01-05): add lint-vcs-no-raw-git allowlist (D-18)") | exact (shrink mirrors that commit's diff in reverse) |
+| `scripts/lint-vcs-no-raw-git.allow.json` (MODIFY — day-one shrink) | config (allowlist data) | n/a | self (initial commit `nnquxytmlsmkxklzpwulsvtnoquqpttu` "feat(01-05): add lint-vcs-no-raw-git allowlist (D-18)") | exact (shrink mirrors that commit's diff in reverse) |
 | `tests/__tools__/capture-vcs-baselines.cjs` (MODIFY — extend `baselines` array per D-10) | tooling (baseline capture) | batch | self (lines 58-89 — entry shape) | exact |
 | `tests/baselines/git-vcs/<id>.snap.json` (NEW × ~30 entries) | data (snapshot) | n/a | `tests/baselines/git-vcs/commands-cjs-994-diff-cached.snap.json` | exact (every Phase-2 baseline copies this shape verbatim) |
 | `sdk/src/vcs/__tests__/baseline-parity.test.ts` (MODIFY — extend adapter-equivalence dispatch table) | test (parity) | n/a | self (lines 60-114 — args-shape switch) | exact |
@@ -462,7 +462,7 @@ if (args[0] === 'diff' && args.includes('--cached') && args.includes('--name-onl
 
 ### `scripts/lint-vcs-no-raw-git.allow.json` (config, MODIFY — day-one shrink)
 
-**Analog:** Commit `9c1344e8` "feat(01-05): add lint-vcs-no-raw-git allowlist (D-18)" — the initial-population diff. The day-one shrink mirrors that diff in reverse: every entry that commit added under "migration backlog" gets removed in plan 02-02 task 1.
+**Analog:** Commit `nnquxytmlsmkxklzpwulsvtnoquqpttu` "feat(01-05): add lint-vcs-no-raw-git allowlist (D-18)" — the initial-population diff. The day-one shrink mirrors that diff in reverse: every entry that commit added under "migration backlog" gets removed in plan 02-02 task 1.
 
 **Concrete diff (RESEARCH §Day-One Allowlist Shrink):**
 
@@ -571,7 +571,7 @@ The baseline file's `match.stdout` is `'exact'` by default; for non-deterministi
 
 ### Pattern: Per-file commit + paired-test atomic commit
 
-**Source:** Commit `aeb7d471` "fix(01): CR-02 status({porcelain:true}) handles paths with whitespace" — the canonical Phase-1 example of source + paired test in one commit (touched `sdk/src/vcs/backends/git.ts` + `sdk/src/vcs/__tests__/git-backend.test.ts` together, no other files).
+**Source:** Commit `orvtoxuzxltsqrqlpvrkttqrqykntnqv` "fix(01): CR-02 status({porcelain:true}) handles paths with whitespace" — the canonical Phase-1 example of source + paired test in one commit (touched `sdk/src/vcs/backends/git.ts` + `sdk/src/vcs/__tests__/git-backend.test.ts` together, no other files).
 **Apply to:** Every per-file migration commit (D-05/D-06).
 
 **Commit message shape** (per RESEARCH §Pattern 1, mirrors the existing `refactor(<scope>): …` cadence in the recent log):
@@ -639,6 +639,6 @@ The hotspot audit grep (above) is the enforcement mechanism.
 **Key load-bearing observations for the planner:**
 1. **Every Phase 2 modification has an in-tree analog.** Phase 1 deliberately landed the adapter shape, the baseline harness, the `vcsTest` fixture, the lint allowlist, and the mechanical-edits invariant — all of which Phase 2 consumes verbatim. No external research, no external libraries.
 2. **17 forward-complete gaps must land in plan 02-02 before any per-file migration past the smoke-test.** The existing Phase 1 surface is NOT forward-complete despite the D-04 claim; RESEARCH proves this with line-precise call-site evidence. The gap-fill verbs all have shape-match analogs in the Phase 1 surface (extending namespaces, not designing new ones).
-3. **Commit `aeb7d471` is the canonical paired-source/test atomic-commit shape** for the entire Phase 2 migration cadence — mirror its exact form per D-05/D-06.
-4. **Commit `9c1344e8` is the inverse of plan 02-02's day-one allowlist shrink** — the diff to remove 9 entries is the algebraic inverse of the lines that commit added.
+3. **Commit `orvtoxuzxltsqrqlpvrkttqrqykntnqv` is the canonical paired-source/test atomic-commit shape** for the entire Phase 2 migration cadence — mirror its exact form per D-05/D-06.
+4. **Commit `nnquxytmlsmkxklzpwulsvtnoquqpttu` is the inverse of plan 02-02's day-one allowlist shrink** — the diff to remove 9 entries is the algebraic inverse of the lines that commit added.
 5. **The smoke-test commit (D-01, plan 02-03) targets `worktree-safety.cjs:80` only** — RESEARCH explicitly disqualifies the other three sites (122, 123, 198) because they expose forward-complete gaps. Pattern 4 above shows the exact mechanical edit, which consumes Phase 1's already-shipped `sdk/src/vcs/parse/worktree-list.ts::readWorktreeList`.

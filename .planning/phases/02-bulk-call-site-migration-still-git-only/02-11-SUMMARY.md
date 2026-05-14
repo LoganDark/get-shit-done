@@ -101,8 +101,8 @@ metrics:
 
 Each task was committed atomically on `phase/02-migration`:
 
-1. **Task 1: Migrate core.cjs (1 site + delete execGit helper) + paired tests** — `73fc5499` (refactor)
-2. **Task 2: UPSTREAM-03 hotspot-discipline audit (D-16 verify gate)** — `5376f2d3` (docs)
+1. **Task 1: Migrate core.cjs (1 site + delete execGit helper) + paired tests** — `xoowpwpslxkznozvkqnopkxxluulkslw` (refactor)
+2. **Task 2: UPSTREAM-03 hotspot-discipline audit (D-16 verify gate)** — `lywtqwolqszolkwymystzptmtuslmymm` (docs)
 
 **Plan metadata:** (this commit) — docs: complete plan
 
@@ -213,8 +213,8 @@ Verifying claims before marking complete:
 
 - [x] `tests/baselines/git-vcs/core-cjs-603-check-ignore.snap.json` exists
 - [x] `.planning/phases/02-bulk-call-site-migration-still-git-only/02-11-AUDIT.md` exists
-- [x] Task 1 commit `73fc5499` exists in git log
-- [x] Task 2 commit `5376f2d3` exists in git log
+- [x] Task 1 commit `xoowpwpslxkznozvkqnopkxxluulkslw` exists in git log
+- [x] Task 2 commit `lywtqwolqszolkwymystzptmtuslmymm` exists in git log
 - [x] core.cjs has zero `execSync\(['"]git |execFileSync\(['"]git |spawnSync\(['"]git ` matches
 - [x] core.cjs has zero `function execGit\(` matches
 - [x] core.cjs has 1 `vcs.refs.isIgnored(` code call (+ 1 reference in the comment block)

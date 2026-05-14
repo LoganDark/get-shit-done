@@ -55,7 +55,7 @@ Closed Phase 5 maintenance + CI-graduation prep wave: 7 jj-* test files patched 
 
 ## Tasks Completed
 
-### Task 1 — Flake-fix sweep on 7 jj-* test files (commit `df821bae`)
+### Task 1 — Flake-fix sweep on 7 jj-* test files (commit `qsvpvupoylrlrnnqvpmmnkkxroyytllr`)
 
 Per-file fix-pattern application:
 
@@ -77,7 +77,7 @@ Verification evidence:
 - 10 consecutive 7-file runs under parallel-file scheduling: **7 of 10 fully green; 3 sporadic failures across 3 different tests in 3 different runs.** This is the residual inter-file contention the SOAK GATE is designed to track. Files in those failures: jj-commit (SQUASH-04 once), jj-octopus (WS-06 once, WS-08 once), jj-workspace (T-04.01-01 once), jj-push-fetch (push() once). The pattern is "different test fails each time" — classic resource-contention not fix-attributable to any single test.
 - Full SDK suite (`cd sdk && pnpm vitest run`): 26 failed / 2238 passed / 32 skipped — same baseline as pre-edit (verified by stash+rerun then unstash). 0 regressions; failures are pre-existing flake or unrelated test bugs (config-mutation, skills, state, validate, query-subprocess-adapter, plus the jj-suite cross-file contention that the soak observes).
 
-### Task 2 sub-task A + B — soak scaffold + MIGR-02 sweep (commits `68a437b7` + `a1c0ef30`)
+### Task 2 sub-task A + B — soak scaffold + MIGR-02 sweep (commits `kyvknnoylvqvwyltukmuvnnluwovtsxr` + `zuyzrqvpzrkvtztnrluolynytzswkuny`)
 
 **Sub-task A — `.planning/intel/ci-jj-soak.md`:** Created with the canonical shape from 05-PATTERNS.md § "`.planning/intel/ci-jj-soak.md`" and RESEARCH § "CI Soak Metric File Shape (D-36 Step 2)". File contains 6 markers of `10 consecutive green / 10/10 / Final Graduation` and 4 D-36 references. Includes:
 - explicit counter-reset policy (any failure in `jj-colocated` OR `jj-native` resets; `git` lane tracked for visibility but doesn't gate)
@@ -102,7 +102,7 @@ Verification:
 - Total `git worktree` occurrence count: **14 → 6** (all 6 remaining are intentional cross-backend documentation prose like `on git this shells `git worktree list`; on jj it shells `jj workspace list``).
 - REQUIREMENTS.md MIGR-02 row flipped "In Progress" → "Complete (cosmetic sweep landed in Phase 5 plan 05-05)".
 
-### Task 5 — CI-03 docs note + PROMPT-03 closure (commit `68a437b7`)
+### Task 5 — CI-03 docs note + PROMPT-03 closure (commit `kyvknnoylvqvwyltukmuvnnluwovtsxr`)
 
 **CI-03 (Complete, D-37/D-38 docs decision):** Added a 15-line header comment block at the top of `.github/workflows/test.yml` documenting the permanent architectural boundary — GitHub Actions workflows themselves (canary.yml, release-sdk.yml, hotfix.yml, branch-cleanup.yml, auto-branch.yml, test.yml) stay on git because GitHub *is* git. Rationale: the jj port's value (local-developer ergonomics + parallel-workspace performance) does not apply to CI runners (ephemeral single-checkout containers); this is a deliberate scope boundary, NOT a deferred port. REQUIREMENTS.md CI-03 row flipped Pending → Complete with the rationale inline.
 
@@ -117,7 +117,7 @@ Grep gate:
 
 ## Proposed CI matrix flip — GATED on soak (NOT landed in this plan)
 
-`.github/workflows/test.yml` lines 56-71 currently read (with the new comment block landed in commit `68a437b7`):
+`.github/workflows/test.yml` lines 56-71 currently read (with the new comment block landed in commit `kyvknnoylvqvwyltukmuvnnluwovtsxr`):
 
 ```yaml
   test:
@@ -177,9 +177,9 @@ If the soak resolves with the `approve with known-flake gate: <test-name>` path 
 executor cannot drive from inside an isolated worktree)
 
 **What the executor has landed:**
-- 7 flake-fix patches with mechanical Patterns A/B + 1 Rule-1 bug fix on jj-lock (commit `df821bae`)
-- MIGR-02 cosmetic sweep on 6 cjs files; REQUIREMENTS.md MIGR-02 → Complete (commit `a1c0ef30`)
-- `.planning/intel/ci-jj-soak.md` scaffold ready for run-log appends (commit `68a437b7`)
+- 7 flake-fix patches with mechanical Patterns A/B + 1 Rule-1 bug fix on jj-lock (commit `qsvpvupoylrlrnnqvpmmnkkxroyytllr`)
+- MIGR-02 cosmetic sweep on 6 cjs files; REQUIREMENTS.md MIGR-02 → Complete (commit `zuyzrqvpzrkvtztnrluolynytzswkuny`)
+- `.planning/intel/ci-jj-soak.md` scaffold ready for run-log appends (commit `kyvknnoylvqvwyltukmuvnnluwovtsxr`)
 - CI-03 docs note in `.github/workflows/test.yml` header; REQUIREMENTS.md CI-03 → Complete (same commit)
 - PROMPT-03 closed per D-37; REQUIREMENTS.md PROMPT-03 → Complete (same commit)
 
@@ -228,13 +228,13 @@ the manual append step.
 - **Issue:** The test spawned a child Node process that acquires the lock, slept exactly 100ms in the parent, then asserted the sentinel file existed. Child-process spawn occasionally takes >100ms under load, so the assertion failed with `expected false to be true`.
 - **Fix:** Replaced fixed 100ms `setTimeout` with a poll-for-sentinel loop (3s budget, 25ms interval). Extended the child's lock-hold from 300ms to 1500ms so the parent's second-acquire reliably observes ≥1 EEXIST iteration regardless of spawn latency. Extended the parent's lock-timeout from 2000ms to 4000ms to match.
 - **Files modified:** `sdk/src/vcs/__tests__/jj-lock.test.ts`
-- **Commit:** `df821bae`
+- **Commit:** `qsvpvupoylrlrnnqvpmmnkkxroyytllr`
 
 ### Scope-Boundary Notes
 
 **Out-of-scope work observed but NOT fixed:**
 
-- The full SDK test suite has 26 pre-existing failures across `query/skills.test.ts`, `query/state.test.ts`, `query/validate.test.ts`, `query/config-mutation.test.ts`, `query-subprocess-adapter.test.ts`, and several CMD-* jj-suite tests (cmd-quick, cmd-pause-work, cmd-undo, cmd-complete-milestone). These are NOT regressions from this plan's changes (verified by stash-and-rerun: the same 26 failures present on `9c97c206`). They are out of scope per the executor's SCOPE BOUNDARY rule.
+- The full SDK test suite has 26 pre-existing failures across `query/skills.test.ts`, `query/state.test.ts`, `query/validate.test.ts`, `query/config-mutation.test.ts`, `query-subprocess-adapter.test.ts`, and several CMD-* jj-suite tests (cmd-quick, cmd-pause-work, cmd-undo, cmd-complete-milestone). These are NOT regressions from this plan's changes (verified by stash-and-rerun: the same 26 failures present on `zsplszpnppqmuuxuyvssxqwsrpxyuznl`). They are out of scope per the executor's SCOPE BOUNDARY rule.
 
 - The plan's Task 4 (verb-gap sweep + branch-create-gap sweep from 05-02 / 05-03 deferred work) is NOT included in this plan's objective scope per the spawning instructions. The objective's six-item task list reduces to: flake fixes, soak scaffold, matrix flip (gated), MIGR-02 sweep, CI-03 docs, PROMPT-03 closure. The verb-gap sweep remains in the plan file for a follow-up runner.
 
@@ -245,9 +245,9 @@ the manual append step.
 - `.planning/phases/05-command-translations-brownfield-validation-ci-hardening/05-05-SUMMARY.md` — FOUND (this file)
 
 **Commits:**
-- `df821bae` — test(05-05): apply flake-fix Patterns A+B to 7 jj-* test files — FOUND in `git log --oneline -5`
-- `a1c0ef30` — docs(05-05): MIGR-02 cosmetic sweep — FOUND
-- `68a437b7` — docs(05-05): land CI-03 + PROMPT-03 closure docs; create ci-jj-soak.md scaffold — FOUND
+- `qsvpvupoylrlrnnqvpmmnkkxroyytllr` — test(05-05): apply flake-fix Patterns A+B to 7 jj-* test files — FOUND in `git log --oneline -5`
+- `zuyzrqvpzrkvtztnrluolynytzswkuny` — docs(05-05): MIGR-02 cosmetic sweep — FOUND
+- `kyvknnoylvqvwyltukmuvnnluwovtsxr` — docs(05-05): land CI-03 + PROMPT-03 closure docs; create ci-jj-soak.md scaffold — FOUND
 
 **Acceptance gates verified:**
 - `describe.sequential` present in jj-octopus, jj-workspace, jj-commit (≥3 of the 3 mandated files) ✓

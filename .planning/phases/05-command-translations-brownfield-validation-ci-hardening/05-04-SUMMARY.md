@@ -87,7 +87,7 @@ This gap is explicit in each test file's header comment (and re-stated in the `c
 - **Found during:** Task 2 initial test run (4/13 tests failed)
 - **Issue:** `vcs.log({maxCount:1}).[0].subject` returned `''`, not the commit message. On jj, `vcs.commit()` routes through `jj squash -B @ -k -m`, which lands the message on `@-` (the parent of the working copy). The fresh working-copy commit `@` is born empty after squash and has no description, so it shows first in the head-only log query.
 - **Fix:** Switched all four log-subject assertions to query the ancestry chain via `vcs.log({maxCount:10, allRefs:true})`, then join the subjects and assert `toContain(...)`. Pattern lifted from `cmd-discuss-phase-jj.test.ts:73-76` (the existing precedent for jj squash-based commit assertions).
-- **Files modified:** `cmd-pause-work-jj.test.ts`, `cmd-import-jj.test.ts`, `cmd-ingest-docs-jj.test.ts`, `cmd-map-codebase-jj.test.ts` (all in the same Task 2 commit `c19027cf`).
+- **Files modified:** `cmd-pause-work-jj.test.ts`, `cmd-import-jj.test.ts`, `cmd-ingest-docs-jj.test.ts`, `cmd-map-codebase-jj.test.ts` (all in the same Task 2 commit `kqymlrlqlwlvqmlvnnyypxlkuxqxnxsy`).
 - **Why not Rule 4 architectural:** This is the documented squash-based-commit shape (Phase 3 plan 03-04 / SQUASH-01..07). The fix uses an existing in-repo pattern; no new types or adapter verbs were needed.
 
 ### Other deviations
@@ -119,7 +119,7 @@ None. The synth fixture seeds literal placeholder content (`MOCK-01 ...`, `# Pla
 ## Self-Check: PASSED
 
 - Files created and present on disk: synth-planning-fixture.ts ✓, synth-planning-fixture.test.ts ✓, cmd-resume-work-jj.test.ts ✓, cmd-pause-work-jj.test.ts ✓, cmd-import-jj.test.ts ✓, cmd-ingest-docs-jj.test.ts ✓, cmd-map-codebase-jj.test.ts ✓
-- Task 1 commit `236353a` (`feat(05-04): add synth-planning-fixture for CMD-10 brownfield tests`) ✓
-- Task 2 commit `c19027c` (`test(05-04): add 5 CMD-10 brownfield integration tests on jj (D-34 synth)`) ✓
+- Task 1 commit `lmyoxtxlmxzvxwummzywoytxxylykvtx` (`feat(05-04): add synth-planning-fixture for CMD-10 brownfield tests`) ✓
+- Task 2 commit `kqymlrlqlwlvqmlvnnyypxlkuxqxnxsy` (`test(05-04): add 5 CMD-10 brownfield integration tests on jj (D-34 synth)`) ✓
 - TS check (`pnpm tsc --noEmit`): zero errors ✓
 - Combined vitest run (5 brownfield files + sanity): 13/13 + 5/5 pass under jj 0.41.0 ✓

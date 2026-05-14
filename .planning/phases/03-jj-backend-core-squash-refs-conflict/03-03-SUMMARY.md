@@ -98,8 +98,8 @@ completed: 2026-05-12
 
 | # | Task | Commit | Files |
 |---|------|--------|-------|
-| 1 | Fill refs.* + refs.bookmarks bodies; extend VcsBookmarks for D-04; flip allowlist; add tests | `42c69a06` | 9 files (2 new + 7 modified) |
-| 2 | Audit confirms no jj-reachable caller for switch + isIgnored | `1fc56bb5` | 1 new file (03-03-AUDIT.md) |
+| 1 | Fill refs.* + refs.bookmarks bodies; extend VcsBookmarks for D-04; flip allowlist; add tests | `nsuzyopqpqottmlnmkwopklmprluxtlk` | 9 files (2 new + 7 modified) |
+| 2 | Audit confirms no jj-reachable caller for switch + isIgnored | `kvnwywutzlpmlqqmvutvwpzspvpsrvyr` | 1 new file (03-03-AUDIT.md) |
 
 ## Files Created/Modified
 
@@ -247,8 +247,8 @@ Plan 03-05 (log/status/diff/findConflicts) is unblocked:
   - `sdk/src/vcs/__tests__/jj-refs.test.ts` ✓
   - `.planning/phases/03-jj-backend-core-squash-refs-conflict/03-03-AUDIT.md` ✓
 - All 2 task commits exist in `git log --oneline`:
-  - `42c69a06` (Task 1) ✓
-  - `1fc56bb5` (Task 2) ✓
+  - `nsuzyopqpqottmlnmkwopklmprluxtlk` (Task 1) ✓
+  - `kvnwywutzlpmlqqmvutvwpzspvpsrvyr` (Task 2) ✓
 
 ---
 *Phase: 03-jj-backend-core-squash-refs-conflict*

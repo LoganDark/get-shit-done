@@ -148,7 +148,7 @@ Land the orchestrator-tier coordination layer for the lazy octopus structure (WS
 - **Issue:** The plan's merge-resolve and subagent-head-resolve revsets used `description(exact:"…")` (or `description(glob:"…")` in the planner's intent). jj 0.41's `description(pattern)` matches against the FULL description string, INCLUDING the trailing `\n` newline that `-m` appends. So `description(exact:"phase 04 merge")` matches zero rows. The correct verb is `subject(...)`, which strips the trailing newline by definition (jj revset help: "A subject is the first line of the description without newline character.").
 - **Fix:** Both revsets in `octopus.ts` switched from `description(exact|glob:"…")` to `subject(exact|glob:"…")`. Added an inline `VERIFIED REVSET FUNCTION` comment block citing the empirical probe so a future maintainer doesn't regress on a jj bump.
 - **Files modified:** `sdk/src/vcs/jj/octopus.ts`
-- **Commit:** `d9c6e532` (folded into the Task 2 commit alongside the test suite that exposed the bug)
+- **Commit:** `ksxukwuvnrltvwmuqnyynwmulznqrkqv` (folded into the Task 2 commit alongside the test suite that exposed the bug)
 
 **2. [Rule 1 - Bug] Plan's `bookmark create -- <name> -r <rev>` argv form is rejected by jj 0.41 — reordered to `-r <rev> -- <name>`**
 
@@ -156,7 +156,7 @@ Land the orchestrator-tier coordination layer for the lazy octopus structure (WS
 - **Issue:** Plan-action argv sketch had `'bookmark', 'create', '--', mergeMarkerBookmark, '-r', mergeChange`. With `--` placed BEFORE the bookmark name, jj's CLI parser interprets `--` as end-of-options and then tries to parse `-r` as a bookmark name → `Failed to parse bookmark name: Syntax error`.
 - **Fix:** Reordered to `'bookmark', 'create', '-r', <rev>, '--', <name>` — `-r <rev>` is parsed as a flag pair BEFORE the `--` separator, then `--` ends option-parsing, then `<name>` is the positional. Verified to work in the probe. Same form used for both parent and merge marker creations.
 - **Files modified:** `sdk/src/vcs/jj/octopus.ts` (initial implementation already had the corrected form; the plan's wrong sketch was caught before commit)
-- **Commit:** `922ac585` (Task 1 commit; fix landed inline)
+- **Commit:** `rtytwrvplkzquwxonptvtsoywttqwnwn` (Task 1 commit; fix landed inline)
 
 **3. [Rule 1 - Bug] Plan's `${mergeChange}-` parent-resolution path breaks after subagent insertion — fixed with parent-marker bookmark**
 
@@ -164,7 +164,7 @@ Land the orchestrator-tier coordination layer for the lazy octopus structure (WS
 - **Issue:** Plan's idempotency path resolved parent via `resolveChangeId(mainRepoRoot, \`\${mergeChange}-\`)`. This is correct ONLY immediately after `createPhaseStructure` finishes — but once `createSubagentHead` inserts a subagent change between parent and merge, the merge's PARENT in jj's view is now the most recent subagent, NOT the original parent slot. A future `createPhaseStructure` call with the same phase number (e.g., orchestrator retry after a crash) would return a subagent change_id as `parentChange`, corrupting the structure.
 - **Fix:** Two marker bookmarks per phase (`gsd/phase-{NN}-parent-marker` AND `gsd/phase-{NN}-merge-marker`). Idempotent path resolves parent from its OWN marker, not via ancestry walk. Both markers are created in the same critical section after the merge-create succeeds.
 - **Files modified:** `sdk/src/vcs/jj/octopus.ts`
-- **Commit:** `922ac585`
+- **Commit:** `rtytwrvplkzquwxonptvtsoywttqwnwn`
 
 ### Rule 2 / Rule 3 / Rule 4 — none in this plan
 
@@ -206,8 +206,8 @@ The narrow octopus + workspace + reap interaction probe (`pnpm vitest run src/vc
 **Modified:** none.
 
 **Commits:**
-- `922ac585` `feat(04-05): land octopus.ts with createPhaseStructure + createSubagentHead + createSubagentSlot`
-- `d9c6e532` `test(04-05): octopus contract suite (WS-05/06/08/10) + subject() revset fix`
+- `rtytwrvplkzquwxonptvtsoywttqwnwn` `feat(04-05): land octopus.ts with createPhaseStructure + createSubagentHead + createSubagentSlot`
+- `ksxukwuvnrltvwmuqnyynwmulznqrkqv` `test(04-05): octopus contract suite (WS-05/06/08/10) + subject() revset fix`
 
 ## Next Phase Readiness
 

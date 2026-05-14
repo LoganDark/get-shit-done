@@ -95,9 +95,9 @@ completed: 2026-05-14
 
 Each task was committed atomically:
 
-1. **Task 1: Schema parity edit + atomicWriteConfig export (atomic single-commit per #2653)** — `8ed42d75` (feat)
-2. **Task 2: expr.children + expr.parents factories + per-backend translator updates (jj + git)** — `c0207eb3` (feat)
-3. **Task 3: has_jj field on initNewProject + empirical probes for A1/A5/A6** — `ff3b7e71` (feat)
+1. **Task 1: Schema parity edit + atomicWriteConfig export (atomic single-commit per #2653)** — `qsyorkwturwsvyrklwlurlloqpmkolnk` (feat)
+2. **Task 2: expr.children + expr.parents factories + per-backend translator updates (jj + git)** — `pnoswwosswsvlxptmyxpvxxsmuksxuqz` (feat)
+3. **Task 3: has_jj field on initNewProject + empirical probes for A1/A5/A6** — `smwvrooyumppnmnwxwwruntpktrkxwxp` (feat)
 
 ## Files Created/Modified
 
@@ -135,7 +135,7 @@ Each task was committed atomically:
 - **Fix:** Rewrote the comment to use unquoted tokens — `// Legal write values: git | jj. (auto is read-time-only — index.ts:70.)` — in both schema files.
 - **Files modified:** `sdk/src/query/config-schema.ts`, `get-shit-done/bin/lib/config-schema.cjs`
 - **Verification:** `node --test tests/config-schema-sdk-parity.test.cjs` exits 0 with 3/3 tests passing.
-- **Committed in:** `8ed42d75` (Task 1 commit — landed atomically with the actual `vcs.adapter` entry)
+- **Committed in:** `qsyorkwturwsvyrklwlurlloqpmkolnk` (Task 1 commit — landed atomically with the actual `vcs.adapter` entry)
 
 **2. [Rule 3 - Blocking] TypeScript exhaustiveness check in both per-backend translators**
 - **Found during:** Task 2 (`pnpm build` after adding `'children' | 'parents'` to `ParsedExpr.kind` union)
@@ -143,7 +143,7 @@ Each task was committed atomically:
 - **Fix:** Added explicit unreachable `case 'children': case 'parents': throw new Error(... unreachable ...)` arms to both switches. The prefix-startsWith branches above handle these kinds before reaching the switch, so the throw is dead code at runtime but satisfies TypeScript's narrowing.
 - **Files modified:** `sdk/src/vcs/parse/git-rev.ts`, `sdk/src/vcs/parse/jj-rev.ts`
 - **Verification:** `cd sdk && pnpm build` succeeds (full TS + CJS build).
-- **Committed in:** `c0207eb3` (Task 2 commit — landed with the rest of the translator updates)
+- **Committed in:** `pnoswwosswsvlxptmyxpvxxsmuksxuqz` (Task 2 commit — landed with the rest of the translator updates)
 
 **3. [Plan-error documented, not auto-fixed] Verify regex in Task 2 mismatches factory syntax**
 - **Found during:** Task 2 verification phase
@@ -194,7 +194,7 @@ Verified all claims:
 - `sdk/src/vcs/__tests__/jj-parents-probe.test.ts` → 3/3 pass ✓
 - `cd sdk && pnpm build` → exits 0 ✓
 - `node scripts/lint-vcs-no-raw-git.cjs` → 0 violations on 966 files ✓
-- Commits `8ed42d75`, `c0207eb3`, `ff3b7e71` exist in `git log --oneline -4` ✓
+- Commits `qsyorkwturwsvyrklwlurlloqpmkolnk`, `pnoswwosswsvlxptmyxpvxxsmuksxuqz`, `smwvrooyumppnmnwxwwruntpktrkxwxp` exist in `git log --oneline -4` ✓
 
 ---
 *Phase: 06-brownfield-jj-migration-sticky-vcs-adapter-flip-planning-sha*

@@ -2,30 +2,30 @@
 
 **Date:** 2026-05-14 (re-pass after upstream fixes landed)
 **Operator:** LoganDark (executor: Claude Opus 4.7 / 1M, worktree `agent-a744dbfbcb88867a4`)
-**Source commit:** `ccf8613c` (`fix(06): B-01 lock-before-dirty + B-02 post-flip remote-bookmark tracking` — main HEAD at run time; carries both fix commits `77c6b853` for B-03 and `ccf8613c` for B-01+B-02)
+**Source commit:** `uswuxmkwlopzysnuvpxzzrvlyvnttpvx` (`fix(06): B-01 lock-before-dirty + B-02 post-flip remote-bookmark tracking` — main HEAD at run time; carries both fix commits `mtruuyovoxqtqlvsyptssswkmunxmttu` for B-03 and `uswuxmkwlopzysnuvpxzzrvlyvnttpvx` for B-01+B-02)
 **Dogfood base directory:** `/var/folders/sq/v1_sd6990ysgkqvckj68qcvw0000gn/T/gsd-dogfood-s531` (literal `mktemp -d -t gsd-dogfood-XXXX` output)
 **Sibling clone path (jj):** `$DOGFOOD_BASE/dogfood-jj`
 **Sibling clone path (git baseline):** `$DOGFOOD_BASE/baseline-git`
 **Source-side current branch (captured pre-migration from baseline-git):** `worktree-agent-a744dbfbcb88867a4` (NOT `main` — exercises the "not assumed to be main" fix in B-02)
-**SDK binary used:** `/Users/LoganDark/Documents/Projects/get-shit-done/.claude/worktrees/agent-a744dbfbcb88867a4/bin/gsd-sdk.js` (freshly rebuilt against `ccf8613c`)
+**SDK binary used:** `/Users/LoganDark/Documents/Projects/get-shit-done/.claude/worktrees/agent-a744dbfbcb88867a4/bin/gsd-sdk.js` (freshly rebuilt against `uswuxmkwlopzysnuvpxzzrvlyvnttpvx`)
 **Tool versions:** `jj 0.41.0-cfdadb380babf004a3c0f1f0177335756011b3a1-…`, `git 2.50.1 (Apple Git-155)`, Node `v25.9.0`
 
 ## Why this fresh pass?
 
 The prior dogfood pass (logged in this file's previous revision) flagged three bugs (B-01, B-02, B-03). All three have been fixed upstream:
 
-- **B-03 fix (commit `77c6b853`):** `sdk/src/query/migrate-vcs.ts` no longer short-circuits on `target === currentAdapter`. Same-direction requests now flow into `runMigration`, where the marker-probe owns the decision: marker present → `{ok:true, migrated:false}` idempotent fast-exit; marker absent → throws "already on `${target}`". The bare-command "already on jj — pass --target git" branch remains (that's ambiguous intent, not same-direction).
-- **B-01 + B-02 fix (commit `ccf8613c`):** `sdk/src/vcs/format-migration/run.ts` pipeline reordered: Step 1 (config read + marker probe) and Step 2 (dirty/conflicts pre-flight) now run BEFORE `acquireStateLock` — so the lockfile no longer shows up in `vcs.status()`. NEW Step 11 added: post-flip remote-bookmark tracking via `jj bookmark track <branch>@origin`. Branch name is captured from the SOURCE VcsAdapter's `vcs.refs.currentBookmarks()` BEFORE the migration. Non-fatal on failure.
+- **B-03 fix (commit `mtruuyovoxqtqlvsyptssswkmunxmttu`):** `sdk/src/query/migrate-vcs.ts` no longer short-circuits on `target === currentAdapter`. Same-direction requests now flow into `runMigration`, where the marker-probe owns the decision: marker present → `{ok:true, migrated:false}` idempotent fast-exit; marker absent → throws "already on `${target}`". The bare-command "already on jj — pass --target git" branch remains (that's ambiguous intent, not same-direction).
+- **B-01 + B-02 fix (commit `uswuxmkwlopzysnuvpxzzrvlyvnttpvx`):** `sdk/src/vcs/format-migration/run.ts` pipeline reordered: Step 1 (config read + marker probe) and Step 2 (dirty/conflicts pre-flight) now run BEFORE `acquireStateLock` — so the lockfile no longer shows up in `vcs.status()`. NEW Step 11 added: post-flip remote-bookmark tracking via `jj bookmark track <branch>@origin`. Branch name is captured from the SOURCE VcsAdapter's `vcs.refs.currentBookmarks()` BEFORE the migration. Non-fatal on failure.
 
 This pass re-runs the sibling-clone dogfood end-to-end to verify those fixes hold in practice.
 
 ## Setup steps performed
 
-1. Built the SDK from the worktree (`cd sdk && pnpm build`) so `dist/`+`dist-cjs/` reflect the `ccf8613c` source.
+1. Built the SDK from the worktree (`cd sdk && pnpm build`) so `dist/`+`dist-cjs/` reflect the `uswuxmkwlopzysnuvpxzzrvlyvnttpvx` source.
 2. `mktemp -d -t gsd-dogfood-XXXX` → `/var/folders/sq/v1_sd6990ysgkqvckj68qcvw0000gn/T/gsd-dogfood-s531`.
 3. `git clone <worktree> "$DOGFOOD_BASE/baseline-git"` (untouched git-side reference).
 4. `git clone <worktree> "$DOGFOOD_BASE/dogfood-jj"` (migration target).
-5. Both clones HEAD at `ccf8613c4256632872100452a3e805d7cfb4acea` (verified `git rev-parse HEAD` on each).
+5. Both clones HEAD at `uswuxmkwlopzysnuvpxzzrvlyvnttpvx` (verified `git rev-parse HEAD` on each).
 6. Inside `baseline-git`, captured source-side current branch via SDK:
    ```bash
    node bin/gsd-sdk.js query current-branch
@@ -231,9 +231,9 @@ These exclusions are intentional and recorded; they do not undermine the verdict
 
 | Bug ID | Description | Fix commit | Status |
 |--------|-------------|-----------|--------|
-| **B-01** | Migration pre-flight refuses on its own lock file (unforced runs blocked) | `ccf8613c` (Step 1+2 reordered ahead of `acquireStateLock`) | **RESOLVED** — Verified by unforced `migrate-vcs --target jj` succeeding end-to-end against a clean clone |
-| **B-02** | `current-branch` returns empty bookmarks on freshly-cloned jj-colocated repo (no local bookmark created post-migration) | `ccf8613c` (new Step 11 — `trackRemoteBookmark` calls `jj bookmark track <branch>@origin` post-flip; branch name captured pre-flip from source VcsAdapter, not assumed `main`) | **RESOLVED** — Verified by `jj bookmark list` showing local `worktree-agent-a744dbfbcb88867a4` entry post-migration; confirms the not-assumed-to-be-`main` design holds for arbitrary branches |
-| **B-03** | SDK verb's same-direction refusal short-circuits before marker-probe fast-exit | `77c6b853` (`migrate-vcs.ts` no longer short-circuits on `target === currentAdapter`; flows into `runMigration` for marker-probe ownership) | **RESOLVED** — Verified by idempotent re-run returning `{ok:true, migrated:false}` with `commitHash` matching the original migration commit |
+| **B-01** | Migration pre-flight refuses on its own lock file (unforced runs blocked) | `uswuxmkwlopzysnuvpxzzrvlyvnttpvx` (Step 1+2 reordered ahead of `acquireStateLock`) | **RESOLVED** — Verified by unforced `migrate-vcs --target jj` succeeding end-to-end against a clean clone |
+| **B-02** | `current-branch` returns empty bookmarks on freshly-cloned jj-colocated repo (no local bookmark created post-migration) | `uswuxmkwlopzysnuvpxzzrvlyvnttpvx` (new Step 11 — `trackRemoteBookmark` calls `jj bookmark track <branch>@origin` post-flip; branch name captured pre-flip from source VcsAdapter, not assumed `main`) | **RESOLVED** — Verified by `jj bookmark list` showing local `worktree-agent-a744dbfbcb88867a4` entry post-migration; confirms the not-assumed-to-be-`main` design holds for arbitrary branches |
+| **B-03** | SDK verb's same-direction refusal short-circuits before marker-probe fast-exit | `mtruuyovoxqtqlvsyptssswkmunxmttu` (`migrate-vcs.ts` no longer short-circuits on `target === currentAdapter`; flows into `runMigration` for marker-probe ownership) | **RESOLVED** — Verified by idempotent re-run returning `{ok:true, migrated:false}` with `commitHash` matching the original migration commit |
 
 All three are confirmed fixed empirically against a live sibling clone. No new bugs surfaced in this re-pass.
 

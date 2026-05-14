@@ -95,11 +95,11 @@ completed: 2026-05-11
 
 Each task was committed atomically:
 
-1. **Task 1: Extend types.ts with CommitInput bookmark fields + error classes** — `c2bbc6d2` (feat)
-2. **Task 2: Flip BACKENDS_AVAILABLE + add BACKENDS_AVAILABLE_FOR_VERB allowlist** — `41cc21ea` (feat)
-3. **Task 3: Create jj.ts skeleton + parser stubs + jjArgv helper** — `51892dd2` (feat)
-4. **Task 4: Wire createJjAdapter into createVcsAdapter + add D-17 sticky resolver + .planning/config.json** — `ec194a9f` (feat)
-5. **Task 5: vcs-fixture.ts jj-colocated lane + git.ts JSDoc note + docs/test-triage/jj-bugs.md seed** — `ef530486` (feat)
+1. **Task 1: Extend types.ts with CommitInput bookmark fields + error classes** — `zpzquyuumltpqtlnuylokmnsppopoqrx` (feat)
+2. **Task 2: Flip BACKENDS_AVAILABLE + add BACKENDS_AVAILABLE_FOR_VERB allowlist** — `pmwkuwloryymrnnvsknwpvuswvruzzxl` (feat)
+3. **Task 3: Create jj.ts skeleton + parser stubs + jjArgv helper** — `ksoqlwrswrlpmlwlqpwxvuvlxqstkxvn` (feat)
+4. **Task 4: Wire createJjAdapter into createVcsAdapter + add D-17 sticky resolver + .planning/config.json** — `nwrsxqqktomsszxstxpqrksqvolkxokv` (feat)
+5. **Task 5: vcs-fixture.ts jj-colocated lane + git.ts JSDoc note + docs/test-triage/jj-bugs.md seed** — `swyystwlzlkrznzmxwuotlsvvsxusqyn` (feat)
 
 ## Files Created/Modified
 
@@ -160,7 +160,7 @@ Each task was committed atomically:
 - **Fix:** Repurpose the test to probe `jj-native` (the current declared-but-unavailable backend) and update label to Phase 3.
 - **Files modified:** `sdk/src/vcs/__tests__/adapter-contract.test.ts`
 - **Verification:** Test passes.
-- **Committed in:** Task 2 (`41cc21ea`).
+- **Committed in:** Task 2 (`pmwkuwloryymrnnvsknwpvuswvruzzxl`).
 
 **3. [Rule 1 - Bug] index.test.ts Phase-1 jj-throw expectations**
 
@@ -169,7 +169,7 @@ Each task was committed atomically:
 - **Fix:** Replaced both tests' bodies with adapter-shape assertions (`vcs.kind === 'jj'`, `vcs.cwd === tmpDir`).
 - **Files modified:** `sdk/src/vcs/__tests__/index.test.ts`
 - **Verification:** Test passes.
-- **Committed in:** Task 5 (`ef530486`).
+- **Committed in:** Task 5 (`swyystwlzlkrznzmxwuotlsvvsxusqyn`).
 
 **4. [Rule 2 - Missing Critical] Per-verb gating on adapter-contract.test.ts**
 
@@ -178,7 +178,7 @@ Each task was committed atomically:
 - **Fix:** Added `verbReady(verb, kind)` helper in `adapter-contract.test.ts` and wrapped each verb-invoking `test(...)` with `test.skipIf(!ready(verb))`. Mirrored the same `verbReady()` pattern in `tests/vcs-adapter-contract.test.cjs` via early-return.
 - **Files modified:** `sdk/src/vcs/__tests__/adapter-contract.test.ts`, `tests/vcs-adapter-contract.test.cjs`
 - **Verification:** Vitest reports `222 passed / 11 skipped`; cjs harness reports `vcs[git] 7/7` + `vcs[jj-colocated] 7/7`.
-- **Committed in:** Task 5 (`ef530486`).
+- **Committed in:** Task 5 (`swyystwlzlkrznzmxwuotlsvvsxusqyn`).
 
 ---
 
@@ -228,11 +228,11 @@ Plan 03-01 ships **no new `.planning/` revision-id-encoding format**. No entries
 
 - All 10 created files exist on disk.
 - All 5 task commits exist in `git log --oneline`:
-  - `c2bbc6d2` (Task 1) ✓
-  - `41cc21ea` (Task 2) ✓
-  - `51892dd2` (Task 3) ✓
-  - `ec194a9f` (Task 4) ✓
-  - `ef530486` (Task 5) ✓
+  - `zpzquyuumltpqtlnuylokmnsppopoqrx` (Task 1) ✓
+  - `pmwkuwloryymrnnvsknwpvuswvruzzxl` (Task 2) ✓
+  - `ksoqlwrswrlpmlwlqpwxvuvlxqstkxvn` (Task 3) ✓
+  - `nwrsxqqktomsszxstxpqrksqvolkxokv` (Task 4) ✓
+  - `swyystwlzlkrznzmxwuotlsvvsxusqyn` (Task 5) ✓
 
 ---
 *Phase: 03-jj-backend-core-squash-refs-conflict*

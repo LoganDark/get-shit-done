@@ -40,6 +40,6 @@
   "mode": "yolo",
   "granularity": "coarse",
   "vcs": {
-    "adapter": "auto"
+    "adapter": "jj"
   }
 }

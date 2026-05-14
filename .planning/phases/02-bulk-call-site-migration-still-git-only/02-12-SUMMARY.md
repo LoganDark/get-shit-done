@@ -46,7 +46,7 @@ metrics:
 
 ## Performance
 
-- **Duration:** ~2 min (resume-only — the tracker file write + commit `29981650` landed in the prior session; this session finalizes the plan metadata)
+- **Duration:** ~2 min (resume-only — the tracker file write + commit `nytrwpnmuoonxlonvnzpvwsrroyosoqn` landed in the prior session; this session finalizes the plan metadata)
 - **Started:** 2026-05-10 (tracker commit)
 - **Completed:** 2026-05-11 (user sign-off + plan-metadata commit)
 - **Tasks:** 1 (single human-action checkpoint task)
@@ -69,7 +69,7 @@ metrics:
 
 The plan has a single human-action checkpoint task. The tracker file commit and the plan-metadata commit are recorded below.
 
-1. **Task 1: Record MIGR-04 + UPSTREAM-01 deferral and surface to developer** — `29981650` (docs)
+1. **Task 1: Record MIGR-04 + UPSTREAM-01 deferral and surface to developer** — `nytrwpnmuoonxlonvnzpvwsrroyosoqn` (docs)
    - `docs(02-12): record MIGR-04 + UPSTREAM-01 deferral to milestone-end (D-17)`
    - Wrote `02-12-DEFERRED.md` with the verbatim structure prescribed in `<what-built>`
    - Surfaced to developer; awaited resume-signal
@@ -80,7 +80,7 @@ The plan has a single human-action checkpoint task. The tracker file commit and 
 
 ### Created
 
-- `.planning/phases/02-bulk-call-site-migration-still-git-only/02-12-DEFERRED.md` (committed in `29981650`) — Phase 2 deferred-tracker recording MIGR-04 + UPSTREAM-01 deferral to milestone-end task post-Phase-5; contains verbatim ROADMAP success-criteria 4 + 5 replacement text
+- `.planning/phases/02-bulk-call-site-migration-still-git-only/02-12-DEFERRED.md` (committed in `nytrwpnmuoonxlonvnzpvwsrroyosoqn`) — Phase 2 deferred-tracker recording MIGR-04 + UPSTREAM-01 deferral to milestone-end task post-Phase-5; contains verbatim ROADMAP success-criteria 4 + 5 replacement text
 - `.planning/phases/02-bulk-call-site-migration-still-git-only/02-12-SUMMARY.md` (this file) — plan completion summary
 
 ### Modified (in plan-metadata commit)
@@ -107,7 +107,7 @@ The user's resume-signal was "Approve as-is" (received 2026-05-11), which accept
 
 None — plan executed exactly as written. The plan was a single human-action checkpoint that required:
 
-1. Writing the tracker file with the prescribed structure (done in commit `29981650`)
+1. Writing the tracker file with the prescribed structure (done in commit `nytrwpnmuoonxlonvnzpvwsrroyosoqn`)
 2. Awaiting developer review (sign-off received 2026-05-11)
 3. Finalizing the plan metadata (this commit)
 
@@ -129,7 +129,7 @@ None.
 - Tracker references `.planning/intel/rebase-log.md` and `docs/upstream-rebase.md` as artifacts to be created at trigger time ✓
 - Tracker contains verbatim replacement text for ROADMAP success criteria 4 and 5 ✓
 - User sign-off recorded: "Approve as-is" resume-signal 2026-05-11 ✓
-- Tracker commit `29981650` exists on `phase/02-migration` ✓
+- Tracker commit `nytrwpnmuoonxlonvnzpvwsrroyosoqn` exists on `phase/02-migration` ✓
 
 ## Phase 2 Status (Closing — Phase 2 plan count 12/12)
 
@@ -153,7 +153,7 @@ ROADMAP success criteria 4 + 5 reframing is queued (verbatim text in 02-12-DEFER
 Verifying claims before marking complete:
 
 - [x] `02-12-DEFERRED.md` exists at the canonical path
-- [x] Tracker commit `29981650` exists in git log on `phase/02-migration`
+- [x] Tracker commit `nytrwpnmuoonxlonvnzpvwsrroyosoqn` exists in git log on `phase/02-migration`
 - [x] Tracker contains MIGR-04, UPSTREAM-01, D-17, D-18, milestone-end, Phase 5
 - [x] Tracker references `.planning/intel/rebase-log.md` and `docs/upstream-rebase.md` as future artifacts
 - [x] Tracker contains verbatim replacement text for ROADMAP success criteria 4 + 5

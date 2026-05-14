@@ -64,7 +64,7 @@ completed: 2026-05-13
 
 ## Task Commits
 
-1. **Task 1: Propagate Phase 5 status to REQUIREMENTS.md table + footer** — `d39bcf3a` (docs)
+1. **Task 1: Propagate Phase 5 status to REQUIREMENTS.md table + footer** — `nrwnotknmomppxvyyqwrkyspkwrskzvv` (docs)
 
 ## Files Created/Modified
 
@@ -113,9 +113,9 @@ This plan is the natural sequencing closure of Wave 3 — it depends on 05-06 + 
 
 ## Self-Check: PASSED
 
-- `.planning/REQUIREMENTS.md` modified: FOUND (verified via `git log --oneline -1` shows `d39bcf3a`)
+- `.planning/REQUIREMENTS.md` modified: FOUND (verified via `git log --oneline -1` shows `nrwnotknmomppxvyyqwrkyspkwrskzvv`)
 - `.planning/phases/05-command-translations-brownfield-validation-ci-hardening/05-08-SUMMARY.md` created: FOUND (this file)
-- Commit `d39bcf3a` exists: FOUND (verified via `git log --oneline -1`)
+- Commit `nrwnotknmomppxvyyqwrkyspkwrskzvv` exists: FOUND (verified via `git log --oneline -1`)
 
 ---
 *Phase: 05-command-translations-brownfield-validation-ci-hardening*

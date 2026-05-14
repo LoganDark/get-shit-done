@@ -79,7 +79,7 @@ completed: 2026-05-10
 - **Started:** 2026-05-10T22:18Z (approx)
 - **Tasks:** 1 (`tdd="false"` — pure mechanical migration)
 - **Files modified:** 7 source/test/tooling files + 8 baseline JSON
-- **Commits on phase/02-migration:** 1 (`021d7823`)
+- **Commits on phase/02-migration:** 1 (`mmkwkkxnllsopnovwyppxlnwkssuloqw`)
 
 ## Accomplishments
 
@@ -185,7 +185,7 @@ Single atomic commit on `phase/02-migration`:
 - **Fix:** Added `amend?: boolean`, `noVerify?: boolean`, `pathspec?: string[]` to `CommitInput`. Git backend's `commit()` honors all three: amend takes precedence over message; pathspec narrows commit scope without staging; pathspec-only path branches to `git commit -m` (no `-am`) so already-staged paths aren't auto-restaged.
 - **Files modified:** `sdk/src/vcs/types.ts`, `sdk/src/vcs/backends/git.ts`
 - **Verification:** Acceptance grep `grep -nE "vcs\\.commit\\(" sdk/src/query/commit.ts` returns 1; commit.test.ts's `--amend with --files` test (preserves the #3061 amend-pathspec scope) passes; baseline-parity dispatch's commit-with-pathspec clause passes for both site-170 and site-301 baselines.
-- **Commit:** Task 1 (`021d7823`)
+- **Commit:** Task 1 (`mmkwkkxnllsopnovwyppxlnwkssuloqw`)
 
 **2. [Rule 3 — blocking dependency repair] verify.ts dynamic-import retarget**
 
@@ -194,7 +194,7 @@ Single atomic commit on `phase/02-migration`:
 - **Fix:** Retargeted all three dynamic imports to `'../vcs/index.js'` (the canonical re-export of `execGit` from the VCS module). The 5-field ExecResult shape is a strict superset of the 3-field shim's shape; existing call sites only read `exitCode` and `stdout`, both available in both shapes. Plan 02-10 owns verify.ts's full migration to the high-level adapter API.
 - **Files modified:** `sdk/src/query/verify.ts`
 - **Verification:** `cd sdk && pnpm build` exits 0; verify.ts's tests still pass.
-- **Commit:** Task 1 (`021d7823`)
+- **Commit:** Task 1 (`mmkwkkxnllsopnovwyppxlnwkssuloqw`)
 
 ### Rule 4 (architectural) deviations
 
@@ -260,7 +260,7 @@ None — no external configuration changed.
 
 ## Self-Check: PASSED
 
-- Commit `021d7823` exists on `phase/02-migration`: confirmed via `git log --oneline -3`.
+- Commit `mmkwkkxnllsopnovwyppxlnwkssuloqw` exists on `phase/02-migration`: confirmed via `git log --oneline -3`.
 - `cd sdk && pnpm build && pnpm build:cjs` both exit 0: confirmed.
 - `cd sdk && pnpm exec vitest run src/vcs/__tests__/` → 149/149 pass: confirmed.
 - `cd sdk && pnpm exec vitest run src/vcs/__tests__/baseline-parity.test.ts` → 32/32 pass (was 24; +8): confirmed.

@@ -185,9 +185,9 @@ None yet.
 
 - **Requirement-count discrepancy:** REQUIREMENTS.md self-reports "78 v1 requirements across 13 categories" but actually contains 86 requirements across 15 categories (added SQUASH and BROWN as separate sections during requirement definition, plus larger category sizes). Roadmap maps the actual 86. REQUIREMENTS.md footer should be reconciled at next phase transition.
 - **Phase 03.1 baseline unblocked (2026-05-13):** Both prior blockers resolved.
-  - Golden-parity drift (5 failures) fixed in `66dbc36a` (`fix(query): port five upstream CJS fixes to SDK …`). Debug session resolved at `.planning/debug/resolved/golden-parity-failures.md`.
-  - Slow Claude-CLI test hang gated behind `GSD_ENABLE_E2E=1` in `f9dd5edd` — three tests (lifecycle-e2e + 2 phase-runner E2E cases) now opt-in. Baseline harness no longer drives the LLM, so per-run wall-clock dropped from 15-50 min to ~5 s.
-  - Baseline data committed in `c0df4ded`: 7 integration files, 98 tests / 7 skipped, 7394 ms median total, 3/3 runs green.
+  - Golden-parity drift (5 failures) fixed in `pxumponwopvsmlmvvlrusyqokxspskwv` (`fix(query): port five upstream CJS fixes to SDK …`). Debug session resolved at `.planning/debug/resolved/golden-parity-failures.md`.
+  - Slow Claude-CLI test hang gated behind `GSD_ENABLE_E2E=1` in `uxqknykpnlrvynmssypnzpotmrlzlvno` — three tests (lifecycle-e2e + 2 phase-runner E2E cases) now opt-in. Baseline harness no longer drives the LLM, so per-run wall-clock dropped from 15-50 min to ~5 s.
+  - Baseline data committed in `vmlpmxxprznkntmwynqvnrwxltxpnuyz`: 7 integration files, 98 tests / 7 skipped, 7394 ms median total, 3/3 runs green.
   - Plans 02..N can now proceed per D-09 (evidence-tied flips).
 
 ## Deferred Items

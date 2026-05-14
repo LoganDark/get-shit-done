@@ -832,7 +832,7 @@ This is doc-only; no requirement reshape. Surface to the user during the wrap-up
   - `jj squash --help`: `-B/-A/-o` marked `EXPERIMENTAL`; `--message` documented as no-editor
   - `jj bookmark set --help`: `-B, --allow-backwards` confirmed
   - `jj bookmark --help`: full subcommand list (advance, create, delete, forget, list, move, rename, set, track, untrack)
-- **`sdk/src/vcs/types.ts`** (current commit `e9fb927b`): full adapter contract surface — methods, types, discriminated union, `__vcsTestOnly` symbol
+- **`sdk/src/vcs/types.ts`** (current commit `ooxzuutkqplolrlwxnopwyzkknqrqyuz`): full adapter contract surface — methods, types, discriminated union, `__vcsTestOnly` symbol
 - **`sdk/src/vcs/backends/git.ts`**: reference implementation for every adapter verb the jj backend mirrors
 - **`sdk/src/vcs/exec.ts`**: spawn wrapper shape (`vcsExec`, `execGit`, `ExecResult`, `VcsExecError`)
 - **`sdk/src/vcs/parse/jj-rev.ts`**: locked revset translations

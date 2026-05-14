@@ -4,7 +4,7 @@ status: resolved
 trigger: fix failing tests
 created: 2026-05-12T22:15:00Z
 updated: 2026-05-13T01:30:00Z
-resolution_commit: 66dbc36a
+resolution_commit: pxumponwopvsmlmvvlrusyqokxspskwv
 ---
 
 # Debug Session: golden-parity-failures
@@ -92,7 +92,7 @@ next_action: apply 4 targeted SDK patches; re-run the two golden integration fil
 
 ## Eliminated
 
-- "Phase 03.1 introduced the regression" — refuted by timeline + commit search. The only Phase 03.1 commit (`cd472665`) added `sdk/scripts/profile-integration.mjs` with zero `sdk/src/**` touches. The harness merely surfaced pre-existing drift.
+- "Phase 03.1 introduced the regression" — refuted by timeline + commit search. The only Phase 03.1 commit (`nqlxwxsrzwupomqnrouvzosrxnkxxrlo`) added `sdk/scripts/profile-integration.mjs` with zero `sdk/src/**` touches. The harness merely surfaced pre-existing drift.
 - "Phase 3 jj VCS-adapter migration corrupted query output" — refuted. None of the four root causes touches `VcsAdapter`, bookmarks, or any VCS surface. The progress formula uses pure disk counts; mode/W016/UAT filters are content parsing only.
 - "Stale golden fixtures need regeneration" — refuted. The tests compare *live* SDK output against *live* `gsd-tools.cjs` output (subprocess); there are no on-disk golden fixtures in play for these 5 assertions.
 - "Single root cause across all 5 failures" (orchestrator's strongest hypothesis) — refuted by the diagnostic diff. The five failures touch four distinct handlers and four distinct upstream CJS PRs. The unification is procedural (port lag), not technical.
@@ -136,7 +136,7 @@ Add module-level `const TERMINAL_UAT_STATUSES = new Set(['complete', 'resolved']
 
 ### Status: RESOLVED
 
-Five patches applied in commit `66dbc36a` ("fix(query): port five upstream CJS fixes to SDK").
+Five patches applied in commit `pxumponwopvsmlmvvlrusyqokxspskwv` ("fix(query): port five upstream CJS fixes to SDK").
 
 A fifth latent drift surfaced during verification (after fixing the first four exposed it): SDK's W006 check did not have the not-started-phase exclusion from upstream `#2009`. Patched in the same commit.
 

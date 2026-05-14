@@ -372,7 +372,7 @@ async function runMigration(cwd: string, target: 'git' | 'jj'): Promise<Migratio
 
 | Category | Items Found | Action Required |
 |----------|-------------|------------------|
-| Stored data | `.planning/STATE.md` line 188-190 contain 4 git SHAs in backtick form (`66dbc36a`, `f9dd5edd`, `c0df4ded`); `.planning/phases/**/*-SUMMARY.md` carry ~30+ commit SHAs per phase in "Commits Made" sections (verified via `grep -rE` on `04-06-SUMMARY.md`). One full 40-char SHA at `04-06-SUMMARY.md:138-139` inside an NDJSON code block. | Rewriter MUST handle: short-hex (7-12 char) AND full-hex (40 char) AND in-code-block contexts. Code blocks are not special-cased — the regex matches inside them too, and that's correct behavior because the example output still references real commits. |
+| Stored data | `.planning/STATE.md` line 188-190 contain 4 git SHAs in backtick form (`pxumponwopvsmlmvvlrusyqokxspskwv`, `uxqknykpnlrvynmssypnzpotmrlzlvno`, `vmlpmxxprznkntmwynqvnrwxltxpnuyz`); `.planning/phases/**/*-SUMMARY.md` carry ~30+ commit SHAs per phase in "Commits Made" sections (verified via `grep -rE` on `04-06-SUMMARY.md`). One full 40-char SHA at `04-06-SUMMARY.md:138-139` inside an NDJSON code block. | Rewriter MUST handle: short-hex (7-12 char) AND full-hex (40 char) AND in-code-block contexts. Code blocks are not special-cased — the regex matches inside them too, and that's correct behavior because the example output still references real commits. |
 | Live service config | `.planning/config.json` `vcs.adapter` field. **Not currently set** in this repo's config.json (sticky resolver falls through to detection, which prefers git per D-17). | After migration: `vcs.adapter: "jj"` (or `"git"` on reverse). |
 | OS-registered state | None — Phase 6 introduces no Windows Task Scheduler / launchd / systemd registrations. | None. |
 | Secrets/env vars | None. `GSD_VCS` env var override (`sdk/src/vcs/index.ts:33`) is not touched — it's an ephemeral test-only override. | None. |
@@ -691,14 +691,14 @@ Empirical scan of this repo's `.planning/` tree on 2026-05-14:
 
 | Surface | Path glob | Format | SHA encoding | Migration approach |
 |---------|-----------|--------|--------------|---------------------|
-| Project state prose | `.planning/STATE.md` | Markdown | Inline backticks `` `66dbc36a` `` in performance/velocity/accumulated-context sections (4 SHAs at lines 188-190) | Regex-pluck |
+| Project state prose | `.planning/STATE.md` | Markdown | Inline backticks `` `pxumponwopvsmlmvvlrusyqokxspskwv` `` in performance/velocity/accumulated-context sections (4 SHAs at lines 188-190) | Regex-pluck |
 | Phase summaries | `.planning/phases/*/*-SUMMARY.md` | Markdown | Inline backticks + bullet list "Commits Made" sections (~10-30 SHAs/file). Also raw 40-char SHAs inside NDJSON code blocks (e.g., `04-06-SUMMARY.md:138-139`) | Regex-pluck; code blocks are NOT special-cased (SHAs in examples are still real references) |
 | Phase learnings | `.planning/phases/*/*-LEARNINGS.md` | Markdown | Inline backticks; prose mentions | Regex-pluck |
 | Phase review | `.planning/phases/*/*-REVIEW.md`, `*-REVIEW-FIX.md` | Markdown | Inline backticks | Regex-pluck |
 | Phase verification | `.planning/phases/*/*-VERIFICATION.md` | Markdown | Inline backticks | Regex-pluck |
 | Phase patterns | `.planning/phases/*/*-PATTERNS.md` | Markdown | Inline backticks | Regex-pluck |
 | Phase CONTEXT/DISCUSSION/RESEARCH/PLAN | `.planning/phases/*/*-CONTEXT.md` etc. | Markdown | Mostly absent. Occasional historical references in DISCUSSION-LOG (e.g., commit Phase 2 D-31 mentions); these resolve cleanly | Regex-pluck (light) |
-| Intel surface | `.planning/intel/*.md` | Markdown | Mostly absent; one mention of `ae56863a` in `git-touchpoints.md` (pnpm-migration commit reference) | Regex-pluck |
+| Intel surface | `.planning/intel/*.md` | Markdown | Mostly absent; one mention of `vtnolxpzlkkytzykynnttxmvpylqzuzt` in `git-touchpoints.md` (pnpm-migration commit reference) | Regex-pluck |
 | Research surface | `.planning/research/*.md` | Markdown | Mostly absent; historical context references | Regex-pluck |
 | Debug surface | `.planning/debug/**/*.md` | Markdown | Some mentions in resolved debug sessions | Regex-pluck |
 | State frontmatter | `.planning/STATE.md` YAML frontmatter (top) | YAML | NO SHAs; just timestamps/status. **Skip — out of scope.** | (none) |
@@ -928,7 +928,7 @@ Extracted from `./CLAUDE.md` + user memory:
 
 1. **Should the rewriter handle commit MESSAGES (commit history prose) or only `.planning/` file prose?**
    - What we know: D-19 inventoried `.planning/` files only.
-   - What's unclear: Commit messages stored in `.git/` (after `git→jj`) or `.jj/` (after `jj→git`) reference SHAs that won't be rewritten. E.g., commit `e85430e2` has message "feat(04-06): wire fireHook pre-commit into jj.ts commit() with D-10 colocated no-op" — that's stable, but the SUMMARY.md file lists `e85430e2` separately and IS rewritten.
+   - What's unclear: Commit messages stored in `.git/` (after `git→jj`) or `.jj/` (after `jj→git`) reference SHAs that won't be rewritten. E.g., commit `splyuxlqqlykuzwmporszsuquvxvssxm` has message "feat(04-06): wire fireHook pre-commit into jj.ts commit() with D-10 colocated no-op" — that's stable, but the SUMMARY.md file lists `splyuxlqqlykuzwmporszsuquvxvssxm` separately and IS rewritten.
    - Recommendation: **OUT OF SCOPE for v1.** Commit messages stay verbatim — they're git/jj-history-internal, not `.planning/` state. Document explicitly.
    - **RESOLVED:** Commit messages are OUT OF SCOPE for the v1 rewriter; `.planning/` prose only.
 

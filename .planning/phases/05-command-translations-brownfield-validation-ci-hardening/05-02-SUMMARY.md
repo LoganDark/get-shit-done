@@ -159,9 +159,9 @@ The four TODO(05-05 sweep) categories enumerated above are unchanged for plan 05
 
 ## Self-Check: PASSED
 
-- ✓ Task 1 commit `5227ca6e` present: `feat(05-02): rewrite execute-phase.md to be VCS-agnostic (D-33, Task 1)`
-- ✓ Task 2 commit `7a6c0b28` present: `feat(05-02): rewrite quick.md to be VCS-agnostic (D-33, Task 2) + finish execute-phase amend`
-- ✓ Task 3 commit `ca807db8` present: `test(05-02): add CMD-01..05 integration tests against jj-colocated fixtures (Task 3)`
+- ✓ Task 1 commit `qsktwxwmqrromrstsuosrrvukprzkxpn` present: `feat(05-02): rewrite execute-phase.md to be VCS-agnostic (D-33, Task 1)`
+- ✓ Task 2 commit `onrpzkpmlmtoqmzvmyprkzynrwqppqtm` present: `feat(05-02): rewrite quick.md to be VCS-agnostic (D-33, Task 2) + finish execute-phase amend`
+- ✓ Task 3 commit `rsqyxrqnokqwksnrvuttqspwqzxyonly` present: `test(05-02): add CMD-01..05 integration tests against jj-colocated fixtures (Task 3)`
 - ✓ All 5 new test files exist on disk under `sdk/src/vcs/__tests__/cmd-*-jj.test.ts`
 - ✓ All 13 tests pass under jj 0.41.0 (vitest exit 0)
 - ✓ Type-check clean (`npx tsc --noEmit` exit 0)
