@@ -6,6 +6,7 @@
     "outDir": "dist-cjs"
   },
   "$wr12_comment": "WR-12: list every transitively-required file explicitly. TypeScript will compile transitively-imported files even when they are not in `include`, but the include list is the only self-documenting place that says 'these files are part of the CJS build'. Adding src/errors.ts here makes the dependency visible to the next reader and ensures dist-cjs/errors.js does not silently disappear if the import seam moves.",
+  "$phase6_comment": "Phase 6 plan 06-02: src/vcs/format-migration/** is ESM-ONLY by design. The rewriter library's orchestrator (run.ts) imports from src/query/* (atomicWriteConfig, acquireStateLock, planningPaths, sanitizeCommitMessage) which transitively pulls model-catalog.ts + sdk-package-compatibility.ts — both use `import.meta.url` (TS1343 on module='commonjs'). The CJS consumer surface for the rewriter is empty: bin/lib/*.cjs does NOT call format-migration directly; only the ESM SDK verb handler in plan 06-03 (src/query/migrate-vcs.ts) does. Excluding the whole directory keeps the CJS build hermetic.",
   "include": ["src/vcs/**/*.ts", "src/errors.ts"],
-  "exclude": ["src/vcs/**/*.test.ts", "src/vcs/__tests__/**", "dist", "dist-cjs", "node_modules"]
+  "exclude": ["src/vcs/**/*.test.ts", "src/vcs/__tests__/**", "src/vcs/format-migration/**", "dist", "dist-cjs", "node_modules"]
 }
