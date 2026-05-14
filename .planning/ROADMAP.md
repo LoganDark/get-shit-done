@@ -151,9 +151,9 @@ Plans:
   5. The full v1 commitment holds: every upstream GSD command works correctly on a jj-only repo without git, with no regression in test coverage on the git side and no `.skip` accumulation on either side.
 **Plans**: 5 plans
 - [x] 05-01-PLAN.md — Foundational infra: A3 fix (D-32) + 11 new SDK query verbs + D-31 deferral edits to ROADMAP/REQUIREMENTS
-- [ ] 05-02-PLAN.md — Daily-driver commands (CMD-01..05): execute-phase.md + quick.md rewrites + 5 integration tests
-- [ ] 05-03-PLAN.md — Lifecycle commands (CMD-06..09, CMD-11): undo/complete-milestone/code-review.md + agent prompt rewrites + 6 integration tests
-- [ ] 05-04-PLAN.md — Brownfield commands (CMD-10): synth-planning-fixture + 5 integration tests (D-34 coverage gap documented)
+- [x] 05-02-PLAN.md — Daily-driver commands (CMD-01..05): execute-phase.md + quick.md rewrites + 5 integration tests
+- [x] 05-03-PLAN.md — Lifecycle commands (CMD-06..09, CMD-11): undo/complete-milestone/code-review.md + agent prompt rewrites + 6 integration tests
+- [x] 05-04-PLAN.md — Brownfield commands (CMD-10): synth-planning-fixture + 5 integration tests (D-34 coverage gap documented)
 - [ ] 05-05-PLAN.md — CI hardening + close: 7 flake fixes + 10-green soak + matrix flip + MIGR-02 cosmetic sweep + PROMPT-03 closure
 
 ## Progress
