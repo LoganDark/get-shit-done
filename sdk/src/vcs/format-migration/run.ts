@@ -4,30 +4,38 @@
  *
  * Pipeline (RESEARCH §"Pattern 3: Atomic Multi-File Commit"):
  *
- *   0. Acquire state-lock on .planning/config.json for the ENTIRE duration
- *      (walk + write + commit). RESEARCH §Anti-Pattern "Skipping the lock".
- *   1. Read config.json → infer source adapter + direction.
+ *   1. Read config.json (NO lock — readFile is atomic for small files) →
+ *      infer source adapter + direction.
  *      Marker-probe fast-exit: if HEAD subject contains MIGRATION_COMMIT_MARKER
  *      and target matches current adapter, return {ok:true, migrated:false}.
  *      (RESEARCH Open Q #4 Option A.)
  *   2. Pre-flight: refuse on dirty WC or in-tree conflicts unless opts.force.
- *      (RESEARCH Pitfall 4.)
- *   3. Walk + async pre-pass to resolve every ID into a cache.
- *   4. Sync rewrite pass on every file using the populated cache.
- *   5. Write every dirty file (sequential writeFile loop — the single
+ *      (RESEARCH Pitfall 4.) MUST run BEFORE acquireStateLock — otherwise
+ *      `.planning/config.json.lock` shows up as an untracked file and the
+ *      dirty check falsely refuses the run (B-01).
+ *   3. Acquire state-lock on .planning/config.json for the WRITE phase
+ *      (walk + write + commit). RESEARCH §Anti-Pattern "Skipping the lock".
+ *   4. Walk + async pre-pass to resolve every ID into a cache.
+ *   5. Sync rewrite pass on every file using the populated cache.
+ *   6. Write every dirty file (sequential writeFile loop — the single
  *      commit is the atomic boundary, not per-file writes).
- *   6. Flip config.json's vcs.adapter via atomicWriteConfig.
- *   7. Emit migration report at .planning/intel/06-migration-report.md.
- *   8. RECONSTRUCT vcs adapter with explicit { kind: target } (RESEARCH Pitfall 6).
+ *   7. Flip config.json's vcs.adapter via atomicWriteConfig.
+ *   8. Emit migration report at .planning/intel/06-migration-report.md.
+ *   9. RECONSTRUCT vcs adapter with explicit { kind: target } (RESEARCH Pitfall 6).
  *      On jj target, fire pre-commit hook explicitly to work around A3 colocated
  *      hook gap (RESEARCH Open Q #5 — resolved via SDK fireHook primitive).
- *   9. Single atomic commit of all dirty files + config.json + report.md with
+ *  10. Single atomic commit of all dirty files + config.json + report.md with
  *      MIGRATION_COMMIT_MARKER in the message.
+ *  11. Post-flip bookmark tracking (jj-target only): track the captured
+ *      default-branch remote bookmark so /gsd-pr-branch sees a local
+ *      bookmark (B-02 fix — non-fatal on failure).
  *
  * Locking architecture:
- *   acquireStateLock(paths.config) is held for the entire `runMigration` body
- *   inside a try/finally — a second concurrent invocation waits up to ~10s
- *   then retries; the lock is released even on throw.
+ *   acquireStateLock(paths.config) wraps the WRITE phase (Steps 3–11) in a
+ *   try/finally. The read-only marker probe (Step 1) and dirty-tree
+ *   pre-flight (Step 2) run BEFORE the lock so the lockfile itself isn't
+ *   visible to vcs.status() (B-01). A second concurrent invocation that
+ *   reaches Step 3 waits up to ~10s for the lock then retries.
  *
  * Deviations from the 06-02-PLAN.md prose (documented for SUMMARY traceability):
  *   - Plan said `vcs.hooks.fire('pre-commit', ctx)` — adapter has no such method.
@@ -46,7 +54,9 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { relative, resolve as pathResolve, sep as pathSep } from 'node:path';
+import type { VcsAdapter } from '../types.js';
 import { createVcsAdapter } from '../index.js';
 import { atomicWriteConfig } from '../../query/config-mutation.js';
 import {
@@ -88,85 +98,102 @@ export async function runMigration(
     canonicalCwd = pathResolve(cwd);
   }
   const paths = planningPaths(canonicalCwd, opts.workstream);
-  const lockPath = await acquireStateLock(paths.config);
-  try {
-    // ─── Step 1: read config, infer direction, marker-probe fast-exit ────
-    let config: Record<string, unknown> = {};
-    try {
-      const raw = await readFile(paths.config, 'utf-8');
-      config = JSON.parse(raw) as Record<string, unknown>;
-    } catch {
-      /* config absent — treat as 'absent' */
-    }
-    const previousAdapter = readVcsAdapter(config) ?? 'absent';
-    const sourceKind: 'git' | 'jj' = previousAdapter === 'jj' ? 'jj' : 'git';
 
-    if (sourceKind === target) {
-      // Marker-probe fast-exit (RESEARCH Open Q #4 Option A): if HEAD's
-      // commit subject already carries the migration marker AND target
-      // matches the current adapter, no work to do.
-      //
-      // Backend semantic shift: `log({ maxCount: 1 })` with NO revset on jj
-      // returns `@` (the working-copy commit), which is empty after a squash
-      // — the actual migration commit lives at `@-` (parent of WC). On git,
-      // HEAD is the most recent commit by default. To probe symmetrically,
-      // we look at the LAST FEW commits (maxCount: 2) on jj so we catch
-      // both `@` and `@-`; git's default-HEAD walk already returns the
-      // migration commit at index 0.
-      try {
-        const vcsProbe = createVcsAdapter(canonicalCwd, { kind: sourceKind });
-        const recent =
-          sourceKind === 'jj'
-            ? // jj: probe both @ and @- (one of them is the migration commit)
-              vcsProbe.log({ maxCount: 2 })
-            : vcsProbe.log({ maxCount: 1 });
-        const markerHit = recent.find((e) => (e.subject ?? '').includes(MIGRATION_COMMIT_MARKER));
-        if (markerHit) {
-          return {
-            ok: true,
-            migrated: false,
-            filesChanged: 0,
-            filesScanned: 0,
-            orphans: {
-              count: 0,
-              ancestorResolved: 0,
-              unresolvable: 0,
-              reportPath: '',
-            },
-            previousAdapter: previousAdapter === 'absent' ? 'absent' : sourceKind,
-            newAdapter: target,
-            commitHash: markerHit.hash ?? '',
-          };
-        }
-      } catch {
-        /* fall through to the explicit-already-on-target error */
+  // ─── Step 1: read config (no lock), infer direction, marker-probe fast-exit ─
+  let config: Record<string, unknown> = {};
+  try {
+    const raw = await readFile(paths.config, 'utf-8');
+    config = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    /* config absent — treat as 'absent' */
+  }
+  const previousAdapter = readVcsAdapter(config) ?? 'absent';
+  const sourceKind: 'git' | 'jj' = previousAdapter === 'jj' ? 'jj' : 'git';
+
+  if (sourceKind === target) {
+    // Marker-probe fast-exit (RESEARCH Open Q #4 Option A): if HEAD's
+    // commit subject already carries the migration marker AND target
+    // matches the current adapter, no work to do.
+    //
+    // Backend semantic shift: `log({ maxCount: 1 })` with NO revset on jj
+    // returns `@` (the working-copy commit), which is empty after a squash
+    // — the actual migration commit lives at `@-` (parent of WC). On git,
+    // HEAD is the most recent commit by default. To probe symmetrically,
+    // we look at the LAST FEW commits (maxCount: 2) on jj so we catch
+    // both `@` and `@-`; git's default-HEAD walk already returns the
+    // migration commit at index 0.
+    try {
+      const vcsProbe = createVcsAdapter(canonicalCwd, { kind: sourceKind });
+      const recent =
+        sourceKind === 'jj'
+          ? // jj: probe both @ and @- (one of them is the migration commit)
+            vcsProbe.log({ maxCount: 2 })
+          : vcsProbe.log({ maxCount: 1 });
+      const markerHit = recent.find((e) => (e.subject ?? '').includes(MIGRATION_COMMIT_MARKER));
+      if (markerHit) {
+        return {
+          ok: true,
+          migrated: false,
+          filesChanged: 0,
+          filesScanned: 0,
+          orphans: {
+            count: 0,
+            ancestorResolved: 0,
+            unresolvable: 0,
+            reportPath: '',
+          },
+          previousAdapter: previousAdapter === 'absent' ? 'absent' : sourceKind,
+          newAdapter: target,
+          commitHash: markerHit.hash ?? '',
+        };
       }
+    } catch {
+      /* fall through to the explicit-already-on-target error */
+    }
+    throw new Error(
+      `migrate-vcs: already on ${target} (previousAdapter=${previousAdapter})`,
+    );
+  }
+
+  const direction: MigrationDirection =
+    sourceKind === 'git' && target === 'jj' ? 'git→jj' : 'jj→git';
+
+  // ─── Step 2: pre-flight refusal on dirty / conflicts (NO LOCK YET) ────
+  // B-01 (.planning/intel/06-dogfood-log.md): this check MUST run before
+  // acquireStateLock — otherwise the lockfile itself shows up in
+  // vcs.status() as an untracked file and unforced runs falsely refuse.
+  const vcs = createVcsAdapter(canonicalCwd, { kind: sourceKind });
+  if (!opts.force) {
+    const status = vcs.status();
+    if (status.entries.length > 0) {
       throw new Error(
-        `migrate-vcs: already on ${target} (previousAdapter=${previousAdapter})`,
+        'migrate-vcs: working tree is dirty — commit/stash or pass --force',
       );
     }
-
-    const direction: MigrationDirection =
-      sourceKind === 'git' && target === 'jj' ? 'git→jj' : 'jj→git';
-
-    // ─── Step 2: pre-flight refusal on dirty / conflicts ────────────────
-    const vcs = createVcsAdapter(canonicalCwd, { kind: sourceKind });
-    if (!opts.force) {
-      const status = vcs.status();
-      if (status.entries.length > 0) {
-        throw new Error(
-          'migrate-vcs: working tree is dirty — commit/stash or pass --force',
-        );
-      }
-      const conflicts = vcs.findConflicts({ scope: 'all' });
-      if (conflicts.length > 0) {
-        throw new Error(
-          'migrate-vcs: in-tree conflicts present — resolve or pass --force',
-        );
-      }
+    const conflicts = vcs.findConflicts({ scope: 'all' });
+    if (conflicts.length > 0) {
+      throw new Error(
+        'migrate-vcs: in-tree conflicts present — resolve or pass --force',
+      );
     }
+  }
 
-    // ─── Step 3: walk + async pre-pass to populate ID cache ─────────────
+  // B-02 prep (jj-target only): detect the current branch BEFORE the
+  // migration so we can track the corresponding remote-tracking bookmark
+  // in jj post-flip. Uses `vcs.refs.currentBookmarks()` (the VCS adapter
+  // surface) instead of raw git — `git symbolic-ref` would trip the
+  // no-raw-git lint guard AND perturb colocated jj state once we flip.
+  // currentBookmarks() returns [] on detached HEAD / anonymous head; in
+  // that case the post-step is a no-op. The branch name is NOT assumed
+  // to be `main` — it can be `master`, `trunk`, or anything else.
+  const defaultBranch = target === 'jj'
+    ? detectDefaultBranchName(vcs)
+    : undefined;
+
+  // ─── Step 3: acquire state-lock for the WRITE phase ──────────────────
+  const lockPath = await acquireStateLock(paths.config);
+  try {
+    // ─── Step 4: walk + async pre-pass to populate ID cache ─────────────
     const files = walkInScope(canonicalCwd);
     const idCache = new Map<string, ResolveResult>();
     const asyncResolver = createIdResolver({
@@ -199,7 +226,7 @@ export async function runMigration(
       }
     }
 
-    // ─── Step 4: sync rewrite pass over every file ──────────────────────
+    // ─── Step 5: sync rewrite pass over every file ──────────────────────
     const syncResolve = syncResolveFromCache(idCache);
     const dirty = new Map<string, { content: string; orphans: Orphan[] }>();
     const totalOrphans: Orphan[] = [];
@@ -212,12 +239,12 @@ export async function runMigration(
       totalOrphans.push(...out.orphans);
     }
 
-    // ─── Step 5: write dirty files (single-commit is the atomic boundary) ─
+    // ─── Step 6: write dirty files (single-commit is the atomic boundary) ─
     for (const [f, { content }] of dirty) {
       await writeFile(f, content, 'utf-8');
     }
 
-    // ─── Step 6: flip config.json's vcs.adapter ─────────────────────────
+    // ─── Step 7: flip config.json's vcs.adapter ─────────────────────────
     const newConfig: Record<string, unknown> = {
       ...config,
       vcs: {
@@ -227,7 +254,7 @@ export async function runMigration(
     };
     await atomicWriteConfig(paths.config, newConfig);
 
-    // ─── Step 7: emit migration report ──────────────────────────────────
+    // ─── Step 8: emit migration report ──────────────────────────────────
     const reportPath = await emitReport({
       cwd: canonicalCwd,
       direction,
@@ -236,7 +263,7 @@ export async function runMigration(
       filesChanged: dirty.size,
     });
 
-    // ─── Step 8: reconstruct adapter on TARGET (RESEARCH Pitfall 6) ─────
+    // ─── Step 9: reconstruct adapter on TARGET (RESEARCH Pitfall 6) ─────
     const newVcs = createVcsAdapter(canonicalCwd, { kind: target });
 
     // A3 colocated pre-commit hook gap workaround (RESEARCH Open Q #5):
@@ -248,7 +275,7 @@ export async function runMigration(
       fireHook(canonicalCwd, 'pre-commit');
     }
 
-    // ─── Step 9: single atomic commit ───────────────────────────────────
+    // ─── Step 10: single atomic commit ──────────────────────────────────
     // jj's fileset parser rejects absolute paths whose realpath escapes the
     // repo root (it tries to express them as `../../../...` and barfs on
     // ".." components). Git's pathspec accepts them, but to keep both
@@ -271,6 +298,18 @@ export async function runMigration(
       throw new Error(
         `migrate-vcs: commit failed (exit ${commitResult.exitCode}): ${commitResult.stderr || commitResult.stdout || '(no stderr)'}`,
       );
+    }
+
+    // ─── Step 11: post-flip bookmark tracking (B-02, jj-target only) ────
+    // `jj git init --colocate` creates only `<branch>@origin` (remote-tracking)
+    // and no local bookmark. /gsd-pr-branch and other workflows that filter
+    // bookmarks then see an empty list. Track the default-branch remote so
+    // a local bookmark materialises. defaultBranch is captured pre-flip
+    // (Step 2) so we never depend on jj's post-init state to know the name.
+    // Failures here are non-fatal — the migration succeeded; bookmark
+    // tracking is a UX polish.
+    if (target === 'jj' && defaultBranch) {
+      trackRemoteBookmark(canonicalCwd, defaultBranch);
     }
 
     const ancestorCount = totalOrphans.filter((o) => o.kind === 'ancestor').length;
@@ -309,6 +348,54 @@ function readVcsAdapter(config: Record<string, unknown>): 'git' | 'jj' | undefin
   const adapter = vcs.adapter;
   if (adapter === 'git' || adapter === 'jj') return adapter;
   return undefined;
+}
+
+/**
+ * Resolve the current branch name from the SOURCE VcsAdapter BEFORE the jj
+ * migration so we can track the corresponding remote bookmark post-flip
+ * (B-02). Uses `vcs.refs.currentBookmarks()` — the cross-backend adapter
+ * surface for "what branches/bookmarks point at the current commit". Never
+ * shells out to git (no raw-git lint trip; no colocated-state perturbation).
+ *
+ * Returns the first current bookmark name, or undefined when HEAD is
+ * detached / anonymous (empty array) or on any unexpected error. Caller
+ * treats undefined as "skip bookmark tracking" — never throws.
+ *
+ * Branch name is NOT assumed to be `main` — `master`, `trunk`, or any
+ * project-specific default works. When the user is checked out on a
+ * feature branch at migration time, that branch is what gets tracked,
+ * which is the right behavior for the post-flip dogfood UX.
+ */
+function detectDefaultBranchName(vcs: VcsAdapter): string | undefined {
+  try {
+    const current = vcs.refs.currentBookmarks();
+    return current[0];
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Track `<branch>@origin` as a local jj bookmark post-migration (B-02).
+ *
+ * `jj git init --colocate` creates remote-tracking bookmarks only — the
+ * local bookmark must be tracked explicitly for `jj bookmark list` to
+ * surface it, which downstream workflows like /gsd-pr-branch rely on.
+ *
+ * Non-fatal: any failure here is swallowed. The migration commit has
+ * already landed; bookmark tracking is post-flip UX polish, not a
+ * correctness gate.
+ */
+function trackRemoteBookmark(cwd: string, branch: string): void {
+  try {
+    execFileSync(
+      'jj',
+      ['bookmark', 'track', `${branch}@origin`],
+      { cwd, stdio: 'ignore' },
+    );
+  } catch {
+    /* origin missing, branch missing, already tracked, etc. — non-fatal */
+  }
 }
 
 /**
