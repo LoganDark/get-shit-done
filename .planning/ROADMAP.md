@@ -172,18 +172,28 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 4. Workspaces + Octopus Structure + Hooks | 7/7 | Complete | 2026-05-13 |
 | 5. Command Translations + Brownfield Validation + CI Hardening | 0/5 | Planned (5 plans) | - |
 
-### Phase 6: Brownfield jj Migration — sticky vcs.adapter flip + .planning SHA→change_id rewriter
+### Phase 6: Brownfield jj Migration — greenfield jj-default + sticky vcs.adapter flip + .planning SHA→change_id rewriter
 
-**Goal:** [To be planned]
-**Requirements**: BROWN-01, BROWN-02 (re-bucketed from Phase 5 per Phase 5 CONTEXT D-31), plus Phase 6 native scope (TBD when planned)
-**Success Criteria** (what must be TRUE) — absorbed from Phase 5 D-31:
-  1. Brownfield commands (`/gsd-map-codebase`, `/gsd-import`, `/gsd-ingest-docs`, `/gsd-resume-work`, `/gsd-pause-work`, `/gsd-ship`, `/gsd-pr-branch`, `/gsd-undo`) run end-to-end against this very repo's jj backend after the sticky-adapter flip + `.planning/` SHA→change_id rewriter land. Observable behavior matches an equivalent git-only sibling clone (no degradation).
-  2. First weekly upstream rebase recorded after brownfield validation, with conflict count + brief retro at `.planning/intel/rebase-log.md`.
+**Goal:** Make jj the default for greenfield projects and define the explicit, one-way migration path for brownfield projects. After this phase, a new user with `jj` installed who runs `/gsd-new-project` in a fresh directory gets a jj-native `.planning/` config without flag-juggling; an existing GSD project with `.planning/` already on disk stays on git unless and until the user explicitly opts into the migration tool, which rewrites SHA-based identifiers in planning files to jj change_ids and flips the sticky `vcs.adapter` config.
+**Requirements**: BROWN-01, BROWN-02 (re-bucketed from Phase 5 per Phase 5 CONTEXT D-31), plus Phase 6 native scope (greenfield-init policy, sticky `vcs.adapter` flip, `.planning/` SHA→change_id rewriter, explicit migration command)
+**Success Criteria** (what must be TRUE):
+  1. **Greenfield default-to-jj policy**: `/gsd-new-project` invoked in a directory without an existing `.planning/` AND where `jj --version` succeeds writes `vcs.adapter: "jj"` into the new `.planning/config.json` at init time. If `jj` is absent or `.planning/` already exists, the existing default (git) is preserved. The decision is a single check at project init, NOT a runtime branch in every command (D-33 anti-pattern guard preserved).
+  2. **Brownfield git-stays-on-git invariant**: For any project where `.planning/` already exists on disk, running any GSD command MUST NOT mutate `vcs.adapter` in `.planning/config.json`. Projects without an explicit `vcs.adapter` key are treated as git (current behavior). The sticky adapter flip is only triggered by the explicit migration command in success criterion #4.
+  3. **`.planning/` SHA→change_id rewriter**: A library (likely `sdk/src/vcs/format-migration/`) that walks `.planning/` files known to embed git commit SHAs (state, summaries, planning intel, debug sessions, etc. — see `.planning/intel/format-migration-targets.md` if present, or inventory during Phase 6 discuss) and rewrites each SHA to the corresponding jj change_id. Round-trip safe (idempotent on already-migrated files; no-op on files with no SHAs).
+  4. **Explicit migration command**: A new top-level command (`/gsd-migrate-vcs` or equivalent; final name decided in discuss-phase) that, in one atomic operation, runs the rewriter from #3 against the project's `.planning/` directory AND flips `vcs.adapter` from `git` to `jj` in `config.json`. The migration is opt-in, one-way (no auto-rollback), and prints a clear summary of files touched. The command refuses to run if `jj --version` fails.
+  5. **Dogfood validation (BROWN-01)**: After running the migration command in #4 against this repo, every brownfield command (`/gsd-map-codebase`, `/gsd-import`, `/gsd-ingest-docs`, `/gsd-resume-work`, `/gsd-pause-work`, `/gsd-ship`, `/gsd-pr-branch`, `/gsd-undo`) runs end-to-end with observable behavior matching an equivalent git-only sibling clone (no degradation).
+  6. **First weekly rebase retro (BROWN-02)**: First weekly upstream rebase recorded post-migration with conflict count + brief retro at `.planning/intel/rebase-log.md`.
 **Depends on:** Phase 5
 **Plans:** 0 plans
 
 Plans:
 - [ ] TBD (run /gsd-plan-phase 6 to break down)
+
+**Open questions for /gsd-discuss-phase 6:**
+- Should greenfield jj-default ALSO require `.git/` to be present (colocated mode) for the A3 hook fix to apply, or accept non-colocated jj-only repos and accept the documented hook-firing trade-offs?
+- What's the migration command's behavior if some `.planning/` SHAs no longer resolve to known change_ids (e.g., orphaned blob references from squashed-away commits)? Hard error vs. flag-and-continue vs. write-placeholder?
+- Should `/gsd-new-project` print a one-line "Using jj backend (detected jj 0.X.Y)" banner so greenfield users see the auto-selection, or stay silent?
+- Migration command naming: `/gsd-migrate-vcs`, `/gsd-vcs-migrate-to-jj`, or roll into existing `/gsd-config` with a `--migrate-to-jj` subcommand?
 
 ---
 *Last updated: 2026-05-13 — Phase 5 planned (5 plans). Plans cover: P1 foundational infra (A3 D-32 fix + 11 new SDK query verbs + D-31 deferral edits moving BROWN-01/02 to Phase 6), P2 daily-driver CMD-01..05 + execute-phase.md/quick.md rewrites + 5 integration tests, P3 lifecycle CMD-06..09/11 + undo/complete-milestone/code-review + agent prompts + 6 tests (CMD-06 documents jj-destructive-undo semantic shift per Pitfall 6), P4 brownfield CMD-10 with synth-jj-fixtures + D-34 coverage-gap docs, P5 CI hardening + close (7 flake fixes + 10-green soak + required-blocking flip + MIGR-02 cosmetic sweep + PROMPT-03 trust-installer closure per D-37). Note: ROADMAP success criterion #3 will be amended by plan 05-01 per D-31 (BROWN dogfood re-bucketed to Phase 6); the legacy wording on line 149 remains in this file until 05-01 lands the edit.*
