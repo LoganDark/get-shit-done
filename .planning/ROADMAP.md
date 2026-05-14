@@ -146,7 +146,7 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Every CMD-* upstream command runs end-to-end on a jj-only repo with passing integration tests: `/gsd-new-project` initializes jj when `.git` is absent; `/gsd-plan-phase` and `/gsd-execute-phase` exercise the lazy octopus structure; `/gsd-quick` uses single `jj squash -B @ -k -m '…'` on the orchestrator `@` (no phase setup, no workspace, no octopus); `/gsd-undo` translates `git reset` to surgical `jj abandon <change>` per individual commit; `/gsd-pr-branch` filters out `.planning/`-only commits via revset and materializes via `jj duplicate` onto a new bookmark; `/gsd-hotfix` uses `jj new <past-change-id>` then standard squash flow with `gsd/hotfix/<id>` bookmark; `/gsd-ship` performs explicit `vcs.push()` (no auto-push); hotfix/canary/complete-milestone/multi-workspace flows preserved per upstream.
   2. All workflow markdown files (`get-shit-done/workflows/*.md` — `execute-phase.md`, `quick.md`, `complete-milestone.md`, `undo.md`, `code-review.md`, etc.) and agent definitions (`agents/*.md` — `gsd-code-fixer.md`, `gsd-executor.md`, etc.) that previously instructed shell git invocations are rewritten to use VCS-agnostic helper commands or backend-aware language; multi-runtime variants (Codex / Gemini / OpenCode) are synced in lockstep with Claude variants (no per-runtime drift).
-  3. Brownfield commands (`/gsd-map-codebase`, `/gsd-import`, `/gsd-ingest-docs`, `/gsd-resume-work`, `/gsd-ship`, `/gsd-pr-branch`, `/gsd-undo`) are run end-to-end against this very repo's jj backend (dogfood), and observable behavior matches the equivalent runs against a git-only sibling clone of the same repo (no degradation).
+  3. Brownfield commands (`/gsd-map-codebase`, `/gsd-import`, `/gsd-ingest-docs`, `/gsd-resume-work`, `/gsd-pause-work`, `/gsd-ship`, `/gsd-pr-branch`, `/gsd-undo`) pass integration tests against synthetic jj fixtures covering each command's decision tree; full dogfood validation against this repo's jj backend is re-bucketed to Phase 6 per CONTEXT D-31 (depends on the Phase 6 SHA→change_id rewriter).
   4. The first weekly upstream rebase performed after brownfield validation is recorded with conflict count and a brief retro; CI matrix graduates jj-backend tests from allow-failure to required-blocking; GitHub Actions workflows (`canary`, `release-sdk`, `hotfix`, `branch-cleanup`, `auto-branch`, etc.) remain git-side per CI-03 and are explicitly flagged in the docs as "stays on git — GitHub *is* git".
   5. The full v1 commitment holds: every upstream GSD command works correctly on a jj-only repo without git, with no regression in test coverage on the git side and no `.skip` accumulation on either side.
 **Plans**: 5 plans
@@ -172,7 +172,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 ### Phase 6: Brownfield jj Migration — sticky vcs.adapter flip + .planning SHA→change_id rewriter
 
 **Goal:** [To be planned]
-**Requirements**: TBD
+**Requirements**: BROWN-01, BROWN-02 (re-bucketed from Phase 5 per Phase 5 CONTEXT D-31), plus Phase 6 native scope (TBD when planned)
+**Success Criteria** (what must be TRUE) — absorbed from Phase 5 D-31:
+  1. Brownfield commands (`/gsd-map-codebase`, `/gsd-import`, `/gsd-ingest-docs`, `/gsd-resume-work`, `/gsd-pause-work`, `/gsd-ship`, `/gsd-pr-branch`, `/gsd-undo`) run end-to-end against this very repo's jj backend after the sticky-adapter flip + `.planning/` SHA→change_id rewriter land. Observable behavior matches an equivalent git-only sibling clone (no degradation).
+  2. First weekly upstream rebase recorded after brownfield validation, with conflict count + brief retro at `.planning/intel/rebase-log.md`.
 **Depends on:** Phase 5
 **Plans:** 0 plans
 

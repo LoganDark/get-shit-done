@@ -11,6 +11,18 @@ import { frontmatterSet, frontmatterMerge, frontmatterValidate } from './frontma
 import { configSet, configSetModelProfile, configNewProject, configEnsureSection } from './config-mutation.js';
 import { commit, checkCommit } from './commit.js';
 import { fireHookQuery } from './hooks.js';
+// Phase 5 plan 05-01 Task 3 (D-33 batch 1): 11 new query verb shims.
+import { pushQuery } from './push.js';
+import { resetQuery } from './reset.js';
+import { revertQuery } from './revert.js';
+import { logQuery } from './log.js';
+import { statusQuery } from './status.js';
+import { diffQuery } from './diff.js';
+import { branchListQuery } from './branch-list.js';
+import { headRefQuery } from './head-ref.js';
+import { currentBranchQuery } from './current-branch.js';
+import { mergeQuery } from './merge.js';
+import { restoreQuery } from './restore.js';
 import { templateFill, templateSelect } from './template.js';
 import { verifySummary, verifyPathExists } from './verify.js';
 import { decisionsParse } from './decisions.js';
@@ -62,6 +74,20 @@ export const MUTATION_SURFACES_STATIC_CATALOG: ReadonlyArray<readonly [string, Q
   // rewrites in Phase 5 replace `git hook run pre-commit` with this).
   ['hooks.fire', fireHookQuery],
   ['hooks fire', fireHookQuery],
+  // Phase 5 plan 05-01 Task 3 (D-33 batch 1): 11 new query verb registrations.
+  // Workflow markdown rewrites in plans 05-02..05-04 dispatch through these
+  // instead of raw `git <verb>` shell-outs.
+  ['push', pushQuery],
+  ['reset', resetQuery],
+  ['revert', revertQuery],
+  ['log', logQuery],
+  ['status', statusQuery],
+  ['diff', diffQuery],
+  ['branch-list', branchListQuery],
+  ['head-ref', headRefQuery],
+  ['current-branch', currentBranchQuery],
+  ['merge', mergeQuery],
+  ['restore', restoreQuery],
   ['template.fill', templateFill],
   ['template.select', templateSelect],
   ['template select', templateSelect],

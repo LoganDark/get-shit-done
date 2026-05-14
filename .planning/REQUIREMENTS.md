@@ -274,8 +274,8 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | PROMPT-01 | Phase 5 | Pending |
 | PROMPT-02 | Phase 5 | Pending |
 | PROMPT-03 | Phase 5 | Pending |
-| BROWN-01 | Phase 5 | Pending |
-| BROWN-02 | Phase 5 | Pending |
+| BROWN-01 | Phase 6 | Pending (re-bucketed from Phase 5 per Phase 5 CONTEXT D-31) |
+| BROWN-02 | Phase 6 | Pending (re-bucketed from Phase 5 per Phase 5 CONTEXT D-31) |
 | CI-03 | Phase 5 | Pending |
 
 **Coverage:**
@@ -288,12 +288,14 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 - Phase 2: 8 requirements (MIGR-01..04, TEST-05, UPSTREAM-01..03)
 - Phase 3: 26 requirements (JJ-01..07, SQUASH-01..07, REFS-01..06, CONFLICT-01..03, TEST-08, CI-01, CI-02)
 - Phase 4: 19 requirements (WS-01..13, HOOK-01..05, CI-04)
-- Phase 5: 17 requirements (CMD-01..11, PROMPT-01..03, BROWN-01..02, CI-03)
+- Phase 5: 15 requirements (CMD-01..11, PROMPT-01..03, CI-03)
+- Phase 6: 2 requirements re-bucketed in (BROWN-01, BROWN-02); other Phase 6 reqs TBD when planned
 
-**Total mapped:** 16 + 8 + 26 + 19 + 17 = 86 ✓ (matches actual requirement count)
+**Total mapped:** 16 + 8 + 26 + 19 + 15 + 2 = 86 ✓ (matches actual requirement count)
 
 ---
 *Requirements defined: 2026-05-09*
+*Last updated: 2026-05-13 — Phase 5 plan 05-01 landed D-31 deferral edits: BROWN-01/02 re-bucketed from Phase 5 to Phase 6 (depends on Phase 6 SHA→change_id rewriter).*
 *Last updated: 2026-05-13 — Phase 4 plan execution complete (7/7). All 19 Phase 4 requirement IDs marked Complete: WS-01..13, HOOK-01..05, CI-04. Notable caveat captured in HOOK-02 / HOOK-03 status: plan 04-06 empirically refuted the A3 assumption (jj 0.41 colocated mode does NOT auto-fire `.git/hooks/pre-commit` after `jj squash`), so the D-10 colocated no-op leaves colocated users with no pre-commit path; three fix paths documented in 04-LEARNINGS Open Questions §1 and deferred as Rule 4 architectural decision. cr-01 raw-bookmark argv-injection todo closed via D-24 fold-in (refname validator lift + `--` separator on both backends).*
 *Last updated: 2026-05-12 — Phase 3 plan execution complete (7/7). All 26 Phase 3 requirement IDs marked Complete: JJ-01..07, SQUASH-01..07, REFS-01..06, CONFLICT-01..03, TEST-08, CI-01, CI-02. jj-colocated backend lane shipped as CI allow-failure (D-11; graduates to required-blocking in Phase 5). conflict() → conflicts() revset doc-bug fixed across REQUIREMENTS / ROADMAP / 03-CONTEXT (RESEARCH Q1 correction landed in plan 03-07).*
 *Last updated: 2026-05-11 — Phase 2 plan execution complete (12/12). MIGR-04 and UPSTREAM-01 routed to milestone-end task per Phase 2 plan 02-12 (RECORDED-AS-DEFERRED, not Done). Phase 2 production-source migration delivered: MIGR-01, MIGR-02, MIGR-03, TEST-05, UPSTREAM-02, UPSTREAM-03 complete.*
