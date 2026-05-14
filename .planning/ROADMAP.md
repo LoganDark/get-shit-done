@@ -183,6 +183,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
   4. **Explicit migration command**: A new top-level command (`/gsd-migrate-vcs` or equivalent; final name decided in discuss-phase) that, in one atomic operation, runs the rewriter from #3 against the project's `.planning/` directory AND flips `vcs.adapter` from `git` to `jj` in `config.json`. The migration is opt-in, one-way (no auto-rollback), and prints a clear summary of files touched. The command refuses to run if `.jj/` is absent (the project isn't a jj repo yet — user must run `jj git init --colocate` or equivalent first) OR if `jj --version` fails.
   5. **Dogfood validation (BROWN-01)**: After running the migration command in #4 against this repo, every brownfield command (`/gsd-map-codebase`, `/gsd-import`, `/gsd-ingest-docs`, `/gsd-resume-work`, `/gsd-pause-work`, `/gsd-ship`, `/gsd-pr-branch`, `/gsd-undo`) runs end-to-end with observable behavior matching an equivalent git-only sibling clone (no degradation).
   6. **First weekly rebase retro (BROWN-02)**: First weekly upstream rebase recorded post-migration with conflict count + brief retro at `.planning/intel/rebase-log.md`.
+  7. **Brand-new empty directory behavior**: `/gsd-new-project` invoked in a directory with no `.planning/`, no `.git/`, AND no `.jj/` (a literal empty dir) refuses to auto-init either VCS. The user must either (a) pass an explicit `--git` or `--jj` flag, which initializes the chosen VCS and writes the corresponding `vcs.adapter` value into `config.json`, OR (b) initialize the VCS themselves first (`git init` or `jj git init --colocate`) and re-run `/gsd-new-project`, which then follows SC #1's `.jj/`-detection rule. This REPLACES upstream's silent `git init` fallback (`get-shit-done/workflows/new-project.md:108-112`) — silent fallback would now hide the migration boundary behind an invisible default. Failure mode: clear error message listing the four options.
 **Depends on:** Phase 5
 **Plans:** 0 plans
 
@@ -191,7 +192,6 @@ Plans:
 
 **Open questions for /gsd-discuss-phase 6:**
 - Greenfield jj-default fires on `.jj/` detection. Should it ALSO require `.git/` to be present (colocated mode) for the A3 hook fix to apply, or accept non-colocated jj-only repos and accept the documented hook-firing trade-offs?
-- What should `/gsd-new-project` do in a brand-new empty directory (no `.git/`, no `.jj/`, no `.planning/`)? Options: (a) default to git silently (current behavior), (b) refuse and tell the user to `git init` or `jj init` first, (c) ask interactively, (d) accept an explicit `--vcs jj|git` flag and default to git when absent.
 - What's the migration command's behavior if some `.planning/` SHAs no longer resolve to known change_ids (e.g., orphaned blob references from squashed-away commits)? Hard error vs. flag-and-continue vs. write-placeholder?
 - Should `/gsd-new-project` print a one-line "Detected jj repo — using jj backend" banner so greenfield users see the auto-selection, or stay silent?
 - Migration command naming: `/gsd-migrate-vcs`, `/gsd-vcs-migrate-to-jj`, or roll into existing `/gsd-config` with a `--migrate-to-jj` subcommand?
