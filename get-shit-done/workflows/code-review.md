@@ -132,9 +132,21 @@ if [ -n "$FILES_OVERRIDE" ]; then
   REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
   
   for file_path in "${FILES_ARRAY[@]}"; do
-    # Security: validate path is within repository (prevent path traversal)
-    ABS_PATH=$(realpath -m "${file_path}" 2>/dev/null || echo "${file_path}")
-    if [[ "$ABS_PATH" != "$REPO_ROOT"* ]]; then
+    # Security: validate path is within repository (prevent path traversal).
+    # CR-06 fix (Plan 05-07 Task 2): use the same boundary form as
+    # agents/gsd-executor.md:451 — admit ONLY $REPO_ROOT itself OR strict
+    # descendants (with `/` boundary). The previous glob-prefix form
+    # ("$REPO_ROOT"*) admitted sibling-dir escape like /repobad when
+    # REPO_ROOT=/repo. Also: realpath failure is a HARD reject (the old
+    # `|| echo "${file_path}"` fallback returned the unresolved string,
+    # which combined with the buggy glob could bypass the check entirely
+    # on systems without coreutils).
+    ABS_PATH=$(realpath -m "${file_path}" 2>/dev/null)
+    if [ -z "$ABS_PATH" ]; then
+      echo "Error: realpath failed for path '${file_path}', skipping"
+      continue
+    fi
+    if [[ "$ABS_PATH" != "$REPO_ROOT" && "$ABS_PATH" != "$REPO_ROOT/"* ]]; then
       echo "Error: File path outside repository, skipping: ${file_path}"
       continue
     fi
