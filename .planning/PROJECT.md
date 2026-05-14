@@ -10,9 +10,21 @@ A hard fork of [`gsd-build/get-shit-done`](https://github.com/gsd-build/get-shit
 
 ## Current State
 
-**Between milestones.** v1.0 MVP shipped 2026-05-14 (8/8 phases delivered the full dual-backend port). v1.1 first upstream sync shipped 2026-05-14 (1 phase, 5 plans — closed the gaps the May 2026 upstream merge exposed). Next milestone awaits scoping via `/gsd-new-milestone`.
+**v1.2 in flight.** v1.0 MVP shipped 2026-05-14 (8/8 phases). v1.1 first upstream sync shipped 2026-05-14 (1 phase, 5 plans). v1.2 (jujutsu is change-only — never commit id anywhere) opened 2026-05-14: unified revision model on the cross-backend `VcsAdapter`; `commit_id` leakage from jj is treated as a defect and audited toward zero.
 
-`SEED-001` (change-id-only on jj adapter surface; commit_id behind a `vcs.jjOnly.*` escape hatch) is planted and will auto-surface during the next milestone's seed-scan if the theme matches.
+## Current Milestone: v1.2 jujutsu is change-only — never commit id anywhere
+
+**Goal:** The cross-backend `VcsAdapter` exposes ONE concept of "a revision." Workflows always work with revisions and never know or care what shape the revision has under the hood — on git that's `commit_id`, on jj that's `change_id`. The fact that jj also has `commit_id`s is a backend-internal detail that NEVER crosses the adapter boundary. The jj backend never volunteers a `commit_id` from any cross-backend verb.
+
+**Target features:**
+- Aggressive audit (eliminate-first stance) — every `commit_id` reference reachable on jj-routed code paths is presumed wrong; the audit's verdict is "convert to revision" by default. Output: `.planning/intel/id-namespace-audit.md`.
+- Cross-backend surface flip — `LogEntry.hash`, `refs.resolveShort()`, `refs.bookmarks.list().rev`, `workspace.list().rev`, `refs.parent`/`refs.head`, `refs.exists`/`countCommits`/`rootCommits` template scans return change_id on jj. `LogEntry.hash` semantics (and possibly name) flip to "the active backend's canonical revision identifier; never assume hex form."
+- No `vcs.jjOnly.commitIdOf` escape hatch on the cross-backend surface. SEED-001's escape-hatch idea inverted — workflows must not branch on `vcs.kind` for id reasons.
+- `expr.commit(sha)` deprecated in favor of `expr.rev(id)` (canonical factory).
+- Boundary I/O exception (audit-justified only): code that emits external git-flavored links (e.g. `github.com/owner/repo/commit/<sha>`) may use a jj-backend-PRIVATE accessor that is never imported by workflow code; prefer tag/release URLs to skip the problem.
+- Lint guard parallel to `lint-vcs-no-raw-git`: jj-routed code paths cannot reference `commit_id` template strings, hex-form id assumptions, or `.commit_id` field accesses without an annotated allowlist entry.
+- `.planning/` format pass — extends Phase 6 B-07 SHA→change_id intent; any remaining commit_id-encoded format gets rewritten.
+- Refactor every workflow that branches on `vcs.kind` for id reasons (delete the branch, use the unified return value).
 
 ## Requirements
 
@@ -59,13 +71,15 @@ A hard fork of [`gsd-build/get-shit-done`](https://github.com/gsd-build/get-shit
 
 ### Active
 
-*No active milestone. Run `/gsd-new-milestone` to scope v1.2.*
+**v1.2 — unified revision model on cross-backend adapter:**
 
-**Open follow-ups for v1.2 candidacy** (tracked but not committed):
+- v1.2 requirements pending — see `REQUIREMENTS.md` once written by the new-milestone workflow.
+
+**Deferred to a future milestone (NOT in v1.2 scope):**
 
 - **Orchestrator parallelization rewrite** — `get-shit-done/workflows/execute-phase.md` worktree dispatch + cleanup loop (~lines 714+) uses raw-git `worktree add` / `merge --no-ff` / `worktree remove`. Phase 7 CONTEXT D-12 described the future-intended fan-in via `sdk/src/vcs/jj/octopus.ts` + `reap.ts` but the orchestrator hasn't been rewired. `parallelization` config knob stays `false` until this lands. Tracked in `project_no_parallelization_yet` memory.
-- **A3 colocated pre-commit gap** — jj 0.41 doesn't auto-fire `.git/hooks/pre-commit` after `jj squash` in colocated mode. Three fix paths documented in Phase 4 LEARNINGS Open Q1. Inherited from v1.0 → v1.1 → carries into v1.2.
-- **SEED-001: change-id-only on jj adapter surface** — adapter currently exposes both change_id and commit_id on jj (Plan 02 of Phase 7 hit the cross-namespace pain). Move commit_id behind `vcs.jjOnly.commitIdOf(rev)` escape hatch. Auto-surfaces during `/gsd-new-milestone` if the milestone theme matches.
+- **A3 colocated pre-commit gap** — jj 0.41 doesn't auto-fire `.git/hooks/pre-commit` after `jj squash` in colocated mode. Three fix paths documented in Phase 4 LEARNINGS Open Q1. Inherited from v1.0 → v1.1 → carries past v1.2.
+- **SEED-001 (subsumed and inverted by v1.2)** — original seed proposed an escape hatch (`vcs.jjOnly.commitIdOf`); v1.2 inverts that to "no escape hatch on cross-backend surface; commit_id leakage from jj is a defect." Seed is now historical context, not a future candidate.
 
 ### Out of Scope
 
@@ -118,6 +132,7 @@ A hard fork of [`gsd-build/get-shit-done`](https://github.com/gsd-build/get-shit
 | Brownfield priority within full-parity scope | Dogfood on this very repo | ✓ Good — v1.0 BROWN-* validated; v1.1 sustained brownfield posture |
 | Squash as sole jj commit primitive | jj's working-copy-aware semantics; `--ignore-working-copy` never used | ✓ Good — held through v1.0 + v1.1 |
 | change_id canonical for tracked identity; commit_id for immutable snapshots | jj-idiomatic; aligned with `.planning/` migration intent | ⚠️ Revisit — dual surface is inconsistent across verbs (SEED-001) |
+| Unified revision model — cross-backend adapter exposes ONE revision concept (commit_id on git, change_id on jj); jj backend never volunteers commit_id from any cross-backend verb (v1.2) | Workflows must not branch on `vcs.kind` for id reasons; SEED-001's escape-hatch idea inverts to "leakage is a defect" | ◇ In progress — v1.2 scope |
 | Sticky `vcs.adapter` resolution at write time (B-09 v1.0) | No `auto` ambiguity at write time | ✓ Good |
 | No raw git anywhere (whole-repo lint guard) | Architectural invariant | ✓ Good — single acknowledged exception (orchestrator worktree dispatch), tracked for rewrite |
 
@@ -139,4 +154,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-14 after v1.1 milestone close. v1.0 + v1.1 requirements consolidated under Validated. Active is empty pending v1.2 scoping. SEED-001 + parallelization-rewrite + A3-gap tracked as v1.2 candidates.*
+*Last updated: 2026-05-14 at v1.2 milestone open. v1.0 + v1.1 under Validated. v1.2 (unified revision model) opened — SEED-001 is subsumed and inverted into v1.2's premise; parallelization-rewrite + A3 colocated pre-commit gap deferred past v1.2.*

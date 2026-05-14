@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: first upstream sync
-status: Awaiting next milestone
-stopped_at: Phase 7 context gathered
-last_updated: "2026-05-14T14:44:49.379Z"
-last_activity: 2026-05-14 — Milestone v1.1 completed and archived
+milestone: v1.2
+milestone_name: jujutsu is change-only — never commit id anywhere
+status: planning
+last_updated: "2026-05-14T15:19:55.660Z"
+last_activity: 2026-05-14
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 
 ## Current Position
 
-Phase: Milestone v1.1 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-05-14 — Milestone v1.1 completed and archived
+Status: Defining requirements
+Last activity: 2026-05-14 — Milestone v1.2 started
 
 ## Performance Metrics
 
