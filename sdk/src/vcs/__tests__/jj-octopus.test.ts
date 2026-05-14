@@ -36,14 +36,25 @@ try {
 	// jj not on PATH; entire suite skips.
 }
 
-describe.skipIf(!jjAvailable)(
-	'octopus.ts — Phase 4 plan 05 (WS-05..10)',
+// Phase 5 plan 05-05 flake-fix: Pattern A (describe.sequential) — this suite
+// uses shared mkdtemp + multi-workspace mutations across tests; running its
+// `it()` blocks concurrently within the file caused jj working-copy contention
+// per Phase 4 LEARNINGS (~50% wall-clock overhead in CI). Pattern B
+// (per-block random-prefix mkdtemp) is applied to the beforeAll prefix to
+// guard against parallel-test-FILE collisions on `/tmp`.
+describe.sequential.skipIf(!jjAvailable)(
+	'octopus.ts — Phase 4 plan 05 (WS-05..10, run sequential to avoid jj working-copy contention)',
 	() => {
 		let dir: string;
 		let vcs: ReturnType<typeof createJjAdapter>;
 
 		beforeAll(() => {
-			dir = mkdtempSync(join(tmpdir(), 'gsd-jj-octopus-'));
+			dir = mkdtempSync(
+				join(
+					tmpdir(),
+					`gsd-jj-octopus-${Math.random().toString(36).slice(2, 10)}-`,
+				),
+			);
 			execSync('jj git init --colocate', { cwd: dir, stdio: 'pipe' });
 			execSync('jj config set --repo user.email "test@test.com"', {
 				cwd: dir,

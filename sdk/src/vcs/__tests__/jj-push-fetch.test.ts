@@ -47,8 +47,10 @@ describe.skipIf(!jjAvailable)(
     let snapshotHandle: any;
 
     beforeAll(() => {
-      workDir = mkdtempSync(join(tmpdir(), 'gsd-vcs-push-work-'));
-      bareDir = mkdtempSync(join(tmpdir(), 'gsd-vcs-push-bare-'));
+      // Phase 5 plan 05-05 flake-fix: Pattern B — random-prefix mkdtemp.
+      const pushRand = Math.random().toString(36).slice(2, 10);
+      workDir = mkdtempSync(join(tmpdir(), `gsd-vcs-push-work-${pushRand}-`));
+      bareDir = mkdtempSync(join(tmpdir(), `gsd-vcs-push-bare-${pushRand}-`));
       // Bare destination via raw git is allowed inside test bodies (lint
       // allowlist covers tests/__tools__ and sdk/src/vcs/__tests__/ for
       // bootstrap fixture seeding — same pattern as jj-refs.test.ts:122).
@@ -146,8 +148,10 @@ describe.skipIf(!jjAvailable)(
     let vcs: ReturnType<typeof createJjAdapter>;
 
     beforeAll(() => {
-      workDir = mkdtempSync(join(tmpdir(), 'gsd-vcs-fetch-work-'));
-      bareDir = mkdtempSync(join(tmpdir(), 'gsd-vcs-fetch-bare-'));
+      // Phase 5 plan 05-05 flake-fix: Pattern B — random-prefix mkdtemp.
+      const fetchRand = Math.random().toString(36).slice(2, 10);
+      workDir = mkdtempSync(join(tmpdir(), `gsd-vcs-fetch-work-${fetchRand}-`));
+      bareDir = mkdtempSync(join(tmpdir(), `gsd-vcs-fetch-bare-${fetchRand}-`));
       execSync('git init --bare', { cwd: bareDir, stdio: 'pipe' });
       execSync('jj git init --colocate', { cwd: workDir, stdio: 'pipe' });
       execSync('jj config set --repo user.email "test@test.com"', {

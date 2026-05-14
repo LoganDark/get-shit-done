@@ -27,6 +27,11 @@ try {
 	// jj not on PATH; entire suite skips.
 }
 
+// Phase 5 plan 05-05 flake-fix: Pattern B only (per-invocation random-prefix
+// mkdtemp). This suite intentionally races on the gsd-lock primitive — the
+// concurrency contention IS the system-under-test, so describe.sequential is
+// NOT applied. Tmpdir-prefix collision across parallel test files is the
+// only flake category here.
 describe.skipIf(!jjAvailable)('acquireJjWriteLock — Phase 4 plan 03 (D-19)', () => {
 	let dir: string;
 	beforeAll(() => {
@@ -46,7 +51,12 @@ describe.skipIf(!jjAvailable)('acquireJjWriteLock — Phase 4 plan 03 (D-19)', (
 			stdio: 'pipe',
 		});
 
-		dir = mkdtempSync(join(tmpdir(), 'gsd-jj-lock-'));
+		dir = mkdtempSync(
+			join(
+				tmpdir(),
+				`gsd-jj-lock-${Math.random().toString(36).slice(2, 10)}-`,
+			),
+		);
 		execSync('jj git init --colocate', { cwd: dir, stdio: 'pipe' });
 		execSync('jj config set --repo user.email "test@test.com"', {
 			cwd: dir,
@@ -106,8 +116,13 @@ describe.skipIf(!jjAvailable)('acquireJjWriteLock — Phase 4 plan 03 (D-19)', (
 	// The parent process then attempts a second acquire and asserts it blocks
 	// until the child releases.
 	it('concurrent acquire: second caller blocks until first releases (child-process)', async () => {
-		// Spawn a child Node process that acquires the lock, sleeps 300ms, then releases.
-		// Requires sdk/dist-cjs/vcs/jj/lock.js — built by the `beforeAll` build step above.
+		// Phase 5 plan 05-05 flake-fix [Rule 1 — Bug]: the original test slept a
+		// fixed 100ms before checking the sentinel, which raced under heavy
+		// parallel load (Node child-process spawn can take >100ms when many
+		// jj-suite workers are running). Poll for the sentinel with a generous
+		// budget (3s) instead. Child sleeps long enough (1500ms) to guarantee
+		// the parent's second acquire observes at least one EEXIST iteration
+		// regardless of spawn latency.
 		const cjsLockPath = join(process.cwd(), 'dist-cjs/vcs/jj/lock.js');
 		const child = spawn(
 			'node',
@@ -116,26 +131,30 @@ describe.skipIf(!jjAvailable)('acquireJjWriteLock — Phase 4 plan 03 (D-19)', (
 				`
 					const { acquireJjWriteLock } = require(${JSON.stringify(cjsLockPath)});
 					const h = acquireJjWriteLock(${JSON.stringify(dir)});
-					setTimeout(() => { h.release(); process.exit(0); }, 300);
+					setTimeout(() => { h.release(); process.exit(0); }, 1500);
 				`,
 			],
 			{ stdio: 'pipe' },
 		);
 
-		// Wait for the child to acquire (give it ~100ms to spawn + acquire).
-		await new Promise((r) => setTimeout(r, 100));
-		expect(existsSync(join(dir, '.jj', 'working_copy', 'gsd-lock'))).toBe(true);
+		// Poll for the child to acquire — wait up to 3s for the sentinel.
+		const sentinelPath = join(dir, '.jj', 'working_copy', 'gsd-lock');
+		const pollDeadline = Date.now() + 3000;
+		while (Date.now() < pollDeadline && !existsSync(sentinelPath)) {
+			await new Promise((r) => setTimeout(r, 25));
+		}
+		expect(existsSync(sentinelPath)).toBe(true);
 
 		const startSecond = Date.now();
 		// This call will busy-wait in the current (parent) process via Atomics.wait.
-		const h2 = acquireJjWriteLock(dir, { timeout: 2000, pollInterval: 25 });
+		const h2 = acquireJjWriteLock(dir, { timeout: 4000, pollInterval: 25 });
 		const elapsed = Date.now() - startSecond;
 		try {
-			// Child held the lock until ~200ms after we started waiting (300ms total
-			// from child spawn - 100ms warmup ≈ 200ms remaining). The second acquire
-			// must have observed at least one EEXIST iteration.
+			// Child held the lock for ≥1500ms after parent saw the sentinel
+			// (minus poll-elapsed). The second acquire must have observed at
+			// least one EEXIST iteration.
 			expect(elapsed).toBeGreaterThanOrEqual(50);
-			expect(elapsed).toBeLessThan(1800);
+			expect(elapsed).toBeLessThan(3800);
 		} finally {
 			h2.release();
 			child.kill();

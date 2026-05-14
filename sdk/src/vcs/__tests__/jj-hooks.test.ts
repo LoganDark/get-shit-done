@@ -67,7 +67,14 @@ describe.skipIf(!jjAvailable)(
 				// Plan 04-01 SUMMARY locked: `jj git init --no-colocate` is the
 				// canonical non-colocated init on jj 0.41 (--no-git was a planning
 				// hypothesis refuted empirically).
-				dir = mkdtempSync(join(tmpdir(), 'gsd-jj-hooks-native-'));
+				// Phase 5 plan 05-05 flake-fix: Pattern B — random-prefix mkdtemp
+				// to avoid parallel-test-file tmpdir collisions.
+				dir = mkdtempSync(
+					join(
+						tmpdir(),
+						`gsd-jj-hooks-native-${Math.random().toString(36).slice(2, 10)}-`,
+					),
+				);
 				execSync('jj git init --no-colocate', { cwd: dir, stdio: 'pipe' });
 				execSync('jj config set --repo user.email "test@test.com"', {
 					cwd: dir,
@@ -161,7 +168,14 @@ describe.skipIf(!jjAvailable)(
 			let dir: string;
 			let vcs: JjVcsAdapter;
 			beforeAll(() => {
-				dir = mkdtempSync(join(tmpdir(), 'gsd-jj-hooks-colocated-'));
+				// Phase 5 plan 05-05 flake-fix: Pattern B — random-prefix mkdtemp
+				// to avoid parallel-test-file tmpdir collisions.
+				dir = mkdtempSync(
+					join(
+						tmpdir(),
+						`gsd-jj-hooks-colocated-${Math.random().toString(36).slice(2, 10)}-`,
+					),
+				);
 				execSync('jj git init --colocate', { cwd: dir, stdio: 'pipe' });
 				execSync('jj config set --repo user.email "test@test.com"', {
 					cwd: dir,
