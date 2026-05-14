@@ -157,7 +157,7 @@ Plans:
 - [x] 05-05-PLAN.md — CI hardening + close: 7 flake fixes + 10-green soak + matrix flip + MIGR-02 cosmetic sweep + PROMPT-03 closure
 - [x] 05-06-PLAN.md — Gap closure: SDK contract fixes (CR-02 RevisionExpr cast in log/diff; WR-03 in push; CR-03 reset paths; CR-04 revert --abort) + black-box integration test against built gsd-sdk binary
 - [x] 05-07-PLAN.md — Gap closure: CR-01 24-site `.data.X → .X` workflow + agent sweep across undo/complete-milestone/code-review/gsd-executor/gsd-code-fixer + CR-06 path-traversal boundary fix in code-review.md
-- [ ] 05-08-PLAN.md — Gap closure: REQUIREMENTS.md status-table propagation for CMD-01..11 + PROMPT-01..02 (PR-01 process gap)
+- [x] 05-08-PLAN.md — Gap closure: REQUIREMENTS.md status-table propagation for CMD-01..11 + PROMPT-01..02 (PR-01 process gap)
 
 ## Progress
 
