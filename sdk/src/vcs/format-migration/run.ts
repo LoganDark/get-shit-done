@@ -26,12 +26,18 @@
  *      hook gap (RESEARCH Open Q #5 — resolved via SDK fireHook primitive).
  *  10. Single atomic commit of all dirty files + config.json + report.md with
  *      MIGRATION_COMMIT_MARKER in the message.
- *  11. Post-flip bookmark tracking (jj-target only): track the captured
- *      default-branch remote bookmark so /gsd-pr-branch sees a local
- *      bookmark (B-02 fix — non-fatal on failure).
+ *
+ * Bookmark tracking is INTENTIONALLY NOT performed here. `jj git init
+ * --colocate` creates only `<branch>@origin` (remote-tracking); the local
+ * bookmark must be tracked separately via `jj bookmark track`. Doing this
+ * automatically inside migrate-vcs adds a hidden side effect: the user
+ * may want different tracking semantics (multi-remote, mirrored origin,
+ * delayed-until-first-push, etc.). Consumers that filter local bookmarks
+ * (e.g. /gsd-pr-branch) handle the empty case themselves with an
+ * actionable error pointing at `jj bookmark track`.
  *
  * Locking architecture:
- *   acquireStateLock(paths.config) wraps the WRITE phase (Steps 3–11) in a
+ *   acquireStateLock(paths.config) wraps the WRITE phase (Steps 3–10) in a
  *   try/finally. The read-only marker probe (Step 1) and dirty-tree
  *   pre-flight (Step 2) run BEFORE the lock so the lockfile itself isn't
  *   visible to vcs.status() (B-01). A second concurrent invocation that
@@ -54,9 +60,7 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
 import { relative, resolve as pathResolve, sep as pathSep } from 'node:path';
-import type { VcsAdapter } from '../types.js';
 import { createVcsAdapter } from '../index.js';
 import { atomicWriteConfig } from '../../query/config-mutation.js';
 import {
@@ -178,18 +182,6 @@ export async function runMigration(
     }
   }
 
-  // B-02 prep (jj-target only): detect the current branch BEFORE the
-  // migration so we can track the corresponding remote-tracking bookmark
-  // in jj post-flip. Uses `vcs.refs.currentBookmarks()` (the VCS adapter
-  // surface) instead of raw git — `git symbolic-ref` would trip the
-  // no-raw-git lint guard AND perturb colocated jj state once we flip.
-  // currentBookmarks() returns [] on detached HEAD / anonymous head; in
-  // that case the post-step is a no-op. The branch name is NOT assumed
-  // to be `main` — it can be `master`, `trunk`, or anything else.
-  const defaultBranch = target === 'jj'
-    ? detectDefaultBranchName(vcs)
-    : undefined;
-
   // ─── Step 3: acquire state-lock for the WRITE phase ──────────────────
   const lockPath = await acquireStateLock(paths.config);
   try {
@@ -300,18 +292,6 @@ export async function runMigration(
       );
     }
 
-    // ─── Step 11: post-flip bookmark tracking (B-02, jj-target only) ────
-    // `jj git init --colocate` creates only `<branch>@origin` (remote-tracking)
-    // and no local bookmark. /gsd-pr-branch and other workflows that filter
-    // bookmarks then see an empty list. Track the default-branch remote so
-    // a local bookmark materialises. defaultBranch is captured pre-flip
-    // (Step 2) so we never depend on jj's post-init state to know the name.
-    // Failures here are non-fatal — the migration succeeded; bookmark
-    // tracking is a UX polish.
-    if (target === 'jj' && defaultBranch) {
-      trackRemoteBookmark(canonicalCwd, defaultBranch);
-    }
-
     const ancestorCount = totalOrphans.filter((o) => o.kind === 'ancestor').length;
     const unresolvableCount = totalOrphans.filter((o) => o.kind === 'unresolvable').length;
 
@@ -348,54 +328,6 @@ function readVcsAdapter(config: Record<string, unknown>): 'git' | 'jj' | undefin
   const adapter = vcs.adapter;
   if (adapter === 'git' || adapter === 'jj') return adapter;
   return undefined;
-}
-
-/**
- * Resolve the current branch name from the SOURCE VcsAdapter BEFORE the jj
- * migration so we can track the corresponding remote bookmark post-flip
- * (B-02). Uses `vcs.refs.currentBookmarks()` — the cross-backend adapter
- * surface for "what branches/bookmarks point at the current commit". Never
- * shells out to git (no raw-git lint trip; no colocated-state perturbation).
- *
- * Returns the first current bookmark name, or undefined when HEAD is
- * detached / anonymous (empty array) or on any unexpected error. Caller
- * treats undefined as "skip bookmark tracking" — never throws.
- *
- * Branch name is NOT assumed to be `main` — `master`, `trunk`, or any
- * project-specific default works. When the user is checked out on a
- * feature branch at migration time, that branch is what gets tracked,
- * which is the right behavior for the post-flip dogfood UX.
- */
-function detectDefaultBranchName(vcs: VcsAdapter): string | undefined {
-  try {
-    const current = vcs.refs.currentBookmarks();
-    return current[0];
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Track `<branch>@origin` as a local jj bookmark post-migration (B-02).
- *
- * `jj git init --colocate` creates remote-tracking bookmarks only — the
- * local bookmark must be tracked explicitly for `jj bookmark list` to
- * surface it, which downstream workflows like /gsd-pr-branch rely on.
- *
- * Non-fatal: any failure here is swallowed. The migration commit has
- * already landed; bookmark tracking is post-flip UX polish, not a
- * correctness gate.
- */
-function trackRemoteBookmark(cwd: string, branch: string): void {
-  try {
-    execFileSync(
-      'jj',
-      ['bookmark', 'track', `${branch}@origin`],
-      { cwd, stdio: 'ignore' },
-    );
-  } catch {
-    /* origin missing, branch missing, already tracked, etc. — non-fatal */
-  }
 }
 
 /**
