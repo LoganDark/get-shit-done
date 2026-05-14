@@ -25,12 +25,20 @@
  *   gsd-sdk query revert HEAD
  *   gsd-sdk query revert HEAD --no-commit          (git only — staged inverse)
  *   gsd-sdk query revert <change_id> --cwd /path
+ *   gsd-sdk query revert <change_id> --force       (jj only — bypass immutability)
  *   gsd-sdk query revert --abort                   (git only — drop mid-revert)
  *
  * Phase 5 plan 05-06 Task 2 (CR-04 fix): the `--abort` flag is now honoured.
  * On git backend it dispatches `git revert --abort` via the new
  * `gitOnly.revertAbort()` primitive. On jj backend it returns a documented
  * no-op envelope (jj has no in-progress revert sequence).
+ *
+ * Phase 6 plan 06-04 (B-05): the `--force` flag passes `--ignore-immutable`
+ * to `jj abandon` so users can rewrite shared history when needed (e.g.
+ * after a remote-tracked bookmark advanced past the target commit). Default
+ * preserves jj's shared-history protection. Flag is parsed-but-ignored on
+ * git backend (git's revert has no immutability concept — every commit
+ * gets a non-destructive inverse).
  */
 
 import { createVcsAdapter } from '../vcs/index.js';
@@ -42,6 +50,7 @@ export const revertQuery: QueryHandler = async (args, projectDir) => {
   let rev: string | undefined;
   let noCommit = false;
   let abort = false;
+  let force = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--cwd' && args[i + 1]) {
@@ -51,6 +60,8 @@ export const revertQuery: QueryHandler = async (args, projectDir) => {
       noCommit = true;
     } else if (args[i] === '--abort') {
       abort = true;
+    } else if (args[i] === '--force') {
+      force = true;
     } else if (!args[i].startsWith('--') && rev === undefined) {
       rev = args[i];
     }
@@ -109,7 +120,13 @@ export const revertQuery: QueryHandler = async (args, projectDir) => {
 
   // jj path: destructive abandon (Pitfall 6 semantic shift, see header).
   // `--no-commit` is meaningless here — jj abandon is one-shot history rewrite.
-  const result = vcsExec(cwd, 'jj', ['abandon', rev]);
+  // `--force` adds `--ignore-immutable` so abandon can rewrite shared history
+  // (commits reachable from remote-tracked bookmarks etc.). Default preserves
+  // jj's shared-history protection (B-05: post-push undo fails by default with
+  // a clear native error pointing at jj's immutability docs).
+  const jjArgs = ['abandon', rev];
+  if (force) jjArgs.push('--ignore-immutable');
+  const result = vcsExec(cwd, 'jj', jjArgs);
   return {
     data: {
       ok: result.exitCode === 0,
@@ -118,6 +135,7 @@ export const revertQuery: QueryHandler = async (args, projectDir) => {
       stderr: result.stderr,
       rev,
       noCommit,
+      force,
       backend: 'jj',
       // Recovery hint for destructive-semantics callers (Pitfall 6):
       // `jj op restore <op>` rolls back this abandon while the op-log

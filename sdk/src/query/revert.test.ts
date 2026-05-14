@@ -57,6 +57,25 @@ describe('revertQuery', () => {
     expect(res.data).toMatchObject({ ok: true, rev: 'abc123', backend: 'jj', destructive: true });
   });
 
+  it('B-05: --force on jj backend appends --ignore-immutable to jj abandon', async () => {
+    createVcsAdapterMock.mockReturnValue({ kind: 'jj' });
+    const res = await revertQuery(['abc123', '--force'], '/repo');
+    expect(vcsExecMock).toHaveBeenCalledWith('/repo', 'jj', ['abandon', 'abc123', '--ignore-immutable']);
+    expect(res.data).toMatchObject({ ok: true, rev: 'abc123', backend: 'jj', destructive: true, force: true });
+  });
+
+  it('B-05: without --force, jj abandon does NOT receive --ignore-immutable (preserves shared-history protection)', async () => {
+    createVcsAdapterMock.mockReturnValue({ kind: 'jj' });
+    await revertQuery(['abc123'], '/repo');
+    expect(vcsExecMock).toHaveBeenCalledWith('/repo', 'jj', ['abandon', 'abc123']);
+  });
+
+  it('B-05: --force on git backend is parsed-but-ignored (git has no immutability concept)', async () => {
+    const res = await revertQuery(['HEAD', '--force'], '/repo');
+    expect(revertGitMock).toHaveBeenCalledWith({ rev: 'HEAD', noCommit: false });
+    expect(res.data).toMatchObject({ ok: true, rev: 'HEAD', backend: 'git' });
+  });
+
   it('CR-04 fix: --abort on git backend dispatches gitOnly.revertAbort()', async () => {
     revertAbortMock.mockReturnValue({ exitCode: 0, stdout: '', stderr: '' });
     const res = await revertQuery(['--abort'], '/repo');
