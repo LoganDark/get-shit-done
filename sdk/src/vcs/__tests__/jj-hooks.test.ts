@@ -1,11 +1,14 @@
 /**
- * Phase 4 plan 06: hook firing contract tests (HOOK-01..05, CI-04, D-10).
+ * Phase 4 plan 06 + Phase 5 plan 05-01: hook firing contract tests
+ * (HOOK-01..05, CI-04, D-32 — D-10 retired).
  *
  * Verifies:
  *   - HOOK-02 / HOOK-03: pre-commit fires after squash, before bookmark advance
- *   - HOOK-03 / D-10: colocated mode (.git + .jj both present) -> pre-commit
- *     is a no-op from the adapter; A3 assumption regression test observes
- *     whether git's .git/hooks/pre-commit fires automatically via colocation
+ *   - HOOK-03 / D-32 (Phase 5 plan 05-01): colocated mode (.git + .jj both
+ *     present) ALWAYS fires the adapter-side .githooks/pre-commit; the prior
+ *     D-10 colocated no-op was retired after Phase 4 plan 04-06 empirically
+ *     refuted the A3 assumption on jj 0.41 colocated mode. Escape hatch:
+ *     `GSD_HOOK_SKIP_COLOCATED=1` suppresses the fire in colocated mode.
  *   - HOOK-04: pre-push fire gated by would-push predicate (no bookmarks to
  *     push -> no-op fire; matches acarapetis/jj-pre-push behaviour)
  *   - HOOK-01: noVerify skips fire on commit and push
@@ -55,7 +58,7 @@ function safeUnlink(p: string): void {
 }
 
 describe.skipIf(!jjAvailable)(
-	'hook firing - Phase 4 plan 06 (HOOK-01..05, CI-04, D-10)',
+	'hook firing - Phase 4 plan 06 + Phase 5 plan 05-01 (HOOK-01..05, CI-04, D-32 — D-10 retired)',
 	() => {
 		describe('jj-native (non-colocated): adapter shells .githooks/<stage>', () => {
 			let dir: string;
@@ -154,7 +157,7 @@ describe.skipIf(!jjAvailable)(
 			});
 		});
 
-		describe('jj-colocated: pre-commit is a no-op from adapter (D-10)', () => {
+		describe('jj-colocated: pre-commit always fires from adapter (D-32 — D-10 retired)', () => {
 			let dir: string;
 			let vcs: JjVcsAdapter;
 			beforeAll(() => {
@@ -179,7 +182,7 @@ describe.skipIf(!jjAvailable)(
 				if (dir) rmSync(dir, { recursive: true, force: true });
 			});
 
-			it('D-10: colocated mode skips adapter-side fireHook for pre-commit', () => {
+			it('D-32: colocated mode always fires adapter-side .githooks/pre-commit', () => {
 				const markerPath = join(dir, '.colocated-adapter-fired');
 				safeUnlink(markerPath);
 				writeHook(
@@ -194,8 +197,39 @@ describe.skipIf(!jjAvailable)(
 					files: ['co-a.txt'],
 				});
 				expect(r.exitCode).toBe(0);
-				// Adapter-side .githooks/pre-commit MUST NOT have fired (D-10).
-				expect(existsSync(markerPath)).toBe(false);
+				// Adapter-side .githooks/pre-commit MUST have fired post-D-32
+				// (D-10 colocated no-op retired; Phase 4 A3 assumption refuted
+				// by plan 04-06 empirical observation on jj 0.41 colocated mode).
+				expect(existsSync(markerPath)).toBe(true);
+			});
+
+			it('GSD_HOOK_SKIP_COLOCATED=1 suppresses the fire in colocated mode (D-32 escape hatch)', () => {
+				const markerPath = join(dir, '.colocated-skip-marker');
+				safeUnlink(markerPath);
+				writeHook(
+					dir,
+					'pre-commit',
+					`#!/bin/bash\ntouch "${markerPath}"\nexit 0\n`,
+				);
+
+				const prev = process.env.GSD_HOOK_SKIP_COLOCATED;
+				process.env.GSD_HOOK_SKIP_COLOCATED = '1';
+				try {
+					writeFileSync(join(dir, 'co-skip.txt'), 'skip\n');
+					const r = vcs.commit({
+						message: 'colocated skip-hook test',
+						files: ['co-skip.txt'],
+					});
+					expect(r.exitCode).toBe(0);
+					// Escape-hatch active: adapter MUST NOT have fired the hook.
+					expect(existsSync(markerPath)).toBe(false);
+				} finally {
+					if (prev === undefined) {
+						delete process.env.GSD_HOOK_SKIP_COLOCATED;
+					} else {
+						process.env.GSD_HOOK_SKIP_COLOCATED = prev;
+					}
+				}
 			});
 
 			// A3 assumption regression — does git's .git/hooks/pre-commit fire

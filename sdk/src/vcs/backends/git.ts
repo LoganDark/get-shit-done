@@ -664,6 +664,17 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         throw new Error(`gitOnly.createAnnotatedTag failed: ${r.stderr || r.stdout}`);
       }
     },
+    // Plan 05-01 Task 1.5 (D-33 batch 1): git-side revert primitive consumed by
+    // sdk/src/query/revert.ts. The jj backend dispatches `jj abandon` directly
+    // inside the SDK query verb (destructive-semantics shift per 05-RESEARCH.md
+    // Pitfall 6) so does NOT have a parallel method here. Args are built via
+    // array (no shell string), matching every other execGit call in this file.
+    revert: (opts: { rev: string; noCommit: boolean }): ExecResult => {
+      const args = ['revert'];
+      if (opts.noCommit) args.push('--no-commit');
+      args.push(opts.rev);
+      return execGit(cwd, args);
+    },
     version: (): string => {
       // WR-02: throw on non-zero exit so callers get a loud signal when git is
       // missing from PATH, instead of an empty-string return that every caller

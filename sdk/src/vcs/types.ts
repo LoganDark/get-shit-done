@@ -351,6 +351,14 @@ export interface GitOnlyOps {
   // (worktree-safety.cjs:122-123) narrow on `vcs.kind === 'git'` first.
   gitDir(): string;          // for main repo == gitCommonDir; for linked worktree == .git/worktrees/<name>
   gitCommonDir(): string;    // absolute path to the main repo's .git directory
+  /**
+   * Plan 05-01 Task 1.5 (D-33 batch 1): git-side revert primitive that the new
+   * `gsd-sdk query revert` shim wraps. The jj backend dispatches `jj abandon`
+   * directly inside the SDK query verb (destructive-semantics shift per
+   * 05-RESEARCH.md Pitfall 6) and does NOT expose a parallel method here —
+   * the gitOnly branch is reachable only after `vcs.kind === 'git'` narrowing.
+   */
+  revert(opts: { rev: string; noCommit: boolean }): ExecResult;
   // D-12: NO `raw` escape hatch in Phase 1. Add specific verbs as Phase 2 migration discovers them.
 }
 
