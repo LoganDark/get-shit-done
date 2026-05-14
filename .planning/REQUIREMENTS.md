@@ -260,19 +260,19 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | HOOK-04 | Phase 4 | Complete (04-06) |
 | HOOK-05 | Phase 4 | Complete (04-06; v1 interface stability locked, Tier 2 PATH-shim wrapper deferred to v2 per HOOK2-01) |
 | CI-04 | Phase 4 | Complete (04-06; pre-push fires via HOOK-04 jj-side direct invocation + cross-backend SDK query bridge `gsd-sdk query hooks.fire`) |
-| CMD-01 | Phase 5 | Pending |
-| CMD-02 | Phase 5 | Pending |
-| CMD-03 | Phase 5 | Pending |
-| CMD-04 | Phase 5 | Pending |
-| CMD-05 | Phase 5 | Pending |
-| CMD-06 | Phase 5 | Pending |
-| CMD-07 | Phase 5 | Pending |
-| CMD-08 | Phase 5 | Pending |
-| CMD-09 | Phase 5 | Pending |
-| CMD-10 | Phase 5 | Pending |
-| CMD-11 | Phase 5 | Pending |
-| PROMPT-01 | Phase 5 | Pending |
-| PROMPT-02 | Phase 5 | Pending |
+| CMD-01 | Phase 5 | Complete (Phase 5 plan 05-02 — cmd-new-project-jj.test.ts + execute-phase.md rewrite under PROMPT-01 envelope) |
+| CMD-02 | Phase 5 | Complete (Phase 5 plan 05-02 — cmd-plan-phase-jj.test.ts) |
+| CMD-03 | Phase 5 | Complete (Phase 5 plan 05-02 — cmd-execute-phase-jj.test.ts + A3 hand-off in execute-phase.md) |
+| CMD-04 | Phase 5 | Complete (Phase 5 plans 05-02 + 05-03 + 05-06 + 05-07 — cmd-discuss-phase-jj + cmd-verify-work-jj + cmd-complete-milestone-jj tests; CR-01/CR-03 closures in 05-06+05-07 restore complete-milestone.md staging-strip semantics) |
+| CMD-05 | Phase 5 | Complete (Phase 5 plan 05-02 — cmd-quick-jj.test.ts + quick.md rewrite) |
+| CMD-06 | Phase 5 | Complete (Phase 5 plans 05-03 + 05-06 + 05-07 — cmd-undo-jj.test.ts + Pitfall 6 prose; CR-01/CR-04 closures in 05-06+05-07 restore undo.md log-discovery + revert --abort recovery) |
+| CMD-07 | Phase 5 | Complete (Phase 5 plan 05-03 — cmd-pr-branch-jj.test.ts) |
+| CMD-08 | Phase 5 | Complete (Phase 5 plans 05-03 + 05-06 + 05-07 — cmd-hotfix-jj.test.ts; WR-03 closure in 05-06 restores push --bookmark gsd/hotfix/<id>) |
+| CMD-09 | Phase 5 | Complete (Phase 5 plans 05-03 + 05-06 + 05-07 — cmd-ship-jj.test.ts; WR-03 closure in 05-06 restores explicit-push contract; cmd-ship-jj.test.ts:108-111 assertion inverted from bug-locking to fix-asserting) |
+| CMD-10 | Phase 5 | Complete (Phase 5 plan 05-04 — 5 brownfield tests against synth-planning-fixture: resume-work, pause-work, import, ingest-docs, map-codebase; D-34 coverage gap documented; real-history dogfood deferred to Phase 6 per D-31) |
+| CMD-11 | Phase 5 | Complete (Phase 5 plans 05-03 + 05-06 + 05-07 — cmd-code-review (via gsd-executor) + cmd-complete-milestone-jj.test.ts; CR-01 closure restores code-review.md phase-commit discovery; CR-06 closure fixes path-traversal boundary at line 137) |
+| PROMPT-01 | Phase 5 | Complete (Phase 5 plans 05-02 + 05-03 + 05-07 — workflow markdown VCS-agnostic across execute-phase, quick, undo, complete-milestone, code-review; CR-01 24-site `.data.X → .X` sweep landed by 05-07) |
+| PROMPT-02 | Phase 5 | Complete (Phase 5 plans 05-03 + 05-07 — agent definitions VCS-agnostic across gsd-executor + gsd-code-fixer; prohibition prose preserved; CR-01 9-site sweep landed by 05-07) |
 | PROMPT-03 | Phase 5 | Complete (Phase 5 plan 05-05 — trust-installer closure per D-37; no per-runtime smoke matrix added; source-of-truth Claude markdown is processed by `bin/install.js` transform pipeline for 15+ runtimes) |
 | BROWN-01 | Phase 6 | Pending (re-bucketed from Phase 5 per Phase 5 CONTEXT D-31) |
 | BROWN-02 | Phase 6 | Pending (re-bucketed from Phase 5 per Phase 5 CONTEXT D-31) |
@@ -295,6 +295,7 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 
 ---
 *Requirements defined: 2026-05-09*
+*Last updated: 2026-05-13 — Phase 5 plan execution complete (8/8: 5 original + 3 gap closure). Gap-closure plans 05-06 (SDK contract fixes: CR-02 RevisionExpr cast in log/diff, WR-03 in push, CR-03 reset paths, CR-04 revert --abort; + black-box integration test against built gsd-sdk binary), 05-07 (CR-01 24-site `.data.X → .X` workflow + agent sweep, CR-06 path-traversal boundary fix in code-review.md), 05-08 (this status-table propagation). All 15 Phase 5 requirement IDs marked Complete: CMD-01..11, PROMPT-01..03, CI-03. BROWN-01/02 remain Pending under Phase 6 per CONTEXT D-31. CI matrix flip stays COMPLETE-WITH-CAVEAT (deferred soak per user context, analogous to Phase 4 A3 caveat).*
 *Last updated: 2026-05-13 — Phase 5 plan 05-01 landed D-31 deferral edits: BROWN-01/02 re-bucketed from Phase 5 to Phase 6 (depends on Phase 6 SHA→change_id rewriter).*
 *Last updated: 2026-05-13 — Phase 4 plan execution complete (7/7). All 19 Phase 4 requirement IDs marked Complete: WS-01..13, HOOK-01..05, CI-04. Notable caveat captured in HOOK-02 / HOOK-03 status: plan 04-06 empirically refuted the A3 assumption (jj 0.41 colocated mode does NOT auto-fire `.git/hooks/pre-commit` after `jj squash`), so the D-10 colocated no-op leaves colocated users with no pre-commit path; three fix paths documented in 04-LEARNINGS Open Questions §1 and deferred as Rule 4 architectural decision. cr-01 raw-bookmark argv-injection todo closed via D-24 fold-in (refname validator lift + `--` separator on both backends).*
 *Last updated: 2026-05-12 — Phase 3 plan execution complete (7/7). All 26 Phase 3 requirement IDs marked Complete: JJ-01..07, SQUASH-01..07, REFS-01..06, CONFLICT-01..03, TEST-08, CI-01, CI-02. jj-colocated backend lane shipped as CI allow-failure (D-11; graduates to required-blocking in Phase 5). conflict() → conflicts() revset doc-bug fixed across REQUIREMENTS / ROADMAP / 03-CONTEXT (RESEARCH Q1 correction landed in plan 03-07).*
