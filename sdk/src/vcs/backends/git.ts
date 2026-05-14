@@ -675,6 +675,29 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
       args.push(opts.rev);
       return execGit(cwd, args);
     },
+    // Plan 05-01 Task 2 (D-33 batch 1, Rule 3 closure): reset / merge / restore
+    // primitives consumed by sdk/src/query/{reset,merge,restore}.ts SDK shims.
+    // The jj backend exposes no parallel methods — the SDK shims return a
+    // typed error after the `vcs.kind === 'jj'` branch is reached. Args
+    // built via array; no shell-string concatenation in any path.
+    reset: (opts: { ref: string; mode: 'soft' | 'mixed' | 'hard' }): ExecResult => {
+      const args = ['reset', `--${opts.mode}`, opts.ref];
+      return execGit(cwd, args);
+    },
+    merge: (opts: { ref: string; squash?: boolean; noFf?: boolean; noCommit?: boolean }): ExecResult => {
+      const args = ['merge'];
+      if (opts.squash) args.push('--squash');
+      if (opts.noFf) args.push('--no-ff');
+      if (opts.noCommit) args.push('--no-commit');
+      args.push(opts.ref);
+      return execGit(cwd, args);
+    },
+    restore: (opts: { files: string[]; from?: string }): ExecResult => {
+      const args = ['restore'];
+      if (opts.from) args.push('--source', opts.from);
+      args.push('--', ...opts.files);
+      return execGit(cwd, args);
+    },
     version: (): string => {
       // WR-02: throw on non-zero exit so callers get a loud signal when git is
       // missing from PATH, instead of an empty-string return that every caller
