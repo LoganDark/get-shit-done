@@ -185,10 +185,13 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
   6. **First weekly rebase retro (BROWN-02)**: First weekly upstream rebase recorded post-migration with conflict count + brief retro at `.planning/intel/rebase-log.md`.
   7. **Brand-new empty directory behavior**: `/gsd-new-project` invoked in a directory with no `.planning/`, no `.git/`, AND no `.jj/` (a literal empty dir) refuses to auto-init either VCS. The user must either (a) pass an explicit `--git` or `--jj` flag, which initializes the chosen VCS and writes the corresponding `vcs.adapter` value into `config.json`, OR (b) initialize the VCS themselves first (`git init` or `jj git init --colocate`) and re-run `/gsd-new-project`, which then follows SC #1's `.jj/`-detection rule. This REPLACES upstream's silent `git init` fallback (`get-shit-done/workflows/new-project.md:108-112`) — silent fallback would now hide the migration boundary behind an invisible default. Failure mode: clear error message listing the four options.
 **Depends on:** Phase 5
-**Plans:** 0 plans
+**Plans:** 4 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 6 to break down)
+- [ ] 06-01-PLAN.md — Foundation: vcs.adapter schema parity (.ts + .cjs atomic per #2653) + expr.children factory + jj/git translators + has_jj on initNewProject/initIngestDocs + atomicWriteConfig export + empirical probes (A1 id-alphabet, A5 x+ direct-children)
+- [ ] 06-02-PLAN.md — Rewriter library: sdk/src/vcs/format-migration/ (walk + rewrite + resolve + orphan + report + run + barrel) + 4 paired tests (pure-fn rewrite, idempotency D-04, mocked-adapter orphan walk, real-jj round-trip on synth-planning-fixture)
+- [ ] 06-03-PLAN.md — /gsd-migrate-vcs SDK verb (current-state-aware --target defaults; --native; --force) + initMigrateVcs handler + catalog/manifest registration + workflow markdown + new-project.md greenfield gate (replaces lines 108-112 silent git init) + black-box integration test against built bin/gsd-sdk.js
+- [ ] 06-04-PLAN.md — BROWN-01 sibling-clone dogfood validation (8 brownfield commands) + blocking checkpoint:human-verify gate + STATE.md memory-rule lift (Post-BROWN-01) + (conditional) in-place migration of THIS repo + BROWN-02 rebase-log.md seed
 
 **Open questions for /gsd-discuss-phase 6:**
 - Greenfield jj-default fires on `.jj/` detection. Should it ALSO require `.git/` to be present (colocated mode) for the A3 hook fix to apply, or accept non-colocated jj-only repos and accept the documented hook-firing trade-offs?
