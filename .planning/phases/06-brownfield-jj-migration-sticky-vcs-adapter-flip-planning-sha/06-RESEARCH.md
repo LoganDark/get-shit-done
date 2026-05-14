@@ -924,32 +924,37 @@ Extracted from `./CLAUDE.md` + user memory:
 | Concurrent migration runs corrupting each other | Tampering | Same lock as TOCTOU above — second invocation waits or times out |
 | Symlinked file under `.planning/` writing outside repo | Tampering | Use `realpath` resolution before write OR refuse to follow symlinks (`fs.lstatSync` check) |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should the rewriter handle commit MESSAGES (commit history prose) or only `.planning/` file prose?**
    - What we know: D-19 inventoried `.planning/` files only.
    - What's unclear: Commit messages stored in `.git/` (after `git→jj`) or `.jj/` (after `jj→git`) reference SHAs that won't be rewritten. E.g., commit `e85430e2` has message "feat(04-06): wire fireHook pre-commit into jj.ts commit() with D-10 colocated no-op" — that's stable, but the SUMMARY.md file lists `e85430e2` separately and IS rewritten.
    - Recommendation: **OUT OF SCOPE for v1.** Commit messages stay verbatim — they're git/jj-history-internal, not `.planning/` state. Document explicitly.
+   - **RESOLVED:** Commit messages are OUT OF SCOPE for the v1 rewriter; `.planning/` prose only.
 
 2. **What happens to `tests/baselines/git-vcs/` and `tests/baselines/jj-vcs/` test fixtures during migration?**
    - What we know: These contain pinned-output snapshots used by `baseline-parity.test.ts`. They're NOT under `.planning/`.
    - What's unclear: If a baseline output captures a commit SHA, does Phase 6 rewrite it?
    - Recommendation: **OUT OF SCOPE.** Baselines are test fixtures, not user state. They're regenerable via `capture-vcs-baselines.cjs`. Migration ignores them.
+   - **RESOLVED:** `tests/baselines/**` are OUT OF SCOPE; the glob set in `walk.ts` excludes them by construction (test fixtures, regenerable via `capture-vcs-baselines.cjs`).
 
 3. **How does the migration interact with workstream-aware `.planning/` (Phase 1 D-22 deferred)?**
    - What we know: `planningPaths(projectDir, workstream)` resolves per-workstream paths.
    - What's unclear: This repo doesn't use workstreams. The migration command should accept a `--workstream <name>` arg in principle, but no caller will use it.
    - Recommendation: Migration command supports `--workstream` argv pass-through (mirrors `configSet`'s signature) but defaults to the main workstream. No explicit user-visible behavior change for this repo.
+   - **RESOLVED:** Migration command accepts `--workstream <name>` argv pass-through (mirrors `configSet`); defaults to main workstream. No user-visible behavior change for THIS repo.
 
 4. **What's the migration command's stable-ID strategy for the migration commit itself?**
    - What we know: D-04 says single atomic commit. On git, that's `git commit` with auto-generated SHA. On jj, it's `jj squash` with auto-generated change_id.
    - What's unclear: The commit message could include a stable marker like `gsd-migrate-vcs/v1` to make idempotency detection trivial.
    - Recommendation: Embed `[gsd-migrate-vcs v1]` in the commit message. The rewriter checks for this marker in the most-recent commit message during idempotency probe (cheaper than scanning all files for source-VCS shapes).
+   - **RESOLVED:** Embed `[gsd-migrate-vcs v1]` marker in every migration commit message. Plan 06-02 Task 2 implements the marker-probe in `run.ts` for cheap idempotency fast-exit (see plan 06-02 `must_haves.truths` and run.ts `MIGRATION_COMMIT_MARKER` probe).
 
 5. **Phase 4 A3 colocated pre-commit hook gap — does Phase 6 fix it or work around?**
    - What we know: Memory states three fix paths documented in 04-LEARNINGS Open Q1; none chosen.
    - What's unclear: Phase 6's migration command commits on jj backend (post-flip). If the user has `.githooks/pre-commit` expectations, the migration commit may silently skip them in colocated mode.
    - Recommendation: **Use the SDK's `vcs.hooks.fire('pre-commit', ctx)` primitive (already wired in Phase 4 plan 04-06) BEFORE the `vcs.commit` call in the migration handler.** This is a workaround at the migration-command level only — does not solve the broader A3 gap. The broader gap stays open for a future v2 phase per Phase 4 LEARNINGS.
+   - **RESOLVED:** Plan 06-02 `run.ts` calls `newVcs.hooks.fire('pre-commit', ctx)` before `newVcs.commit(...)` on the jj target path. The broader A3 gap remains open for a future v2 phase per Phase 4 LEARNINGS Open Q1.
 
 ## Environment Availability
 
