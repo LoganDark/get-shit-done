@@ -109,6 +109,23 @@ export const BACKENDS_AVAILABLE_FOR_VERB: Readonly<
   // sdk/src/vcs/jj/lock.ts. Allowlist admits both jj backends now that contract
   // tests pass on each.
   'acquireWriteLock': Object.freeze(['git', 'jj-colocated', 'jj-native'] as const),
+  // Phase 7 plan 07-01 (VCS-08..VCS-15): 8 new verbs land on both backends.
+  // currentBookmarksIn: scoped current-branch probe (D-04).
+  // mergeBase: git merge-base / jj fork_point() (D-05).
+  // readBlob: git show <rev>:<path> / jj file show (planner fold-in VCS-15).
+  // diff.diffFilter: typed enum on cross-backend surface (D-06).
+  // status.cwd: scoped variant (D-07).
+  // workspace.merge: 2-parent merge + atomic main-advance + agent-delete (D-01..D-03).
+  // workspace.remove: composite forget+rm-rf on jj; worktree remove --force on git (D-08).
+  // bookmarks.delete.force: extend opts with force (D-09); jj force is documented no-op.
+  'refs.currentBookmarksIn': Object.freeze(['git', 'jj-colocated'] as const),
+  'refs.mergeBase': Object.freeze(['git', 'jj-colocated'] as const),
+  'refs.readBlob': Object.freeze(['git', 'jj-colocated'] as const),
+  'diff.diffFilter': Object.freeze(['git', 'jj-colocated'] as const),
+  'status.cwd': Object.freeze(['git', 'jj-colocated'] as const),
+  'workspace.merge': Object.freeze(['git', 'jj-colocated'] as const),
+  'workspace.remove': Object.freeze(['git', 'jj-colocated'] as const),
+  'refs.bookmarks.delete.force': Object.freeze(['git', 'jj-colocated'] as const),
   // Test-only snapshot/restore (gated separately so per-test fixture
   // setup can probe verb availability before invoking them — see
   // sdk/src/vcs/__tests__/vcs-fixture.ts). Phase 3 plan 03-02 flipped both

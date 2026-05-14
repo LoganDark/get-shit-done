@@ -447,15 +447,15 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
    */
   const diff = (opts: DiffOpts = {}): DiffResult => {
     const args: string[] = ['diff'];
-    if (opts.nameOnly) args.push('--name-only');
-    if (opts.nameStatus) args.push('--summary');
-    // Phase 7 D-06 (VCS-10): typed enum → post-filter on parsed --summary output.
-    // jj 0.41 has no native --diff-filter flag; force --summary so we can parse
-    // status letters, then filter client-side. parseDiffSummary already handles
-    // the {A,M,D,R,C,T,X,B} letter set (IN-04: `U` dropped — jj 0.41 doesn't emit it).
-    if (opts.diffFilter && !opts.nameStatus) {
-      args.push('--summary');
-    }
+    // Phase 7 D-06 (VCS-10): when diffFilter is set, the jj backend must
+    // probe --summary output to parse status letters and then post-filter.
+    // jj 0.41 rejects `--name-only --summary` together (mutually exclusive),
+    // so when diffFilter is requested we use --summary alone and derive
+    // nameOnly from the filtered nameStatus result below.
+    const useSummary = opts.nameStatus === true || opts.diffFilter !== undefined;
+    const useNameOnly = opts.nameOnly === true && !useSummary;
+    if (useNameOnly) args.push('--name-only');
+    if (useSummary) args.push('--summary');
     if (opts.rev) args.push('-r', toJjRev(opts.rev));
     if (opts.paths && opts.paths.length > 0) args.push('--', ...opts.paths);
     // opts.staged: no-op on jj (no index concept). See JSDoc above.
@@ -465,12 +465,18 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     }
     const result: DiffResult = {
       raw: r.stdout,
-      nameOnly: opts.nameOnly
+      nameOnly: useNameOnly
         ? r.stdout.split('\n').map((s) => s.trim()).filter(Boolean)
         : [],
     };
-    if (opts.nameStatus || opts.diffFilter) {
+    if (useSummary) {
       result.nameStatus = parseDiffSummary(r.stdout);
+      // When the caller requested nameOnly:true alongside summary-shaped
+      // probes (because diffFilter forced --summary), derive nameOnly from
+      // the parsed entries so the contract surface matches the request.
+      if (opts.nameOnly === true) {
+        result.nameOnly = result.nameStatus.map((e) => e.path);
+      }
     }
     // Phase 7 D-06 (VCS-10): post-filter parsed entries by status letter.
     if (opts.diffFilter && result.nameStatus) {

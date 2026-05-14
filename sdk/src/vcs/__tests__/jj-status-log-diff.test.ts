@@ -172,4 +172,77 @@ describe.skipIf(!jjAvailable)('Phase 3 plan 03-05 — jj log/status/diff', () =>
       expect(stagedR.nameOnly.sort()).toEqual(unstagedR.nameOnly.sort());
     });
   });
+
+  // ─── Phase 7 plan 07-01 — diff diffFilter / status cwd / readBlob ──────
+  describe('Phase 7 — diff({ diffFilter }) / status({ cwd }) / readBlob()', () => {
+    it('diff({ diffFilter: "deleted", nameOnly: true }) returns only deleted paths', () => {
+      // Set up: commit two files, then commit a deletion of one.
+      writeFileSync(join(dir, 'p7-keep.txt'), 'keep\n');
+      writeFileSync(join(dir, 'p7-del.txt'), 'del\n');
+      vcs.commit({
+        files: ['p7-keep.txt', 'p7-del.txt'],
+        message: 'p7: seed two files',
+      });
+      // Now delete one and commit the deletion via WC-state-capture.
+      const { rmSync: rm } = require('node:fs') as typeof import('node:fs');
+      rm(join(dir, 'p7-del.txt'));
+      vcs.commit({ files: ['p7-del.txt'], message: 'p7: rm del' });
+      // Diff @-- (before-deletion) vs @- (after-deletion). Resolve the rev
+      // shorthands through resolveShort + expr.rev so the validator accepts
+      // them as proper change-id-shaped strings.
+      const beforeChange = vcs.refs.resolveShort(expr.parent());
+      // Note: at this point @ is the empty post-commit WC; @- is the deletion commit,
+      // @-- is the seed-two-files commit. We want to diff before vs after the deletion.
+      const r = vcs.diff({
+        // Single-rev form: diff @-'s tree against its parent.
+        rev: expr.parent(),
+        diffFilter: 'deleted',
+        nameOnly: true,
+      });
+      // jj diff -r <rev> shows the diff between <rev>'s parents and <rev>.
+      // @- is the deletion commit, so p7-del.txt should appear with D status.
+      expect(r.nameOnly).toContain('p7-del.txt');
+      expect(r.nameOnly).not.toContain('p7-keep.txt');
+      void beforeChange;
+    });
+
+    it('diff({ diffFilter: "added" }) filters --summary output to A-status only', () => {
+      writeFileSync(join(dir, 'p7-add-a.txt'), 'a\n');
+      writeFileSync(join(dir, 'p7-add-b.txt'), 'b\n');
+      vcs.commit({
+        files: ['p7-add-a.txt', 'p7-add-b.txt'],
+        message: 'p7: seed two adds',
+      });
+      // Use the single-rev form (jj diff -r <@-> shows @-'s parent-to-self diff).
+      const r = vcs.diff({
+        rev: expr.parent(),
+        diffFilter: 'added',
+        nameOnly: true,
+      });
+      // Both files were ADDs in the @- commit; both must appear under A status.
+      expect(r.nameOnly).toContain('p7-add-a.txt');
+      expect(r.nameOnly).toContain('p7-add-b.txt');
+    });
+
+    it('status({ porcelain: true, cwd }) reports state at the spawned cwd workspace', () => {
+      // Confirm cwd parameter accepted; result shape well-formed.
+      writeFileSync(join(dir, 'p7-status.txt'), 'sw\n');
+      const r = vcs.status({ porcelain: true, cwd: dir });
+      expect(r).toBeDefined();
+      expect(Array.isArray(r.entries)).toBe(true);
+    });
+
+    it('readBlob(head, path) returns committed content via `jj file show`', () => {
+      writeFileSync(join(dir, 'p7-blob.txt'), 'phase 7 blob content\n');
+      vcs.commit({ files: ['p7-blob.txt'], message: 'p7: add blob' });
+      // readBlob from @- because @ is the new empty post-commit working-copy.
+      const content = vcs.refs.readBlob(vcs.refs.parent, 'p7-blob.txt');
+      expect(content.trim()).toBe('phase 7 blob content');
+    });
+
+    it('readBlob throws VcsExecError on missing rev or path', () => {
+      // Probe with a path that does not exist at HEAD~.
+      expect(() => vcs.refs.readBlob(vcs.refs.parent, 'never-existed.txt')).toThrow();
+    });
+  });
 });

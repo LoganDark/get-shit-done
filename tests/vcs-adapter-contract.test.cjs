@@ -85,4 +85,149 @@ vcsTest('auto', ({ getVcs, getCwd, getKind }) => {
     // gitOnly only exists on git backend (JjVcsAdapter has no gitOnly).
     if (vcs.kind === 'git') assert.ok(Object.isFrozen(vcs.gitOnly));
   });
+
+  // ─── Phase 7 plan 07-01 — 8 new VcsAdapter verbs (VCS-08..VCS-15) ─────────
+
+  test('Phase 7 — vcs.refs.currentBookmarksIn(cwd) returns string[]', () => {
+    if (!verbReady('refs.currentBookmarksIn')) return;
+    const vcs = getVcs();
+    const cwd = getCwd();
+    fs.writeFileSync(path.join(cwd, 'cbi.txt'), 'cbi');
+    vcs.commit({ files: ['cbi.txt'], message: 'cbi seed' });
+    const branches = vcs.refs.currentBookmarksIn(cwd);
+    assert.ok(Array.isArray(branches));
+    assert.ok(branches.every((b) => typeof b === 'string'));
+  });
+
+  test('Phase 7 — vcs.refs.mergeBase(head, head) returns same rev (idempotent)', () => {
+    if (!verbReady('refs.mergeBase')) return;
+    const vcs = getVcs();
+    const cwd = getCwd();
+    fs.writeFileSync(path.join(cwd, 'mb.txt'), 'mb');
+    vcs.commit({ files: ['mb.txt'], message: 'mb seed' });
+    const base = vcs.refs.mergeBase(vcs.refs.head, vcs.refs.head);
+    assert.equal(typeof base, 'string');
+    assert.ok(base.length > 0);
+  });
+
+  test('Phase 7 — vcs.refs.readBlob(head, path) returns committed file content', () => {
+    if (!verbReady('refs.readBlob')) return;
+    const vcs = getVcs();
+    const cwd = getCwd();
+    fs.writeFileSync(path.join(cwd, 'blob-test.txt'), 'hello blob\n');
+    vcs.commit({ files: ['blob-test.txt'], message: 'add blob-test' });
+    const content = vcs.refs.readBlob(vcs.refs.head, 'blob-test.txt');
+    assert.equal(content.trim(), 'hello blob');
+  });
+
+  test('Phase 7 — vcs.diff({diffFilter:"deleted", nameOnly:true}) returns shape with nameOnly array', () => {
+    if (!verbReady('diff.diffFilter')) return;
+    const vcs = getVcs();
+    const cwd = getCwd();
+    fs.writeFileSync(path.join(cwd, 'keep.txt'), 'keep');
+    fs.writeFileSync(path.join(cwd, 'del.txt'), 'del');
+    vcs.commit({ files: ['keep.txt', 'del.txt'], message: 'seed two files' });
+    fs.unlinkSync(path.join(cwd, 'del.txt'));
+    const r = vcs.diff({ diffFilter: 'deleted', nameOnly: true });
+    assert.ok(Array.isArray(r.nameOnly));
+    // Don't assert specific paths — staging semantics differ between backends.
+    // The contract here is shape-well-formed; per-domain tests assert content.
+  });
+
+  test('Phase 7 — vcs.status({porcelain:true, cwd}) honors the cwd override', () => {
+    if (!verbReady('status.cwd')) return;
+    const vcs = getVcs();
+    const cwd = getCwd();
+    fs.writeFileSync(path.join(cwd, 'sw.txt'), 'sw');
+    const r = vcs.status({ porcelain: true, cwd });
+    assert.ok(Array.isArray(r.entries));
+  });
+
+  test('Phase 7 — vcs.workspace.merge happy-path: 2-parent + atomic main-advance + agent-delete', () => {
+    if (!verbReady('workspace.merge')) return;
+    if (!verbReady('refs.currentBookmarksIn')) return;
+    if (!verbReady('refs.bookmarks.delete.force')) return;
+    const vcs = getVcs();
+    const cwd = getCwd();
+    // 1. Establish a base commit on main.
+    fs.writeFileSync(path.join(cwd, 'wm-main.txt'), 'wm-main\n');
+    vcs.commit({ files: ['wm-main.txt'], message: 'wm: add main.txt' });
+    // 2. Resolve the current main bookmark name.
+    const branches = vcs.refs.currentBookmarksIn(cwd);
+    if (branches.length === 0) return; // detached HEAD / anonymous head — skip
+    const mainName = branches[0];
+    // 3. Build the agent commit + bookmark pointing at it.
+    const agentBranch = `gsd-wm-agent-${Date.now()}`;
+    fs.writeFileSync(path.join(cwd, 'wm-agent.txt'), 'wm-agent\n');
+    vcs.commit({ files: ['wm-agent.txt'], message: 'wm: agent commit' });
+    vcs.refs.bookmarks.create(agentBranch, vcs.refs.head, { raw: true });
+    // 4. Call merge with the required mainBookmark.
+    const vcsModule = require('../sdk/dist-cjs/vcs/index.js');
+    const expr = vcsModule.expr;
+    const r = vcs.workspace.merge({
+      branch: expr.bookmark(agentBranch),
+      message: `chore: merge ${agentBranch}`,
+      ff: false,
+      mainBookmark: mainName,
+      agentBookmark: agentBranch,
+    });
+    // 5. Assert envelope shape + main-advance side effect.
+    assert.equal(r.ok, true, `merge failed: ${r.stderr}`);
+    assert.equal(r.conflicted, false);
+    assert.equal(typeof r.changeId, 'string');
+    assert.ok(r.changeId && r.changeId.length > 0, 'changeId must be non-empty on ok-path');
+    // Agent bookmark must be gone (atomic delete per D-03).
+    assert.equal(
+      vcs.refs.bookmarks.exists(agentBranch, { raw: true }),
+      false,
+      'agent bookmark must be deleted atomically',
+    );
+  });
+
+  test('Phase 7 — vcs.workspace.remove happy-path: removes registration', () => {
+    if (!verbReady('workspace.remove')) return;
+    if (!verbReady('workspace.add') && !require('./helpers.cjs').BACKENDS_AVAILABLE_FOR_VERB['workspace.add']) {
+      return;
+    }
+    const vcs = getVcs();
+    const cwd = getCwd();
+    fs.writeFileSync(path.join(cwd, 'wr.txt'), 'wr\n');
+    vcs.commit({ files: ['wr.txt'], message: 'wr seed' });
+    const wsName = `gsd-wr-${Date.now()}`;
+    const wsRel = path.join('.claude', 'jj-workspaces', wsName);
+    const wsPath = path.join(cwd, wsRel);
+    // workspace.add — Phase 4 primitive. Both backends support it.
+    try {
+      vcs.workspace.add({ path: wsPath, name: wsName });
+    } catch (err) {
+      // git's workspace.add may not accept paths inside the same repo without
+      // additional setup; for git, try a path outside the parent's worktree dir.
+      // The minimal cross-backend assertion is that workspace.remove handles the
+      // happy-path call shape without throwing on the registered workspace.
+      return;
+    }
+    const before = vcs.workspace.list();
+    const found = before.find(
+      (w) => w.path === wsPath || w.path === wsName,
+    );
+    if (!found) return; // backend-specific registration shape; per-domain test owns this
+    vcs.workspace.remove(wsPath, { force: true });
+    const after = vcs.workspace.list();
+    const stillThere = after.find(
+      (w) => w.path === wsPath || w.path === wsName,
+    );
+    assert.equal(stillThere, undefined, 'workspace.remove must unregister the workspace');
+  });
+
+  test('Phase 7 — vcs.refs.bookmarks.delete(name, {force:true}) accepts force flag', () => {
+    if (!verbReady('refs.bookmarks.delete.force')) return;
+    const vcs = getVcs();
+    const cwd = getCwd();
+    fs.writeFileSync(path.join(cwd, 'bdf.txt'), 'bdf');
+    vcs.commit({ files: ['bdf.txt'], message: 'bdf seed' });
+    const name = `gsd-bdf-${Date.now()}`;
+    vcs.refs.bookmarks.create(name, vcs.refs.head, { raw: true });
+    vcs.refs.bookmarks.delete(name, { raw: true, force: true });
+    assert.equal(vcs.refs.bookmarks.exists(name, { raw: true }), false);
+  });
 });

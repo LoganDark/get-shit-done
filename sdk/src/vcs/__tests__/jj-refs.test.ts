@@ -249,3 +249,99 @@ describe.skipIf(!jjAvailable)(
     });
   },
 );
+
+// ─── Phase 7 plan 07-01 — currentBookmarksIn / mergeBase / bookmarks.delete force ─
+
+describe.skipIf(!jjAvailable)(
+  'Phase 7 plan 07-01 — refs.currentBookmarksIn / refs.mergeBase / bookmarks.delete force on jj (live)',
+  () => {
+    let dir: string;
+    let vcs: ReturnType<typeof createJjAdapter>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let snapshotHandle: any;
+
+    beforeAll(() => {
+      dir = mkdtempSync(
+        join(
+          tmpdir(),
+          `gsd-vcs-p7-refs-${Math.random().toString(36).slice(2, 10)}-`,
+        ),
+      );
+      execSync('jj git init --colocate', { cwd: dir, stdio: 'pipe' });
+      execSync('jj config set --repo user.email "test@test.com"', {
+        cwd: dir,
+        stdio: 'pipe',
+      });
+      execSync('jj config set --repo user.name "Test"', {
+        cwd: dir,
+        stdio: 'pipe',
+      });
+      writeFileSync(join(dir, 'seed.txt'), 'seed\n');
+      execSync('jj squash -B @ -k -m "seed commit"', {
+        cwd: dir,
+        stdio: 'pipe',
+      });
+      vcs = createJjAdapter(dir);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      snapshotHandle = (vcs as any)[__vcsTestOnly].snapshot();
+    });
+
+    beforeEach(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (vcs as any)[__vcsTestOnly].restore(snapshotHandle);
+    });
+
+    afterAll(() => {
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    });
+
+    // ─── currentBookmarksIn ────────────────────────────────────────────────
+    it('currentBookmarksIn(dir) returns bookmarks at @- (mirrors currentBookmarks D-04)', () => {
+      vcs.refs.bookmarks.create('p7-cbi-test', expr.parent());
+      const current = vcs.refs.currentBookmarksIn(dir);
+      expect(current).toContain('p7-cbi-test');
+    });
+
+    it('currentBookmarksIn(dir) returns [] when no bookmarks point at @-', () => {
+      expect(vcs.refs.currentBookmarksIn(dir)).toEqual([]);
+    });
+
+    // ─── mergeBase ─────────────────────────────────────────────────────────
+    it('mergeBase(head, head) returns a change_id (D-05)', () => {
+      writeFileSync(join(dir, 'mb-a.txt'), 'a\n');
+      vcs.commit({ files: ['mb-a.txt'], message: 'add a' });
+      const base = vcs.refs.mergeBase(vcs.refs.head, vcs.refs.head);
+      // jj change_id is k-z alphabet, length >= 4 (per SHA_OR_CHANGE_ID_RE).
+      expect(base).toMatch(/^[k-z]+$/);
+      expect(base.length).toBeGreaterThanOrEqual(4);
+    });
+
+    it('mergeBase(parent, parent) returns the parent change_id', () => {
+      const base = vcs.refs.mergeBase(vcs.refs.parent, vcs.refs.parent);
+      expect(base).toMatch(/^[k-z]+$/);
+    });
+
+    // ─── bookmarks.delete force (D-09 — no-op on jj) ───────────────────────
+    it('bookmarks.delete(name, { force: true }) deletes regardless of state (D-09)', () => {
+      const name = 'p7-bdf-test';
+      vcs.refs.bookmarks.create(name, vcs.refs.parent);
+      expect(vcs.refs.bookmarks.exists(name)).toBe(true);
+      vcs.refs.bookmarks.delete(name, { force: true });
+      expect(vcs.refs.bookmarks.exists(name)).toBe(false);
+    });
+
+    it('bookmarks.delete force on already-deleted bookmark — jj 0.41 empirical (RESEARCH A2 resolution)', () => {
+      const name = 'p7-bdf-second';
+      vcs.refs.bookmarks.create(name, vcs.refs.parent);
+      vcs.refs.bookmarks.delete(name, { force: true });
+      // RESEARCH A2 / Pitfall 5: jj 0.41 empirically — `jj bookmark delete` on
+      // a non-existent bookmark exits 0 (idempotent). The cross-backend `force`
+      // flag is still a documented no-op on jj (jj's delete is already
+      // unconditional), but the implication that second-delete throws turned
+      // out to be jj-version-dependent. Record the actual jj 0.41 behavior:
+      // double-delete is silently idempotent. Future jj version regression
+      // would surface as this test failing.
+      expect(() => vcs.refs.bookmarks.delete(name, { force: true })).not.toThrow();
+    });
+  },
+);

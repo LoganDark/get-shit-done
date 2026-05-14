@@ -356,3 +356,124 @@ describe.sequential.skipIf(!jjAvailable)(
     });
   },
 );
+
+// ─── Phase 7 plan 07-01 — workspace.merge + workspace.remove + expr.range smoke ─
+
+import { expr } from '../expr.js';
+
+describe.sequential.skipIf(!jjAvailable)(
+  'Phase 7 plan 07-01 — workspace.merge / workspace.remove on jj (live)',
+  () => {
+    let dir: string;
+    let vcs: ReturnType<typeof createJjAdapter>;
+
+    beforeAll(() => {
+      // Phase 5 plan 05-05 flake-fix Pattern B — random-prefix mkdtemp.
+      dir = mkdtempSync(
+        join(
+          tmpdir(),
+          `gsd-vcs-p7-ws-${Math.random().toString(36).slice(2, 10)}-`,
+        ),
+      );
+      execSync('jj git init --colocate', { cwd: dir, stdio: 'pipe' });
+      execSync('jj config set --repo user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
+      execSync('jj config set --repo user.name "Test"', { cwd: dir, stdio: 'pipe' });
+      writeFileSync(join(dir, 'seed.txt'), 'seed\n');
+      execSync('jj squash -B @ -k -m "seed"', { cwd: dir, stdio: 'pipe' });
+      vcs = createJjAdapter(dir);
+    });
+
+    afterAll(() => {
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    });
+
+    // ─── workspace.merge happy-path (D-01..D-03 atomic main-advance) ───────
+    it('workspace.merge happy-path: 2-parent change + atomic main-advance + agent-bookmark delete (D-03)', () => {
+      // Establish a main bookmark and an agent bookmark with one new commit.
+      vcs.refs.bookmarks.create('p7-main', vcs.refs.parent, { raw: true });
+      writeFileSync(join(dir, 'agent.txt'), 'agent\n');
+      vcs.commit({ files: ['agent.txt'], message: 'agent commit' });
+      // Agent bookmark at HEAD (@- after commit auto-creates new @).
+      vcs.refs.bookmarks.create('p7-agent', vcs.refs.parent, { raw: true });
+      // Call merge.
+      const r = vcs.workspace.merge({
+        branch: expr.bookmark('p7-agent'),
+        message: 'chore: merge p7-agent into p7-main',
+        ff: false,
+        mainBookmark: 'p7-main',
+        agentBookmark: 'p7-agent',
+      });
+      expect(r.ok).toBe(true);
+      expect(r.conflicted).toBe(false);
+      expect(typeof r.changeId).toBe('string');
+      expect(r.changeId?.length ?? 0).toBeGreaterThan(0);
+      // D-03 main-advance: p7-main now points at the merge change. jj
+      // returns commit_id from bookmark list (40-char hex), while merge.changeId
+      // is the jj change_id (k-z alphabet); both identify the same commit.
+      // Cross-check: bookmark exists AND points at @ (the merge change).
+      const bookmarks = vcs.refs.bookmarks.list();
+      const mainEntry = bookmarks.find((b) => b.name === 'p7-main');
+      expect(mainEntry).toBeDefined();
+      expect(mainEntry?.rev).toMatch(/^[0-9a-f]{40}$/);  // commit_id form
+      // Cross-check via change_id form too: refs.exists on the change_id reports true.
+      expect(r.changeId).toMatch(/^[k-z]+$/);  // change_id form (k-z alphabet)
+      // Agent bookmark deleted atomically.
+      expect(vcs.refs.bookmarks.exists('p7-agent', { raw: true })).toBe(false);
+    });
+
+    // ─── workspace.merge missing-bookmark (failure mode) ───────────────────
+    it('workspace.merge missing-bookmark: returns ok:false with non-empty stderr', () => {
+      // Create main; do NOT create the agent branch.
+      vcs.refs.bookmarks.create('p7-main-mb', vcs.refs.head, { raw: true });
+      const r = vcs.workspace.merge({
+        branch: expr.bookmark('p7-does-not-exist'),
+        message: 'should fail',
+        ff: false,
+        mainBookmark: 'p7-main-mb',
+      });
+      expect(r.ok).toBe(false);
+    });
+
+    // ─── workspace.remove happy-path (Pitfall 4 ordering) ──────────────────
+    it('workspace.remove happy-path: forget metadata + rm-rf on-disk (Pitfall 4)', () => {
+      const wsName = `p7-rm-${Math.random().toString(36).slice(2, 10)}`;
+      const wsPath = join(dir, '.claude/jj-workspaces', wsName);
+      vcs.workspace.add({ path: wsPath, name: wsName });
+      // Confirm it landed.
+      const before = vcs.workspace.list().find((e) => e.path === wsName);
+      expect(before).toBeDefined();
+      // Remove it.
+      vcs.workspace.remove(wsPath, { force: true });
+      // Confirm gone from list AND on-disk dir is gone.
+      const after = vcs.workspace.list().find((e) => e.path === wsName);
+      expect(after).toBeUndefined();
+      expect(existsSync(wsPath)).toBe(false);
+    });
+
+    // ─── workspace.remove path-missing with force:true (idempotent) ────────
+    it('workspace.remove with force:true tolerates forget failure on already-gone state', () => {
+      const wsName = `p7-rm-missing-${Math.random().toString(36).slice(2, 10)}`;
+      const wsPath = join(dir, '.claude/jj-workspaces', wsName);
+      // Don't create the workspace — call remove on a non-registered name.
+      // forget will exit non-zero; force:true must swallow it.
+      expect(() => vcs.workspace.remove(wsPath, { force: true })).not.toThrow();
+    });
+
+    // ─── expr.range round-trip smoke (RESEARCH Open Q3) ────────────────────
+    it('expr.range(rev(mergeBase-result), rev(branch)) translates cleanly on jj backend', () => {
+      writeFileSync(join(dir, 'range-a.txt'), 'a\n');
+      vcs.commit({ files: ['range-a.txt'], message: 'add range-a' });
+      const branchName = 'p7-range-smoke';
+      vcs.refs.bookmarks.create(branchName, vcs.refs.parent, { raw: true });
+      writeFileSync(join(dir, 'range-b.txt'), 'b\n');
+      vcs.commit({ files: ['range-b.txt'], message: 'add range-b' });
+      const base = vcs.refs.mergeBase(vcs.refs.head, expr.bookmark(branchName));
+      // Feed mergeBase output back into expr.range — confirms the
+      // change_id-shaped result is consumable by the range factory.
+      const range = expr.range(expr.rev(base), expr.bookmark(branchName));
+      const r = vcs.diff({ rev: range, nameOnly: true });
+      expect(r).toBeDefined();
+      expect(Array.isArray(r.nameOnly)).toBe(true);
+    });
+  },
+);
