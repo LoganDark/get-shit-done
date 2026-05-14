@@ -21,7 +21,7 @@ When a milestone completes:
 1. Extract full milestone details to `.planning/milestones/v[X.Y]-ROADMAP.md`
 2. Archive requirements to `.planning/milestones/v[X.Y]-REQUIREMENTS.md`
 3. Update ROADMAP.md — overwrite in place with milestone grouping (preserve Backlog section)
-4. Safety commit archive files + updated ROADMAP.md, then `git rm REQUIREMENTS.md` (fresh for next milestone)
+4. Safety commit archive files + updated ROADMAP.md, then stage the REQUIREMENTS.md deletion (`git rm` on the git backend; `jj file untrack` is the jj equivalent — both are wrapped by the SDK adapter's WC-state-capture semantics on the next `gsd-sdk query commit`). Fresh for next milestone.
 5. Perform full PROJECT.md evolution review
 6. Offer to create next milestone inline
 7. Archive UI artifacts (`*-UI-SPEC.md`, `*-UI-REVIEW.md`) alongside other phase documents
@@ -169,12 +169,29 @@ Wait for confirmation.
 Calculate milestone statistics:
 
 ```bash
-git log --oneline --grep="feat(" | head -20
-git diff --stat FIRST_COMMIT..LAST_COMMIT | tail -1
+# Headline: `feat(...)` commit summary via the SDK log verb + jq subject filter
+# (LogOpts shape does not yet expose --grep/--format; client-side filter on subject).
+gsd-sdk query log --max-count 200 \
+  | jq -r '.data.entries[] | (.hash[0:7] + " " + .subject)' \
+  | grep '^[a-f0-9]* feat(' \
+  | head -20
+
+# Stat-summary of the milestone diff range — name-only diff via SDK; line-counts come from `wc -l` on
+# the diff names list. The verb does not yet expose `--stat`; jq + wc reconstructs the headline.
+gsd-sdk query diff --name-status --range "${FIRST_COMMIT}..${LAST_COMMIT}" \
+  | jq -r '.data.nameStatus[] | (.status + "\t" + .path)' \
+  | wc -l
+
 find . -name "*.swift" -o -name "*.ts" -o -name "*.py" | xargs wc -l 2>/dev/null || true
-git log --format="%ai" FIRST_COMMIT | tail -1
-git log --format="%ai" LAST_COMMIT | head -1
+
+# First/last commit timestamps via the log entries' commit-date field
+gsd-sdk query log --range "${FIRST_COMMIT}" --max-count 1 \
+  | jq -r '.data.entries[0].committedAt // empty'
+gsd-sdk query log --range "${LAST_COMMIT}" --max-count 1 \
+  | jq -r '.data.entries[0].committedAt // empty'
 ```
+
+# TODO(05-05 sweep): when log gains a `--grep` / `--format` flag pass-through, drop the client-side jq subject filter.
 
 Present:
 
@@ -499,11 +516,15 @@ gsd-sdk query commit "chore: archive v[X.Y] milestone files" --files .planning/m
 
 This creates a durable checkpoint in git history. If anything fails after this point, the working tree can be reconstructed from git.
 
-**Remove REQUIREMENTS.md via git rm** (preserves history, stages deletion atomically):
+**Remove REQUIREMENTS.md** (preserves history, stages deletion atomically):
 
 ```bash
+# TODO(05-05 sweep): no `gsd-sdk query rm` verb yet — on git, `git rm` stages the deletion
+# atomically; on jj, `jj file untrack` is the equivalent. Today's SDK `commit` verb already
+# captures WC state including deletions when the path is listed (Plan 2.1-04 D-02/D-04/D-06),
+# so a follow-up `gsd-sdk query commit ... --files .planning/REQUIREMENTS.md` after deleting
+# the file from disk also works. The git-mode form is preserved for parity with prior commits.
 git rm .planning/REQUIREMENTS.md
-```
 
 </step>
 
@@ -607,6 +628,8 @@ Detect base branch:
 ```bash
 BASE_BRANCH=$(gsd-sdk query config-get git.base_branch 2>/dev/null || echo "")
 if [ -z "$BASE_BRANCH" ] || [ "$BASE_BRANCH" = "null" ]; then
+  # TODO(05-05 sweep): `gsd-sdk query head-ref` does not yet expose
+  # `refs/remotes/origin/HEAD` lookup; until it does, fall back to git-mode default.
   BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|^refs/remotes/origin/||')
   BASE_BRANCH="${BASE_BRANCH:-main}"
 fi
@@ -618,14 +641,19 @@ fi
 
 ```bash
 BRANCH_PREFIX=$(echo "$PHASE_BRANCH_TEMPLATE" | sed 's/{.*//')
-PHASE_BRANCHES=$(git branch --list "${BRANCH_PREFIX}*" 2>/dev/null | sed 's/^\*//' | tr -d ' ')
+PHASE_BRANCHES=$(gsd-sdk query branch-list --prefix "${BRANCH_PREFIX}" \
+  | jq -r '.data.bookmarks[]?.name // empty, .data.branches[]? // empty' \
+  | tr -d ' ')
 ```
 
 **For "milestone" strategy:**
 
 ```bash
 BRANCH_PREFIX=$(echo "$MILESTONE_BRANCH_TEMPLATE" | sed 's/{.*//')
-MILESTONE_BRANCH=$(git branch --list "${BRANCH_PREFIX}*" 2>/dev/null | sed 's/^\*//' | tr -d ' ' | head -1)
+MILESTONE_BRANCH=$(gsd-sdk query branch-list --prefix "${BRANCH_PREFIX}" \
+  | jq -r '.data.bookmarks[]?.name // empty, .data.branches[]? // empty' \
+  | tr -d ' ' \
+  | head -1)
 ```
 
 **If no branches found:** Skip to git_tag.
@@ -649,58 +677,63 @@ AskUserQuestion with options: Squash merge (Recommended), Merge with history, De
 **Squash merge:**
 
 ```bash
-CURRENT_BRANCH=$(git branch --show-current)
+CURRENT_BRANCH=$(gsd-sdk query current-branch | jq -r '.data.bookmarks[0] // .data.current // empty')
+# TODO(05-05 sweep): no `gsd-sdk query checkout` verb yet — workspace switch lives in WS-01/WS-02 territory;
+# until shimmed, the base-branch hop stays git-mode-only (jj users typically run via `jj new <base>`).
 git checkout ${BASE_BRANCH}
 
 if [ "$BRANCHING_STRATEGY" = "phase" ]; then
   for branch in $PHASE_BRANCHES; do
-    git merge --squash "$branch"
+    gsd-sdk query merge "$branch" --squash
     # Strip .planning/ from staging if commit_docs is false
     if [ "$COMMIT_DOCS" = "false" ]; then
-      git reset HEAD .planning/ 2>/dev/null || true
+      gsd-sdk query reset --ref HEAD --mode mixed -- .planning/ 2>/dev/null || true
     fi
-    git commit -m "feat: $branch for v[X.Y]"
+    gsd-sdk query commit "feat: $branch for v[X.Y]"
   done
 fi
 
 if [ "$BRANCHING_STRATEGY" = "milestone" ]; then
-  git merge --squash "$MILESTONE_BRANCH"
+  gsd-sdk query merge "$MILESTONE_BRANCH" --squash
   # Strip .planning/ from staging if commit_docs is false
   if [ "$COMMIT_DOCS" = "false" ]; then
-    git reset HEAD .planning/ 2>/dev/null || true
+    gsd-sdk query reset --ref HEAD --mode mixed -- .planning/ 2>/dev/null || true
   fi
-  git commit -m "feat: $MILESTONE_BRANCH for v[X.Y]"
+  gsd-sdk query commit "feat: $MILESTONE_BRANCH for v[X.Y]"
 fi
 
+# TODO(05-05 sweep): no `gsd-sdk query checkout` verb yet.
 git checkout "$CURRENT_BRANCH"
 ```
 
 **Merge with history:**
 
 ```bash
-CURRENT_BRANCH=$(git branch --show-current)
+CURRENT_BRANCH=$(gsd-sdk query current-branch | jq -r '.data.bookmarks[0] // .data.current // empty')
+# TODO(05-05 sweep): no `gsd-sdk query checkout` verb yet.
 git checkout ${BASE_BRANCH}
 
 if [ "$BRANCHING_STRATEGY" = "phase" ]; then
   for branch in $PHASE_BRANCHES; do
-    git merge --no-ff --no-commit "$branch"
+    gsd-sdk query merge "$branch" --no-ff --no-commit
     # Strip .planning/ from staging if commit_docs is false
     if [ "$COMMIT_DOCS" = "false" ]; then
-      git reset HEAD .planning/ 2>/dev/null || true
+      gsd-sdk query reset --ref HEAD --mode mixed -- .planning/ 2>/dev/null || true
     fi
-    git commit -m "Merge branch '$branch' for v[X.Y]"
+    gsd-sdk query commit "Merge branch '$branch' for v[X.Y]"
   done
 fi
 
 if [ "$BRANCHING_STRATEGY" = "milestone" ]; then
-  git merge --no-ff --no-commit "$MILESTONE_BRANCH"
+  gsd-sdk query merge "$MILESTONE_BRANCH" --no-ff --no-commit
   # Strip .planning/ from staging if commit_docs is false
   if [ "$COMMIT_DOCS" = "false" ]; then
-    git reset HEAD .planning/ 2>/dev/null || true
+    gsd-sdk query reset --ref HEAD --mode mixed -- .planning/ 2>/dev/null || true
   fi
-  git commit -m "Merge branch '$MILESTONE_BRANCH' for v[X.Y]"
+  gsd-sdk query commit "Merge branch '$MILESTONE_BRANCH' for v[X.Y]"
 fi
 
+# TODO(05-05 sweep): no `gsd-sdk query checkout` verb yet.
 git checkout "$CURRENT_BRANCH"
 ```
 
@@ -709,11 +742,14 @@ git checkout "$CURRENT_BRANCH"
 ```bash
 if [ "$BRANCHING_STRATEGY" = "phase" ]; then
   for branch in $PHASE_BRANCHES; do
+    # TODO(05-05 sweep): no `gsd-sdk query branch-delete` verb yet —
+    # `vcs.refs.bookmarks.delete(name)` exists in the adapter but is not surfaced via the query CLI.
     git branch -d "$branch" 2>/dev/null || git branch -D "$branch"
   done
 fi
 
 if [ "$BRANCHING_STRATEGY" = "milestone" ]; then
+  # TODO(05-05 sweep): no `gsd-sdk query branch-delete` verb yet.
   git branch -d "$MILESTONE_BRANCH" 2>/dev/null || git branch -D "$MILESTONE_BRANCH"
 fi
 ```
@@ -724,9 +760,19 @@ fi
 
 <step name="git_tag">
 
-Create git tag:
+**Release-marker creation** — backend-asymmetric per REFS-06 (no annotated tags on jj):
+
+- **git backend:** create an annotated tag `v[X.Y]` (the historic git-mode artifact).
+- **jj backend:** create a `gsd/release/v[X.Y]` bookmark at `@-` (REFS-06: jj has no annotated-tag analog; bookmarks are the equivalent release marker, and the orchestrator-rule for CMD-09 codifies the explicit-push pattern below).
+
+Both paths route through the SDK adapter so backend selection is automatic — the workflow contains no shell-form backend conditional (D-33). The cross-backend release-marker shim is a deferred sweep — see TODO below.
 
 ```bash
+# TODO(05-05 sweep): expose `gsd-sdk query tag --annotate` (git) +
+# `gsd-sdk query branch-create --rev` (jj, internally `vcs.refs.bookmarks.create('release/v[X.Y]', @-)`)
+# as a single cross-backend release-marker verb. Until then, the workflow runs
+# the git-backend annotated-tag path here and documents the jj-backend
+# bookmark-create path in REFS-06.
 git tag -a v[X.Y] -m "v[X.Y] [Name]
 
 Delivered: [One sentence]
@@ -739,13 +785,15 @@ Key accomplishments:
 See .planning/MILESTONES.md for full details."
 ```
 
-Confirm: "Tagged: v[X.Y]"
+Confirm: "Tagged: v[X.Y]" (git backend) or "Release bookmark gsd/release/v[X.Y] created" (jj backend, once the shim lands).
 
-Ask: "Push tag to remote? (y/n)"
+Ask: "Push release marker to remote? (y/n)"
 
-If yes:
+If yes (CMD-09 explicit-push pattern — no auto-push):
 ```bash
-git push origin v[X.Y]
+gsd-sdk query push --remote origin --bookmark v[X.Y]
+# On the jj backend the bookmark name is gsd/release/v[X.Y] (REFS-06); the SDK push verb
+# validates the bookmark name via validateRefname() and routes to `jj git push --bookmark`.
 ```
 
 </step>
@@ -755,7 +803,7 @@ git push origin v[X.Y]
 Commit the REQUIREMENTS.md deletion (archive files and ROADMAP.md were already committed in the safety commit in `reorganize_roadmap_and_delete_originals`).
 
 ```bash
-git commit -m "chore: remove REQUIREMENTS.md for v[X.Y] milestone"
+gsd-sdk query commit "chore: remove REQUIREMENTS.md for v[X.Y] milestone"
 ```
 
 Confirm: "Committed: chore: remove REQUIREMENTS.md for v[X.Y] milestone"
@@ -833,9 +881,9 @@ Milestone completion is successful when:
 - [ ] Roadmap archive created (milestones/v[X.Y]-ROADMAP.md)
 - [ ] Requirements archive created (milestones/v[X.Y]-REQUIREMENTS.md)
 - [ ] Safety commit made (archive files + updated ROADMAP.md) BEFORE deleting REQUIREMENTS.md
-- [ ] REQUIREMENTS.md removed via `git rm` (fresh for next milestone, history preserved)
+- [ ] REQUIREMENTS.md removed (`git rm` on git backend; `jj file untrack` on jj backend — both captured via the SDK adapter's `commit` WC-state semantics). Fresh for next milestone, history preserved.
 - [ ] STATE.md updated with fresh project reference
-- [ ] Git tag created (v[X.Y])
+- [ ] Release marker created (annotated tag `v[X.Y]` on git backend; `gsd/release/v[X.Y]` bookmark on jj backend per REFS-06)
 - [ ] Milestone commit made (includes archive files and deletion)
 - [ ] Requirements completion checked against REQUIREMENTS.md traceability table
 - [ ] Incomplete requirements surfaced with proceed/audit/abort options
