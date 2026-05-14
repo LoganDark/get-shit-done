@@ -67,6 +67,21 @@ export const expr = Object.freeze({
   range(from: RevisionExpr, to: RevisionExpr): RevisionExpr {
     return brand(`range:${from as unknown as string}..${to as unknown as string}`);
   },
+  // Plan 06-01 Task 2 — children factory (RESEARCH §"Pattern 2: Orphan Ancestor Walk").
+  // Encoded form embeds the parsed-encoded inner substring so per-backend
+  // translators can recursively translate it. On jj this resolves to '<inner>+';
+  // on git the children: form throws (no single-token operator — plan 06-02
+  // orphan walker only calls expr.children on the jj-side adapter).
+  children(rev: RevisionExpr): RevisionExpr {
+    return brand(`children:${rev as unknown as string}`);
+  },
+  // Plan 06-01 Task 2 — parents factory (symmetric to children; consumed by
+  // plan 06-02 orphan walker for source-VCS ancestor traversal). Translates to
+  // '(<inner>)-' on jj and '<inner>^@' on git. Both backends translate
+  // successfully — the orphan walker uses this regardless of direction.
+  parents(rev: RevisionExpr): RevisionExpr {
+    return brand(`parents:${rev as unknown as string}`);
+  },
   // Phase 2.1 D-13: structured factory for runtime revision strings. Renamed
   // from `commit(sha)` to `rev(id)`. D-12 forbids expr.raw(), so call sites
   // that hold a revision string (e.g. from a prior log/show output) must
@@ -82,9 +97,14 @@ export const expr = Object.freeze({
 
 // Internal — the parsers in parse/*.ts use this to switch on encoded form.
 export interface ParsedExpr {
-  kind: 'head' | 'parent' | 'bookmark' | 'remote';
+  kind: 'head' | 'parent' | 'bookmark' | 'remote' | 'children' | 'parents';
   name?: string;
   remote?: string;
+  // Plan 06-01 Task 2 — populated when kind === 'children' OR 'parents'.
+  // The translators in parse/{jj,git}-rev.ts inspect the encoded string
+  // directly for these kinds (recursive translation), but parseExpr also
+  // returns the parsed inner so JS callers can introspect the AST.
+  inner?: ParsedExpr;
 }
 
 export function parseExpr(rev: RevisionExpr): ParsedExpr {
@@ -104,6 +124,16 @@ export function parseExpr(rev: RevisionExpr): ParsedExpr {
       const sep = rest.indexOf(':');
       if (sep < 0) throw new Error(`Invalid remote RevisionExpr: '${s}'`);
       return { kind: 'remote', remote: rest.slice(0, sep), name: rest.slice(sep + 1) };
+    }
+    case 'children': {
+      // 'children:<encoded-inner>' — recursively parse the inner expression
+      const inner = parseExpr(rest as unknown as RevisionExpr);
+      return { kind: 'children', inner };
+    }
+    case 'parents': {
+      // 'parents:<encoded-inner>' — recursively parse the inner expression
+      const inner = parseExpr(rest as unknown as RevisionExpr);
+      return { kind: 'parents', inner };
     }
     default:
       throw new Error(`Unknown RevisionExpr kind: '${kind}'`);

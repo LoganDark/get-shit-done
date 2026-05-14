@@ -116,3 +116,55 @@ describe('expr.rev factory (02-03 Task 2 — Blocker 3; 2.1-01 widened to accept
     expect(() => expr.rev('kxnvqropmlkz')).not.toThrow();
   });
 });
+
+describe('expr.children factory (06-01 Task 2)', () => {
+  it('children() factory produces a children-prefixed encoded form', () => {
+    const inner = expr.head();
+    const c = expr.children(inner);
+    expect(parseExpr(c)).toEqual({ kind: 'children', inner: { kind: 'head' } });
+  });
+
+  it('children() nests inside other expressions as a RevisionExpr', () => {
+    const inner = expr.bookmark('main');
+    const c = expr.children(inner);
+    expect(parseExpr(c)).toEqual({
+      kind: 'children',
+      inner: { kind: 'bookmark', name: 'main' },
+    });
+  });
+
+  it('children() returns a branded RevisionExpr (D-12 hatch-free)', () => {
+    const c = expr.children(expr.head());
+    expect(typeof c).toBe('string');
+    expect(String(c).startsWith('children:')).toBe(true);
+  });
+
+  it('toJjRev(children(head())) → "@+"', () => {
+    expect(toJjRev(expr.children(expr.head()))).toBe('@+');
+  });
+
+  it('toGitRev(children(head())) throws typed not-supported error', () => {
+    expect(() => toGitRev(expr.children(expr.head()))).toThrow(
+      /parse\/git-rev: 'children:' form is not supported on the git backend/,
+    );
+  });
+});
+
+describe('expr.parents factory (06-01 Task 2)', () => {
+  it('parents() factory produces a parents-prefixed encoded form (symmetric to children)', () => {
+    const p = expr.parents(expr.head());
+    expect(parseExpr(p)).toEqual({ kind: 'parents', inner: { kind: 'head' } });
+    expect(String(p).startsWith('parents:')).toBe(true);
+  });
+
+  it('toJjRev(parents(head())) → "(@)-" and toGitRev(parents(head())) → "HEAD^@"', () => {
+    expect(toJjRev(expr.parents(expr.head()))).toBe('(@)-');
+    expect(toGitRev(expr.parents(expr.head()))).toBe('HEAD^@');
+  });
+
+  it('parents() returns a branded RevisionExpr (D-12 hatch-free)', () => {
+    const p = expr.parents(expr.head());
+    expect(typeof p).toBe('string');
+    expect(String(p).startsWith('parents:')).toBe(true);
+  });
+});
