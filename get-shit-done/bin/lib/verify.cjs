@@ -946,7 +946,12 @@ function cmdValidateHealth(cwd, options, raw) {
     } catch { /* parse error already caught in Check 5 */ }
   }
 
-  // ─── Check 11: Stale / orphan git worktrees (#2167) ────────────────────────
+  // ─── Check 11: Stale / orphan workspaces (#2167) ──────────────────────────
+  // MIGR-02 cosmetic sweep (Phase 5 plan 05-05): inspectWorktreeHealth uses
+  // the VCS adapter (vcs.workspace.list / context — see VcsWorkspace in
+  // sdk/src/vcs/types.ts). On git this shells `git worktree list`; on jj it
+  // routes to `jj workspace list`. User-facing remediation strings prefer
+  // the cross-backend `gsd-sdk query worktree-list` form.
   try {
     const worktreeHealth = inspectWorktreeHealth(
       cwd,
@@ -954,32 +959,32 @@ function cmdValidateHealth(cwd, options, raw) {
       { execGit, existsSync: fs.existsSync, statSync: fs.statSync }
     );
     if (!worktreeHealth.ok) {
-      // AC2 / AC3: surface degraded-git state as a structured warning instead
+      // AC2 / AC3: surface degraded-vcs state as a structured warning instead
       // of silently suppressing it (PRED.k302 — error-swallowing-empty-sentinel).
       if (worktreeHealth.reason === 'git_timed_out') {
         addIssue('warning', 'W020',
-          'Worktree health check degraded: git worktree list timed out after 10s — orphan/stale worktrees could not be inspected',
-          'Run: git worktree list --porcelain to diagnose; check for .git/index.lock or a hung git process');
+          'Workspace health check degraded: vcs.workspace.list timed out after 10s — orphan/stale workspaces could not be inspected',
+          'Run: gsd-sdk query worktree-list to diagnose; check for a stuck lock or hung VCS process');
       }
       // Other non-ok reasons (not_a_git_repo, git_list_failed) are silent — not
-      // meaningful for users who have no git repo or whose git is not configured.
+      // meaningful for users who have no VCS repo or whose VCS is not configured.
     } else {
       for (const finding of worktreeHealth.findings) {
         if (finding.kind === 'orphan') {
           addIssue('warning', 'W017',
-            `Orphan git worktree: ${finding.path} (path no longer exists on disk)`,
-            'Run: git worktree prune');
+            `Orphan workspace: ${finding.path} (path no longer exists on disk)`,
+            'Run: gsd-sdk query worktree-prune (routes to vcs.workspace.prune)');
           continue;
         }
 
         if (finding.kind === 'stale') {
           addIssue('warning', 'W017',
-            `Stale git worktree: ${finding.path} (last modified ${finding.ageMinutes} minutes ago)`,
-            `Run: git worktree remove ${finding.path} --force`);
+            `Stale workspace: ${finding.path} (last modified ${finding.ageMinutes} minutes ago)`,
+            `Run: gsd-sdk query worktree-remove ${finding.path} (routes to vcs.workspace.forget on jj, git worktree remove on git)`);
         }
       }
     }
-  } catch { /* git worktree not available or not a git repo — skip silently */ }
+  } catch { /* vcs adapter or workspace.list not available — skip silently */ }
 
   // ─── Check 12: MILESTONES.md / archive snapshot drift (#2446) ─────────────
   const milestonesPath = path.join(planBase, 'MILESTONES.md');

@@ -1504,7 +1504,14 @@ function cmdInitProgress(cwd, raw) {
 }
 
 /**
- * Detect child git repos in a directory (one level deep).
+ * Detect child VCS repos in a directory (one level deep).
+ *
+ * MIGR-02 cosmetic sweep (Phase 5 plan 05-05): this helper currently only
+ * detects git-backed children (via `.git` presence) — the call-site uses
+ * `createVcsAdapter(..., { kind: 'git' })` to status-probe each. Detecting
+ * jj-backed children (`.jj` presence) is a future-work item beyond the
+ * Phase 5 scope; the current behavior matches pre-MIGR-02 semantics.
+ *
  * Returns array of { name, path, has_uncommitted } objects.
  */
 function detectChildRepos(dir) {
@@ -1536,7 +1543,9 @@ function cmdInitNewWorkspace(cwd, raw) {
   // Detect child git repos for interactive selection
   const childRepos = detectChildRepos(cwd);
 
-  // Check if git worktree is available
+  // Check if the VCS adapter has worktree/workspace primitives available.
+  // (MIGR-02 cosmetic sweep — comment-only update; the underlying call is
+  // already adapter-mediated via createVcsAdapter().gitOnly.version().)
   let worktreeAvailable = false;
   try {
     const vcs = createVcsAdapter(cwd, { kind: 'git' });

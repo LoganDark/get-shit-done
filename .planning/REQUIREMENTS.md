@@ -208,7 +208,7 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | TEST-06 | Phase 1 | Complete |
 | TEST-07 | Phase 1 | Complete |
 | MIGR-01 | Phase 2 | Complete |
-| MIGR-02 | Phase 2 | In Progress |
+| MIGR-02 | Phase 2 | Complete (cosmetic sweep landed in Phase 5 plan 05-05 — error-message strings + comments in 4 of 6 cjs files updated; lint-vcs-no-raw-git stays at 0 violations) |
 | MIGR-03 | Phase 2 | Complete |
 | MIGR-04 | Phase 2 | Recorded as deferred to milestone-end task (post-Phase-5) per Phase 2 plan 02-12 |
 | TEST-05 | Phase 2 | Complete |
