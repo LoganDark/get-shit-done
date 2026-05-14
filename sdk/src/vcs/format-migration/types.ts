@@ -27,9 +27,14 @@ export type MigrationDirection = 'git→jj' | 'jj→git';
  *                 `childrenInTarget` lists that ancestor's direct children in the
  *                 target VCS (jj-side only; empty on git target — see orphan.ts).
  *   - 'unresolvable': ancestor walk hit the root without finding a counterpart.
+ *   - 'skip': the candidate does NOT exist as a commit on the SOURCE backend
+ *             (e.g. a hex substring inside an English word like `cceeded`
+ *             from `succeeded`, or a placeholder like `deadbeef`). The
+ *             rewriter leaves the match verbatim — no orphan record, no
+ *             breadcrumb. This is the source-side existence safety net (B-07).
  */
 export interface ResolveResult {
-  kind: 'resolved' | 'ancestor' | 'unresolvable';
+  kind: 'resolved' | 'ancestor' | 'unresolvable' | 'skip';
   targetId?: string;
   childrenInTarget?: string[];
 }

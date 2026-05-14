@@ -13,12 +13,20 @@
  * Rationale: `migrateContent` is pure-sync to keep the regex loop simple. The
  * async ↔ sync split lives here, not inside migrateContent.
  *
- * On `VcsExecError`, the async resolver delegates to `deps.ancestor(...)` (the
- * `orphan.ts:resolveAncestor` walker). On null ancestor → `unresolvable`.
+ * Resolution pipeline (per ID, post B-07 redesign):
+ *   1. Source-side existence check (`vcs.refs.exists(...)`). If the ID does
+ *      NOT exist as a commit on the SOURCE backend, return `{kind:'skip'}`
+ *      WITHOUT ever consulting the target backend. This catches hex-shaped
+ *      substrings that are not real commit hashes (e.g. `cceeded` inside
+ *      `succeeded`) and prevents them from becoming orphan breadcrumbs.
+ *   2. Target-side direct translation via `commitIdOf` / `changeIdOf`.
+ *   3. On `VcsExecError` from step 2 → delegate to `deps.ancestor(...)` (the
+ *      `orphan.ts:resolveAncestor` walker). On null ancestor → `unresolvable`.
  */
 
 import { commitIdOf, changeIdOf } from '../parse/jj-id.js';
 import { VcsExecError } from '../exec.js';
+import { expr } from '../expr.js';
 import type { VcsAdapter } from '../types.js';
 import type {
   MigrationDirection,
@@ -59,6 +67,35 @@ export function createIdResolver(deps: CreateIdResolverDeps): IdResolver {
       if (cached !== undefined) return cached;
 
       let result: ResolveResult;
+
+      // ─── Step 1: source-side existence check (B-07 safety net) ────────
+      // Before consulting the target backend, verify the candidate exists
+      // as a commit on the SOURCE backend. Hex-shaped substrings of
+      // English words (e.g. `cceeded` inside `succeeded`) and illustrative
+      // placeholders (e.g. `deadbeef`) fail this check and short-circuit
+      // to `kind:'skip'` — no orphan record, no breadcrumb, no edit.
+      //
+      // `vcs.refs.exists(...)` returns false on any "not a commit" outcome
+      // (unknown ID, wrong shape, etc.). It does NOT throw for invalid
+      // input — defensive try/catch covers exotic VcsExecError shapes.
+      let sourceExists = false;
+      try {
+        // `expr.rev(id)` accepts both git-SHA-shaped and jj-change-id-shaped
+        // strings and validates the surface shape. The backend's
+        // `refs.exists()` returns false on unknown IDs; we treat any throw
+        // as nonexistent too (covers malformed inputs and exotic backend
+        // errors). The match is then emitted verbatim by `migrateContent`.
+        sourceExists = deps.vcs.refs.exists(expr.rev(id));
+      } catch {
+        sourceExists = false;
+      }
+      if (!sourceExists) {
+        result = { kind: 'skip' };
+        cache.set(id, result);
+        return result;
+      }
+
+      // ─── Step 2: target-side direct translation ───────────────────────
       try {
         // Direct translation: source-VCS id → target-VCS id.
         //   git→jj: source ID is a git SHA, target is jj change_id → changeIdOf
@@ -70,7 +107,10 @@ export function createIdResolver(deps: CreateIdResolverDeps): IdResolver {
         result = { kind: 'resolved', targetId };
       } catch (err) {
         if (err instanceof VcsExecError) {
-          // Unknown on the target side — walk ancestors.
+          // ─── Step 3: ancestor walk for legitimate orphans ──────────────
+          // The ID exists on source but has no direct target counterpart
+          // (e.g. the source-side history was rewritten post-migration).
+          // Walk ancestors via `orphan.ts:resolveAncestor`.
           const walked = await deps.ancestor(deps.vcs, deps.cwd, id, deps.direction);
           result =
             walked === null

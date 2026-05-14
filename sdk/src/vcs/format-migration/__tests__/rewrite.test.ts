@@ -18,8 +18,8 @@
  *   - Multiple matches in one file aggregate orphans correctly
  */
 
-import { describe, it, expect } from 'vitest';
-import { migrateContent, GIT_SHA_RE, JJ_CID_RE } from '../rewrite.js';
+import { describe, it, expect, vi } from 'vitest';
+import { migrateContent, findEligibleZones, GIT_SHA_RE, JJ_CID_RE } from '../rewrite.js';
 import type { ResolveResult, MigrationDirection } from '../types.js';
 
 /** Helper: build a sync resolver that returns a fixed result for one ID. */
@@ -253,5 +253,197 @@ describe('migrateContent — regex stateful-lastIndex defence', () => {
       '/tmp/x.md',
     );
     expect(r2.content).toBe('X `abc1234` Y');
+  });
+});
+
+// ─── B-07: zone-targeting + skip kind ──────────────────────────────────────
+
+describe('migrateContent — B-07 zone-targeting (prose is never rewritten)', () => {
+  it('does NOT rewrite hex substrings inside English words in prose', () => {
+    // `cceeded` is 7 lowercase hex chars inside `succeeded`. Pre-B-07 this
+    // tripped the regex and produced an `[orphan:cceeded]` breadcrumb.
+    // Post-B-07 the prose zone is excluded entirely — no resolver call,
+    // no edit.
+    const resolveSpy = vi.fn<(id: string) => ResolveResult>(() => ({ kind: 'unresolvable' }));
+    const input = 'A push that "succeeded" but the remote did not show your work.';
+    const r = migrateContent(input, 'git→jj', resolveSpy, '/tmp/x.md');
+    expect(r.content).toBe(input);
+    expect(r.orphans).toEqual([]);
+    expect(resolveSpy).not.toHaveBeenCalled();
+  });
+
+  it('does NOT rewrite real SHAs that appear only in prose (no backticks)', () => {
+    const resolveSpy = vi.fn<(id: string) => ResolveResult>(() => ({
+      kind: 'resolved',
+      targetId: 'kkkkkkkkmmmm',
+    }));
+    const input = 'See commit abc1234 for the fix.';
+    const r = migrateContent(input, 'git→jj', resolveSpy, '/tmp/x.md');
+    expect(r.content).toBe(input);
+    expect(r.orphans).toEqual([]);
+    expect(resolveSpy).not.toHaveBeenCalled();
+  });
+
+  it('DOES rewrite SHAs in inline backtick spans (canonical GSD convention)', () => {
+    const resolveSpy = vi.fn<(id: string) => ResolveResult>(() => ({
+      kind: 'resolved',
+      targetId: 'kkkkkkkkmmmm',
+    }));
+    const input = 'See `abc1234` for the fix.';
+    const r = migrateContent(input, 'git→jj', resolveSpy, '/tmp/x.md');
+    expect(r.content).toBe('See `kkkkkkkkmmmm` for the fix.');
+    expect(resolveSpy).toHaveBeenCalledWith('abc1234');
+  });
+
+  it('does NOT rewrite SHAs inside fenced code blocks (illustrative content)', () => {
+    const resolveSpy = vi.fn<(id: string) => ResolveResult>(() => ({
+      kind: 'resolved',
+      targetId: 'kkkkkkkkmmmm',
+    }));
+    const input = [
+      'Prose before.',
+      '```',
+      'git log --oneline',
+      'abc1234 fix something',
+      '```',
+      'Prose after.',
+    ].join('\n');
+    const r = migrateContent(input, 'git→jj', resolveSpy, '/tmp/x.md');
+    expect(r.content).toBe(input);
+    expect(resolveSpy).not.toHaveBeenCalled();
+  });
+
+  it('does NOT rewrite content inside tilde-fenced code blocks', () => {
+    const resolveSpy = vi.fn<(id: string) => ResolveResult>(() => ({
+      kind: 'resolved',
+      targetId: 'kkkkkkkkmmmm',
+    }));
+    const input = ['Prose.', '~~~', 'abc1234', '~~~', 'After.'].join('\n');
+    const r = migrateContent(input, 'git→jj', resolveSpy, '/tmp/x.md');
+    expect(r.content).toBe(input);
+    expect(resolveSpy).not.toHaveBeenCalled();
+  });
+
+  it('does NOT rewrite backticked content with mixed payload (only purely-hex spans)', () => {
+    // `abc1234 fix` is a mixed-content span — the rewriter conservatively
+    // leaves it alone rather than splicing inside a backtick. Users who
+    // want the SHA rewritten put it in its own backtick.
+    const resolveSpy = vi.fn<(id: string) => ResolveResult>(() => ({
+      kind: 'resolved',
+      targetId: 'kkkkkkkkmmmm',
+    }));
+    const input = 'See `abc1234 fix` for the change.';
+    const r = migrateContent(input, 'git→jj', resolveSpy, '/tmp/x.md');
+    expect(r.content).toBe(input);
+    expect(resolveSpy).not.toHaveBeenCalled();
+  });
+
+  it('rewrites frontmatter values on allowlisted commit-bearing keys', () => {
+    const resolveSpy = vi.fn<(id: string) => ResolveResult>(() => ({
+      kind: 'resolved',
+      targetId: 'kkkkkkkkmmmm',
+    }));
+    const input = [
+      '---',
+      'resolution_commit: abc1234',
+      'status: resolved',
+      '---',
+      'Body — `abc1234` appears here too.',
+    ].join('\n');
+    const r = migrateContent(input, 'git→jj', resolveSpy, '/tmp/x.md');
+    // Both occurrences rewritten (frontmatter value + backticked body span).
+    expect(r.content).toBe([
+      '---',
+      'resolution_commit: kkkkkkkkmmmm',
+      'status: resolved',
+      '---',
+      'Body — `kkkkkkkkmmmm` appears here too.',
+    ].join('\n'));
+  });
+
+  it('does NOT rewrite frontmatter values on non-allowlisted keys', () => {
+    const resolveSpy = vi.fn<(id: string) => ResolveResult>(() => ({
+      kind: 'resolved',
+      targetId: 'kkkkkkkkmmmm',
+    }));
+    const input = [
+      '---',
+      'author_email: abc1234@example.com',
+      'note: deadbeef placeholder',
+      '---',
+      'Body without backtick.',
+    ].join('\n');
+    const r = migrateContent(input, 'git→jj', resolveSpy, '/tmp/x.md');
+    expect(r.content).toBe(input);
+    expect(resolveSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('migrateContent — B-07 skip kind (resolver opt-out)', () => {
+  it("emits the match verbatim and records NO orphan when resolve returns kind:'skip'", () => {
+    const resolveSpy = vi.fn<(id: string) => ResolveResult>(() => ({ kind: 'skip' }));
+    const input = 'See `deadbeef` here.';
+    const r = migrateContent(input, 'git→jj', resolveSpy, '/tmp/x.md');
+    expect(r.content).toBe('See `deadbeef` here.');
+    expect(r.orphans).toEqual([]);
+    expect(resolveSpy).toHaveBeenCalledWith('deadbeef');
+  });
+
+  it("skip and resolved mix correctly within one file", () => {
+    const resolveSpy = vi.fn<(id: string) => ResolveResult>((id) => {
+      if (id === 'deadbeef') return { kind: 'skip' };
+      return { kind: 'resolved', targetId: 'kkkkkkkkmmmm' };
+    });
+    const input = 'Real `abc1234` and placeholder `deadbeef`.';
+    const r = migrateContent(input, 'git→jj', resolveSpy, '/tmp/x.md');
+    expect(r.content).toBe('Real `kkkkkkkkmmmm` and placeholder `deadbeef`.');
+    expect(r.orphans).toEqual([]);
+  });
+});
+
+describe('findEligibleZones — direct unit tests', () => {
+  it('returns empty set for prose with no backticks or frontmatter', () => {
+    const zones = findEligibleZones('plain prose with abc1234 in it');
+    expect(zones).toEqual([]);
+  });
+
+  it('detects backticked hex spans only when the entire content is hex-shaped', () => {
+    const input = '`abc1234` and `not hex content` and `kxnzlnrntwou`';
+    const zones = findEligibleZones(input);
+    // Two eligible zones: `abc1234` and `kxnzlnrntwou`.
+    expect(zones).toHaveLength(2);
+    expect(zones[0].source).toBe('backtick');
+    expect(input.slice(zones[0].start, zones[0].end)).toBe('abc1234');
+    expect(input.slice(zones[1].start, zones[1].end)).toBe('kxnzlnrntwou');
+  });
+
+  it('detects frontmatter values on allowlisted keys', () => {
+    const input = ['---', 'resolution_commit: abc1234', '---', 'body'].join('\n');
+    const zones = findEligibleZones(input);
+    expect(zones).toHaveLength(1);
+    expect(zones[0].source).toBe('frontmatter');
+    expect(input.slice(zones[0].start, zones[0].end)).toBe('abc1234');
+  });
+
+  it('skips fenced code blocks entirely', () => {
+    const input = ['Before.', '```', '`abc1234`', '```', 'After.'].join('\n');
+    const zones = findEligibleZones(input);
+    expect(zones).toEqual([]);
+  });
+
+  it('honors mid-line ``` as opening a fence and skips through to the close', () => {
+    // Markdown sometimes uses ```lang at the start of a line — the regex
+    // must treat that line as a fence delimiter.
+    const input = ['Before.', '```bash', 'echo abc1234', '```', 'After `abc1234` is eligible.'].join('\n');
+    const zones = findEligibleZones(input);
+    expect(zones).toHaveLength(1);
+    expect(zones[0].source).toBe('backtick');
+    expect(input.slice(zones[0].start, zones[0].end)).toBe('abc1234');
+  });
+
+  it('does NOT mistake frontmatter on a non-allowlisted key', () => {
+    const input = ['---', 'author: deadbeef', '---'].join('\n');
+    const zones = findEligibleZones(input);
+    expect(zones).toEqual([]);
   });
 });
