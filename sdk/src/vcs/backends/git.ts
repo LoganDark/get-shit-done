@@ -675,13 +675,29 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
       args.push(opts.rev);
       return execGit(cwd, args);
     },
+    // Phase 5 plan 05-06 Task 1 (CR-04 fix): drop an in-progress git revert
+    // sequence. Caller (revertQuery on git backend) routes
+    // `gsd-sdk query revert --abort` here. Non-zero exit code is allowed
+    // (e.g. no in-progress sequence) and is surfaced to the caller without
+    // throwing — matches the rest of the gitOnly verb contract (every other
+    // gitOnly method returns ExecResult).
+    revertAbort: (): ExecResult => {
+      return execGit(cwd, ['revert', '--abort']);
+    },
     // Plan 05-01 Task 2 (D-33 batch 1, Rule 3 closure): reset / merge / restore
     // primitives consumed by sdk/src/query/{reset,merge,restore}.ts SDK shims.
     // The jj backend exposes no parallel methods — the SDK shims return a
     // typed error after the `vcs.kind === 'jj'` branch is reached. Args
     // built via array; no shell-string concatenation in any path.
-    reset: (opts: { ref: string; mode: 'soft' | 'mixed' | 'hard' }): ExecResult => {
+    //
+    // Phase 5 plan 05-06 Task 1 (CR-03 fix): path-scoped reset. When
+    // `opts.paths` is non-empty the impl appends `-- <paths>` so only those
+    // index entries are touched.
+    reset: (opts: { ref: string; mode: 'soft' | 'mixed' | 'hard'; paths?: string[] }): ExecResult => {
       const args = ['reset', `--${opts.mode}`, opts.ref];
+      if (opts.paths && opts.paths.length > 0) {
+        args.push('--', ...opts.paths);
+      }
       return execGit(cwd, args);
     },
     merge: (opts: { ref: string; squash?: boolean; noFf?: boolean; noCommit?: boolean }): ExecResult => {
