@@ -579,7 +579,8 @@ The commands above cover the most common day-to-day flows. Every command listed 
 
 - **`/gsd-health [--repair] [--context]`** — Diagnose planning directory health and optionally repair issues.
 - **`/gsd-forensics [problem description]`** — Post-mortem investigation for failed GSD workflows; diagnoses what went wrong.
-- **`/gsd-undo --last N | --phase NN | --plan NN-MM`** — Safe git revert. Roll back phase or plan commits using the phase manifest with dependency checks.
+- **`/gsd-undo --last N | --phase NN | --plan NN-MM`** — Safe git revert. Roll back phase or plan commits using the phase manifest with dependency checks. On jj add `--force` to override shared-history protection (passes `--ignore-immutable`).
+- **`/gsd-migrate-vcs [--target jj|git] [--native] [--force]`** — Bidirectional VCS migration. Rewrites `.planning/` revision-id encodings between git SHAs and jj change_ids in a single atomic commit and flips `vcs.adapter`. Auto-runs `jj git init --colocate` on a plain git repo. Round-trip safe and idempotent.
 - **`/gsd-docs-update [--force] [--verify-only]`** — Generate or update project documentation verified against the codebase.
 - **`/gsd-extract-learnings <phase>`** — Extract decisions, lessons, patterns, and surprises from completed phase artifacts.
 
