@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: first upstream sync
-status: completed
+status: Awaiting next milestone
 stopped_at: Phase 7 context gathered
-last_updated: "2026-05-14T14:27:40.159Z"
-last_activity: 2026-05-14 -- Phase 07 marked complete
+last_updated: "2026-05-14T14:44:49.379Z"
+last_activity: 2026-05-14 — Milestone v1.1 completed and archived
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 61
-  completed_plans: 62
+  total_phases: 1
+  completed_phases: 1
+  total_plans: 5
+  completed_plans: 5
   percent: 100
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 
 ## Current Position
 
-Phase: 07 — COMPLETE
+Phase: Milestone v1.1 complete
 Plan: —
-Status: Phase 07 complete
-Last activity: 2026-05-14 -- Phase 07 marked complete
+Status: Awaiting next milestone
+Last activity: 2026-05-14 — Milestone v1.1 completed and archived
 
 ## Performance Metrics
 
@@ -217,3 +217,7 @@ Resume file: .planning/phases/07-reconcile-fork-capabilities-with-upstream-add-m
 - `sdk/src/query/config-mutation.test.ts:441` — `expect(raw.commit_docs).toBe(true)` failing. Not introduced by 01-02. Out of scope.
 
 These should be triaged in a future maintenance plan.
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
