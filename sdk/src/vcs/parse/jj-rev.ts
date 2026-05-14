@@ -25,6 +25,21 @@ export function toJjRev(rev: RevisionExpr): string {
   if (encoded.startsWith('rev:')) {
     return encoded.slice('rev:'.length); // emit change_id (or SHA) prefix verbatim
   }
+  // Plan 06-01 Task 2 — 'children:<inner>' translates to jj revset 'x+'
+  // (direct children, depth-1 — empirically verified by jj-children-probe.test.ts).
+  if (encoded.startsWith('children:')) {
+    const innerEncoded = encoded.slice('children:'.length) as unknown as RevisionExpr;
+    const innerTranslated = toJjRev(innerEncoded); // recursion
+    return `${innerTranslated}+`;
+  }
+  // Plan 06-01 Task 2 — 'parents:<inner>' translates to jj revset 'x-'.
+  // Parenthesise the inner expression so suffix-operator precedence is
+  // unambiguous when inner itself is a compound revset.
+  if (encoded.startsWith('parents:')) {
+    const innerEncoded = encoded.slice('parents:'.length) as unknown as RevisionExpr;
+    const innerTranslated = toJjRev(innerEncoded);
+    return `(${innerTranslated})-`;
+  }
   const p = parseExpr(rev);
   switch (p.kind) {
     case 'head':
@@ -35,5 +50,13 @@ export function toJjRev(rev: RevisionExpr): string {
       return p.name!;
     case 'remote':
       return `${p.name}@${p.remote}`;
+    // Plan 06-01 Task 2 — children/parents kinds are handled by the string-prefix
+    // branches above (children: → <inner>+; parents: → (<inner>)-). These cases
+    // are unreachable but keep the switch exhaustive for TypeScript.
+    case 'children':
+    case 'parents':
+      throw new Error(
+        `parse/jj-rev: unreachable — '${p.kind}:' should have been handled by prefix branch`,
+      );
   }
 }

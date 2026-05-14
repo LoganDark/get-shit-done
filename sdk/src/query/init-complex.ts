@@ -209,6 +209,7 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
       (hasExistingCode || hasPackageFile) && !pathExists(projectDir, '.planning/codebase'),
 
     has_git: pathExists(projectDir, '.git'),
+    has_jj: pathExists(projectDir, '.jj'),    // Phase 6 plan 06-01 — greenfield gate signal (plan 06-03 consumer)
 
     brave_search_available: hasBraveSearch,
     firecrawl_available: hasFirecrawl,

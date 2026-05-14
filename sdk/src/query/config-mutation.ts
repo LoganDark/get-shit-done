@@ -32,8 +32,11 @@ import type { QueryHandler } from './utils.js';
 /**
  * Write config JSON atomically via temp file + rename to prevent
  * partial writes on process interruption.
+ *
+ * Exported for use by plans 06-02 / 06-03 (vcs.adapter flip + greenfield gate)
+ * per Phase 6 RESEARCH §"vcs.adapter Write Semantics" Option A.
  */
-async function atomicWriteConfig(configPath: string, config: Record<string, unknown>): Promise<void> {
+export async function atomicWriteConfig(configPath: string, config: Record<string, unknown>): Promise<void> {
   const tmpPath = configPath + '.tmp.' + process.pid;
   const content = JSON.stringify(config, null, 2) + '\n';
   try {

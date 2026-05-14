@@ -71,6 +71,9 @@ const VALID_CONFIG_KEYS = new Set([
   'runtime',
   // #3162 — documented top-level key: controls model ID resolution for non-Claude runtimes
   'resolve_model_ids',
+  // Phase 6 plan 06-01 — sticky VCS adapter selector (Phase 3 D-17 storage location).
+  // Legal write values: git | jj. (auto is read-time-only — index.ts:70.)
+  'vcs.adapter',
 ]);
 
 /**
