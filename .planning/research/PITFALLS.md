@@ -1,370 +1,313 @@
 # Pitfalls Research
 
-**Domain:** Porting a worktree-heavy, hook-driven, ~5k LOC TypeScript+CJS Node toolchain (GSD) from git to Jujutsu (jj) as a second VCS backend; solo developer on a focused-sprint timeline; upstream-tracking hard fork.
-**Researched:** 2026-05-09
-**Confidence:** MEDIUM-HIGH (jj behaviors verified against official docs and tracking issues; abstraction/fork-management pitfalls verified across multiple primary sources; some "what bites in practice" claims are MEDIUM because the project category — automated, programmatic, multi-workspace, hook-firing jj wrappers — has limited prior art.)
+**Domain:** Unified-revision-model cleanup on dual-backend (git + jj) `VcsAdapter` in TypeScript SDK + CJS-runtime hybrid (GSD jj-port fork)
+**Researched:** 2026-05-14
+**Confidence:** HIGH (codebase-grounded; jj community + Mercurial Evolve + Sapling prior art consulted)
+**Scope qualifier:** This file catalogues mistakes specific to ADDING the v1.2 unified-revision flip to THIS dogfooded codebase. Generic "refactoring is hard" pitfalls are out of scope; every entry is tied to either a concrete file path, a concrete prior incident in this repo's history, or a documented prior-art incident in another VCS-tooling project.
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Treating colocated jj as "git-with-extras" and freely interleaving git commands
+### Pitfall 1: Silent stable-identity semantic flip (snapshot-stable → rebase-stable)
 
 **What goes wrong:**
-GSD already has both `.git` and `.jj` and is running colocated. The temptation — especially under sprint pressure — is to "just shell out to git for the gnarly bits and use jj for the nice bits." This breaks two ways:
-1. Mutating git commands (commit, reset, checkout, branch -d, fetch with prune) silently desync jj's internal state. The next jj command does an automatic `jj git import`, which can produce **divergent change IDs**, **conflicted bookmarks**, or **a branch pointer in the wrong place**. The official docs explicitly warn: "There may still be bugs when interleaving mutating jj and git commands, usually having to do with a branch pointer ending up in the wrong place."
-2. Background processes (IDEs, direnv, `git status` in shell prompts, file-watchers) can run `git fetch` without user awareness, producing the same drift.
+A caller stores `LogEntry.hash` (today: `commit_id`, snapshot-stable — never moves) and re-uses it later as a "pointer to this exact tree state." After the v1.2 flip the same field returns `change_id` (rebase-stable — moves with rewrites; tracks "the same change" not "the same snapshot"). Code that treated the stored id as an immutable snapshot identity now silently dereferences the *current head of an evolving change*, which can be a different tree, a different parent, or in the divergent-change case (jj allows two visible commits with the same change_id) an *ambiguity error* at lookup time rather than a silent miss.
+
+The trap is asymmetric: on git the semantics are unchanged (commit_id is the only id), so all parameterized tests pass on git. On jj, the rebased-out-from-under-the-stored-id scenario only manifests when something rewrites between store and re-use — exactly the kind of timing-dependent bug that escapes unit tests and surfaces in real workflows (e.g. parallel agent dispatch, mid-phase rebase, hotfix-on-top).
 
 **Why it happens:**
-The adapter abstraction makes both backends look interchangeable. Calling `git()` from a jj-backend code path looks fine in isolation, ships green tests, then explodes weeks later when a divergent change ID surfaces in production-ish dogfood usage. The colocated mode also lulls you into thinking "well, the .git is right there, why not?"
+- The two ids look syntactically interchangeable in TypeScript (`string`). The compiler enforces no distinction.
+- `LogEntry.hash` field name (carrying "hash" semantic) historically encoded the snapshot-stable expectation; the flip changes the field's meaning without renaming it (per SEED-001, the rename is *optional* in the seed proposal).
+- The stable-id distinction is invisible at the call site — it's a property of *what the caller does later* with the id, not of the call itself.
+- Real-world prior-art evidence: Gerrit's Change-Id has the same semantic split; the jj↔Gerrit integration design doc explicitly calls out that "the merged commits from the GH PR do not include any trailing Change-Id… [causing] tracking issues when rebasing." That is the same class of bug, externalised.
 
 **How to avoid:**
-- Adapter contract: **the jj backend never shells out to git** for state-mutating operations. Read-only inspection of git refs (`git rev-parse`, `git config`) is acceptable; mutation goes through `jj git`-prefixed commands or through `jj` directly.
-- Lint rule (or a runtime assertion in dev mode): if `vcsBackend === 'jj'` and the call site invokes `git <mutating-verb>`, throw or warn loudly.
-- Test fixture: a regression test that runs an "interleaved" sequence (jj op → git op → jj op) and asserts the change graph has not produced divergent IDs. If the adapter is hygienic this test is unreachable; the test exists to fail fast if a future commit reintroduces the temptation.
-- For the dogfood repo (this very repo), document a "no manual `git commit/checkout/branch` in jj-backed surfaces" rule in `CLAUDE.md`.
+- **Audit-first before flip** (already in the v1.2 plan): the audit phase MUST classify every `.hash` / `commit_id` reachable read site as one of `{snapshot-needed, rebase-stable-needed, indifferent}`. Output: `.planning/intel/id-namespace-audit.md` (per PROJECT.md Active scope).
+- **Rename `LogEntry.hash`** (SEED-001 Task 3 suggests this). Either `id` (with prominent `// rebase-stable on jj, snapshot-stable on git`) or split into `LogEntry.changeId` / `LogEntry.commitId`. Renaming forces every call-site to be re-considered at compile time — a free audit pass.
+- **Brand the type** at the TS level: `type Revision = string & { readonly __brand: 'Revision' }`. Cheap, catches `entries[0].hash === storedSha` mismatches when storedSha is an unbranded string.
+- **Runtime guard at the boundary** for cross-time storage: if a caller stores an id in `.planning/` or in a manifest that survives across rebase windows, document the storage-stability requirement in the schema (e.g. `STATE.md` bookkeeping fields).
 
 **Warning signs:**
-- `jj log` shows the same change ID appearing twice with different commit IDs (divergent).
-- A bookmark suddenly shows as conflicted (`name??`).
-- After running a GSD command, `jj st` reports the working copy is at an unexpected revision.
-- `jj git import` runtime grows noticeably between releases (suggests packed-refs pollution).
+- A test that "works on git, flakes on jj only after a rebase happens between two assertions"
+- `jj log -r <stored-id>` returning a *different* tree than the original store time (silent for tools that don't compare trees)
+- jj error: "ambiguous change id" or "no such change" when looking up a previously valid stored id (divergent-change fork case)
+- Mismatched diffs between two captures of "the same change" across rebase
 
 **Phase to address:**
-Foundation phase (VCS-01 through VCS-03). The adapter contract and the lint/assertion guard belong in the same change as the jj backend stub. Address before any per-command migration.
+Audit phase (Task 1 per SEED-001 Phase shape). Verification: every `LogEntry.hash` consumer in the audit doc has a written rationale `{snapshot|rebase|indifferent}`.
 
 ---
 
-### Pitfall 2: jj's automatic working-copy snapshot fires on every command — silently amends GSD state
+### Pitfall 2: Hex-prefix matching silently always-misses against change_id alphabet
 
 **What goes wrong:**
-By default, almost every `jj` command snapshots the working copy at the start and amends the working-copy commit. GSD frequently does multi-step sequences: write a planning file → run `jj log` to inspect state → write another file → commit. Each intermediate `jj log` (or any read-only-looking jj invocation) re-snapshots, which means **a file written between two jj inspect calls is now in the working-copy commit before GSD intended to commit it**. This is the inverse of git's "you must `git add` before it's tracked" mental model.
+Code that does `id.startsWith(prefix)` with a hex prefix (or `id.match(/^[0-9a-f]+/)`, or implicit substring comparison against a known-hex constant) silently returns `false` on jj after the flip. The change_id alphabet is `[k-z]` — the 16-letter reverse-base32 set per jj 0.41 (per `sdk/src/vcs/format-migration/rewrite.ts:63` and confirmed by Plan 06-01 A1 probe: "alphabet is disjoint from `[0-9a-f]` — there is zero risk of jj_CID matching a hex SHA"). After the flip, every hex-prefix comparison returns `false`/null, not an error. *No exception is thrown.* The failure is silent.
 
-Concrete failure modes:
-- A planning file written mid-workflow ends up in the same commit as code changes, breaking GSD's commit-boundary invariants.
-- A test that creates a file, runs `jj log` to verify state, then deletes the file and asserts "working copy is clean" fails because jj snapshotted between those steps and the file is in the working-copy commit's tree.
-- Worktree-safety bugs (e.g., `bug-2924-worktree-head-attachment` analog): GSD checks "is HEAD attached?" by running a jj inspect command, which itself moves the working-copy pointer.
+This is the most dangerous failure mode in the v1.2 flip because:
+1. Tests that *check the prefix matches* will fail loudly on jj (good)
+2. Tests that *check the prefix is unique* or *check `not.toMatch`* will pass deceptively (bad — coverage holes)
+3. Production code that treats "no match" as a not-found case will quietly fall through to a no-op, a default, or a "create new" branch
+
+Concrete example from this repo: `sdk/src/query/verify.ts:683` does `(e.hash || '').slice(0, 7)` — this is a *display* slice, harmless. But `sdk/src/query/log.ts:72` does `expr.rev(entries[n].hash)` — which is a *reuse*, and `expr.rev` validates shape and rejects non-hex non-jj-alphabet strings at runtime (see `sdk/src/vcs/expr.ts:92`: "expr.rev: not a hex-SHA or change-id shaped string"). After the flip, an old jj LogEntry-hash-as-hex assumption would either be silently re-shaped (if `expr.rev` widens) or throw at the wrong stack-frame.
 
 **Why it happens:**
-Engineers porting from git assume read-only commands (`status`, `log`, `show`) are side-effect-free. In jj, only commands run with `--ignore-working-copy` are truly read-only.
+- Hex prefixes are *visually* indistinguishable from short jj prefixes until you look at the alphabet — `abc1234` is unambiguously hex; `xyznopr` is unambiguously change_id; but a developer reading code sees only "id-shaped string."
+- Many tests use literal hex prefixes pasted from a baseline run; after the flip the literals are wrong-alphabet but compile + run.
+- The jj community has already encountered the related class: prefix-uniqueness assumptions break on divergent changes (jj issue #2476: "`jj log -r <change id prefix>` can miss some commits in divergent change"). The takeaway: prefix lookup against change_ids is *strictly less reliable* than against commit_ids even when the alphabet is correct.
 
 **How to avoid:**
-- Adapter rule: **every read-only jj invocation passes `--ignore-working-copy`** unless the call site has explicitly opted in to snapshot semantics.
-- Centralize `jj` invocation in one helper (mirrors the `execGit()` seam GSD never had on the git side); have it default `--ignore-working-copy` and require an opt-in flag for snapshot-on-read.
-- Unit test: invoke a sequence of read-only adapter methods between two `vcs.status()` calls and assert the working-copy commit ID is unchanged.
+- **Lint guard pattern** (extend `lint-vcs-no-raw-git`'s default-deny to a parallel `lint-vcs-no-hex-id-shape`): scan for the regex `/[0-9a-f]{7,40}/` inside string literals AND template literals reachable from jj-routed code paths. False positives (commit URLs, fixture hex constants in *git-only* fixtures) go in an annotated allowlist.
+- **Boundary-only hex assumptions:** any code that intentionally needs hex must route through `vcs.jjOnly.commitIdOf(rev)` (the SEED-001 escape hatch — but kept private/audited per PROJECT.md "no escape hatch on cross-backend surface").
+- **Test coverage:** add a parameterized test that asserts `LogEntry.hash` does NOT match `/^[0-9a-f]/` on jj (positive assertion of the new shape), placed in the contract suite at `sdk/src/vcs/__tests__/adapter-contract.test.ts`. Cheap, catches regressions.
+- **Audit pass for slice/substring-of-id literals:** `grep -n "\.slice(0, 7)\|\.slice(0, 8)\|\.slice(0, 12)" sdk/src` — every match against an id-bearing field needs a per-call decision (display vs reuse).
 
 **Warning signs:**
-- Test failures of the form "expected working copy to be empty, found N files" where N grew after a recent refactor that added a `vcs.log()` call.
-- "Stale working copy" errors in another workspace immediately after running a query in this one (because the snapshot rewrote the working-copy commit, and any sibling workspace depending on it became stale — see Pitfall 4).
+- New jj test failures clustered in code that previously passed git
+- "No commit found" / "no match" log lines appearing on jj where git-side returns a result
+- `expr.rev(...)` throws in stack frames downstream of `LogEntry.hash` consumers
+- `if (id.startsWith(prefix))` branches that *never enter the true arm* on jj (silent — no error, just dead code on one backend)
 
 **Phase to address:**
-Foundation (VCS-01). The default-`--ignore-working-copy` policy is a one-line adapter design decision; getting it wrong forces re-audit of every call site later.
+Audit phase (find them) + flip phase (fix them) + lint phase (prevent regression).
 
 ---
 
-### Pitfall 3: `jj workspace` and `git worktree` are NOT 1:1 — semantic mapping is design-heavy
+### Pitfall 3: Cross-backend test-equality over-broad relaxation hides regressions
 
 **What goes wrong:**
-GSD's worktree code carries hard-won bug history: `bug-2924-worktree-head-attachment`, `bug-2774-cleanup-workspace-safety`, `bug-3097/3099-worktree-path-safety`, `bug-2075-deletion-safeguards`, `bug-2431-locked-surfacing`, `bug-2015-base-branch`, `bug-2388-no-branch-rename`. A naive port that maps `git worktree add` → `jj workspace add` and `git worktree remove` → `jj workspace forget` will silently regress several of these:
+Plan 02 of Phase 7 already hit this: a parameterized test had `expect(workspace.merge.result).toEqual(bookmarks.list().rev)` and had to relax to *presence-only* (`expect(rev).toBeTruthy()`) because the two values are in different namespaces. The relaxation is correct in isolation, but the *pattern* — "I'll just check it's truthy" — propagated through several test files in v1.1 (per `07-02-SUMMARY.md` Deviations §2). After v1.2 there will be *more* such mismatches during the migration window: callers that previously matched on git will diverge from jj by id-shape, even when the underlying *meaning* still matches.
 
-| Git bug class | Carries to jj? | Why / why not |
-|---|---|---|
-| Worktree HEAD attachment (`bug-2924`) | **No analog** | jj has no detached HEAD concept; change IDs serve the role. Test must be rewritten to assert "workspace's working-copy commit is the expected change ID," not "HEAD points to a branch." |
-| Worktree path safety (`bug-3097/3099`, `bug-2774`) | **Yes — same** | Path-injection / symlink / `..` traversal hazards are filesystem-level; orthogonal to VCS. Tests carry over verbatim. |
-| Worktree deletion safeguards (`bug-2075`) | **Partial** | `jj workspace forget` does NOT delete the working-copy directory on disk. GSD's "delete the worktree" semantics need a two-step on jj: `jj workspace forget` + filesystem `rm -rf`. Accidentally calling only one of them produces an orphan workspace OR an orphan directory. |
-| Worktree locked-surfacing (`bug-2431`) | **No direct analog** | jj has no "lock" primitive equivalent to `git worktree lock`. Either drop the feature on jj backend, or design a sentinel-file convention. |
-| Base-branch detection (`bug-2015`) | **Different mechanism** | jj uses bookmarks (which don't auto-move on commit) instead of branches. "Base branch" semantics map to "tracked remote bookmark," but the detection heuristic differs. |
-| No-branch-rename (`bug-2388`) | **Inverted** | In jj, bookmarks are explicit pointers; renaming a bookmark is `jj bookmark move`/`forget`+`set`. The "git auto-renames branch on push" pitfall does not exist. The new pitfall is "bookmark didn't auto-advance to follow my new commit, and I pushed an old position." |
-
-Additionally: **jj workspaces share the underlying repo via `.jj/working_copy/`** — they're not independent clones. If workspace A rewrites a commit that workspace B's working-copy commit depends on, B becomes stale and `jj workspace update-stale` is required. GSD's parallel-phase execution will hit this: phase A on workspace 1 amends a shared ancestor, phase B on workspace 2 now needs an update step that has no git analog.
+The trap: a presence-only assertion catches "the field exists" but misses "the field points to the right commit." A test that's relaxed to `expect(rev).toBeTruthy()` will pass even if the implementation returns `'placeholder-id'` or a stale value.
 
 **Why it happens:**
-The mapping looks 1:1 in shallow comparison ("both have multiple working dirs sharing one repo"). Deep semantics differ in non-obvious ways. Solo developers under sprint pressure tend to skip the deep-dive and hit the bugs at integration time.
+- Path-of-least-resistance during test-suite triage when a parameterized test fails on one backend.
+- Real architectural divergence (genuinely different namespaces) makes strict equality wrong, but the relaxation overshoots by losing the *referential* check, not just the *shape* check.
+- v1.1 Plan 05 ("strict-green") shipped *despite* this gap because the relaxation was noted in the deviation log but not fixed.
 
 **How to avoid:**
-- Before writing the workspace adapter (WS-01), write a **semantic equivalence table** for every git-worktree operation GSD uses, mapping to the jj equivalent and flagging the "no analog" cases. This becomes the adapter contract.
-- For each existing worktree bug-fix test, decide explicitly: (a) carries verbatim, (b) needs jj-equivalent reformulation, (c) git-specific — gate behind backend check. Document the decision.
-- Add a stale-working-copy probe: after any cross-workspace mutating operation, the adapter checks if siblings became stale and surfaces it (or auto-runs `jj workspace update-stale`). Treat "stale working copy" as a first-class adapter concern, not an exception users debug.
-- Don't try to emulate `git worktree lock` on jj — design the staggering primitive (WS-02) on top of jj's actual concurrency model (file-based lock at `.jj/working_copy/lock` plus the lock-free op log).
+- **Resolve at the boundary** for cross-backend comparisons: when comparing a `change_id`-flavoured value against a `commit_id`-flavoured value across backends in a test, route both through `vcs.refs.resolveTo({ kind: 'change' | 'commit' })` (or equivalent normalization) and assert on the normalized form. This recovers referential equality.
+- **Per-backend expected fixtures:** for tests where the id-shape genuinely differs and that's the point, store per-backend baselines (`__fixtures__/git/` vs `__fixtures__/jj/`) rather than a single golden.
+- **Id-shape-agnostic matchers:** custom vitest matcher `expect(rev).toBeRevisionOf(expectedCommit)` that resolves both sides via the adapter and compares semantically. One central implementation, used everywhere.
+- **Forbid bare `.toBeTruthy()` on id-bearing fields** in CI: a lint pattern that flags `expect(...rev|...hash|...id).toBeTruthy()` and requires either an annotated waiver or a richer matcher. Mirrors the `lint-vcs-no-raw-git` discipline.
+- **Track the deviation list** explicitly: every relaxation made during the v1.2 phase goes into a single LEARNINGS-style table; close-gate requires every entry to be either fixed or have a written justification.
 
 **Warning signs:**
-- A worktree test passes on git but the equivalent jj test was "skipped pending design" and never came back.
-- Dogfood usage produces "stale working copy" errors that GSD doesn't surface clearly.
-- A workspace-forget operation leaves a directory behind that later GSD runs trip over (file conflicts, "directory exists" errors).
+- Tests that pass on both backends but assert nothing meaningful (visual review of `expect()` calls in changed test files)
+- The number of `toBeTruthy()` calls in `__tests__/*` increasing without a corresponding decrease in `toEqual()` calls
+- Rising count of "deviation: relaxed assertion" notes in plan SUMMARY.md files
 
 **Phase to address:**
-A dedicated workspace-mapping phase (between adapter foundation and per-command migration). Don't bury this inside "port worktree-safety.cjs to adapter" — it's design-heavy and needs its own slot. Verifies via WS-01/02/03 plus all `bug-XXXX-worktree-*` tests passing on jj.
+Test-migration phase (write the matchers/fixtures up-front, before flipping production code).
 
 ---
 
-### Pitfall 4: Concurrency model mismatch — no `.git/index.lock` analog
+### Pitfall 4: External-link emission boundary leak (escape-hatch contagion)
 
 **What goes wrong:**
-GSD's parallel-phase execution implicitly relies on git's `.git/index.lock` for serialization: two `git commit` invocations in the same worktree race for the lock and the second blocks/fails fast. jj has a fundamentally different concurrency model:
-- The repo state itself is **lock-free** — concurrent jj invocations just produce a fork in the operation log, which jj resolves by re-running the most recent op as a merge of the divergent ops.
-- Working-copy snapshots are protected by a **single file lock at `.jj/working_copy/lock`** (one per workspace).
-- Cross-workspace coordination has no built-in serialization at all.
+GitHub URLs require commit_id (`github.com/owner/repo/commit/<sha>`) — the canonical example is `scripts/changeset/github-release-notes.cjs:154` which builds `https://github.com/${normalizedSlug}/compare/${fromRef}...${toRef}`. After the flip, the cross-backend adapter no longer volunteers commit_id on jj; the link emitter must use the v1.2 boundary-I/O accessor (the `vcs.jjOnly.commitIdOf(rev)` of SEED-001, *re-scoped per PROJECT.md as a backend-private accessor*).
 
-Failure modes for GSD's parallel-phase model:
-1. Two GSD-spawned agents hit the same workspace simultaneously: one blocks on the working_copy lock, the other proceeds. Behavior depends on lock-acquisition order — non-deterministic.
-2. Two agents in different workspaces both rewrite the same ancestor commit: both succeed (lock-free), but the op log now has divergent operations and one of the resulting workspaces is stale.
-3. A GSD command interrupted mid-operation (Ctrl+C, OOM, timeout) leaves the working copy stale; the next invocation needs `jj workspace update-stale` or it operates on incorrect state. There's a known issue (jj #7538) about frequent stale-working-copy errors.
+The trap: once the accessor exists, *other* callers ask for one. "Just for the GitHub URL case" becomes "and also for the cache-key case" becomes "and also for this ad-hoc display case." Each new use-site weakens the architectural invariant ("workflows must not branch on `vcs.kind` for id reasons" — PROJECT.md Key Decisions). In TypeScript/Node modules this contagion is especially hard to bound because:
+1. **Re-exports:** an internal accessor exported from `vcs/jj/internal.ts` becomes accessible by anyone who `import { commitIdOf } from '../vcs/jj/internal.js'` — no compile error, no lint flag, just an architectural smell that's invisible to grep.
+2. **Transitive imports:** workflow code rarely imports from `vcs/jj/*` directly today, but a helper module added to `vcs/util/*` *can* import from `vcs/jj/*` and then *that* helper gets imported by workflow code. Two import hops bypass any "don't import from jj/" rule that scans direct imports only.
+3. **Dynamic require:** `require(\`./vcs/${kind}/internal\`)` defeats static analysis entirely (already used elsewhere in the SDK for backend selection — `sdk/src/vcs/backends.ts`).
 
 **Why it happens:**
-The mental model "lock contention = git index.lock" is hardwired into GSD's worktree-safety layer. jj's lock-free design means parallel ops complete instead of serializing — which is sometimes what you want and sometimes catastrophic.
+- Any escape hatch in a tightly-disciplined codebase becomes attractive precisely *because* it solves a hard problem cleanly. Other hard problems get rerouted through it.
+- TypeScript module visibility is module-scoped, not architectural-layer-scoped. There is no built-in "this export is only consumable by sibling modules" mechanism.
+- Prior art from this codebase's own history: the `vcs.gitOnly` namespace introduced in Phase 2.1 is the cautionary example — it was meant for one or two narrow needs and grew. PROJECT.md still notes the orchestrator parallelization gap is "the only acknowledged exception" for raw-git, but `gitOnly` itself has 4+ documented narrow uses already (`sdk/src/vcs/types.ts:433`, `:441`, `:457`, etc.).
 
 **How to avoid:**
-- Adapter operation `vcs.acquireWriteLock(workspace)`: on git, no-op (kernel-enforced via index.lock). On jj, takes an explicit advisory lock (e.g., flock on a sentinel file under the workspace) for cross-workspace serialization where GSD needs it.
-- For mutating operations that touch shared ancestors (rebase, squash), serialize at the GSD layer — don't rely on jj to detect the conflict.
-- After every interrupted operation, **always** check for and recover from stale working copies before proceeding. Build this into the adapter's `vcs.beforeCommand()` hook.
-- Document the "no kernel-level mutex" constraint in `WS-02`'s acceptance criteria.
+- **Single-callsite invariant:** the boundary-I/O accessor has *exactly one* import in the entire repo (the GitHub link emitter). Enforced by lint: count occurrences of the import; CI fails if > 1.
+- **Per-callsite justification with PR-blocking review:** every new caller that wants the accessor must add an entry to a tracked allowlist with a written rationale; the lint guard fails CI if a new entry is added without a code-owner approval. Mirrors the `scripts/lint-vcs-no-raw-git.allow.json` discipline (per the `$comment` field in that file: "Phase 2 will REMOVE bin/lib/*.cjs entries as each call site migrates to the adapter" — the allowlist is *append-rare, remove-aggressive*).
+- **Prefer alternatives that skip the problem:** SEED-001 explicitly suggests using *tag/release URLs* instead of commit URLs where possible (release URLs accept tag names, not commit ids — no namespace problem). PROJECT.md Active scope echoes: "prefer tag/release URLs to skip the problem."
+- **Module-private export pattern:** keep the accessor as a *non-public* export — i.e. not in any `index.ts` barrel re-export. Importers must use a deep path (`from '../vcs/backends/jj-internal-commit-id.js'`) which is itself a code-review red flag. Pair with an ESLint `no-restricted-imports` rule listing the deep path as restricted-with-allowlist.
+- **No dynamic-require escape hatch:** the boundary accessor is statically imported only. Lint rule: forbid `require(...vcs/jj...)` and `import(...vcs/jj...)` dynamic forms anywhere outside the backend factory.
 
 **Warning signs:**
-- "Stale working copy" errors appearing in CI flakiness (intermittent, hard to reproduce).
-- Divergent operations in `jj op log` after a parallel-phase run.
-- Two phases producing commits with the same change ID but different commit IDs (divergent change).
+- A second PR proposing to use the boundary accessor (the *first* "let's add one more case")
+- A new `vcs/util/` helper that imports the accessor (transitive-import hop)
+- Discussion in PR review that includes the phrase "we already have an escape for X, can we just"
 
 **Phase to address:**
-Workspace-mapping phase, paired with `WS-02`. The advisory-lock primitive belongs in the adapter, not bolted onto individual commands.
+Flip phase (introduce the accessor + the single-callsite invariant simultaneously) + lint phase (encode the invariant).
 
 ---
 
-### Pitfall 5: Hook implementation strategy will be re-litigated three times if not designed up front
+### Pitfall 5: Mid-phase `.planning/` cutover writes mixed-shape ids
 
 **What goes wrong:**
-jj has **no native hook system**. The PROJECT decided "Hooks ported jj-native (not just relying on colocation)" — but the implementation strategy has three viable paths, each with non-trivial gotchas:
+The v1.2 phase dogfoods on this very repo's own `.planning/` directory. As the surface flip lands mid-phase, in-flight `.planning/` files written *before* the flip encode commit_id-shape ids (40-char hex on jj); files written *after* the flip encode change_id-shape ids (12-char `[k-z]`). The result: `STATE.md`, `SUMMARY.md`, `CONTEXT.md` files inside the v1.2 phase directory itself contain ids in *both* shapes, and the rewriter at `sdk/src/vcs/format-migration/rewrite.ts` may or may not handle the mixed state cleanly depending on the direction it's run in.
 
-1. **Wrapper command** (replace `jj` binary with a shell script that fires hooks then delegates):
-   - PATH ordering is fragile — if user's shell PATH puts the real jj first, the wrapper doesn't fire.
-   - If the wrapper is in `~/bin/jj` and the user's IDE spawns jj via absolute path (`/opt/homebrew/bin/jj`), bypassed entirely.
-   - Recursive invocation: if the hook itself runs `jj something`, you re-enter the wrapper. Need a sentinel env var (`GSD_JJ_WRAPPER_DEPTH`) to break recursion.
-   - Security: a wrapper that lives in the repo is a code-execution vector; CI must be aware.
-   - On macOS, codesigning/quarantine attributes can break a binary-replacement strategy; shell wrappers are safer but slower.
-
-2. **Op-log polling** (background process watches `jj op log` for new operations and fires hooks after the fact):
-   - Inherently post-hoc — you cannot reject a commit, only react to it.
-   - Polling latency vs. CPU tradeoff; jj has no inotify-based "operation completed" signal.
-   - Race: hook fires after op N completes but before op N+1, and op N+1 changes what op N produced.
-
-3. **Colocated git hooks fire on git side** (HOOK-03 in PROJECT):
-   - Works when colocated, doesn't work for non-colocated jj users.
-   - Triggers only on `jj git push` and `jj git commit` paths, not on pure-jj operations like `jj describe` or `jj squash` that GSD relies on.
-   - The PROJECT decision says don't rely solely on this.
-
-If the team picks one approach during implementation without having written the comparison up front, the first time a hook misfires (during dogfood) you re-pick. Then the first time the wrapper-PATH fails on someone's machine, you re-pick again. Each re-pick is ~3-5 days of churn.
+Specific failure modes:
+- B-07's rewriter (`rewrite.ts`) rewrites *eligible zones* (backtick spans + YAML frontmatter on allowlisted keys per `COMMIT_KEY_ALLOWLIST`); a mid-phase rewrite of the v1.2 phase directory's own files may rewrite ids that were *just-written* by the in-flight phase as `commit_id` → `change_id`, but the original commit may no longer exist as a `commit_id` on jj after a rewrite (working-copy snapshot timing).
+- The rewriter's `kind='ancestor'` branch emits `<targetId> + [was sha:<orig>]` annotations; mid-phase running of the rewriter will sprinkle these across files that workflow code is *currently editing*, causing merge-style conflicts when the agent re-saves.
 
 **Why it happens:**
-The ecosystem is genuinely thin (jj #403, jj #3577 — both still open). There is no canonical "this is how you do jj hooks" pattern. Solo developers tend to pick the path of least immediate resistance, which is whichever the first attempt looked like.
+- Dogfooded migrations don't have the luxury of a quiescent target — the migration is happening *to* files that are being actively appended to.
+- The rewriter is pure (per `rewrite.ts:1` "NO I/O"), but the *invocation* (via `run.ts`) is not. Running the rewriter mid-phase touches files; touching files invalidates assumptions made by in-flight workflow code.
+- B-07 (Phase 6) was a *one-time* migration on a quiescent target and didn't need to handle this; v1.2 needs a different cutover model.
 
 **How to avoid:**
-- Before writing any hook code, write a 1-page Decision Record: comparison of the three approaches against GSD's specific hook moments (pre-commit on `jj describe`, pre-push on `jj git push`, possibly post-mutate hooks). Pick one primary, explicitly note the fallback. This is one of the deferred decisions to revisit at first usable checkpoint.
-- For wrapper-command approach: use a Node.js or sh script (not a binary), and resolve the real `jj` via `which jj` excluding the wrapper's own directory (or via a recorded absolute path in config). Do not rely on PATH-shadowing alone.
-- Build the hook layer in a way that's swappable — a `Hook` interface with a `WrapperHook` and a future `OpLogPollingHook` implementation. Cost is low (one interface), benefit is high (changing strategies is mechanical).
-- Test the hook fires on every jj command GSD invokes (matrix: command × backend × hook-strategy).
+- **Phase boundary marker (recommended):** the v1.2 phase commits its own files in *commit_id shape* (the pre-flip shape) for the entire duration of the phase. The rewriter pass runs *exactly once* at phase close, as part of the close-gate, against the entire `.planning/phases/<v1.2>/` directory. No mid-phase rewrites.
+- **Frontmatter pin:** add `id_shape_at_write: commit_id` (or `change_id`) to the frontmatter of every file written during the v1.2 phase. The rewriter consults this pin to know which direction to migrate, avoiding ambiguity (currently the rewriter relies on alphabet disjointness — safe but loses provenance).
+- **Pre-flip dump:** before the flip lands, capture a snapshot of every `commit_id` reachable via the adapter into a sidecar file (`.planning/phases/<v1.2>/pre-flip-id-snapshot.json`) so post-flip rewrites have an authoritative lookup table even if the working-copy rewrites have moved things around.
+- **Idempotency invariant test:** the rewriter's CONTEXT D-04.2 invariant ("when content contains no source-shape tokens IN ELIGIBLE ZONES, the output is byte-identical to input") is the safety net — verify it holds for the v1.2 phase directory specifically before running the close-gate rewrite.
+
+**Prior art:**
+This repo's own Phase 6 B-07 is the closest prior art (planning-file SHA→change_id rewriter). The model worked because Phase 6 wasn't dogfooded *on the rewriter itself*. v1.2 IS dogfooded on the surface flip — different problem.
 
 **Warning signs:**
-- Hooks fire in dev but not in CI (PATH difference).
-- Hooks fire twice for one operation (wrapper recursion).
-- Hooks don't fire for a specific jj subcommand the team forgot to enumerate.
+- v1.2 phase directory contains ids in both shapes mid-phase (visible in `git diff` review)
+- The rewriter's orphan output (`Orphan[]` per `format-migration/types.ts`) growing during mid-phase runs
+- Workflow re-saves clobber rewriter annotations (i.e. `[was sha:...]` markers disappear)
 
 **Phase to address:**
-Dedicated hooks-design phase before HOOK-01/02 implementation. Output: ADR + interface stub. Implementation phase then has a clean target.
+Migration phase (close-gate-only rewriter pass) + phase-shape design (decide pin-or-snapshot before phase opens).
 
 ---
 
-### Pitfall 6: Test suite stays green by skipping, not by porting
+### Pitfall 6: Markdown / prose hex leaks survive lint (lint scans code, not prose)
 
 **What goes wrong:**
-GSD has ~80 git-touching tests. Under sprint pressure, the path of least resistance is:
-1. Adapter migration breaks half the tests.
-2. Tests are tagged `.skip` "until adapter migration completes."
-3. Skipped tests accumulate; coverage looks fine because vitest reports "150 passing" without flagging the skipped count loudly.
-4. Months later, a worktree edge case (`bug-2924`-class) regresses on jj backend; the test that would have caught it has been skipped since week 2.
+Workflow `.md` files in `.planning/`, `get-shit-done/workflows/*.md`, and `commands/*.md` embed example ids in prose ("e.g. commit `abc1234`") and in fenced code blocks (`$ git log abc1234`). The B-07 rewriter explicitly *does not* touch fenced code blocks or free-form prose (per `rewrite.ts:30-33`: "Prose paragraphs (even with whitespace-delimited hex-looking words…) and Fenced code blocks ``` ... ```… are non-eligible by construction"). After the v1.2 flip, agent prompts and runbooks that still have hex-shape examples will either:
+1. *Mislead the agent* into expecting hex-shape output from `LogEntry.hash`, prompting hex-prefix matching code that fails per Pitfall 2, or
+2. *Fall stale* — the example still works on git but is never re-run on jj because the example assumes hex.
 
-The TEST-01/02/03/04 acceptance criteria explicitly require "all worktree edge-case bug tests pass on jj backend" — but PR-level discipline is what enforces it.
+The lint guard `scripts/lint-vcs-no-raw-git.cjs` skips markdown by default (`SCAN_EXT = /\.(cjs|js|mjs|ts|yml|yaml|sh|bash)$/` — note: no `.md`), and the allowlist explicitly lists `docs/**` and `.planning/**` as blanket-allowed (per `lint-vcs-no-raw-git.allow.json` globs). So *prose-shape drift* is invisible to the existing tooling.
 
 **Why it happens:**
-Skipping a test feels like a small reversible decision; un-skipping it is "I'll do it after this milestone." Solo developer + no PR reviewer + sprint deadline = the un-skip never happens.
+- Markdown linting is harder than code linting (false positives are 10x more common — every "I gave it the SHA `aabbccdd`" sentence in a writeup is potentially a flag).
+- The B-07 rewriter's deliberately conservative scope (eligible zones only) is correct for *content migration* but leaves *prose drift* unfixed.
+- Workflows and commands evolve faster than docs; nobody routinely re-reads command markdown for stale examples.
 
 **How to avoid:**
-- CI rule (or a pre-push hook): **the count of `.skip`/`xit`/`it.todo` tests does not increase from main**. If a PR skips a test, it must un-skip another or document the migration ticket.
-- Track test-migration progress as a visible counter (e.g., `tests-on-jj/tests-on-git` ratio). Add to repo README or a status file. Make regression visible.
-- Adopt **parameterized testing** from day one (TEST-02) instead of duplicating: a `describe.each([['git'], ['jj']])` harness means every test runs on both backends or fails clearly. No "I'll add the jj version later" because there is no separate jj version.
-- For tests that genuinely need a backend-specific implementation (the `bug-2924` worktree-attachment-style tests), use `it.runIf(backend === 'jj')` with explicit reasoning in the test name, not `.skip`.
+- **Prose-aware lint pass** (separate tool, not the same lint guard): a markdown scanner that flags hex-shape strings *only* in workflow/command markdown (not in `.planning/phases/*/SUMMARY.md` historical artifacts where hex was correct at write time). Allowlist by *file path*, not by *zone*.
+- **Date-based suppression:** any `.md` file whose hex examples predate the v1.2 flip date is grandfathered (with a tag in a sidecar file); only post-flip additions are scrutinised.
+- **Examples as fixtures:** workflow markdown that contains example output blocks should reference fixture files (`<!-- @example-from: fixtures/log-output-jj.txt -->`), not embedded examples. The fixtures are regenerated against the live adapter periodically; drift becomes a fixture diff, not a prose archaeology problem.
+- **Search baseline at phase close:** at v1.2 close-gate, run `grep -E '[0-9a-f]{7,40}' get-shit-done/workflows/*.md commands/*.md` and require every hit to be either justified (in a per-file checklist) or migrated to a non-hex example.
+
+**Prior art:**
+Phase 6 B-07 explicitly carved out prose from the rewriter scope; this is the *known* gap. The v1.2 flip is the first time the gap matters because pre-v1.2 the prose-shape and live-shape *agreed*.
 
 **Warning signs:**
-- "Tests passing" count rising while the matrix coverage isn't.
-- The list of skipped tests in vitest output growing across commits.
-- A bug fix that lands without a corresponding jj-backend test.
+- Agent runs that produce hex-prefix-matching code on jj despite the production code being clean (the agent is reading stale docs)
+- Workflow `.md` files modified post-flip that still contain `[0-9a-f]{7,40}` — visible in diff
 
 **Phase to address:**
-Test infrastructure phase (TEST-01, TEST-02 — parameterized harness) must come **before** the bulk per-command migration. Building the harness first means every subsequent porting PR adds matrix coverage automatically.
+Lint phase (separate prose-lint tool) + close-gate sweep.
 
 ---
 
-### Pitfall 7: Adapter call sites become "leaky" — VCS specifics escape via return types
+### Pitfall 7: Lint guard rollout — allowlist becomes write-only
 
 **What goes wrong:**
-The "law of leaky abstractions" hits VCS adapters hard. Common leaks:
-- Returning a "ref" string and downstream code does `.startsWith('refs/heads/')` — git-specific.
-- Returning a commit SHA and downstream code does `sha.length === 40` checks — git-specific (jj has change IDs, ~16 chars in the default reverse-hex form).
-- Surfacing error strings verbatim — `"fatal: not a git repository"` leaks from git, nothing equivalent surfaces from jj.
-- Implicit assumption that "checkout" detaches HEAD or moves a branch — jj's equivalent (`jj edit`) does neither in the same way.
-- Worktree paths returned with `.git/worktrees/...` substrings — none of those directories exist on jj.
+The new `lint-vcs-no-commit-id` guard (parallel to `lint-vcs-no-raw-git`) lands with an initial allowlist sized to the audit results. Without process discipline, the allowlist grows monotonically: every PR that hits a new `commit_id` reference adds an entry "to unblock CI"; entries are added without justification; nobody removes entries. Within 6 months the allowlist is a list of "places where this rule doesn't apply" — i.e. the rule has been hollowed out to a slogan.
 
-Every leak becomes a future port-bug: code works on git backend, fails subtly on jj backend.
+Common-mistake taxonomy specific to this codebase:
+1. **Too-narrow regex** — e.g. catches `commit_id` symbol but misses `'commit_id'` inside template literals, `${"commit_id"}`, or jj template strings like `'commit_id ++ "\\n"'` (which appear at `sdk/src/vcs/backends/jj.ts:225,946,965,978` and are exactly the leak surface to lint against).
+2. **Too-broad allowlist** — every test file gets blanket-added (the existing allowlist already does this with `sdk/src/vcs/__tests__/**` glob, which is appropriate for *raw-git* but is *too broad* for *commit_id* because tests should also be id-namespace-disciplined).
+3. **No per-entry justification** — the existing `lint-vcs-no-raw-git.allow.json` has only top-level `$comment` fields explaining categories of entries, not per-entry rationale. Re-using this shape for commit_id allowlist will reproduce the gap.
+4. **No CI gate on allowlist additions** — adding a file to the JSON requires no special review. CI doesn't distinguish "PR that adds an allowlist entry" from "PR that doesn't."
+5. **No removal pressure** — entries persist after the underlying issue is fixed. Existing `$comment_2_1_09` field in the current allowlist documents one removal sweep; that's the *only* removal sweep recorded.
 
 **Why it happens:**
-Adapter design is usually right at the surface but wrong at the edges. The first 90% of adapter calls return clean abstractions; the last 10% return git-shaped data because that's what the git implementation produced and "the test passed."
+- Allowlists are dependency-direction reversed: the rule depends on the allowlist (what to skip), not vice versa. So expanding the allowlist *weakens* the rule, but the lint output looks identical (still 0 violations).
+- "Just unblock CI" pressure is real and routine; per-entry justification is a high-friction process that gets bypassed.
+- The lint guard is itself code; reviewers focus on the *rule* and not the *allowlist diff*.
 
 **How to avoid:**
-- Design the adapter with **VCS-neutral return types**: `Commit { id: string, parent: Commit[] }` (don't say "SHA"); `Ref { name: string, kind: 'branch'|'bookmark'|'tag', target: Commit }`. The type system carries the abstraction.
-- Forbid passing raw error messages from the underlying tool through the adapter — wrap in `VcsError { kind: 'NotARepo'|'Conflicted'|'Stale'|... , detail: string }`.
-- Audit at adapter contract finalization: grep for `.git`, `refs/`, `HEAD`, `40` (SHA length), `origin/` in code that consumes adapter return values. Each hit is a leak.
-- For genuinely git-specific operations that have no jj equivalent (e.g., reflog inspection): expose them under a `vcs.gitOnly` namespace that throws on jj backend, so leaks are explicit not implicit.
+- **Per-entry schema with required `reason` and `expires` fields:**
+  ```json
+  { "path": "sdk/src/vcs/backends/jj.ts", "reason": "internal commit_id template — boundary-only use", "expires": "2026-12-31", "owner": "@LoganDark" }
+  ```
+  CI rejects entries without these fields. Expired entries fail CI (forcing re-justification or removal).
+- **CI label/path-filter for allowlist diffs:** any PR that modifies `lint-vcs-no-commit-id.allow.json` requires a special label (`allowlist-change`) which triggers an additional human review gate. Prior art: GitHub's own `CODEOWNERS` per-path requirement.
+- **Deny by template-literal-aware regex:** the regex must match `commit_id` as both a bare identifier AND inside string/template literals AND inside jj-template strings (the `'commit_id ++ ...'` pattern). Test the regex against the known-leak sites in jj.ts as fixtures.
+- **Removal-pressure mechanism:** quarterly automated PR (or close-gate of every milestone) that lists allowlist entries unchanged for >90 days and asks the owner to either re-justify or remove. Prior art: this repo's own `$comment_2_1_09` style of recording removal sweeps in the JSON itself.
+- **Differentiate test allowlist from production allowlist:** two separate JSONs (`...allow-prod.json`, `...allow-test.json`); test allowlist can be coarser (glob-based) but production must be file-specific. Mirrors the production-vs-test distinction `lint-vcs-no-raw-git` *implicitly* makes via globs vs files.
 
 **Warning signs:**
-- A test that constructs a fake commit object using a `'a'.repeat(40)` SHA — implies the type assumed git format.
-- Code paths that branch on `id.length` or `id.match(/^[a-f0-9]+$/)`.
-- Error messages displayed to the user mentioning "git" specifically.
+- Allowlist file growing in monthly diff
+- New entries added in the same PR that triggers them (no separate "audit + add to allowlist" PR step)
+- Allowlist entries with no per-entry comment
 
 **Phase to address:**
-Foundation (VCS-01). Type design and the leak audit happen as part of contract finalization. Re-audit at the end of each per-command migration phase (not just once).
+Lint phase (design the allowlist schema before adding the first entry).
 
 ---
 
-### Pitfall 8: Upstream rebase conflicts compound — fork code intermixed with upstream code
+### Pitfall 8: `expr.commit(sha)` rename — silent semantic widening + fixture rot
 
 **What goes wrong:**
-The fork tracks upstream main via jj's anonymous-branch / live-rebase model. Conflicts surface as a function of:
-- How many upstream files the fork modifies (more files = more conflict surface)
-- How interleaved the fork's changes are with upstream's likely change patterns (changes inside hot-path functions = high conflict; changes in new sidecar files = zero conflict)
-- How long between rebases (longer = more upstream churn to integrate)
+Per SEED-001 Task 3 and PROJECT.md Active scope: `expr.commit(sha)` deprecates in favour of `expr.rev(id)` (canonical factory). Common mistakes:
 
-The largest single anti-pattern is **inline rewrites in hotspot files**: GSD's top hotspots (`core.cjs` 2036 LOC, `verify.cjs` 1390, `commands.cjs` 1028) are upstream's hotspots too. Editing the same lines upstream edits = guaranteed conflicts every rebase.
+1. **Silent semantic shift via input domain widening:** `expr.commit(sha)` historically required hex-SHA input; `expr.rev(id)` per `sdk/src/vcs/expr.ts:92` accepts both `'hex-SHA or change-id shaped string'`. A caller that switches `expr.commit(sha)` → `expr.rev(sha)` *and* later passes a non-SHA value (e.g. a bookmark name, a tag) will hit the runtime validator only on the wider-domain input. The deprecation seems mechanical but the input contract changes.
+2. **Test fixtures hard-coded to `expr.commit`:** fixtures and snapshots that reference `expr.commit(...)` in their expected-call traces will silently pass after a deprecation alias (because the alias still works) but never exercise the new factory. The codebase has many of these (per `expr.test.ts` at line 96, the rename was *partially* done in 2.1-01 already; remnants likely linger).
+3. **Deprecation aliasing masks the rename in stack traces:** if `expr.commit = expr.rev` (alias-style deprecation), errors thrown from inside the factory show `expr.rev` in the stack but the *call site* says `expr.commit`. Debuggers and grep-based archaeology get confused.
+4. **TypeScript declaration files in `dist-cjs/`** (see git status: 9 modified `dist-cjs/vcs/*.d.ts.map` files in the working tree right now): generated `.d.ts` files that still export the old name make downstream consumers (the `.cjs` runtime; external tooling that imports from `dist-cjs/`) silently keep using the old name. Grep on `src/` will look clean while `dist-cjs/` keeps the symbol alive.
 
 **Why it happens:**
-The "right" engineering instinct ("fix it in place where the original code is") maximizes conflicts. Solo developers don't usually weigh the rebase tax against code locality.
+- Deprecation aliases are the path of least resistance and seem polite; they preserve backwards compat at the cost of architectural clarity.
+- The Phase 2.1 rename (per `expr.test.ts:96` comment) already happened *partially* — there's a precedent in the repo of "rename done but not finished" for exactly this symbol.
+- Hybrid TS-source + CJS-runtime build means symbols can persist in build artifacts (`dist-cjs/`) even after src removal — there's an extra layer to clean.
 
 **How to avoid:**
-- **Adapter-shaped changes are mechanical**: replace `execSync('git ...')` with `vcs.commit(...)`. Upstream's edits to surrounding code merge cleanly because the adapter call is a stable target. PROJECT already records this as a key decision; reinforce in code review (even if solo, in the commit-message discipline).
-- **Sidecar files for jj-specific code**: `sdk/src/vcs/jj/*` is fork-only and never conflicts with upstream. `sdk/src/vcs/git/*` is the migration target for upstream's existing logic; conflicts are inevitable but localized.
-- **Avoid mixed commits**: a commit that both refactors upstream code AND adds fork-specific behavior is the worst case for rebase. Split into two: one is mechanical refactor (rebases cleanly because upstream may have done similar refactor), one is fork-only addition (rebases cleanly because upstream didn't touch the new file).
-- **Rebase frequently**: weekly cadence keeps each conflict surface small. Monthly is when forks die.
-- Use `jj range-diff` analog (`jj log -r 'fork-commits'` against upstream) to identify commits that overlap with upstream changes; consider whether each is still needed.
-- Track a "drift score": LOC modified in shared files vs. LOC in sidecar files. Rising ratio of shared-file modifications = early warning.
+- **Hard-rename, no alias:** delete `expr.commit` outright in the same commit that introduces the rename. Compile errors at every call site are *desired* — they're the audit pass.
+- **Codemod the call sites in the same PR:** ts-morph or jscodeshift script to mechanically rewrite `expr.commit(x)` → `expr.rev(x)` across all `.ts` files. Single PR, single review surface.
+- **Verify dist-cjs** rebuild + clean: explicit `rm -rf dist-cjs && pnpm build && grep -r 'expr\.commit' dist-cjs/` should return zero matches before merge.
+- **Input-domain test:** add a *negative* test that `expr.rev` *is now* the only entry point — `expect(expr.commit).toBeUndefined()` style. Prevents accidental re-introduction.
+- **No `@deprecated` JSDoc tag-only deprecation:** the tag is a documentation contract, not a runtime gate. If the symbol has to live for one release, gate it on a runtime assertion (`throw new Error('removed; use expr.rev')`) — NOT on a no-op or alias.
 
 **Warning signs:**
-- A rebase that produces conflicts in 5+ files (vs. typical 0-2).
-- The same file conflicts in 3+ consecutive rebases — suggests the fork modifies a hotspot upstream is actively churning.
-- A commit's diff shows changes scattered across many upstream files instead of concentrated in fork-owned files.
+- Stack traces mentioning `expr.commit` in code that "was migrated"
+- `dist-cjs/` containing `expr.commit` after `src/` doesn't
+- New PRs introducing `expr.commit(...)` calls (autocomplete or muscle memory; the fix is to delete the symbol so autocomplete stops offering it)
 
 **Phase to address:**
-Foundation phase establishes the adapter pattern and sidecar layout. UPSTREAM-02 acceptance is "fork-specific code organized to minimize conflicts" — verify by tracking conflict count per rebase as a metric.
+Flip phase (do the rename in one mechanical pass; codemod + delete).
 
 ---
 
-## Moderate Pitfalls
+### Pitfall 9: Boundary-I/O exception bloat (covered jointly with Pitfall 4)
 
-### Pitfall 9: jj version churn — recently-deprecated aliases bite tooling
-
-**What goes wrong:**
-jj is pre-1.0 and renames things. Recent renames in current versions:
-- `jj branch` → `jj bookmark` (deprecated alias still works but warns)
-- `jj op undo` → `jj op revert`
-- `jj obslog` → `jj evolution-log`/`jj evolog`
-- Minimum git version raised to 2.41.0
-- Per-repo config files (`.jj/repo/config.toml`, `.jj/workspace-config.toml`) moved out of repo
-
-Code that hard-codes `jj branch` works today, prints deprecation warnings, breaks at some future jj release. CI logs fill with deprecation noise that masks real issues.
-
-**How to avoid:**
-- Use the current canonical names (`bookmark`, `op revert`, `evolog`) from day one.
-- Pin a minimum jj version in adapter (`jj --version` check on startup), bail with a clear message if too old.
-- Test against latest stable + one prior to catch regressions.
-
-**Warning signs:** Deprecation warnings in CI output. New jj release breaks a test.
-
-**Phase to address:** Foundation (VCS-03). Document the supported jj version range in adapter README.
+See Pitfall 4 for the architectural prevention. Stand-alone summary: the `vcs.jjOnly.commitIdOf` accessor (or whatever its v1.2 final name is) **must** be a single-callsite invariant enforced by lint, with PR-blocking review on every new caller. The escape hatch is the highest-leverage architectural risk in the v1.2 surface design.
 
 ---
 
-### Pitfall 10: Performance — `jj git import` runtime grows with refs
+### Pitfall 10: Performance traps — audit, lint, and per-test branching costs
 
 **What goes wrong:**
-On colocated repos, every jj command runs `jj git import` to sync git state. This scales with number of refs (branches, tags, remotes). Hot loops in tests that invoke many jj commands amplify the cost. Symptom: test suite that was 30s on git takes 4-5 minutes on jj.
+
+**A) Audit phase cost (LOW concern):** Brute-force `grep`/`rg` scan over `sdk/src` + `get-shit-done/bin/lib` + `scripts` is fast (<5s for this repo size). Use `node:fs` + a streaming line-reader if you want a structured output; using ts-morph to do AST-aware scanning is *correct* (catches `commit_id` in template literals AND in JSDoc comments) but ~30-60s for a full repo scan. Tradeoff: AST scan once at audit time is cheap, AST scan in CI per-PR is *not*.
+
+**B) Lint guard CI cost (MEDIUM concern):** The existing `lint-vcs-no-raw-git.cjs` is regex-based and fast. Extending to commit_id detection at the same regex layer is also fast (<2s). Risk: if the new lint moves to AST analysis to catch template-literal cases, CI time can grow noticeably (vitest already dominates CI time per `project_test_perf_pain_vitest`; lint additions are perceptible).
+
+**C) Per-test fixture-id-shape branching (MEDIUM concern):** If parameterized tests grow `if (vcs.kind === 'jj') { expect(...) } else { expect(...) }` branches at every id-equality assertion, three failure modes appear:
+1. **Test-runtime cost:** branching itself is free, but separate fixture loads per backend can add measurable I/O (already a vitest-suite pain point).
+2. **Duplicated assertion logic:** drift between the branches (per Pitfall 3 — over-broad relaxation hides regressions).
+3. **Test-harness complexity:** the existing `vcs-fixture.ts` and `__tests__/adapter-contract.test.ts` already manage backend-aware dispatch; adding id-shape branching at every assertion bloats per-test setup.
+
+**D) Runtime guard cost (LOW concern):** A type-brand at the TS layer (per Pitfall 1 prevention) is zero-runtime-cost. A runtime assertion at the boundary accessor (e.g. `commitIdOf` validates input is a known-good rev before resolving) costs one regex test per call — negligible.
+
+**Why it happens:**
+- Performance regressions in CI / test suites are death-by-1000-cuts; each individual addition is "negligible" but accumulates.
+- This repo specifically has known vitest-perf pain (per `project_test_perf_pain_vitest`); v1.2 should not add to it.
+- Audit phase has no perf budget at all (it's a one-shot intel run, not part of CI).
 
 **How to avoid:**
-- Batch operations where possible (one `jj log` instead of N `jj show`).
-- Run `jj util gc` periodically (in CI before test runs; in dogfood as a periodic chore).
-- Be aware that the public-jj-binary fsmonitor on macOS has a known hang issue (jj #6440) — disable in test environments.
-- For programmatic loops, prefer revset queries that return all needed data in one call.
+- **Audit:** AST-aware scan ONCE during the audit phase; emit `.planning/intel/id-namespace-audit.md` + a JSON sidecar that the lint guard *consumes* as its initial allowlist. After audit, lint stays regex-only.
+- **Lint:** stay regex-based for production CI. AST audit is dev-only / phase-only. Pair with the per-entry allowlist schema (Pitfall 7) so the regex is permissive but the allowlist is strict.
+- **Per-test branching:** centralize id-shape handling in a custom matcher (`expect(rev).toBeRevisionOf(commit)` per Pitfall 3) instead of inline branches. One implementation, one place to optimize.
+- **Measure baseline before and after:** capture CI lint+test time pre-v1.2 as a phase-open artifact; close-gate compares. Prior art: `.planning/phases/03.1-…` baseline harness pattern (per `feedback_baseline_is_correctness_not_perf` memory — though that one was correctness-focused, the same harness shape applies for perf).
 
-**Warning signs:** Test runtime regressing on jj backend specifically. CI timing out.
+**Warning signs:**
+- CI time creeping up post-v1.2 lint addition
+- New tests adding inline `if (vcs.kind === ...)` branches at assertion sites (refactor into matcher)
+- Audit script being added to pre-commit by mistake (it's phase-only)
 
-**Phase to address:** Test infrastructure phase (TEST-02). Set a runtime budget (jj-backend tests no more than 2x git-backend) and track.
-
----
-
-### Pitfall 11: Bookmarks don't auto-advance — stale push positions
-
-**What goes wrong:**
-Unlike git branches, jj bookmarks are explicit pointers that **do not move automatically when you create new commits**. After `jj new && jj describe`, the bookmark still points where it pointed before. `jj git push` pushes the bookmark's recorded position — i.e., the pre-new commit. Result: your local commits don't make it to the remote, but no error fires.
-
-Common workflow: `jj git push --bookmark main` after a series of commits results in pushing whatever main pointed to last time it was moved.
-
-**How to avoid:**
-- Adapter `vcs.push()` for jj backend: explicitly `jj bookmark move <name> --to @-` (or appropriate target) before push.
-- Document the "bookmark advance" step prominently in any GSD workflow that pushes.
-- For workflows that auto-create branches (PR branches), use `jj git push --change @-` which auto-creates and tracks per-change bookmarks.
-
-**Warning signs:** A push that "succeeded" but the remote doesn't show your latest work.
-
-**Phase to address:** Per-command migration of push-touching commands (`/gsd-ship`, `/gsd-pr-branch`).
-
----
-
-### Pitfall 12: Tags — jj only creates lightweight, can't create annotated
-
-**What goes wrong:**
-GSD uses tags for releases/canaries. jj can read annotated tags fine, can create lightweight tags, but **cannot create annotated tags**. If GSD's release flow does `git tag -a vX.Y.Z -m "..."` it has no jj equivalent and must shell out to git directly.
-
-**How to avoid:**
-- Identify all `git tag -a` call sites; route through adapter with a `vcs.createAnnotatedTag()` method. On jj backend, this method shells out to git via `jj git` if colocated, or fails fast on non-colocated with a clear message.
-- Treat annotated tag creation as a known "git-only-for-now" operation; document in the adapter README.
-
-**Warning signs:** Tag creation silently producing lightweight tags when annotated were expected (different signature/metadata visible on GitHub).
-
-**Phase to address:** Per-command migration of release/hotfix flows.
-
----
-
-### Pitfall 13: `.gitignore` semantics — "already tracked" files stay tracked
-
-**What goes wrong:**
-GSD uses `.gitignore` to keep planning artifacts out of commits. In jj, files that are **already tracked** stay tracked even if they later match an ignore pattern. Adding a path to `.gitignore` after the fact does not stop tracking; you need `jj file untrack`. GSD's "gitignored-planning rescue" tests assume git's "ignore-pattern-as-source-of-truth" semantics, which is wrong on jj.
-
-**How to avoid:**
-- Adapter method `vcs.ignorePath(path)`: on git, write to `.gitignore`. On jj, write to `.gitignore` AND run `jj file untrack` for the matching path if currently tracked.
-- Tests that exercise gitignored-planning rescue need both code paths verified.
-
-**Warning signs:** A planning file unexpectedly committed even though `.gitignore` includes it.
-
-**Phase to address:** Per-command migration of planning-file-aware commands (verify, init).
-
----
-
-### Pitfall 14: `jj git init --colocate` doesn't refuse to nest in a git worktree
-
-**What goes wrong:**
-The colocated workspaces tracking issue (jj #8052) explicitly lists "refusing to create a new Jujutsu repo in a Git worktree when running `jj git init --colocate`" as outstanding work. Today, doing so produces a corrupt nesting that's hard to recover from. GSD's `/gsd-new-project` workflow on jj backend must guard against this — don't just blindly invoke `jj git init --colocate` without checking we're not inside a `.git/worktrees/` subdirectory.
-
-**How to avoid:**
-- Adapter init operation: pre-flight check via `git rev-parse --git-common-dir` vs. `--git-dir`; if they differ, we're inside a worktree, refuse with a clear error.
-
-**Warning signs:** `/gsd-new-project` invoked accidentally inside a worktree, leaves a broken `.jj` directory.
-
-**Phase to address:** Per-command migration of init flows (GREEN-01).
+**Phase to address:**
+Audit phase (one-shot AST run) + lint phase (regex-based for CI) + close-gate (perf delta check).
 
 ---
 
@@ -372,195 +315,143 @@ The colocated workspaces tracking issue (jj #8052) explicitly lists "refusing to
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Inline `if (backend === 'jj') ... else ...` branches in command code | Skip designing the right adapter method; ship the command this week | Every backend-conditional in command code is a future leak point; doubles the maintenance burden of every command | **Never** in `bin/lib/` or `sdk/src/` post-foundation. Acceptable in tests for explicitly-asymmetric edge cases (with a comment justifying). |
-| Skip the `--ignore-working-copy` rule for "just one quick query" | One-line change instead of plumbing the flag | Silent working-copy snapshot in a read-only path causes a future "tests pass locally, fail in CI" mystery | Never in adapter implementation. Acceptable in throwaway diagnostic scripts. |
-| Test-skipping under deadline ("I'll un-skip after milestone") | Green CI now | Skipped tests become invisible coverage holes; the un-skip almost never happens | Only with a tracked GitHub issue and CI rule that prevents net-new skips. |
-| Wrapper script in shell instead of Node.js for the hook layer | Faster initial implementation | Recursion handling, error reporting, cross-platform behavior get gnarly fast; rewriting in Node later is significant | Acceptable for first prototype to validate the approach; rewrite to Node before relying on it. |
-| Adapter returns raw stdout strings instead of typed records | Avoid type design upfront; "we'll parse later" | Every consumer parses independently, formats drift across backends, type leaks become invisible | Never for stable adapter operations. Acceptable for `vcs.gitOnly.escapeHatch()` style debug methods. |
-| "Just shell out to git" for the one or two operations jj makes hard | Ship the command this week | Becomes the precedent — next time it's hard you do it again. Three of these and you've lost the abstraction. | Only with explicit "no jj equivalent" justification + a tracked issue + isolation in `vcs.gitOnly` namespace. |
-| Hard-code `'main'` instead of detecting base branch via adapter | Skip a port for the first dogfood | Every fork user with a non-main default branch hits the same wall later | MVP only, behind config override; remove by first non-trivial dogfood. |
+| Deprecation alias `expr.commit = expr.rev` instead of hard rename | No CI breakage during PR | Symbol persists in `dist-cjs/`, autocomplete keeps offering it, prose docs stay stale | **Never** for v1.2 — hard rename + codemod (Pitfall 8) |
+| `expect(rev).toBeTruthy()` instead of normalised cross-backend comparison | Test passes immediately | Tests pass but assert nothing meaningful (Pitfall 3) | Only when paired with a tracked deviation table entry that lists a fix-by date |
+| Adding files to lint allowlist without per-entry justification | PR unblocked | Allowlist becomes write-only; rule hollowed out (Pitfall 7) | **Never** — schema requires `reason` + `expires` fields |
+| Shipping `vcs.jjOnly.commitIdOf` as a public verb (not backend-private) | Solves the link-emit case cleanly | Other callers gravitate to it (Pitfall 4) | **Never** for cross-backend exposure; backend-private only |
+| Letting v1.2 phase directory contain mixed-shape ids mid-phase | No need to design the cutover up front | Rewriter clobbers in-flight files; provenance lost (Pitfall 5) | Only with explicit `id_shape_at_write` frontmatter pin |
+| Skipping prose lint because "examples don't matter" | Saves writing the markdown scanner | Agents read stale docs and produce wrong-shape code (Pitfall 6) | Only for grandfathered pre-flip files |
 
 ---
 
 ## Integration Gotchas
 
 | Integration | Common Mistake | Correct Approach |
-|---|---|---|
-| GitHub Actions CI | Assuming `jj` is available; assuming colocated repo on CI agents | CI stays git-side per PROJECT decision; only run jj-backend tests locally or in a dedicated jj-CI lane with `jj` installed and version-pinned. |
-| `pre-commit.com` framework | Expecting it to work with jj's no-staging-area model | jj has nothing staged; either pass `--files` from `jj diff --name-only @` (per Aazuspan blog) or run pre-commit against the working-copy commit explicitly. Document the exact recipe. |
-| `direnv` / shell prompts | Background `git` calls drift jj state | Audit shell config in dogfood environment; either disable git-status-in-prompt for this repo or accept the perf cost. |
-| `.changeset/` tooling | Uses `git log` to detect changed packages; will not see jj-only changes if non-colocated | PROJECT keeps `.changeset/` on git side. Document explicitly that on non-colocated jj this won't work. |
-| Editor integrations (VS Code git, JetBrains) | Run git in background, can fight with jj's auto-import | Either accept the noise or configure the editor to disable git auto-fetch in this repo. |
-| `gh` CLI | Authentication via `.envrc` (per CLAUDE.md) is fork-specific; ambient `gh auth` resolves to wrong creds | Already documented in CLAUDE.md; ensure adapter never invokes `gh` without the env var prefix. |
-| Node `child_process` working directory | `cwd` is critical for jj — running `jj` from outside the workspace path produces confusing errors | Adapter always passes explicit `cwd` to `execSync`/`spawn`; never relies on `process.cwd()`. |
+|-------------|----------------|------------------|
+| GitHub commit URLs | Using `vcs.refs.resolveShort()` → emits change_id post-flip → URL 404s | Route through boundary-I/O accessor (`vcs.jjOnly.commitIdOf`) OR prefer release-tag URLs (PROJECT.md Active scope guidance) |
+| GitHub release notes (`scripts/changeset/github-release-notes.cjs`) | Using `expr.rev(refname)` for tag/branch names (rejected per Plan 04 Phase 7 deviation) | `expr.bookmark(name)` for refnames; `expr.rev(id)` only for SHA/change_id-shaped strings |
+| Pre-commit hook id capture (A3 colocated gap, deferred) | Storing `commit_id` from a pre-commit hook context that fires post-squash | Use `change_id` — pre-commit fires before the commit_id is final (jj squash semantics); change_id is stable across the squash |
+| `jj log -r <change_id_prefix>` lookups in workflow code | Assuming prefix uniqueness; jj has divergent-change ambiguity (jj issue #2476) | Always pass full change_id from a controlled source; never construct a prefix in workflow code |
+| Cross-backend manifest schema (e.g. WAVE-01's manifest) | Fields named `commit` or `sha` carrying change_id post-flip | Rename to `rev` with a documented "active backend canonical id" semantic; mirror Phase 7 D-05 mergeBase precedent |
 
 ---
 
 ## Performance Traps
 
 | Trap | Symptoms | Prevention | When It Breaks |
-|---|---|---|---|
-| N+1 jj invocations in a hot loop | Test runtime balloons on jj backend; per-command latency dominates | Batch via revset queries; cache adapter results within a command lifecycle | Hits at ~100 commits / ~50 refs in colocated mode. |
-| `jj git import` running on every command without `jj util gc` | Linearly increasing command latency over weeks of use | Schedule periodic `jj util gc` (cron or pre-push hook); pack git refs | Hits at ~1000 refs accumulated; very visible at ~5000. |
-| Hook layer firing on read-only commands | Every `jj log` invokes the full hook chain | Hooks scoped to mutating commands only; whitelist the verbs that fire hooks | Hits whenever GSD does inspect-heavy workflows (`/gsd-resume-work`). |
-| Leaving snapshots on for read-only adapter calls | Working-copy commit ID changes between unrelated queries; downstream consumers see "stale" state and retry, doubling load | Default `--ignore-working-copy` for read paths (Pitfall 2). | Hits in any test that asserts on a stable working-copy ID across multiple adapter calls. |
-| macOS fsmonitor on colocated repo | `jj git clone --colocate` hangs forever (jj #6440) | Disable git fsmonitor in this repo's `.git/config` or globally for jj users | Reproducible on macOS with `core.fsmonitor=true`. |
+|------|----------|------------|----------------|
+| AST-based lint in CI per-PR | CI lint step time growing 30-60s | Keep lint regex-based; AST is audit-phase-only | Any repo where lint runs every PR + repo grows past ~50k LOC |
+| Inline `if (vcs.kind === 'jj')` branches at every test assertion | Per-test setup cost grows; assertion logic drift | Centralize in custom vitest matcher | Once parameterized test count exceeds ~50 with id-bearing assertions |
+| Per-backend fixture I/O on every test run | Vitest-suite time grows (already this repo's pain point) | Single fixture file with backend-keyed data; load once per suite | Once fixture file count exceeds suite count |
+| Audit AST scan in pre-commit hook | Slow commits | Audit is phase-only artifact; never wire to pre-commit | Always (audit is not CI/hook material) |
+| Boundary-I/O accessor doing full `jj show` per call | Slow link emission for release notes (N commits = N jj invocations) | Batch resolution: one `jj log -r 'commits'` call returning a map | Once release notes span >20 commits |
 
 ---
 
 ## Security Mistakes
 
+(Lower priority for this milestone — no crypto/secrets surface added — but worth recording.)
+
 | Mistake | Risk | Prevention |
-|---|---|---|
-| Wrapper-command for jj lives in repo at a known path | Repository compromise = arbitrary code execution on every `jj` invocation | Wrapper installed via opt-in to user's `~/bin`, not in repo. Repo provides install script + checksum. |
-| Hook script reads commit message and execs based on content | Crafted commit message → command injection | Hooks treat all commit content as data; never `eval` / `sh -c` commit content. Use parameter-passing not string interpolation. |
-| Adapter shells out with string-concatenation of user input (branch names, paths) | Shell injection via crafted bookmark/branch name | Always use array-form spawn with `shell: false`; never `execSync(\`jj show ${ref}\`)`. |
-| `.envrc` token leaked into `jj describe` commit messages or `jj diff` outputs | Token exfiltration if commit pushed | Pre-commit hook scans for token patterns; `.gitignore` includes `.envrc`. (Already in place per CLAUDE.md — don't regress.) |
-| Per-repo `hooks/jj.toml` allows arbitrary binary execution | Cloning a malicious repo = code execution on first jj command | Don't enable repo-level hook config; use user-level only. (jj design currently flags this as a security concern.) |
+|---------|------|------------|
+| Logging full change_id in error messages without truncation | Change_ids reveal divergent-change relationships in shared logs (information leak in multi-tenant setups; not relevant for solo-dev but worth noting) | Truncate to short form (8 chars) in logs; full form in dev-only paths |
+| Trusting user-supplied id strings without `expr.rev` validation | Command injection via crafted id passed to `jj`/`git` invocation | Always route through `expr.rev` factory (already enforced by `expr.ts:92` — verify no bypass added in v1.2) |
+| Assuming change_id stability under untrusted rebase | An untrusted upstream rebase could re-write change_id mappings | Out of scope for v1.2 — single-developer repo — but document as future-milestone constraint if multi-contributor mode opens |
 
 ---
 
-## UX Pitfalls (Developer-Facing — GSD as a tool)
+## UX Pitfalls (Developer UX — there are no end-users here)
 
 | Pitfall | User Impact | Better Approach |
-|---|---|---|
-| Auto-detection picks the wrong backend silently | User in colocated repo expects jj behavior, gets git, confused by missing features | Detection logs the choice on first command; config file records it; `--vcs` flag overrides. |
-| Error messages bubble raw jj/git stderr | "fatal: not a git repository" or "Error: The working copy is stale" with no GSD context | Wrap all VCS errors in `VcsError` with GSD-context message: "GSD couldn't snapshot workspace X (jj working copy stale). Run `jj workspace update-stale` or pass `--auto-recover`." |
-| jj-specific concepts (change ID, bookmark, op log) leak into GSD docs without explanation | Git users porting projects to jj read GSD docs and bounce off | Glossary in GSD docs; jj docs use git-equivalent terminology in parens on first mention. |
-| GSD picks a default that's wrong for one backend ("create branch X") | jj users see GSD trying to "create branch" — what GSD really means is "advance bookmark" | Backend-aware terminology in user-facing strings. |
+|---------|-------------|-----------------|
+| Error messages that say "invalid revision" without showing the input shape | Developer can't tell if it's a hex/change_id/refname mismatch | Echo the input + the expected alphabet pattern in the error |
+| Renaming `LogEntry.hash` → `LogEntry.id` without a deprecation window | Every external consumer (the CJS runtime, scripts/) breaks at once | Either accept the breakage (single-developer repo, fast turnaround) OR provide one release of dual-field emission with a typed-deprecation flag |
+| Audit doc (`.planning/intel/id-namespace-audit.md`) without a verdict-per-entry | Reader has to re-do the classification work | Each entry: `{site, current shape, post-flip shape, classification, justification}` — copy SEED-001's per-call-site format |
+| `vcs.kind === 'jj'` narrowing in workflow code "for id reasons" persisting after v1.2 | The whole point of v1.2 (per PROJECT.md Active: "workflows must not branch on `vcs.kind` for id reasons") is defeated | Audit identifies these; phase deletes them; lint rule prevents re-introduction |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Adapter contract:** All operations have both git AND jj implementations? Verify by `grep -r 'throw new Error.*not implemented'` in `sdk/src/vcs/jj/`.
-- [ ] **Read-only invocations:** All read paths pass `--ignore-working-copy`? Verify by audit script: any `jj` invocation in adapter without the flag is flagged unless explicitly opted in.
-- [ ] **Worktree bug tests on jj:** All `bug-XXXX-worktree-*` tests have jj-backend variants AND pass? Verify by test matrix output showing both backends green.
-- [ ] **Concurrency advisory locks:** Any operation that mutates shared ancestors goes through `vcs.acquireWriteLock`? Verify by code review grep for cross-workspace mutations.
-- [ ] **Stale working copy recovery:** Adapter handles stale state automatically OR surfaces clearly to user? Verify by Ctrl-C-mid-operation + next-command test.
-- [ ] **Hook layer:** Hooks fire on every mutating jj command GSD invokes? Verify by enumerating mutating verbs and adding a fixture test per verb.
-- [ ] **Bookmark advance before push:** Push paths advance bookmark first? Verify by integration test: commit → push → check remote shows new commit.
-- [ ] **Annotated tag operations:** Tag-creation paths handle the lightweight-only constraint? Verify by release-flow test.
-- [ ] **Init refuses inside git worktree:** `/gsd-new-project` on jj backend pre-flight checks for nested worktree? Verify with regression test.
-- [ ] **Type design audit:** No `.git`, `refs/`, `40` (SHA length) in code consuming adapter return values? Verify by grep audit at adapter contract finalization.
-- [ ] **Test-skip count:** Skipped test count not increased over baseline? Verify by CI metric.
-- [ ] **Upstream rebase clean:** Last 3 rebases produced ≤2 conflicts each? Verify by rebase log.
-- [ ] **Wrapper recursion guard:** Hook layer breaks recursion via env var? Verify by test that a hook running `jj log` doesn't infinite-loop.
+- [ ] **Surface flip:** All 7 SEED-001 surfaces flipped — verify by grep for `commit_id ++` and `commit_id.short()` templates in `sdk/src/vcs/backends/jj.ts`; should all be inside the boundary-I/O accessor only
+- [ ] **`dist-cjs/` rebuild:** `dist-cjs/vcs/backends/jj.js` recompiled; grep for old `commit_id` templates returns zero hits in the dist artifacts (per Pitfall 8 — generated files lag source)
+- [ ] **`expr.commit` deletion:** symbol is undefined at runtime, not just deprecated; no autocomplete suggestions
+- [ ] **PITFALL 1 doc updated:** `sdk/src/vcs/backends/jj.ts:327` no longer claims "LogEntry.hash is commit_id NEVER change_id" (per SEED-001 Phase shape Task 5)
+- [ ] **`.planning/` v1.2 directory rewriter pass:** ran exactly once at close-gate; idempotency invariant verified by re-running it (second run is byte-identical)
+- [ ] **Workflow / command markdown sweep:** post-flip date-range hex grep on `get-shit-done/workflows/*.md` + `commands/*.md` + `agents/*.md` returns zero unjustified hits
+- [ ] **Lint allowlist hygiene:** every entry has `reason` + `expires` + `owner`; no entries added in unrelated PRs since the lint landed
+- [ ] **Cross-backend test parity:** every previously-relaxed `toBeTruthy()` from v1.1 Plan 02 has been either upgraded to a normalised matcher OR justified in writing
+- [ ] **Boundary-I/O accessor single-callsite:** lint reports exactly one importer (the GitHub URL emitter)
+- [ ] **No new `vcs.kind === 'jj'` narrowing for id reasons:** count of `vcs.kind === 'jj'` checks in workflow code is *down* relative to v1.1 baseline
+- [ ] **Skip-count baseline guard:** no test newly skipped to dodge id-shape pain (per `scripts/check-skip-count.cjs` discipline)
+- [ ] **Strict-green on both backends:** matches v1.1 Plan 05 close-gate posture
 
 ---
 
 ## Recovery Strategies
 
 | Pitfall | Recovery Cost | Recovery Steps |
-|---|---|---|
-| Divergent change IDs from git/jj interleaving (Pitfall 1) | LOW-MEDIUM | `jj op log` → identify the divergent op → `jj op revert <op>` → re-do work cleanly through adapter only. If pushed, may need history rewrite. |
-| Working copy snapshot pulled wrong files into commit (Pitfall 2) | LOW | `jj squash --interactive` to move files out of the working-copy commit; or `jj split` to separate. |
-| Worktree-bug regression on jj (Pitfall 3) | MEDIUM | Triage which bug class (deletion safeguard, locked-surfacing, etc.); add jj-specific test; fix in adapter; backfill regression suite. |
-| Stale working copy after parallel ops (Pitfall 4) | LOW | `jj workspace update-stale`; if data lost, `jj workspace update-stale` produces a recovery commit. |
-| Wrong hook strategy chosen, doesn't fire reliably (Pitfall 5) | HIGH | Re-pick from the alternatives in the ADR; the swappable interface design (Pitfall 5 prevention) makes this 1-day swap instead of 1-week rewrite. Without it: weeks. |
-| Skipped tests piled up, regression hits (Pitfall 6) | HIGH | Audit all skipped tests; un-skip + fix in dedicated cleanup phase; add CI rule to prevent recurrence. |
-| Adapter leak discovered post-migration (Pitfall 7) | MEDIUM | Add typed wrapper; migrate consumers; backfill type-narrowing tests. Compounds if discovered late — every consumer touched. |
-| Upstream rebase hits 20+ conflicts (Pitfall 8) | HIGH | Cherry-pick fork commits onto fresh upstream branch one at a time; redesign hot-conflict commits into adapter-shaped form; consider extracting fork-specific logic to sidecar. |
-| jj version churn breaks adapter (Pitfall 9) | LOW | Pin to last working version; update adapter to use new canonical names; bump min version. |
-| `jj git import` perf regression (Pitfall 10) | LOW | `jj util gc`; audit ref accumulation; prune stale remote-tracking refs. |
-| Bookmark didn't advance, missing commits on remote (Pitfall 11) | LOW | Local commits aren't lost (jj never loses commits); advance bookmark, re-push. |
-| Annotated tag created as lightweight (Pitfall 12) | LOW | Delete lightweight tag; create annotated via git directly; document the workaround in release flow. |
-| Tracked file persists after `.gitignore` add (Pitfall 13) | LOW | `jj file untrack <path>`. |
-| `jj git init --colocate` left corrupt nesting (Pitfall 14) | MEDIUM | Delete the inner `.jj`; verify outer git worktree intact; re-init outside the worktree. |
+|---------|---------------|----------------|
+| Hex-prefix matching silently false (Pitfall 2) | LOW | Grep + audit + fix per-site; no data loss |
+| Stable-identity flip caused production wrong-tree dereference (Pitfall 1) | MEDIUM-HIGH | Restore from snapshot via `vcs.jjOnly.commitIdOf` if pre-flip ids preserved; otherwise reconstruct via `jj op log` history |
+| `.planning/` mid-phase mixed-shape corruption (Pitfall 5) | MEDIUM | Restore from a pre-flip snapshot in `.planning/phases/<v1.2>/pre-flip-id-snapshot.json`; re-run rewriter from clean state; if no snapshot, walk `jj op log` to recover |
+| Lint allowlist bloat (Pitfall 7) | LOW (process), MEDIUM (effort) | Run a removal sweep — for each entry, verify the underlying issue is fixed; if not, re-justify with new expiry; pattern is `$comment_2_1_09` style entry in the JSON |
+| Boundary-I/O accessor sprawl (Pitfall 4 / 9) | HIGH | Each new caller must be re-routed to a non-leak path; if the accessor has 5+ callers it's already a parallel namespace and needs an architectural rethink |
+| Markdown prose drift (Pitfall 6) | LOW | Date-windowed grep + manual rewrite; pair with fixture-extraction pattern to prevent recurrence |
+| Mid-phase test relaxation (Pitfall 3) | MEDIUM | LEARNINGS-style table at phase close; each entry resolved before next milestone opens |
 
 ---
 
 ## Pitfall-to-Phase Mapping
 
+Suggested phase shape: **Audit → Flip → Migrate → Lint → Close-gate**.
+
 | Pitfall | Prevention Phase | Verification |
-|---|---|---|
-| 1. Interleaved git/jj mutations | Foundation (VCS-01–03) | Lint/assertion guard fires in dev mode; interleaving regression test passes. |
-| 2. Auto-snapshot side effects | Foundation (VCS-01) | `--ignore-working-copy` policy in adapter helper; audit grep clean. |
-| 3. Worktree↔workspace mapping | Workspace-mapping phase (WS-01–03) | Semantic-equivalence table written; all `bug-XXXX-worktree-*` tests pass on jj. |
-| 4. Concurrency model mismatch | Workspace-mapping phase (WS-02) | Advisory-lock primitive in adapter; stale-working-copy recovery in `vcs.beforeCommand`. |
-| 5. Hook strategy churn | Hooks-design phase (pre HOOK-01) | ADR + swappable Hook interface; matrix test of hook firing across all GSD-invoked jj verbs. |
-| 6. Test-skip drift | Test infrastructure phase (TEST-01–02) | Parameterized harness in place from day one; CI rule on skip count. |
-| 7. Adapter leaks | Foundation + per-command migration | Type design audit at contract finalization; re-audit at end of each migration phase. |
-| 8. Upstream rebase conflicts | Foundation (UPSTREAM-02) + ongoing | Sidecar layout established; conflict count tracked per rebase; weekly cadence. |
-| 9. jj version churn | Foundation (VCS-03) | Min-version check on adapter init; canonical command names used. |
-| 10. `jj git import` perf | Test infrastructure phase | Runtime budget set (≤2x git-backend); periodic `jj util gc`. |
-| 11. Bookmark advance | Per-command migration (push surfaces) | Push integration test verifies remote shows pushed commit. |
-| 12. Annotated tags | Per-command migration (release surfaces) | Release-flow integration test verifies annotated metadata. |
-| 13. `.gitignore` semantics | Per-command migration (planning-aware commands) | Untrack-after-ignore regression test on jj backend. |
-| 14. `jj git init --colocate` nested | Per-command migration (init surfaces) | Pre-flight check + regression test. |
-
----
-
-## Solo Focused-Sprint Pitfalls (Cross-Cutting)
-
-These are not domain-specific (jj or VCS) — they're solo-developer-under-deadline patterns that compound the above pitfalls. Worth calling out separately because the user is explicitly solo on a focused sprint.
-
-### "I'll fix it later" debt
-- The most common form here: skipping a test (Pitfall 6), inline-branching on backend (Tech Debt table), shell-script wrapper instead of Node hook (Pitfall 5).
-- **Mitigation:** treat any "later" debt as a tracked GitHub issue tagged `port-debt` at the moment it's incurred. The 30 seconds of issue-filing pays for itself the first time you forget what "later" meant.
-
-### Scope creep ("while I'm here, let me also...")
-- The temptation: while migrating `core.cjs`, also rewrite the worktree pruning logic that's been bugging you. Now your adapter migration PR is also a worktree refactor — twice the conflict surface against upstream, twice the test failures, twice the review burden (even self-review).
-- **Mitigation:** rule of thumb — adapter-migration changes and feature changes never share a commit. If you find a bug while migrating, open an issue and keep migrating.
-
-### Test-skipping under deadline pressure
-- See Pitfall 6. The CI rule is what enforces this when willpower fails.
-
-### When to abandon adapter purity for shipping speed
-- There **are** legitimate cases. Annotated tags (Pitfall 12) are one — building a perfect abstraction for a feature jj genuinely doesn't have is yak-shaving. The rule:
-  - **Operation has clean jj equivalent** → adapter must abstract. No shortcuts.
-  - **Operation has no jj equivalent or jj equivalent is genuinely worse** → expose under `vcs.gitOnly` namespace; document; treat as known limitation. Don't fake it.
-  - **Operation is a hot-path GSD relies on for core value** → invest the time even if it's hard. Worktree mapping qualifies; shell-out shortcuts here will haunt for months.
-
-### Brownfield-priority discipline
-- PROJECT prioritizes brownfield workflows (BROWN-01–05) for first dogfood. Discipline: don't optimize commands the user isn't actually running yet. Greenfield workflows (GREEN-01–03) are out-of-priority within v1; complete them but don't gold-plate.
+|---------|------------------|--------------|
+| 1 — Stable-identity semantic flip | Audit (classify every read site) + Flip (rename `LogEntry.hash` to force compile-error audit) | Audit doc has verdict-per-entry; rename PR triggers compile errors at exactly the audited sites |
+| 2 — Hex-prefix silent miss | Audit (find them) + Flip (fix them) + Lint (prevent regression) | Contract test asserts `LogEntry.hash` does NOT match `/^[0-9a-f]/` on jj |
+| 3 — Test-equality over-relaxation | Pre-Flip test-prep (write matcher up-front) + Close-gate (deviation table review) | Custom matcher is the only id-equality path in changed tests; deviation table empty or fully justified |
+| 4 — External-link boundary leak | Flip (introduce accessor with single-callsite invariant) + Lint (encode invariant) | Lint counts importers; CI fails on >1 |
+| 5 — Mid-phase `.planning/` cutover | Phase-shape design (decide pin-or-snapshot before phase opens) + Migrate (close-gate-only rewriter pass) | Idempotency test: re-run rewriter; output is byte-identical |
+| 6 — Markdown prose hex leaks | Lint (separate prose-lint tool) + Close-gate (date-windowed grep sweep) | Sweep returns zero unjustified hits in post-flip-date `.md` changes |
+| 7 — Lint allowlist hollowing | Lint (design schema with `reason`/`expires`/`owner` before adding first entry) | CI rejects entries without required fields; expired entries fail CI |
+| 8 — `expr.commit` rename rot | Flip (hard rename + codemod in single PR, verify `dist-cjs/`) | `grep -r 'expr\.commit' .` returns zero |
+| 9 — Boundary accessor sprawl | (Same as Pitfall 4) | Same as Pitfall 4 |
+| 10 — Perf traps | Audit (one-shot AST), Lint (regex-only in CI), Close-gate (perf delta check) | CI time delta < 5% vs v1.1 baseline |
 
 ---
 
 ## Sources
 
-### Primary (HIGH confidence)
-- [Jujutsu — Git compatibility (official docs)](https://docs.jj-vcs.dev/latest/git-compatibility/) — colocated mode gotchas, interleaving warnings, conflict representation, push behavior, supported/unsupported features
-- [Jujutsu — Working copy (official docs)](https://docs.jj-vcs.dev/latest/working-copy/) — automatic snapshot, `--ignore-working-copy`, ignore-pattern semantics
-- [Jujutsu — Concurrency (official docs)](https://docs.jj-vcs.dev/latest/technical/concurrency/) — lock-free model, working_copy/lock, divergent ops handling
-- [Jujutsu — Operation log (official docs)](https://docs.jj-vcs.dev/latest/operation-log/) — op log vs git reflog, undo semantics
-- [Jujutsu — Bookmarks (official docs)](https://docs.jj-vcs.dev/latest/bookmarks/) — bookmark vs branch, no-auto-advance
-- [Jujutsu — Divergent changes guide](https://docs.jj-vcs.dev/latest/guides/divergence/) — divergent change IDs, how they arise
-- [Jujutsu — Working with GitHub](https://docs.jj-vcs.dev/latest/github/) — push tracking, detached HEAD on init
-- [Jujutsu — Changelog](https://docs.jj-vcs.dev/latest/changelog/) — recent breaking changes (`branch`→`bookmark`, `op undo`→`op revert`, `obslog`→`evolog`, min git version)
+**This codebase (file:line — primary evidence):**
+- `sdk/src/vcs/backends/jj.ts:225,327,946,965,978,1083` — the leak surface
+- `sdk/src/vcs/format-migration/rewrite.ts:53,63,73-86` — alphabet disjointness probe + COMMIT_KEY_ALLOWLIST + zone-targeting
+- `sdk/src/vcs/expr.ts:38,92` — `expr.rev` factory + input-domain validator
+- `sdk/src/query/log.ts:72`, `sdk/src/query/verify.ts:683` — current `.hash` consumers
+- `scripts/lint-vcs-no-raw-git.cjs:48-69`, `scripts/lint-vcs-no-raw-git.allow.json` — existing lint discipline (model + anti-pattern)
+- `scripts/changeset/github-release-notes.cjs:154` — the canonical external-link emission case
+- `.planning/seeds/SEED-001-change-id-only-on-jj-adapter-surface.md` — surface inventory and phase shape sketch
+- `.planning/MILESTONES.md` v1.1 Plan 02 deviations + Plan 04 deviation — prior-incident evidence for cross-namespace pain and `expr.rev` input-domain widening
 
-### Issue tracker (HIGH confidence — primary source for known bugs)
-- [jj #8052 — Tracking issue for colocated workspaces](https://github.com/jj-vcs/jj/issues/8052) — outstanding work on colocated mode, including `jj git init --colocate` not refusing inside git worktrees
-- [jj #403 — Does jj have git hook support?](https://github.com/jj-vcs/jj/discussions/403) — current state of hooks, why pre-commit doesn't translate
-- [jj #3577 — FR: Generalized hook support](https://github.com/jj-vcs/jj/issues/3577) — hook design discussion
-- [jj #405 — Integrate with pre-commit.com](https://github.com/jj-vcs/jj/issues/405) — pre-commit framework gap
-- [jj #6440 — `jj git clone --colocate` hangs forever on macOS with fsmonitor](https://github.com/jj-vcs/jj/issues/6440)
-- [jj #6203 — Frequent issues with `.git/packed-refs`](https://github.com/jj-vcs/jj/issues/6203)
-- [jj #1042 — `git checkout` in colocated repo may abandon old HEAD](https://github.com/jj-vcs/jj/issues/1042)
-- [jj #7538 — Frequent errors: `The working copy is stale`](https://github.com/jj-vcs/jj/issues/7538)
-- [jj #5224 — Show summary of working-copy snapshot changes](https://github.com/jj-vcs/jj/issues/5224)
+**Project memory:**
+- `project_planning_id_migration` — B-07 SHA→change_id rewriter precedent
+- `project_test_perf_pain_vitest` — vitest perf budget context for Pitfall 10
+- `feedback_baseline_is_correctness_not_perf` — close-gate baseline pattern
 
-### Practitioner reports (MEDIUM confidence — single-source unless cross-referenced)
-- [Automating Pre-Push Checks with Jujutsu — Aazuspan](https://www.aazuspan.dev/blog/automating-pre-push-checks-with-jujutsu/) — wrapper-script pre-commit recipe
-- [Using Jujutsu in a colocated git repository — cuffaro.com](https://cuffaro.com/2025-03-15-using-jujutsu-in-a-colocated-git-repository/) — practical colocated gotchas
-- [Demystifying Jujutsu (jj) Workspaces — Joshua Lyman](https://www.joshualyman.com/2026/02/demystifying-jujutsu-jj-workspaces/) — workspace semantics
-- [Jujutsu worktrees are very convenient — Shaddy](https://shaddy.dev/notes/jj-worktrees/) — workspace vs git-worktree practical comparison
-- [Jujutsu From The Trenches — Matt Hall](https://mattjhall.co.uk/posts/jujutsu-from-the-trenches.html) — real-world hook/wrapper experience
-- [Running Jujutsu with Claude Code Hooks — Matthew Sanabria](https://matthewsanabria.dev/posts/running-jujutsu-with-claude-code-hooks/) — closest published prior art for "AI-agent-driven jj wrapper" use case
-- [Avoid Losing Work with Jujutsu (jj) for AI Coding Agents — Anthony Panozzo](https://www.panozzaj.com/blog/2025/11/22/avoid-losing-work-with-jujutsu-jj-for-ai-coding-agents/) — programmatic-agent + jj patterns
-- [Tech Notes: The Jujutsu version control system — neugierig.org](https://neugierig.org/software/blog/2024/12/jujutsu.html) — surprises and rough edges
-- [Tech Notes: Understanding Jujutsu bookmarks — neugierig.org](https://neugierig.org/software/blog/2025/08/jj-bookmarks.html) — bookmark non-auto-advance gotcha
+**External — VCS prior art:**
+- [Jujutsu Glossary — change_id vs commit_id semantics](https://docs.jj-vcs.dev/latest/glossary/) — change_id is rebase-stable, commit_id is snapshot-stable
+- [Jujutsu Divergent Changes guide](https://docs.jj-vcs.dev/latest/guides/divergence/) — divergent change_id requires `/0` `/1` offset disambiguation; pure-prefix lookup can be ambiguous
+- [Jujutsu issue #2476 — `jj log -r <change id prefix>` can miss some commits in divergent change](https://github.com/jj-vcs/jj/issues/2476) — concrete prior incident for prefix-uniqueness assumption breakage
+- [Jujutsu Revset language reference](https://jj-vcs.github.io/jj/latest/revsets/) — change_id alphabet `^[k-z]*$`, prefix-non-unique-is-error semantics
+- [Jujutsu FAQ — change_id vs commit_id behavior on rewrite](https://jj-vcs.github.io/jj/latest/FAQ/) — "Rewriting a commit results in a new commit ID, but the change ID generally remains the same"
+- [Gerrit ↔ Jujutsu integration design doc](https://www.gerritcodereview.com/design-docs/support-jujutsu-use-cases.html) — concrete prior-art incident: "merged commits from the GH PR do not include any trailing Change-Id… [causing] tracking issues when rebasing" (the same class as Pitfall 1)
+- [Mercurial ChangesetEvolution](https://www.mercurial-scm.org/wiki/ChangesetEvolution) — obsolescence markers as the hg-equivalent prior art for tracking-rebased-identity
+- [Sapling Visibility and mutation](https://sapling-scm.com/docs/dev/internals/visibility-and-mutation/) — Sapling's mutation-record approach as a third prior-art point
 
-### Abstraction / fork-management theory (MEDIUM confidence)
-- [The Law of Leaky Abstractions — Joel Spolsky / lawsofsoftwareengineering.com](https://lawsofsoftwareengineering.com/laws/law-of-leaky-abstractions/)
-- [Being friendly: Strategies for friendly fork management — GitHub Blog](https://github.blog/2022-05-02-friend-zone-strategies-friendly-fork-management/) — atomic commits, sidecar layout for upstream-tracking forks
-- [LLVM out-of-tree target sync discussion](https://discourse.llvm.org/t/how-to-keep-out-of-tree-target-in-sync-with-upstream/68027) — long-running fork rebase patterns
-
-### GSD-specific (HIGH confidence — internal)
-- `.planning/PROJECT.md` — fork constraints, decisions, scope
-- `.planning/intel/git-touchpoints.md` — porting surface
-- Worktree bug history in upstream test names: `bug-2924-worktree-head-attachment`, `bug-2774-cleanup-workspace-safety`, `bug-3097/3099-worktree-path-safety`, `bug-2075-deletion-safeguards`, `bug-2431-locked-surfacing`, `bug-2015-base-branch`, `bug-2388-no-branch-rename`
+**External — lint discipline prior art:**
+- [ESLint custom rules — meta.schema for options validation](https://eslint.org/docs/latest/extend/custom-rules) — schema-required option pattern that prevents allowlist write-only rot
 
 ---
-*Pitfalls research for: GSD jj-port (porting worktree-heavy TS+CJS Node.js tool to dual-backend git/jj VCS)*
-*Researched: 2026-05-09*
+
+*Pitfalls research for: GSD jj-port v1.2 unified-revision-model cleanup*
+*Researched: 2026-05-14*

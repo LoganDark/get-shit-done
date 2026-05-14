@@ -1,259 +1,237 @@
-# Feature Research — Git → jj Operational Mapping
+# Feature Research — v1.2 unified revision model
 
-**Domain:** VCS adapter port (git → Jujutsu) for GSD
-**Researched:** 2026-05-09
-**Confidence:** HIGH for documented jj commands; MEDIUM for behavioral-fidelity edge cases (especially worktree/workspace and concurrency); LOW for hook workarounds (the ecosystem is in flux as of mid-2026).
-**Downstream consumer:** `REQUIREMENTS.md` and the `sdk/src/vcs/` adapter interface.
+**Domain:** dual-backend VCS adapter (git + jj 0.41) for a TypeScript SDK + CJS-runtime hybrid
+**Researched:** 2026-05-14
+**Confidence:** HIGH on industry patterns + per-surface migration table; MEDIUM on optimal anti-feature disposition (deprecate vs. delete vs. flip-rename)
 
-This document is **operation-centric**, not user-feature-centric. Each row in the tables below is a git operation that GSD currently invokes; the question for v1 is "what does the adapter do when called from a jj backend?" The standard "Table Stakes / Differentiators / Anti-features" framing is repurposed:
+## Scope-anchoring premise
 
-- **Direct map** ↔ Table Stakes: mechanical translation, low fidelity risk
-- **Semantic shift** ↔ Differentiators-shaped (must redesign call site, but doable)
-- **No analog** ↔ Anti-features-shaped (designed from scratch — v1 risk surface)
-- **jj-only opportunities** ↔ deferred wins (capabilities GSD gains by going jj-native — flagged for future phases, **not v1 scope**)
+v1.2 is **subsequent** to a fully-shipped dual-backend adapter (v1.0 + v1.1). All structural verbs already exist (`commit`, `log`, `diff`, `status`, `findConflicts`, `refs.{*}`, `workspace.{*}`, `gitOnly.*`). v1.2 does NOT add backend behavior — it refactors the **identity contract** of existing surfaces so that "a revision" has one meaning across backends. The defining premise: workflows must never branch on `vcs.kind` for id reasons; the jj backend never volunteers `commit_id` from any cross-backend verb.
 
----
+Two existing precedents establish the architectural direction this milestone generalizes:
+1. **Phase 4 D-06** — `IncompleteWorkEntry.changeIdShort` was change_id native from day 1 (`sdk/src/vcs/types.ts:226-231`).
+2. **Phase 7 D-05** — `refs.mergeBase()` returns change_id on jj via `fork_point(x)` revset (`sdk/src/vcs/backends/jj.ts:887-900`). User overrode the recommendation despite the rebase-stability tradeoff. v1.2 generalizes this verdict to the rest of the read surface.
 
-## Operation Mapping
+## Industry survey — how dual-backend VCS tools expose revision identity
 
-### 1. Direct map (mechanical translation)
+### Pattern 1: "Pick the common shape, hide the rest" (volgo-vcs, Sapling)
 
-These operations have a 1:1 jj equivalent with effectively identical behavior. The adapter wraps shell-out either way.
+Both git and Mercurial use **40-char hex** for revision identity, so [volgo-vcs](https://mbarbin.github.io/vcs/docs/explanation/mercurial-compatibility/) ducks the question — its `Rev` type is "the 40-char hex string both backends happen to produce." It explicitly declines a fully-abstracted VCS layer ("All types, names, and semantics in Vcs remain Git-centric"). This works for git+hg because the namespaces are *shape-compatible*. It does NOT work for git+jj — change_id uses a reverse-base32 alphabet (k–z, no 0–9 or a–f) precisely so it cannot be confused with a hex commit_id ([jj-vcs.dev architecture docs](https://docs.jj-vcs.dev/latest/technical/architecture/)). v1.2 cannot adopt this pattern.
 
-| Git operation | jj equivalent | Notes | Complexity | Fidelity risk |
-|---|---|---|---|---|
-| `git status` | `jj status` (alias `jj st`) | jj output mentions "Working copy : <change-id>" plus changed files. Parser must change. Use `--no-pager` and `-T <template>` for stable output. | S | LOW |
-| `git diff` | `jj diff` | jj diff defaults to working-copy commit (`@`) vs its parent. Supports `--from`/`--to`. Output format differs (e.g. inline color); use `--git` flag for git-format diff. | S | LOW |
-| `git log` | `jj log` | jj log defaults to a graph view of mutable commits (`mutable()`); pass `-r ::@` or `-r 'all()'` to widen. **Templating mandatory** for scripting (`-T builtin_log_oneline` or custom). | M | LOW once template is stable |
-| `git ls-files` | `jj file list` | Lists files at a revision (default `@`). Adapter contract should pass revision explicitly to keep parity. | S | LOW |
-| `git blame <path>` | `jj file annotate <path>` | Output formatting differs; commit IDs are jj's hex commit IDs (still git-compatible in colocated mode, but jj also has change IDs). | S | LOW–MEDIUM (output parsing) |
-| `git config --get/--set` | `jj config get`/`jj config set` | jj has explicit scope flags: `--user`, `--repo`, `--workspace`. Maps cleanly to git's `--global`/`--local`. **Per-repo config stored outside the repo** (not inside `.jj/`). | S | LOW |
-| `git remote add/remove/list/set-url` | `jj git remote add/remove/rename/set-url/list` | Subcommand names match closely. | S | LOW |
-| `git fetch <remote>` | `jj git fetch --remote <remote>` | jj fetches into git's storage layer (colocated) or its own (non-colocated) and updates tracking bookmarks. | S | LOW |
-| `git push <remote> <branch>` | `jj git push --remote <remote> --bookmark <name>` | Push semantics align; jj also supports `--all`, `--allow-new`. **Important:** jj refuses to push untracked bookmarks to existing remote bookmarks (safety feature). | S–M | MEDIUM (safety-check surfaces) |
-| `git init` | `jj git init [--colocate]` | `--colocate` creates both `.git` and `.jj`; this is GSD's preferred mode (matches dogfood repo). | S | LOW |
-| `git clone <url>` | `jj git clone <url> [--colocate]` | Same as above. | S | LOW |
-| `.gitignore` | `.gitignore` (jj reads it natively) | jj uses its own ignore engine but consumes `.gitignore`, `.git/info/exclude`, and `core.excludesFile` from git config. **Re-tracking gotcha:** files newly matching `.gitignore` need `jj file untrack`. | S | LOW |
-| `git tag` | `jj tag` | Same surface, fewer subcommands than git's tag UX. Read-only operations easy; signing not supported in jj. | S | LOW–MEDIUM (signing) |
+[Sapling SCM](https://sapling-scm.com/docs/introduction/) (Meta's git+Mercurial-and-internal-backend tool) takes a similar approach: standard 40-char hex IDs work uniformly because both backends produce them. Sapling does NOT have to bridge a second namespace.
 
-**Sources:** [Git compatibility – jj docs](https://docs.jj-vcs.dev/latest/git-compatibility/), [CLI reference – jj docs](https://docs.jj-vcs.dev/latest/cli-reference/), [Bookmarks – jj docs](https://docs.jj-vcs.dev/latest/bookmarks/), [Config – jj docs](https://docs.jj-vcs.dev/latest/config/).
+### Pattern 2: "Bridge with a translation table" (hg-git, git-remote-hg)
 
----
+[hg-git](https://github.com/schacon/hg-git) maintains an explicit Mercurial-changeset-id ↔ git-commit-id mapping table on disk — enabling "lossless" round-trips. The translation is keyed on the **content-addressed** invariant that survives crossing the bridge (per [Mercurial wiki HgGit](https://www.mercurial-scm.org/wiki/HgGit)). This is the wrong primitive for v1.2: jj's commit_id IS the git commit_id when colocated; the namespaces aren't separate stores, they're parallel views of the same underlying object. There's nothing to bridge — only a question of which view the public API exposes.
 
-### 2. Semantic shift (similar concept, different model)
+### Pattern 3: "Native to the dominant backend; the other is an internal detail" (jj-fzf, lazyjj, jjui)
 
-These operations have a jj equivalent, but the underlying model differs enough that the adapter must do more than rename. Test impact is real — many existing tests encode git-specific behavior that has no jj counterpart.
+[jj-fzf](https://github.com/tim-janik/jj-fzf/blob/trunk/jj-fzf) uses **change_id as the primary user-facing reference** throughout — the interactive selection placeholder `{2}` is the change_id column. commit_id surfaces only when interfacing with **external tools that demand immutable hashes** (the script reaches for `commit_id` only when handing off to an LLM commit-message generator and when running `jj split` on a specific revision). Otherwise change_id is canonical.
 
-| Git operation | jj equivalent | Semantic difference | Complexity | Fidelity risk | Test impact |
-|---|---|---|---|---|---|
-| `git commit -m "msg"` | `jj commit -m "msg"` (closes current change, opens new empty change on top) **or** `jj describe -m "msg"` (sets description without closing) | jj has no staging area — *all* working-copy changes are auto-snapshotted into the change `@`. `jj commit` finalizes and creates a new empty `@`; `jj describe` only sets the message. GSD's call-site intent matters: "commit current state with this message" → `jj commit -m`. | M | MEDIUM | Tests that grep for `git commit -m` strings or assert post-commit working-tree-is-clean must learn that jj always has a `@` change (often empty, never "clean" in git's sense) |
-| `git commit --amend` | `jj describe -m "newmsg"` (message only) **or** `jj squash` (fold `@` into its parent) | "Amend" decomposes: amending a *message* is `jj describe`; amending *content* into the previous commit is `jj squash` (which moves `@`'s changes into `@-` and leaves `@` empty). | M | MEDIUM | Hotfix flows that rely on `--amend` semantics need to choose explicitly between describe and squash |
-| `git branch <name>` | `jj bookmark create <name>` | jj has no "current branch" — bookmarks don't move automatically with new commits. After `jj commit`, the bookmark stays on the old commit; user must `jj bookmark move`. | M | **HIGH** | Any test asserting "branch advances on commit" will fail; GSD's branch-tracking logic must be redesigned |
-| `git checkout <ref>` / `git switch <ref>` | `jj new <ref>` (new change on top of `<ref>`) **or** `jj edit <ref>` (move `@` onto `<ref>` itself) | `git checkout` is overloaded (branches, files, detached HEAD); jj splits these. Default GSD intent ("move working copy to ref to start work") is `jj new <ref>`. `jj edit` is closer to git's detached-HEAD checkout. | M | MEDIUM | Worktree-attachment tests (`bug-2924-worktree-head-attachment`) need a jj-equivalent invariant — "what does it mean for a workspace to be 'attached' to a bookmark in jj" is a design question |
-| `git checkout <path>` (restore file) | `jj restore <path>` | Restores file content from another revision (default: `@-`). Works at file granularity. | S | LOW |
-| `git rebase <onto>` | `jj rebase -d <onto>` | jj rebase is **conflict-tolerant**: conflicts are recorded in commits and you continue working; no "rebase in progress" state. Descendants auto-rebase whenever any commit is rewritten. | M | MEDIUM–HIGH | Tests asserting "rebase fails on conflict" or "rebase leaves repo in mid-rebase state" don't apply; GSD verify gates may need to learn to detect "this commit has unresolved conflict markers" via `jj log -r 'conflict()'` |
-| `git cherry-pick <rev>` | `jj duplicate <rev> -d @` **or** `jj rebase -r <rev> -d @` | `jj duplicate` keeps the original; `jj rebase -r` moves it. GSD cherry-pick flows (canary/hotfix) want `duplicate`. | M | MEDIUM | Hotfix-cherry-pick tests need duplicate semantics + explicit destination |
-| `git merge <ref>` | `jj new <parent1> <parent2>` (creates merge change with two parents) | jj merges by creating a multi-parent change directly; no separate "merge commit" syntax. Conflicts are recorded in the change rather than blocking. | M | MEDIUM | Merge-flow tests need to drop "fast-forward" reasoning; jj has no FF concept |
-| `git reset --hard <ref>` | `jj abandon @` then `jj new <ref>` **or** `jj edit <ref>` (depending on intent) | "Throw away current work and move to ref" decomposes into abandon + new. Note: abandoned changes remain in op log; truly destructive recovery is via `jj op restore`. | M | MEDIUM | Reset-driven cleanup tests must not assert "commit gone from reflog" — jj keeps it in op log indefinitely |
-| `git reset --soft <ref>` | `jj squash --from @ --into <ref>` (rough analog) **or** `jj rebase` + `jj abandon` | "Move HEAD but keep working tree" doesn't translate cleanly because jj has no separate working tree. The right adapter behavior depends on *why* GSD calls `--soft`. | L | HIGH | Any GSD code that does `git reset --soft` to manipulate index state needs a per-call-site redesign |
-| `git rev-parse HEAD` | `jj log -r @ -T 'commit_id' --no-graph` | `@` is the working-copy revision. Use `--no-graph` and `-T` to get a clean ID. **Caveat:** in colocated mode, `@`'s commit ID matches what git sees as HEAD; in non-colocated mode, jj has its own commit IDs that may differ from git's. | S | LOW (colocated), MEDIUM (non-colocated) |
-| `git rev-list <range>` | `jj log -r '<revset>' -T 'commit_id' --no-graph` | jj's revset language is more expressive; `..`, `::`, ancestors, descendants, intersection/union/negation. Adapter should expose revset strings as the canonical "range" type and translate at the git boundary. | M | LOW once revset is standardized |
-| `git stash` | **No direct equivalent.** Idiomatic jj: `jj new` on a sibling change to "set aside" current work, return via `jj edit <stash-change>`. Or simply do nothing (work-in-progress is already a commit). | jj's auto-snapshot model makes stashing largely unnecessary — your in-progress work is always a real change you can `jj edit` back into later. GSD's stash usage (if any in the worktree-safety code) should be re-examined: the *intent* is "preserve uncommitted state across context switches," which jj satisfies by default. | M (if used) | MEDIUM | Tests expecting `git stash list` populated must be removed or rewritten |
-| `git worktree add <path> <ref>` | `jj workspace add --name <name> -r <ref> <path>` | Both create a separate working directory backed by the same repo. jj workspaces have richer semantics (each has its own `@` recorded as a separate working-copy commit named `<name>@`); changing `@` in workspace A *does not* affect workspace B's `@`, but `update-stale` is needed when the underlying repo state shifts beneath you. | L | **HIGH** | Worktree edge-case tests (`bug-2774`, `bug-2924`, `bug-3097/3099`, etc.) encode git-specific invariants — many will need parallel jj-version invariants designed from scratch |
-| `git worktree list` | `jj workspace list` | Output format differs; templating recommended. | S | LOW |
-| `git worktree remove <path>` | `jj workspace forget <name>` + manual rmdir | jj's `forget` removes the workspace from tracking *but does not delete the directory*. Adapter must rm the dir explicitly. | S–M | MEDIUM (cleanup ordering) |
-| `git pull` | `jj git fetch` + `jj rebase` (or operation-log-aware merge) | jj has no `pull` because rebase-on-fetch isn't the only sensible default. GSD pull-equivalent flows must explicitly fetch then rebase. | M | LOW (just decompose) |
-| `git add <path>` / `git rm <path>` / `git mv` | **Mostly no-op:** jj auto-tracks. `jj file track <path>` only needed for files matching `.gitignore`. `jj file untrack` to stop tracking. Renames detected automatically by content similarity. | jj has no index. "Stage this change" is meaningless; the change is already in `@`. Adapter: most `git add` calls become no-ops on the jj backend. | S | LOW (most call sites) / MEDIUM (call sites that depend on staged-vs-unstaged distinction) | Tests that assert "file is staged" or "file is in index but not committed" must be retargeted to "file is in `@` but `@` has not been finalized via `jj commit`" |
+[lazyjj](https://github.com/Cretezy/lazyjj) and [jjui](https://github.com/idursun/jjui) similarly drive their entire UX off change_id (per their default jj-template-driven log views). Neither tool was designed for cross-backend duty — they assume jj — but the design verdict generalizes: **inside a jj-aware surface, change_id is the right canonical id; commit_id is reserved for boundary I/O**.
 
-**Sources:** [Git comparison – jj docs](https://docs.jj-vcs.dev/latest/git-comparison/), [Working copy – jj docs](https://docs.jj-vcs.dev/latest/working-copy/), [Revsets – jj docs](https://docs.jj-vcs.dev/latest/revsets/), [Bookmarks – jj docs](https://docs.jj-vcs.dev/latest/bookmarks/), [CLI reference – jj docs](https://docs.jj-vcs.dev/latest/cli-reference/).
+### Pattern 4: jj's own CLI default
 
----
+`jj log` default output shows BOTH ids in every row (verified locally on jj 0.41 in this repo: change_id `puktoqmq` next to commit_id `5c02d8c2`). The user-facing convention is "show both, but change_id is the one you cite when you mean *this work*; commit_id is the one you cite when you mean *this exact byte snapshot*." Per [jj docs templates](https://docs.jj-vcs.dev/latest/templates/) and [Why are jj's ID prefixes so short?](https://jonathan-frere.com/posts/jujutsu-shortest-ids/), jj computes the **shortest unambiguous prefix** independently for each namespace — they're treated as parallel addressing schemes, not interchangeable.
 
-### 3. No analog (must be designed from scratch — v1 risk surface)
+**Verdict for v1.2:** Pattern 3 (with explicit boundary-I/O accessor for Pattern 4's commit_id half) is the right model. Adapter surface returns canonical revision id (commit_id on git, change_id on jj). A separate, jj-backend-PRIVATE accessor exists for the rare boundary case (GitHub URL emission, hex-prefix matching) — never imported by workflow code, never reachable on the cross-backend surface.
 
-These operations have **no jj counterpart**. Each requires a design decision in the adapter contract.
+## Feature Landscape
 
-| Git operation | Why no analog | Design options for v1 | Complexity | Fidelity risk |
-|---|---|---|---|---|
-| Pre-commit hook (`.githooks/pre-commit`) | jj has no native hook system. The maintainers have stated native hooks are eventual but not imminent ([discussion #403](https://github.com/jj-vcs/jj/discussions/403)). Pre-commit is structurally hard for jj because there's no "just-created commit at HEAD" moment — the working copy is always already a commit. | (a) **Wrapper-binary approach:** ship a `jj-gsd` shim that intercepts `jj commit`/`jj describe`, runs hooks, then delegates. (b) **Colocation-only approach:** rely on the colocated `.git/hooks/pre-commit` continuing to fire when users run git operations (won't fire on pure-jj operations). (c) **Op-log polling:** background daemon detecting new operations and running hooks post-hoc (changes hook semantics from blocking to advisory). (d) **Defer to `jj fix`:** for lint/format hooks only, use `jj fix` which is jj's native equivalent for content-rewriting tools. | L | **HIGH** — different semantic model; some hooks just don't fit |
-| Pre-push hook (`.githooks/pre-push`) | Same root cause; somewhat easier because push *is* an explicit operation. | Adopt or fork [`acarapetis/jj-pre-push`](https://github.com/acarapetis/jj-pre-push) — wraps `jj git push`, identifies bookmarks, runs hooks per-bookmark, restores state. Requires colocation. **Recommended for v1.** | M | MEDIUM (third-party tool, evolving API) |
-| `.git/index.lock` (concurrency primitive) | jj has no index. Its concurrency model is the operation log: ops are atomic ref updates with op-head merging. Concurrent ops produce divergent op heads which jj surfaces (and the user resolves via `jj op log` / `jj op restore`). | GSD's worktree-staggering logic (`worktree-safety.cjs`) currently uses `.git/index.lock` as a coarse mutex. **Replacement:** explicit file-lock primitive in the adapter (e.g. `flock` on a `.planning/.gsd-vcs.lock` sentinel file). Do NOT try to map onto jj's op-head model — that's a different layer. | M | **HIGH** — bug-2774 / bug-3097 / bug-3099 logic depends on this |
-| `git worktree lock <path>` / `git worktree unlock` | jj has no workspace lock concept. | Same as above — implement a sentinel-file lock owned by the adapter. | S | MEDIUM |
-| `git worktree prune` | jj has no equivalent. `jj workspace forget` is manual. Stale workspace detection happens via `jj workspace update-stale`, but that's about op-log staleness, not directory absence. | Adapter implements prune as: `jj workspace list` + filesystem-existence check + `jj workspace forget` for missing entries. | M | MEDIUM |
-| `git reflog` | jj has the operation log instead, which is **strictly more powerful** but structured per-operation, not per-ref. | Adapter exposes "history of ref X" by combining `jj op log` with revset queries. For v1, GSD's reflog usage (rare) can be approximated by `jj op log` + manual filtering. | M | LOW (unlikely to break anything in v1) |
-| `git submodule` | jj has no submodule support. | Out of scope for v1 — GSD doesn't use submodules per touchpoint scan (only `.gitmodules` path-safety mention). Document as known limitation. | — | — |
-| `git notes` | jj has no notes equivalent (commit metadata is via change description + the op log). | GSD doesn't appear to use git notes. Document as known limitation. | — | — |
-| `git bisect` | jj has experimental support via third-party tools but no first-party `jj bisect`. | GSD doesn't appear to invoke bisect programmatically. Out of scope. | — | — |
+### Table Stakes (must ship to deliver "unified revision model")
 
-**Sources:** [Git hooks discussion #403](https://github.com/jj-vcs/jj/discussions/403), [jj-pre-push tool](https://github.com/acarapetis/jj-pre-push), [Operation log – jj docs](https://docs.jj-vcs.dev/latest/operation-log/), [Pre-commit integration issue #405](https://github.com/jj-vcs/jj/issues/405).
+Without these, the milestone hasn't met its goal — workflows still must branch on `vcs.kind` for id reasons.
 
----
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| **Caller audit doc** (`.planning/intel/id-namespace-audit.md`) | Cannot safely flip surfaces without knowing every consumer's id assumption (range-stability, hex-prefix matching, external link emission, status-table propagation). Plan 02 of Phase 7 proved callers DO depend on commit_id semantics in some places. SEED-001 calls this "the load-bearing risk." | MEDIUM | Per-call-site classification: `change_id-safe` / `needs commit_id` / `needs both` / `unclear`. Eliminate-first stance per PROJECT.md — default verdict is "convert to revision." |
+| **Flip `LogEntry.hash` on jj to change_id** | Single most-cited surface in workflow code; setting the precedent. PITFALL 1 doc at `sdk/src/vcs/backends/jj.ts:327-328` currently pins commit_id semantics — must invert. | MEDIUM | Field name carries hash-shape semantic ("hash"); see anti-features below for the rename question. |
+| **Flip `refs.resolveShort()` on jj to change_id.shortest()** | Display surface; Phase 6 B-07 already uses change_id.shortest() internally. `sdk/src/vcs/backends/jj.ts:946`. | LOW | Template flip: `commit_id.short()` → `change_id.shortest()`. Note jj uses `.shortest()` for prefix-uniqueness optimization (per [jj templates docs](https://docs.jj-vcs.dev/latest/templates/)). |
+| **Flip `refs.bookmarks.list()[].rev` on jj to change_id** | `Bookmark.rev` field shape; the cross-namespace pain Plan 07-02 hit (`workspace.merge` returns change_id, `bookmarks.list` returned commit_id, no `===` possible). | LOW | Template flip. |
+| **Flip `workspace.list()[].rev` on jj to change_id** | Same `WorkspaceInfo.rev` consistency issue. `sdk/src/vcs/backends/jj.ts:1083`. | LOW | Template flip. |
+| **Flip `refs.parent` / `refs.head` materialization on jj** | Used by mergeBase, log scoping, conflict resolution; if these stay commit_id while peers flip, callers re-derive via two paths. `sdk/src/vcs/backends/jj.ts:222-227`. | LOW | Template flip. |
+| **Flip `refs.exists` / `countCommits` / `rootCommits` template scans on jj** | Internal consistency; these compose with the above. `sdk/src/vcs/backends/jj.ts:965, 978`. | LOW | Template flip; `exists` is shape-agnostic but the scan id used in revset construction must match the new canonical. |
+| **`expr.rev(id)` as canonical revision factory; `expr.commit(sha)` deprecated** | Phase 2.1 already deleted `expr.commit` at the type level (per PROJECT.md Validated). v1.2 closes any ambient/runtime alias that survived (see anti-features). | LOW | The naming pun matters: `expr.commit` implies "this is a git commit hash" — wrong for the unified model. |
+| **Lint guard parallel to `lint-vcs-no-raw-git`** | Architectural enforcement. Mirrors the existing whole-repo default-deny pattern that has already prevented git-backend leakage; without a parallel guard, the audit's verdict erodes over time. PROJECT.md explicitly calls this out. | MEDIUM | Default-deny `commit_id` template strings + `.commit_id` field accesses + hex-form id assumptions inside jj-routed code paths. Annotated allowlist for the boundary-I/O accessor's two implementation files. |
+| **`.planning/` format pass — extends Phase 6 B-07** | Any remaining commit_id-encoded record in `.planning/` (status tables, intel docs, manifest fields) gets rewritten. Memory `project_planning_id_migration` tracks this surface. | LOW–MEDIUM | Audit step → rewriter pass; reuses B-07's existing `commitIdOf ↔ changeIdOf` translation pair from `sdk/src/vcs/format-migration/rewrite.ts`. |
+| **Refactor every workflow that branches on `vcs.kind` for id reasons** | The whole point of v1.2. Branch deletions are evidence the abstraction works. PROJECT.md Active list. | MEDIUM | Delete the `if (vcs.kind === 'git') … else …` blocks; use the unified return value. Audit step locates them. |
 
-### 4. jj-only opportunities (defer to future phases — NOT v1 scope)
+### Differentiators (capabilities the unified model unlocks)
 
-Capabilities GSD gains by going jj-native. Flag these in the adapter design so v1 doesn't block them, but don't implement them in v1.
+Capabilities split-namespace surface CANNOT deliver cleanly today.
 
-| Capability | Value to GSD | Effort | Phase target |
-|---|---|---|---|
-| **Op-log-backed `/gsd-undo`** | Today GSD's undo is bespoke. jj's `jj op restore <op-id>` is a single, atomic, fearless undo across *all* refs at once. Wiring `/gsd-undo` to jj's op log on the jj backend gives genuinely better UX with little code. | M | After v1 parity ships |
-| **Conflict-tolerant rebase for milestone integration** | jj records conflicts *in commits* rather than blocking on them. Milestone integration phases that today require manual conflict resolution could continue automatically with conflict markers carried in change content; verify-gate detects and surfaces them. | L | After v1, post-dogfood |
-| **Auto-rebase descendants on commit edit** | `/gsd-edit-commit` (or equivalent) becomes trivial — any rewrite auto-propagates. Today this is manual rebase chains. | M | Phase 2+ |
-| **Change IDs as stable identifiers** | jj change IDs are stable across rewrites; commit IDs are not. Workflow tracking (which phase produced which change) becomes stable across hotfixes/squashes. | M | Phase 2+ |
-| **Templating for stable scripted output** | `-T <template>` produces scripted output that is more stable than git's porcelain modes. Adapter v2 could use templates universally; v1 just needs *some* template for each parsed call site. | M | Already partially required for v1 (per-command), but a unified template strategy is a v2 win |
-| **Concurrent workspaces without index-lock contention** | jj's op-log model is lock-free across workspaces. GSD's worktree-stagger logic could be relaxed on jj backend (don't add the sleep delays that exist for git). | S | Optional v1 optimization; safer to defer |
-| **`jj fix` for in-tree fixers** | GSD's auto-fixers (lint, format) could pipe through `jj fix` to apply uniformly across stacked phase commits without manual rebase. | M | Phase 2 |
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| **Rebase-stable cross-backend caching** | Cache keys can use canonical revision id without losing referential meaning when an upstream rebase passes through. On jj, change_id survives `jj rebase`; on git, commit_id IS stable. Either way the cached entry stays addressable. Today, callers caching a `LogEntry.hash` on jj see cache misses after every rebase. | MEDIUM | Emerges from the flip — no new code, but a consequence worth documenting because consumers need to know the new stability guarantee. |
+| **Verb composition without backend-aware bridging** | `mergeBase` → `diff` → `bookmarks.list` chains compose with `===` equality across the namespace. Today, Plan 07-02's strict-equivalence test had to relax to presence-only because the namespaces don't compare. SEED-001's "deeper benefit." | LOW (consequence-of-flip) | This is the design property that justifies the milestone. |
+| **Cleaner workflow `.md` — no inline backend conditionals for ids** | PROMPT-04 in v1.1 already deleted 242 LOC of raw-git fallbacks. v1.2 lets us delete more `vcs.kind`-branched id-handling lines from the same files. | LOW | Audit produces the deletion list. |
+| **Documented rebase-stability semantic on `LogEntry`** | Today PITFALL 1 doc at `jj.ts:327` warns "hash is commit_id, NEVER change_id." After v1.2, `LogEntry.id` (or whatever the post-rename field is) carries a documented dual-semantic: "stable across rewrites on jj, immutable snapshot on git." Consumers can rely on it for change-tracking without backend awareness. | LOW (doc work) | Replace PITFALL 1 with a positive contract. |
+| **First-class `vcs.refs.idAlphabet`-aware short-prefix matching** | Today, `id.startsWith(prefix)` is a footgun on jj because change_id uses k-z alphabet — hex prefixes never match. After v1.2, callers use `vcs.refs.matchPrefix(id, prefix)` (or similar) which delegates to the backend's native short-prefix logic. | LOW–MEDIUM | Possibly out of scope for v1.2 if the audit reveals zero callers. Document as v1.3 candidate if so. |
 
-**Sources:** [Operation log – jj docs](https://docs.jj-vcs.dev/latest/operation-log/), [Git comparison – jj docs](https://docs.jj-vcs.dev/latest/git-comparison/), [Templates – jj docs](https://docs.jj-vcs.dev/latest/templates/).
+### Anti-Features (do NOT belong in the unified model)
 
----
+| Feature | Why Tempting | Why Problematic | Alternative |
+|---------|--------------|-----------------|-------------|
+| **`vcs.jjOnly.commitIdOf(rev)` on the cross-backend surface** | Originally proposed by SEED-001 as the symmetrical escape hatch. | **PROJECT.md explicitly inverts SEED-001 on this point.** Workflows must not branch on `vcs.kind` for id reasons. Exposing `vcs.jjOnly.commitIdOf` on the public adapter surface re-creates the branching pattern v1.2 deletes. Phase 2.1 D-01 narrowing convention (`if (vcs.kind === 'jj')` then access `vcs.jjOnly.*`) is appropriate for genuine git-vs-jj capability gaps (`gitOnly.createAnnotatedTag` etc.) — NOT for an id-reason branch. | Boundary-I/O accessor lives **jj-backend-PRIVATE** (file-private symbol or non-exported helper inside `sdk/src/vcs/backends/jj.ts`). It is reachable from `sdk/src/vcs/format-migration/rewrite.ts` (the B-07 rewriter, audit-justified) and from a single curated emission file (e.g., a future `sdk/src/vcs/external-link.ts` that builds GitHub URLs). It is NOT exported from `sdk/src/vcs/index.ts`. Lint guard's allowlist is the enforcement mechanism. |
+| **`expr.commit(sha)` left as a soft alias for `expr.rev(id)`** | Backwards compatibility / migration-friendliness. | The name `expr.commit(sha)` *teaches the wrong model*. `commit` and `sha` both encode git-namespace assumptions. Keeping it as an alias means new callers learn it from old code and propagate the wrong mental model. Phase 2.1 audit already deleted it; v1.2 only needs to verify nothing reintroduced it. | **Delete; do not alias.** Verify via grep + lint guard that no `expr.commit` reference exists in the codebase. If the audit finds any, error-mode-not-deprecation. |
+| **`LogEntry.hash` kept as field name with semantic flip** | Avoids a breaking rename across all consumers. | The field name *encodes the wrong semantic*. "hash" connotes content-addressed git SHA. After the flip, on jj it returns change_id which is NOT content-derived. Leaving the name preserves the very namespace confusion v1.2 is supposed to eliminate. | **Rename to `LogEntry.id`** (namespace-neutral, mirrors the new `expr.rev(id)` factory). Document the dual-semantic in the type doc. The mechanical rename is grep-able and the breaking change is discoverable at compile time (TypeScript `string` field; rename is a tsserver "rename symbol" operation). DO NOT split into `changeId` / `commitId` with one nullable per backend — that re-creates the namespace duality at the type level and forces every caller to handle both, which is the OPPOSITE of the unified-revision-model goal. |
+| **`Bookmark.rev` / `WorkspaceInfo.rev` rename to match** | Symmetry with `LogEntry.id`. | These already use the namespace-neutral `rev` field name. No rename needed; only the value's shape flips. | Leave field names; flip values only. |
+| **Public `vcs.refs.commitIdOf(rev)` that returns "the canonical id, but always hex"** | A "just in case" universal escape hatch. | Same problem as `vcs.jjOnly.commitIdOf`: it teaches callers there's an "escape" they should reach for, which means they reach for it. The lint guard cannot distinguish "audit-justified GitHub URL emission" from "callsite that hasn't been thought through." | Boundary I/O is rare enough that it should be **explicit at the file level** (a single, audit-named, lint-allowlisted module), not implicit at the API surface. |
+| **Auto-coercion (e.g., `expr.rev` accepts both shapes and figures it out)** | Convenience. | Conflates the namespaces. `expr.rev` should validate against the active backend's id shape; mixing shapes silently is exactly the bug v1.2 prevents. Plan 07-04 (Phase 7) already saw this go wrong in the other direction — `expr.rev` validates hex, and the planner had to swap to `expr.bookmark` for git refnames (per `MILESTONES.md` v1.1 deviations). | Keep `expr.rev` validation strict to the active backend's shape. Add separate factories (`expr.bookmark`, `expr.tag`) for non-id revision expressions, as already exists. |
+| **Removing `commit_id` from jj backend internal use** | "If we're going change-id-only, just use change_id everywhere." | jj's commit_id is an implementation detail that the backend MUST sometimes use internally — e.g., when constructing `jj git push` argv (which speaks git's namespace), when interfacing with colocated `.git` directly, or when re-deriving the boundary-I/O hex form. v1.2 is about the ADAPTER SURFACE, not jj's internals. | Internal commit_id use inside `jj.ts` private functions is fine. The lint guard targets `commit_id` template strings in code paths that compose into the **public adapter return value**, plus any field-access pattern that escapes the file. |
 
-## Operation Dependencies (adapter design implications)
+## Per-Surface Migration Table (current shape → target shape)
+
+This is the spec the requirements step picks features off of. Each row is a cross-backend verb whose return value's id shape differs between v1.1 and v1.2 on the jj backend. Git column shape is unchanged — git uses commit_id natively for everything.
+
+| # | Verb / field | File:line | v1.1 git shape | v1.1 jj shape | v1.2 jj target | Notes |
+|---|--------------|-----------|----------------|---------------|----------------|-------|
+| 1 | `LogEntry.hash` | `types.ts:110-111` + `jj.ts:327-339` | commit_id (40-char hex) | commit_id (40-char hex, PITFALL 1) | **change_id** (40-char k-z) | Field RENAME to `id` (anti-feature row 3). PITFALL 1 doc inverts. |
+| 2 | `refs.resolveShort(rev)` | `types.ts:335` + `jj.ts:946` | commit_id.short() (~7 hex) | commit_id.short() (~7 hex) | **change_id.shortest()** (variable len, jj's auto-uniquing) | jj's `.shortest()` is preferred over fixed `.short()` per jj docs. |
+| 3 | `refs.bookmarks.list()[].rev` | `types.ts:167-170, 344` + jj.ts (bookmark list parse) | commit_id (40-char hex) | commit_id (40-char hex) | **change_id** (40-char k-z) | The Plan 07-02 cross-namespace pain. |
+| 4 | `workspace.list()[].rev` | `types.ts:172-176, 382` + `jj.ts:1083` | commit_id (40-char hex) | commit_id (40-char hex) | **change_id** (40-char k-z) | `WorkspaceInfo.rev` field shape. |
+| 5 | `refs.parent` accessor | `types.ts:312` + `jj.ts:222-227` | commit_id | commit_id | **change_id** | Returned as `RevisionExpr`. |
+| 6 | `refs.head` accessor | `types.ts:311` | commit_id | commit_id | **change_id** | Returned as `RevisionExpr`. |
+| 7 | `refs.exists(rev)` template scan | `types.ts:338` + `jj.ts:965` | n/a (boolean) | scans commit_id template | **scans change_id template** | Return type is boolean; only the internal scan id changes. |
+| 8 | `refs.countCommits(opts)` | `types.ts:336` + `jj.ts:965-978` | numeric | numeric (commit_id template scan) | **numeric (change_id template scan)** | Internal-only flip. |
+| 9 | `refs.rootCommits(opts)` | `types.ts:337` + `jj.ts:978` | string[] of commit_ids | string[] of commit_ids | **string[] of change_ids** | Note function NAME `rootCommits` — anti-feature candidate for rename to `rootRevisions` later (defer; not blocking). |
+| 10 | `expr.commit(sha)` factory (if any reference survives) | grep target across `sdk/src/query/*` | already deleted in Phase 2.1 | already deleted | **verify-and-delete-any-reintroduction** | Audit step. |
+| 11 | `LogEntry.parents` array | `types.ts:112` | commit_id[] | commit_id[] | **change_id[]** | Composes with #1; same flip. |
+
+### Surfaces that stay change_id (already correct — DO NOT FLIP)
+
+| Verb / field | File:line | Status |
+|--------------|-----------|--------|
+| `vcs.commit() → CommitResult.hash` (jj only) | `types.ts:91` + `jj.ts:1180-1226` | Already returns commit_id on jj per current code (`jj.ts:222-227` post-squash probe). **AUDIT THIS:** SEED-001's table lists `vcs.commit()` returns as "already change_id" via `{ changeId }`, but the actual `CommitResult` field is `hash` and the post-squash code populates it from a `commit_id` template. Mismatch between the seed's claim and the code — resolve in audit. |
+| `vcs.workspace.merge() → WorkspaceMergeResult.changeId` | `types.ts:217-222` + `jj.ts:1180-1226` | Already change_id (Phase 7 D-03). |
+| `vcs.workspace.reap() → ReapResult.abandoned[].changeId` | `types.ts:244-249` | Already change_id (Phase 4 D-19). |
+| `vcs.refs.mergeBase(a, b)` | `types.ts:328-331` + `jj.ts:887-900` | Already change_id (Phase 7 D-05 user override — the precedent). |
+| `IncompleteWorkEntry.changeIdShort` | `types.ts:226-231` | Already change_id (Phase 4 D-06 — change_id native from day 1). |
+
+### New surface: boundary-I/O accessor (jj-backend-PRIVATE)
+
+NOT exported from `sdk/src/vcs/index.ts`. NOT reachable from workflow code.
+
+| Symbol | Location | Purpose |
+|--------|----------|---------|
+| `__jjCommitIdOf(rev: RevisionExpr): string` | private to `sdk/src/vcs/backends/jj.ts` (or a sibling module under the same allowlist entry) | Resolve a rev to its 40-char commit_id for the rare boundary case (GitHub URL emission, content-addressed external reference). Lint-guard allowlist entry: this file + the curated single emission file. The B-07 rewriter at `sdk/src/vcs/format-migration/rewrite.ts` already has a working internal helper to lift here. |
+
+**Strongly prefer**: route GitHub external links through tag/release URLs, not `/commit/<sha>` URLs, eliminating the need entirely for the audited surface to be reached. The MIGR-05 production consumer (`scripts/changeset/github-release-notes.cjs`) emits release-notes URLs — tag-keyed, not commit-keyed — so it likely stays clean post-flip without ever calling the boundary accessor. Audit verifies.
+
+## Feature Dependencies
 
 ```
-Adapter interface contract
-    └──requires──> stable revision-pointer abstraction (commit-id OR change-id)
-                       └──requires──> revset string as canonical "range" type
+Caller audit doc (.planning/intel/id-namespace-audit.md)
+    └──blocks──> ALL surface flips (#1–#11 above)
+    └──blocks──> vcs.kind-branching deletions (workflow refactor)
+    └──blocks──> .planning/ format pass
 
-Worktree primitive
-    └──requires──> Workspace primitive (jj backend)
-        └──requires──> Adapter-owned file-lock (replaces .git/index.lock)
-            └──requires──> Workspace-path-safety guards (bug-2774 / bug-3097-3099)
+Surface flips (#1–#11)
+    └──blocks──> Lint guard activation (allowlist needs the final list of audit-justified files)
+    └──blocks──> .planning/ format pass (rewriter must know the new canonical shape)
+    └──blocks──> Workflow vcs.kind-branching deletions (deletions assume the new shape)
 
-Hook primitive (jj backend)
-    └──requires──> wrapper-binary OR pre-push tool
-        └──conflicts with──> non-colocated jj (most workarounds need .git)
+Boundary-I/O accessor (private __jjCommitIdOf)
+    └──enables──> Lint guard's allowlist entry
+    └──enables──> any post-audit boundary callsite that survives
 
-Push primitive
-    └──requires──> Bookmark primitive (jj backend)
-        └──conflicts with──> "current branch auto-advances" mental model
+Rename: LogEntry.hash → LogEntry.id
+    └──blocks──> any consumer touched by the audit (mechanical TS rename)
+    └──independent of──> the value flip (could ship in same commit or staged)
+
+Lint guard activation (default-deny commit_id in jj-routed paths)
+    └──depends-on──> Audit complete + flips landed + boundary accessor in place
+    └──finalizes──> the architectural enforcement; without it, the audit's verdict erodes
 ```
 
-### Dependency notes
+### Dependency Notes
 
-- **Revset-string-as-range:** GSD currently passes git revisions as raw strings (`HEAD`, `origin/main`, `HEAD~3`). The adapter contract should formalize this as a `RevisionExpr` type that the git backend feeds to git verbatim and the jj backend translates (`HEAD` → `@`, `HEAD~3` → `@---`, `origin/main` → `main@origin`). Without this, every call site does ad-hoc translation.
-- **Workspace-path-safety + file-lock:** GSD's existing worktree-safety code (`bug-2774`, `bug-3097-3099`) protects against deleting/clobbering active worktree dirs. On jj this is *more* important because `jj workspace forget` doesn't delete the directory — adapter must own the directory lifecycle.
-- **Hook + non-colocated conflict:** every viable hook workaround for v1 assumes colocated jj. The roadmap should mark non-colocated-jj hooks as a Known Limitation for v1, with a follow-up phase to revisit when upstream jj ships native hooks.
+- **Audit BEFORE flip:** the load-bearing risk per SEED-001. Plan 07-02 proved at least one cross-namespace caller exists (`bookmarks.list().rev` ↔ `workspace.merge().changeId` comparison). Without the audit, the flip surfaces silent bugs in any caller that stored a `LogEntry.hash` and later compared/joined on it.
+- **Flip BEFORE lint:** the lint guard's allowlist needs the post-audit list of legitimate commit_id consumers (which should be ≤2 files: the boundary-I/O accessor's home, and any single curated emission module). Activating the guard before the flip means everything fails the guard.
+- **Flip BEFORE workflow refactor:** the `vcs.kind`-branching deletions in workflow `.md` files assume the new shape. Deleting them before the flip means workflows on jj break.
+- **`.planning/` format pass AFTER flip:** the rewriter needs to know the new canonical shape so it can validate post-rewrite correctness.
+- **Rename `hash` → `id` is independent** of the value flip and can ship in a separate commit if planner prefers (mechanical, grep-able, TS-checkable). Bundling them in one commit is also fine — it's a single semantic change.
+- **Boundary-I/O accessor MUST exist before lint guard activates** even if no consumer calls it yet. The lint guard's allowlist references its file path; without the file existing the allowlist is malformed.
 
----
+## MVP Definition
 
-## v1 Scope Definition
+### Launch With (v1.2)
 
-### Launch With (v1 — full git→jj parity)
+Minimum viable v1.2 — what's needed to declare "unified revision model on cross-backend adapter."
 
-The non-negotiable adapter contract. Every call site in `bin/lib/{core,verify,commands,worktree-safety,init,graphify,drift}.cjs` and `sdk/src/query/{commit,init,verify,progress,check-ship-ready,check-decision-coverage,docs-init}.ts` must route through these.
+- [ ] **Caller audit doc** at `.planning/intel/id-namespace-audit.md` — every commit_id reference reachable on jj-routed code paths classified.
+- [ ] **All 11 cross-backend surface flips** (table above) landed; jj backend never volunteers commit_id from any of them.
+- [ ] **`LogEntry.hash` → `LogEntry.id` rename** + PITFALL 1 doc inverted.
+- [ ] **Boundary-I/O accessor** (`__jjCommitIdOf`) jj-backend-PRIVATE; lint-allowlisted in ≤2 files.
+- [ ] **Lint guard parallel to `lint-vcs-no-raw-git`** — default-deny `commit_id` template strings + `.commit_id` field accesses + hex-form id assumptions in jj-routed code paths; tightened allowlist matches the audit verdict.
+- [ ] **Workflow `vcs.kind`-branching deletions** for id reasons (the deletions are the evidence the abstraction works).
+- [ ] **`.planning/` format pass** — extends Phase 6 B-07; any remaining commit_id-encoded record rewritten to change_id.
+- [ ] **Validation:** `expr.commit(sha)` confirmed deleted (no reintroduction); strict-green on both backend lanes; no skip-count regressions.
 
-- [ ] **commit/describe** — direct map: `jj commit -m`, with `describe`-vs-`commit` policy decided per call site
-- [ ] **status / diff / log** — direct map with stable templates (`-T builtin_log_oneline` or custom)
-- [ ] **branch + checkout** — semantic shift: bookmark + `jj new`/`jj edit` (branch-doesn't-auto-advance is a v1 behavior, not a bug to fix)
-- [ ] **revset/rev-parse abstraction** — adapter exposes `RevisionExpr` type; jj backend translates
-- [ ] **worktree → workspace** — semantic shift with full bug-test parity (bug-2774 / 2924 / 3097-3099 must pass on jj backend)
-- [ ] **adapter-owned file lock** — replaces `.git/index.lock` for cross-workspace serialization
-- [ ] **rebase / cherry-pick / merge** — semantic shift with **conflict-detection-via-revset** policy: `jj log -r 'conflict()'` after every rewrite to surface unresolved conflicts to the verify gate
-- [ ] **reset --hard / abandon** — decomposed semantic-shift mapping
-- [ ] **add/rm/mv** — mostly no-op on jj backend; document the call sites where staged-vs-unstaged distinction matters and choose explicit semantics
-- [ ] **stash** — no analog; audit existing call sites and replace with `jj edit` round-trips OR mark unused and remove
-- [ ] **push / fetch / pull** — direct map for push/fetch; pull decomposes
-- [ ] **config / remote** — direct map
-- [ ] **gitignore** — works as-is in colocated mode
-- [ ] **pre-commit / pre-push hooks** — colocated-only for v1: rely on git-side hooks firing when `.git/hooks/*` exists, plus optional `jj-pre-push` adoption for pre-push on jj-native push paths
+### Add After Validation (v1.3+)
 
-### Add After Validation (v1.x — once dogfood proves stable)
+Features deferred from v1.2 because they're consequence-of-flip rather than required:
 
-- [ ] **Non-colocated jj support** — same adapter contract, hooks marked unsupported
-- [ ] **Native jj-side pre-commit** via wrapper binary (replaces colocation-only constraint)
-- [ ] **Templating-driven output parsing** for log/status/blame (reduces fragility of parsing human output)
+- [ ] **`vcs.refs.matchPrefix(id, prefix)`** — alphabet-aware short-prefix matching. Add only if v1.2 audit found callers doing `id.startsWith(prefix)`.
+- [ ] **Rename `rootCommits` → `rootRevisions`** — for naming consistency with the unified model. Mechanical rename; defer to avoid scope creep.
+- [ ] **Documented rebase-stability semantic** added to the new `LogEntry.id` JSDoc — captures the dual-semantic positive contract that replaces the inverted PITFALL 1.
 
 ### Future Consideration (v2+)
 
-- [ ] **`/gsd-undo` backed by `jj op restore`** — major UX win, modest code
-- [ ] **Conflict-tolerant milestone integration** — uses jj's in-commit conflict markers
-- [ ] **Change-ID-based phase tracking** — stable across rewrites, enables fearless milestone reshape
-- [ ] **`jj fix` integration for in-tree formatters/linters**
-- [ ] **Workspace-stagger relaxation** on jj backend (drop the safety sleeps)
+- [ ] **Public `vcs.refs.idAlphabet` introspection** — for tools that genuinely need to know whether they're working in hex or k-z space (formatters, validators). Defer until a real consumer asks.
 
----
+## Feature Prioritization Matrix
 
-## Adapter Surface Prioritization Matrix
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| Caller audit doc | HIGH (load-bearing — blocks everything else) | LOW–MEDIUM | P1 |
+| 11 surface flips (jj backend) | HIGH (the milestone goal) | LOW per surface, MEDIUM aggregate | P1 |
+| `LogEntry.hash` → `id` rename | MEDIUM (avoids name-encoded mental model) | LOW (TS-checkable, grep-able) | P1 |
+| Boundary-I/O accessor (private) | MEDIUM (enables lint guard; rarely called in practice) | LOW (lift B-07 helper) | P1 |
+| Lint guard activation | HIGH (architectural enforcement; without it, the verdict erodes) | MEDIUM (mirror existing `lint-vcs-no-raw-git` pattern) | P1 |
+| Workflow `vcs.kind`-branching deletions | HIGH (evidence the abstraction works) | LOW–MEDIUM (audit produces the list) | P1 |
+| `.planning/` format pass | MEDIUM (closes Phase 6 B-07 intent) | LOW (extends existing rewriter) | P1 |
+| Verify `expr.commit(sha)` deleted | LOW (already deleted in Phase 2.1; verification only) | LOW | P1 (cheap) |
+| `vcs.refs.matchPrefix(id, prefix)` | MEDIUM (only if audit reveals callers) | LOW–MEDIUM | P2 |
+| `rootCommits` → `rootRevisions` rename | LOW (cosmetic) | LOW | P3 |
+| Public `vcs.refs.idAlphabet` introspection | LOW (no consumer yet) | LOW | P3 |
 
-Per-operation priority for the v1 adapter. "User value" here means "GSD workflow value" — does it block a GSD command from working on jj?
+## Competitor Feature Analysis
 
-| Operation | GSD workflow value | Implementation cost | Priority | Notes |
-|---|---|---|---|---|
-| commit/describe | HIGH | LOW | P1 | Used in nearly every workflow |
-| status/diff/log | HIGH | MEDIUM (templates) | P1 | Output parsing is the work |
-| worktree↔workspace + lock | HIGH | HIGH | P1 | Largest single risk; bug-test parity required |
-| revset/rev-parse abstraction | HIGH | MEDIUM | P1 | Foundational — without it, every call site duplicates translation |
-| rebase/cherry-pick/merge | HIGH | MEDIUM | P1 | Conflict-detection policy decision |
-| reset (hard/soft) | MEDIUM | MEDIUM | P1 | Per-call-site decomposition |
-| branch/checkout (bookmark + new/edit) | HIGH | MEDIUM | P1 | "No current branch" is a real model shift |
-| add/rm/mv | LOW (mostly no-op) | LOW | P1 | Cheap to ship, blocks nothing |
-| push/fetch | HIGH | LOW | P1 | Direct map |
-| config/remote | MEDIUM | LOW | P1 | Direct map |
-| gitignore | HIGH | NONE | P1 | Works for free |
-| stash | LOW | LOW (mostly remove) | P2 | Audit and likely delete call sites |
-| pre-commit hook | HIGH | HIGH | P1 (colocated-only) | Risk-bounded by colocation requirement for v1 |
-| pre-push hook | MEDIUM | MEDIUM | P1 (jj-pre-push or skip) | Adopt third-party tool or document gap |
-| reflog → op log | LOW | MEDIUM | P3 | GSD rarely invokes reflog |
-| submodules | NONE | — | — | Out of scope, not used by GSD |
-| notes | NONE | — | — | Out of scope, not used by GSD |
-| op-log undo | HIGH (UX) | MEDIUM | P3 (v2+) | Defer; major win, but not parity |
-
-**Priority key**
-- P1: Must have for v1 launch (full parity)
-- P2: Should have, add when convenient
-- P3: Future / v2+
-
----
-
-## Behavioral-Fidelity Risk Register (concentrated v1 risks)
-
-The following call-site clusters carry the highest behavioral-drift risk between git and jj backends. The adapter test matrix should include explicit parity tests for each:
-
-1. **Worktree-path-safety guards** (bug-2774 / 3097 / 3099) — jj's `forget` doesn't delete dirs; lifecycle ownership shifts to adapter.
-2. **Branch-tracking after commit** (`commit.ts`, `core.cjs`) — bookmarks don't auto-advance; GSD's "branch points to latest commit on phase X" assumption breaks.
-3. **Conflict surfacing during rebase** (`commands.cjs` rebase paths) — jj rebase succeeds with conflicts; verify gate must learn `jj log -r 'conflict()'`.
-4. **`git reset --soft` call sites** — likely each one needs unique decomposition; audit individually.
-5. **Cross-workspace concurrency** (`worktree-safety.cjs`) — `.git/index.lock` is gone; new sentinel-lock primitive must serialize.
-6. **Hook firing in non-colocated repos** — silently doesn't fire in v1; needs Known Limitation doc + warning.
-7. **Output parsing** — `git log --format=...` is widely depended on; jj template syntax is different. Per-command stable templates required.
-
----
+| Feature | jj-fzf | volgo-vcs | Sapling | hg-git | v1.2 GSD jj-port |
+|---------|--------|-----------|---------|--------|-------------------|
+| Canonical id on dual-backend surface | change_id (single-backend tool) | shape-overlap (40-char hex; both backends produce it) | shape-overlap (40-char hex) | bridge with translation table | **commit_id on git, change_id on jj** (Pattern 3 from survey) |
+| Boundary I/O for external systems | reaches for commit_id locally inside helper script | n/a (Git-centric API) | n/a (presents Git layer) | bidirectional translation table | **jj-backend-PRIVATE accessor**, lint-allowlisted, never on public surface |
+| `vcs.kind`-branching for id reasons | n/a | unavoidable (callers ARE git-centric) | hidden by uniform hex | unavoidable | **forbidden** (lint guard enforces) |
+| Public type for "a revision" | string (jj's RevisionExpr equivalent) | `Rev.t` (40-char hex) | hash string | `Sha1` per backend | **branded `RevisionExpr`** (existing) — value shape flips per backend, type stays uniform |
+| Rebase-stable id available | yes (change_id native) | no (hex only — git rebase invalidates) | no (Sapling has its own commit graph stability story; not exposed as a separate id) | no | **yes** (consequence of v1.2 flip) |
 
 ## Sources
 
-Verified jj documentation (May 2026):
+### Industry / pattern references
+- [volgo-vcs Mercurial Compatibility](https://mbarbin.github.io/vcs/docs/explanation/mercurial-compatibility/) — Pattern 1 (shape-overlap; declines full abstraction)
+- [Sapling SCM Introduction](https://sapling-scm.com/docs/introduction/) and [Internal differences from Mercurial](https://sapling-scm.com/docs/dev/internals/internal-difference-hg/) — Pattern 1 + multi-backend abstraction
+- [hg-git README (schacon/hg-git)](https://github.com/schacon/hg-git) and [Mercurial wiki HgGit](https://www.mercurial-scm.org/wiki/HgGit) — Pattern 2 (translation table)
+- [jj-fzf source `tim-janik/jj-fzf:trunk/jj-fzf`](https://github.com/tim-janik/jj-fzf/blob/trunk/jj-fzf) — Pattern 3 (change_id canonical, commit_id reserved for boundary I/O — direct precedent for v1.2's design)
+- [lazyjj on GitHub](https://github.com/Cretezy/lazyjj) and [jjui on GitHub](https://github.com/idursun/jjui) — Pattern 3 confirmation in TUI tooling
+- [jj-vcs.dev community-built tools](https://docs.jj-vcs.dev/latest/community_tools/) — broader ecosystem survey
 
-- [Git comparison – jj docs](https://docs.jj-vcs.dev/latest/git-comparison/) — HIGH confidence (official, current)
-- [Git compatibility – jj docs](https://docs.jj-vcs.dev/latest/git-compatibility/) — HIGH confidence
-- [Working copy – jj docs](https://docs.jj-vcs.dev/latest/working-copy/) — HIGH confidence
-- [CLI reference – jj docs](https://docs.jj-vcs.dev/latest/cli-reference/) — HIGH confidence
-- [Bookmarks – jj docs](https://docs.jj-vcs.dev/latest/bookmarks/) — HIGH confidence
-- [Revsets – jj docs](https://docs.jj-vcs.dev/latest/revsets/) — HIGH confidence
-- [Operation log – jj docs](https://docs.jj-vcs.dev/latest/operation-log/) — HIGH confidence
-- [Config – jj docs](https://docs.jj-vcs.dev/latest/config/) — HIGH confidence
-- [Templates – jj docs](https://docs.jj-vcs.dev/latest/templates/) — HIGH confidence
+### jj architecture / template references
+- [jj architecture docs](https://docs.jj-vcs.dev/latest/technical/architecture/) — change_id stored separately in `.jj/repo/store/extra/`; alphabet design forbids confusion with commit_id; storage-independent APIs principle
+- [jj template language docs](https://docs.jj-vcs.dev/latest/templates/) — `change_id.shortest()` / `commit_id.shortest()` semantics; default formatters
+- [Why are Jujutsu's ID Prefixes So Short? — Jonathan Frere](https://jonathan-frere.com/posts/jujutsu-shortest-ids/) — explains independent shortest-unique-prefix computation per namespace; reinforces "two parallel addressing schemes" design
+- [jj configuration docs](https://docs.jj-vcs.dev/latest/config/) — `format_short_change_id` / `format_short_commit_id` template aliases (jj treats them as separately formattable, not interchangeable)
+- [jj working with GitHub docs](https://docs.jj-vcs.dev/latest/github/) — confirms jj has no first-class story for commit_id-based GitHub URL emission (reinforces "boundary I/O is rare in practice if you stick to tag/release URLs")
+- Local verification: `jj 0.41.0` `jj log` default output shows BOTH ids in every row, confirming "show both, change_id is canonical for *this work*, commit_id for *this byte snapshot*" convention
 
-Hook ecosystem (more volatile):
-
-- [jj-vcs/jj discussion #403 — git hook support](https://github.com/jj-vcs/jj/discussions/403) — MEDIUM (community discussion; maintainer confirmed direction but no timeline)
-- [jj-vcs/jj issue #405 — pre-commit.com integration](https://github.com/jj-vcs/jj/issues/405) — MEDIUM
-- [acarapetis/jj-pre-push](https://github.com/acarapetis/jj-pre-push) — MEDIUM (third-party tool, "very limited" by author's own description)
-
-Cross-referenced internal:
-
-- `/Users/LoganDark/Documents/Projects/get-shit-done/.planning/PROJECT.md`
-- `/Users/LoganDark/Documents/Projects/get-shit-done/.planning/intel/git-touchpoints.md`
-
----
-
-## Quality Gate Self-Check
-
-- [x] Categories are clear (Direct map / Semantic shift / No analog / jj-only opportunity)
-- [x] Every operation in the question list has a recommendation (15 operations + jj-only opportunities + scripting conventions + colocated-vs-not)
-- [x] Behavioral fidelity risks called out explicitly (per-row column + Risk Register section)
-- [x] jj documentation references included (verified via WebFetch on docs.jj-vcs.dev — current as of May 2026, not training data)
+### In-tree references (file:line, repo-local — no URL)
+- `sdk/src/vcs/types.ts:91, 110-116, 167-170, 172-176, 217-231, 244-249, 311-339` — current type shapes
+- `sdk/src/vcs/backends/jj.ts:222-227, 327-339, 887-900, 946, 965, 978, 1083, 1180-1226` — every commit_id-returning surface (the Plan-table-of-contents)
+- `.planning/seeds/SEED-001-change-id-only-on-jj-adapter-surface.md` — predecessor document v1.2 inverts on the escape-hatch question; per-surface table is the spine of the migration table above
+- `.planning/MILESTONES.md` v1.1 — Plan 07-02 deviation §2 (cross-namespace pain), Plan 07-04 (`expr.rev` validates hex; `expr.bookmark` for refnames)
+- `.planning/PROJECT.md` Active list + Key Decisions row 9 — v1.2 inversion of SEED-001's escape-hatch idea
+- `sdk/src/vcs/format-migration/rewrite.ts` (per SEED-001 breadcrumbs) — existing `commitIdOf ↔ changeIdOf` helper to lift to `__jjCommitIdOf`
 
 ---
-
-*Feature research for: VCS adapter port (git → jj) — operational mapping*
-*Researched: 2026-05-09*
+*Feature research for: dual-backend VCS adapter unified revision model (v1.2)*
+*Researched: 2026-05-14*

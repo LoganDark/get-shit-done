@@ -1,121 +1,126 @@
-# Stack Research — jj Integration for GSD VCS Adapter
+# Stack Research — v1.2 audit + surface flip + lint guard
 
-**Domain:** Version-control adapter — invoking Jujutsu (jj) reliably from a Node ≥22 / TypeScript ≥5 / pnpm 11 / vitest CJS+ESM hybrid codebase.
-**Researched:** 2026-05-09
-**Local jj install verified:** `jj 0.40.0` (this repo)
-**Latest stable jj:** **v0.41.0** — released 2026-05-07 (verified via GitHub API against `jj-vcs/jj`)
-**Confidence:** HIGH on jj capabilities (verified locally + against current docs); HIGH on exec strategy (matches existing repo conventions); MEDIUM on hook design (jj has no native hooks — design space).
+**Domain:** TypeScript SDK + CJS-runtime hybrid (existing); incremental tooling for an
+identifier-namespace audit + surface flip + lint-guard parallel
+**Researched:** 2026-05-14
+**Confidence:** HIGH
 
----
-
-## TL;DR (the prescriptive answer)
-
-1. **Do not use a Node binding for jj.** None of the candidates (`agentic-jujutsu`, `jj-mcp-server`, `jj-navi`) are appropriate dependencies for this codebase. **Shell out to the `jj` CLI binary** — same model GSD already uses for `git`, same constraint set, zero new heavy deps. (HIGH)
-2. **Use Node's built-in `child_process` (specifically `execFileSync` / `spawnSync` for sync sites, `execFile` / `spawn` for async sites).** Do **not** add `execa`, `simple-git`-style wrappers, or shelljs. The repo has zero exec libraries today (`package.json` deps: `@anthropic-ai/claude-agent-sdk`, `ws`); adding one for jj-only would diverge from the git side and bloat install. (HIGH)
-3. **Use `jj`'s template language with the `json()` function for all machine-readable parsing.** `jj log -T 'json(self) ++ "\n"' --no-graph` produces newline-delimited JSON (NDJSON) per revision; same for `jj op log -T 'json(self)'` and `jj workspace list -T 'json(self)'`. Verified locally on jj 0.40. (HIGH — verified by running locally)
-4. **Require minimum jj 0.36** for the adapter's runtime contract — that's the version where colocated-repo concurrency races were fixed and concurrent `jj log` + mutating commands became safe. Recommend **jj 0.40+** as the supported floor since template-`json()` and op-log JSON serialisation matured through the 0.31 → 0.40 window. (HIGH on 0.36 race fix; MEDIUM on exact json() arrival version — Context7 unavailable, cross-checked against changelog summary.)
-5. **There is no `.git/index.lock` analog in jj.** jj is intentionally **lock-free** — concurrent operations create divergent op-log heads that a subsequent command 3-way-merges automatically. The adapter's worktree-locking primitive (used in `worktree-safety.cjs`) needs **app-level** locking (e.g. a sentinel file under `.planning/.gsd-locks/` or a `proper-lockfile`-style advisory lock) — **not** a jj-level mechanism. (HIGH — confirmed via official `technical/concurrency` docs.)
-6. **No native hook system in jj.** The HOOK-01/HOOK-02 work in PROJECT.md is genuine design work, not an integration of an existing primitive. Three viable approaches, in descending order of robustness: (a) **wrap the `jj` binary** (replace via `$PATH` shim that fires hooks then `exec`s real jj), (b) **op-log polling** (`jj op log -T 'json(self)' --at-op @ -n 5` after each adapter call to detect new ops), (c) **rely on git colocation** (good enough for HOOK-03 only — fails the non-colocated requirement in PROJECT.md). (MEDIUM — synthesised; jj does not document a "blessed" approach.)
+> Scope reminder: this is a **subsequent-milestone STACK** for a project with an already-validated
+> stack (Node ≥22, pnpm 11+, TypeScript ≥5.7, vitest 3, jj 0.41 pinned in CI). It does NOT
+> re-litigate those choices. It only proposes the **net-new tooling** the v1.2 audit + flip + lint
+> work actually needs, plus what to deliberately *not* add.
+>
+> Headline answer: **add zero new npm dependencies.** The audit is a one-shot grep/template-walk
+> that fits inside the existing `scripts/*.cjs` ecosystem. The lint guard is a fork of the existing
+> `lint-vcs-no-raw-git.cjs`. The surface flip is a TypeScript code change reviewed by hand and the
+> existing TS compiler. Heavy AST tooling (ts-morph, jscodeshift, ast-grep) is **explicitly ruled
+> out** for reasons listed under "What NOT to Use" — they would add real cost (deps, CI install
+> time, learning curve) for negligible audit-quality lift over the regex+template approach the
+> codebase already trusts (see `format-migration/rewrite.ts:53,63` for the precedent).
 
 ---
 
 ## Recommended Stack
 
-### Core: how the adapter invokes jj
+### Core Technologies (already locked — confirmed unchanged for v1.2)
 
-| Component | Version | Purpose | Why |
-|-----------|---------|---------|-----|
-| **jj CLI binary** | ≥ 0.36 required, **≥ 0.40 recommended** | The only supported integration surface | jj has no in-process Node binding worth depending on. The CLI is the documented, stable, version-skewable contract. |
-| **`node:child_process`** built-in | Node ≥ 22 (already required) | Process spawning for `jj` calls | Repo already uses raw `child_process.execSync('git …')` everywhere — same primitives for jj keep both backends symmetric and add zero new deps. The "Avoid heavy npm deps" constraint in PROJECT.md is explicit. |
-| **`execFileSync` / `spawnSync`** | Node built-in | Argument-array invocation, no shell parsing | **Mandatory**: pass `jj` argv as an array (`execFileSync('jj', ['log', '-T', 'json(self)', '--no-graph'])`), never as a single shell string. Avoids quoting bugs in jj revsets/templates which contain `()`, `::`, `&`, `~`, `"`. |
-| **`spawn`** (async, streaming) | Node built-in | For commands with large output (`jj log` over deep history, `jj op log`) | `execSync`/`execFileSync` buffer all stdout in memory before returning; `jj log` on a 30k-LOC repo can exceed default 1 MB `maxBuffer`. Use streaming `spawn` for unbounded output. |
-| **TypeScript ≥ 5** (already required) | ≥ 5.7 (matches `sdk/package.json`) | Adapter type contract in `sdk/src/vcs/` | Matches existing constraint. Type the adapter's return shapes around the jj `json(self)` output schema so the git-side adapter must conform. |
-| **vitest** (already required) | ≥ 3.1 (matches `sdk/package.json`) | Adapter parity tests across both backends | TEST-02 in PROJECT.md (parameterized backend matrix) maps cleanly to vitest `describe.each` / `test.each`. |
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| TypeScript | `^5.7.0` (pinned in `sdk/package.json:55`) | Compiler for SDK source; type-system narrowing is the *primary enforcement* for the surface flip — `LogEntry.hash`'s type doesn't change, but call-site usages that assume hex form are caught by `expr.commit(sha)` deprecation + `RevisionExpr` brand check | Already locked. The branded `RevisionExpr` in `sdk/src/vcs/types.ts:20` is the v1.2 enforcement seam — narrowing is what makes a leaked `commit_id` *visible* once `expr.commit` is deprecated to `expr.rev`. No version bump needed. |
+| Node.js | `>=22.0.0` (`package.json:47`) | Runtime for SDK + CJS bin/lib + scripts | Already locked. Audit/lint scripts are plain `.cjs` like every other one in `scripts/` — no Node-version surface change. |
+| pnpm | `11.0.8` (`package.json:49`) | Workspace + lockfile | Already locked. v1.2 adds zero deps, so the lockfile delta is intentionally empty. |
+| vitest | `^3.1.1` (`sdk/package.json:56`) | Test runner with parameterized `GSD_TEST_BACKENDS=git \| jj-colocated` matrix | Already locked. Existing matrix is the surface-flip regression net — every renamed/retyped verb gets a both-backends assertion via the existing parameterization. |
+| jj | `0.41` (CI-pinned) | jj-colocated lane backend; provides the templates the audit walks | Already locked. v1.2 needs `change_id` + `change_id.short()` template forms — both first-class in 0.41 (verified per `07-RESEARCH.md` sources cited in `sdk/src/vcs/backends/jj.ts:891`, and confirmed locally: `jj 0.41.0` at `/Users/LoganDark/.local/bin/jj`). No bump. |
 
-### jj-side flags & invocation conventions
+### Supporting Libraries (none added)
 
-| Convention | Example | Why |
-|------------|---------|-----|
-| **Always pass `--repository <path>` explicitly** | `jj --repository /path/to/repo log …` | Don't rely on cwd discovery — same discipline as `git -C`. Prevents picking up an outer `.jj/` ancestor when the adapter is invoked from a sub-repo or worktree path. |
-| **Always pass `--no-pager`** | `jj --no-pager log …` | Otherwise jj invokes `$PAGER` / `less` when stdout is a TTY, which can happen under some test runners and CI matrices. |
-| **Always pass `--color never`** for parsed output | `jj --color never log …` | Prevents ANSI escapes in stdout. The `json()` template avoids most of this but global color can still affect non-template stdout. |
-| **Pass `--quiet` for command sites that must not print to stderr** | `jj --quiet new …` | jj prints status hints (e.g. "Working copy now at: …") to stderr by default. `--quiet` silences these for clean automation. |
-| **Use `--ignore-working-copy` for read-only queries** | `jj --ignore-working-copy log …` | Default jj behaviour is to **snapshot the working copy at the start of every command** (this is one of jj's defining behaviours and a major correctness/perf footgun for adapters). For read-only queries, skip the snapshot — faster, no side-effects, no race against concurrent edits. |
-| **Use `--at-operation @ --ignore-working-copy` for "what does the repo look like right now"** | `jj --at-op @ --ignore-working-copy st …` | Documented idiom from `jj op log --help`. Inspects current state without mutation. |
-| **Use `-T 'json(self) ++ "\n"' --no-graph` for parsable output** | `jj log -T 'json(self) ++ "\n"' --no-graph -r '@-::@'` | Produces NDJSON. `--no-graph` strips the ASCII art column. Verified locally — emits stable structured fields (`commit_id`, `change_id`, `parents`, `description`, `author`, `committer`). |
-| **Set `JJ_USER` / `JJ_EMAIL` in env when scripting commits** | `env: { ...process.env, JJ_USER: 'GSD', JJ_EMAIL: 'gsd@local' }` | jj refuses commits without identity. Mirrors how the git side respects `GIT_AUTHOR_*` env vars. |
+| Library | Version | Purpose | When to Use |
+|---------|---------|---------|-------------|
+| *(none)* | — | — | The deliberate v1.2 stance is **zero new runtime or dev deps**. See "What NOT to Use" for what was rejected and why. |
 
-### Exit-code & stderr contract (verified by inspection of jj `--help` and behavior)
-
-- **Exit 0**: success.
-- **Exit 1**: user-facing error (bad revset, missing path, conflict, etc.). Human-readable diagnostic on **stderr**, sometimes with hints.
-- **Exit 2**: usage error (bad CLI flag).
-- **Exit 255**: internal error / panic.
-- **Stderr conventions**: jj prints **diagnostic and progress info to stderr by default** ("Working copy now at: …", "Concurrent modification detected, resolving automatically"), even on exit-0 success. The adapter must capture stderr separately and **not** treat non-empty stderr as failure — only the exit code is authoritative. (HIGH — verified by running commands locally.)
-
-### Supporting libraries — explicitly NONE
-
-The adapter should add **no** new dependencies. Below is the analysis of every candidate and why each is rejected:
-
-| Candidate | Status | Why rejected |
-|-----------|--------|--------------|
-| `simple-git` (npm) | Active, mature for git | Git-only — no jj equivalent. Even on the git side, replacing 244 existing `execSync('git …')` call sites with a wrapper API is out of scope vs. the adapter abstraction (which is the actual leverage). |
-| `nodegit` / `isomorphic-git` / `libgit2` bindings | Mature for git | Git-only. No jj-equivalent in-process binding exists for Node. |
-| `agentic-jujutsu` (npm) | Published v2.3.6 ~5 months ago by `ruvnet` | **Reject.** Despite "production ready" labelling, marketing copy includes "QuantumDAG consensus", "AgentDB learning", "quantum-resistant signing (placeholder until v2.3.0)" — these are red flags for a vendored stack. Embeds the jj binary inside the npm package (size + version-skew issue). Single maintainer, AI-marketing surface. Unsuitable as a load-bearing dep. |
-| `jj-mcp-server` (npm) | Active | Wrong shape — exposes jj as MCP tools for AI agents. GSD needs in-process Node calls, not an MCP daemon. |
-| `jj-navi` (npm/crate) | Niche TUI helper | Not a programmatic API — workspace-orchestrator TUI focused. |
-| `execa` (npm) | Active, popular | Would be a fine standalone choice — better Windows quoting, async-first, tree-kill on signal, structured errors. **However**: repo has zero exec libraries today and explicitly says "Avoid adding heavy npm deps". Adding `execa` only on the jj side splits conventions between backends. If the repo ever decides to standardise on `execa`, do it across both adapters in one move — out of scope for this milestone. |
-| `proper-lockfile` (npm) | Mature advisory-lock library | Plausible for WS-02 (replacing `.git/index.lock` semantics in worktree-safety) — flagged for phase-level decision, not a stack-level recommendation here. The adapter could equally use a hand-rolled `O_EXCL` sentinel file. |
-| `jj-lib` (Rust crate) / `gitoxide` | Internal jj/git Rust libs | Not Node — no FFI bindings shipped. Out of scope unless the project pivots to a NAPI-RS native module (which the constraints explicitly forbid). |
-
-### Development tools
+### Development Tools (all already on disk; no installs)
 
 | Tool | Purpose | Notes |
 |------|---------|-------|
-| `jj util config-schema` | Validate any jj config the adapter writes | Ships with jj — emits JSON schema for `~/.jjconfig.toml` and `.jj/repo/config.toml`. Useful in tests to assert config-write call sites produce valid TOML. |
-| `jj util exec` | Run a command "via jj" — wraps git-equivalent ops | Niche; flag for HOOK-01 design — could be the wrap-point for hook firing on commit. |
-| `jj util install-man-pages` | Not relevant to adapter | — |
-| **CI: install jj via `cargo binstall jujutsu-cli` or release tarball** | Need a way to install jj in CI for adapter tests | The official release tarballs at `github.com/jj-vcs/jj/releases/download/v0.41.0/jj-*-{darwin,linux,windows}.tar.gz` are the cheapest path. Avoid `cargo install` (slow, requires Rust toolchain in CI). |
+| Node `fs` + regex (in-tree, in `scripts/lint-vcs-no-raw-git.cjs` style) | Power both the **per-call-site audit script** and the **`commit_id` lint guard** | Mirror the existing 200-line lint script verbatim — same scan-root injection seam (`--scan-root <dir>`), same JSON allowlist file, same `// vcs-lint:allow-…-here <reason>` annotation pattern. ~80 % of the new lint script is copy-paste from `scripts/lint-vcs-no-raw-git.cjs`. |
+| `jj log -T '<template>'` (already used 7× in `sdk/src/vcs/backends/jj.ts`) | Templating engine for any audit pass that needs to enumerate revisions, parents, bookmarks, etc. | The audit isn't just static-text scanning — it has to enumerate which jj backend templates currently emit `commit_id`. Walk `jj.ts` for `'-T', '…commit_id…'` literals; this *is* the audit's primary input. |
+| `jq` (`/usr/bin/jq` — system-installed, used by existing scan scripts e.g. `scripts/secret-scan.sh`) | Parse `jj log -T 'json(...)'` and `jj bookmark list -T 'json(...)'` outputs in the audit script | Already a system dep; no install. The codebase already parses jj NDJSON via hand-written parsers in `sdk/src/vcs/parse/jj-*.ts`, which the audit script can re-use directly without going through `jq` for the bulk of the work. |
+| TypeScript compiler (`tsc`) — already on disk via `@gsd-build/sdk` workspace | Surface-flip enforcement: deprecating `expr.commit(sha)` in favor of `expr.rev(id)` is a TS-level change; the build catches every consumer | Already locked. v1.2 just adds `@deprecated` JSDoc on `expr.commit` (Phase 2.1 D-13 already left it as a thin alias of `expr.rev`, see `sdk/src/vcs/expr.ts:34`). |
+
+### What this means for the six specific questions
+
+**Q1 — TS/CJS code-search tools (ts-morph / jscodeshift / ast-grep) for the audit?** No.
+The audit is *enumerative*, not refactor-driving. We need to *find* every `commit_id` /
+`.commit_id` / hex-shaped-SHA reference and *classify* it (lint annotation, accept-as-internal,
+flip-to-change-id, route-via-private-accessor). That is a `scripts/audit-id-namespace.cjs`
+shaped exactly like `scripts/lint-vcs-no-raw-git.cjs` — file walker + per-line regex + JSON
+allowlist. Adding ts-morph would be a 10× DX hit (~50 MB dep tree, ~3-5 s startup) for a
+~150-line script that runs once and lives in CI.
+
+**Q2 — Lint guard extension.** Fork (don't extend) `scripts/lint-vcs-no-raw-git.cjs` into
+`scripts/lint-vcs-no-commit-id.cjs` with a sibling `scripts/lint-vcs-no-commit-id.allow.json`.
+The two scanners share ~80 % of code — same `parseArgv`, same `findFiles`, same `globToRegExp`,
+same `--scan-root` seam, same `// vcs-lint:allow-…-here <reason>` annotation grammar. **Reason
+to fork rather than extend:** the existing lint's allowlist is *git-routed* code that's
+expected to keep using git (e.g. `scripts/secret-scan.sh`); the new lint's allowlist will be
+*jj-internal templates that legitimately read `commit_id`* (e.g. `jj.ts:225` —
+`LogEntry.hash` resolution post-squash) PLUS the boundary-I/O private accessor for github.com
+URLs. Different policies → different allowlists → different scripts. They both run in CI; both
+default-deny.
+
+**Q3 — jj-tooling additions for the audit.** None. jj 0.41 already ships every template
+function the audit needs:
+- `change_id` — change identifier (the v1.2 canonical surface)
+- `change_id.short()` — short form for human display
+- `commit_id` — git-shape hash (the thing being audited *out*)
+- `commit_id.short()` — what `resolveShort()` currently returns on jj
+- `bookmarks` (with `name` / `target` accessors)
+- `parents.map(...)` — used by `mergeBase` revset
+
+The audit script invokes `jj log -T '…'` directly via `child_process` (already the call shape
+used inside `sdk/src/vcs/backends/jj.ts`); no template-helper layer is needed. **Important:**
+the audit must *read* templates only; it must NOT add any `change_id`-emitting templates to
+the *adapter implementation* itself — that's the Phase 1 work item, not a stack concern.
+
+**Q4 — Markdown / `.planning/` prose scanning for leaked commit_id hex strings.** Reuse the
+*existing*, already-shipped `format-migration/rewrite.ts` regex+zone machinery. The
+`GIT_SHA_RE` at `sdk/src/vcs/format-migration/rewrite.ts:53` plus `findEligibleZones()` at
+`:240` already implement *exactly* the markdown scan v1.2 needs — backtick spans + YAML
+frontmatter allowlist, code-fence exclusion, idempotency invariant. The v1.2 audit/lint just
+imports those exports (or, for the lint script which is `.cjs`, mirrors the regex literal
+verbatim — the alphabet-disjointness invariant means a 60-char regex is sufficient). **Do not
+rebuild this; do not add a new markdown parser.** The same machinery that did the SHA→change_id
+*rewrite* in v1.0 Phase 6 powers the v1.2 *detection*.
+
+**Q5 — Versions / pins.** No version changes. All inherited.
+
+**Q6 — Don't add.** Detailed in "What NOT to Use" below.
 
 ---
 
 ## Installation
 
-No npm dependencies are added by this milestone. The only "install" change is documenting the jj binary as a runtime requirement for users who choose the jj backend.
-
 ```bash
-# No new npm deps.
-pnpm install   # unchanged
-
-# jj binary (user-managed, like git):
-#   macOS:    brew install jj
-#   Cargo:    cargo install --locked jj-cli
-#   Releases: github.com/jj-vcs/jj/releases (v0.41.0 latest as of 2026-05-09)
+# Nothing to install. v1.2 adds zero deps — the lockfile delta is intentionally empty.
 ```
 
-CI workflow addition (illustrative, not a code recommendation in this file):
-
-```yaml
-- name: Install jj
-  run: |
-    JJ_VERSION=v0.41.0
-    curl -fsSL "https://github.com/jj-vcs/jj/releases/download/${JJ_VERSION}/jj-${JJ_VERSION#v}-x86_64-unknown-linux-musl.tar.gz" \
-      | tar xz -C "$RUNNER_TEMP"
-    echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
-    jj --version
-```
+If a future *human* reviewer wants ad-hoc AST exploration during the audit (one-shot, throwaway,
+not committed), they can run `npx --yes @ast-grep/cli@0.42.2 …` directly — no
+package.json entry, no lockfile churn. The recommendation here is that the *committed* audit
+script does NOT depend on this.
 
 ---
 
 ## Alternatives Considered
 
-| Recommended | Alternative | When the alternative would be better |
-|-------------|-------------|--------------------------------------|
-| Shell out to `jj` CLI | NAPI-RS binding to `jj-lib` (Rust) | If GSD ever needs sub-millisecond per-call latency and is willing to ship platform-specific prebuilt binaries. **Currently not justified** — git side is also CLI-shelled, parity matters more than speed. |
-| Plain `child_process` | `execa` | If/when the repo decides to retroactively wrap *both* adapters and `bin/install.js` etc. — single coordinated migration, separate milestone. |
-| `jj log -T 'json(self)'` | `jj log -T '<custom template>'` with hand-parsed delimiters | If the structured-output schema turns out to be too version-skewed (jj docs warn "field names and value types are usually stable but backward compatibility isn't guaranteed"). Hedge: pin jj minimum version, snapshot-test the JSON shape in CI, and consider hand-rolled templates for the smallest critical field set if `json()` schema breaks between jj versions. |
-| App-level locking via sentinel file in `.planning/` | `proper-lockfile` npm dep | If hand-rolled `O_EXCL` proves fragile in cross-platform tests (Windows file-locking semantics). Defer to phase-level decision. |
-| Op-log polling for hooks | Wrapping the `jj` binary via `$PATH` shim | If polling has unacceptable latency or misses operations. The shim approach is more robust but invasive (must coexist with user's own `jj` shell aliases). |
+| Recommended | Alternative | When to Use Alternative |
+|-------------|-------------|-------------------------|
+| Regex+walker `.cjs` script (mirroring `lint-vcs-no-raw-git.cjs`) | **ts-morph** (`v28.0.0`, 2026-04-12) | Use ts-morph if the audit ever needs **type-aware** queries — e.g. "every call site whose argument's *resolved type* is `string` and is passed where `RevisionExpr` is expected." For v1.2 we never need that: the brand on `RevisionExpr` (`sdk/src/vcs/types.ts:20`) means TS itself rejects hex-SHA literals at the call site. ts-morph's value is whole-program semantic understanding; the audit only needs syntactic pattern matching. |
+| Regex+walker | **jscodeshift** (`v17.3.0`) | Use jscodeshift if the surface flip becomes a **mass automated rewrite** of consumers (e.g. ~200+ call sites of `expr.commit(sha)` → `expr.rev(id)`). Current consumer count is ~5–10 (already mostly migrated in Phase 2.1 D-13); a hand-edit + TS-error sweep is faster than authoring + reviewing a codemod. |
+| Regex+walker | **@ast-grep/cli** (`v0.42.2`, 2026-05-10) | Use ast-grep if the team wants a **portable cross-language lint primitive** to reuse for shell + TS + markdown in one pattern grammar. Real benefit, but installs a Rust binary into CI; the bigger downside is that the project's existing lint precedent (`lint-vcs-no-raw-git.cjs`) is pure-Node — adding ast-grep splits the lint stack and forces every contributor to install it locally to run `pnpm test`. |
+| Hand-extend `lint-vcs-no-raw-git.allow.json` | Fork the script into a separate `lint-vcs-no-commit-id.cjs` | Forking is the recommendation. Extending would conflate two policies (git-route ban + commit-id-leakage ban) onto one allowlist where the legitimate exemptions are mutually exclusive (`jj.ts:225` legitimately reads `commit_id` from jj but is also legitimately git-free; one allowlist row can't express that). |
+| `format-migration/rewrite.ts` regex re-use for prose scan | New markdown AST parser (e.g. `unified` / `remark`) | Use a markdown AST parser only if the audit needs to **rewrite** markdown (Phase 6 already proved a custom zone walker handles GSD's authoring conventions correctly). For *detection-only* — which is all v1.2 needs from the prose scan — the existing zone-walker is overkill, but it's already-shipped overkill that has tests. Free lunch. |
+| `jj log -T` direct invocation in script | A dedicated jj template-builder helper module | A helper would make sense for >5 distinct template invocations across the audit; v1.2 has ~3. Inline-string templates inside the audit script (mirroring `jj.ts:225,898,946,965,978,1178`) are clearer in context. |
 
 ---
 
@@ -123,110 +128,122 @@ CI workflow addition (illustrative, not a code recommendation in this file):
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| `agentic-jujutsu` npm package | Single-maintainer with AI-marketing surface ("QuantumDAG consensus"), embedded binary version-skew, not aligned with GSD's "thin shell-out, no heavy deps" posture. | Direct `child_process` + `jj` CLI. |
-| `jj-mcp-server` | Wrong shape — MCP daemon for AI clients, not in-process Node API. | Direct `child_process`. |
-| `child_process.exec(string)` (shell-parsed) | jj revsets contain `()`, `::`, `&`, `~`, `"` — shell parsing breaks. The git side has the same hazard but historically gets away with it; jj revsets exercise it more aggressively. | `execFileSync('jj', [...argv])` — argv array, no shell. |
-| Default `maxBuffer: 1MB` on `execSync` | `jj log` on a 30k-LOC repo with deep history blows past 1 MB easily. | Either bump `maxBuffer` to `64 * 1024 * 1024` for bounded queries, or stream via `spawn` for `jj log` / `jj op log`. |
-| Parsing jj's human-readable output (e.g. greping `jj log` graph chars) | The graph format and human output are explicitly **not** stable across versions. | Always pass `-T 'json(self) ++ "\n"' --no-graph` and parse NDJSON. |
-| Treating non-empty stderr as failure | jj prints normal status messages to stderr ("Working copy now at: …") on successful runs. | Inspect exit code only; capture stderr for diagnostics. |
-| Running `jj` commands without `--ignore-working-copy` for queries | Every default jj invocation snapshots the working copy first — slow, mutates op log, races concurrent edits. | `--ignore-working-copy` for queries; let mutations snapshot as normal. |
-| Relying on `.git/index.lock`-style file locks at the jj layer | jj is intentionally lock-free; no analog exists. | App-level locking in adapter (sentinel file or `proper-lockfile`). |
-| Pinning to jj < 0.36 | Concurrent-command race conditions in colocated mode. | Minimum 0.36, recommended 0.40+. |
-| `jj git colocate` as the only hook strategy | Fails the non-colocated jj requirement (HOOK-01 in PROJECT.md must work without colocation). | Op-log polling or binary-wrapper shim for jj-native hooks; colocation handles the colocated-only HOOK-03 path. |
+| **ts-morph** as a v1.2 dep | (1) ~50 MB dep tree on a project that ships zero non-essential deps (`package.json:50` runtime deps = `@anthropic-ai/claude-agent-sdk` + `ws` only). (2) TypeScript-version-pinning hassle (ts-morph bundles its own TS; risk of drift vs the project's `^5.7.0`). (3) Provides type-system insight the audit doesn't need — the audit is *syntactic* (find `commit_id` literals + `.commit_id` accessor). (4) Project constraint per `PROJECT.md:119`: "Avoid adding heavy npm deps; prefer shelling out to `jj` binary via the adapter." | A `~150-line scripts/audit-id-namespace.cjs` mirroring `lint-vcs-no-raw-git.cjs` (same walker, same allowlist mechanism, same annotation grammar). |
+| **jscodeshift** | (1) Primary use case is mass-automated refactoring; v1.2's consumer-call-site count is small enough for hand-edit + tsc sweep. (2) Adds Recast + Babel parser as transitive deps (~30 MB). (3) Codemod authorship/review cost > hand-edit cost at this scale. | TS compiler errors (turn `expr.commit` into `@deprecated` then run `tsc`; every offender lights up). |
+| **@ast-grep/cli** as a *committed* dep | (1) Splits the lint-script ecosystem from pure-Node to mixed Rust+Node. (2) Requires per-platform binary install in CI matrix (Linux + macOS lanes both need it). (3) Real value (cross-language pattern grammar) is not exercised in v1.2 — we have one TS surface + one CJS surface + one markdown surface, and the regexes for each are <5 lines. | Pure-Node walker (Q1+Q2 answer above). Note: `npx @ast-grep/cli` is fine for *interactive exploration* by a human reviewer during audit drafting; just don't commit it. |
+| **A new markdown AST parser** (`unified`/`remark`/`mdast-util-*`) | (1) Adds 8–15 transitive deps. (2) Detection-only scan doesn't need AST; the existing `findEligibleZones()` machinery (`format-migration/rewrite.ts:240`) already implements the right semantics (backtick spans, YAML frontmatter allowlist, code-fence exclusion) and has unit tests. (3) Reusing it preserves the *idempotency invariant* the v1.0 Phase 6 rewriter established — auditor and rewriter agree on what a "leaked SHA in prose" means. | Import `findEligibleZones` + `GIT_SHA_RE` from `sdk/src/vcs/format-migration/rewrite.ts` (or mirror them in the `.cjs` lint script — they're 60 lines of code). |
+| **`@typescript-eslint/parser` + custom ESLint rule** | (1) Project doesn't currently ship ESLint config (verified: no `.eslintrc*` at root, no `eslint` in `package.json`); adopting ESLint as a side-effect of v1.2 is scope creep. (2) The existing lint precedent is pure-Node walker scripts (`scripts/lint-*.cjs`) that run via `pnpm test`'s `pretest`; new lint should join that family for consistency. | Pure-Node walker. |
+| **A new JSON-schema validator** for the audit-output file (`.planning/intel/id-namespace-audit.md`) | The audit output is *markdown*, not JSON — humans read it during the v1.2 review pass. JSON would invert the consumer (auditor writes for an automated reader instead of for a developer). | Hand-authored markdown table per the v1.0 Phase 6 audit precedent. |
+| **A `vcs.jjOnly.commitIdOf` cross-backend escape hatch** (the SEED-001 design) | v1.2's defining premise (`PROJECT.md:17,135`) inverts SEED-001: leakage is a *defect*, not an *opt-in*. Adding a cross-backend `jjOnly.commitIdOf` would re-create the leak the milestone is closing. | Backend-PRIVATE accessor: `sdk/src/vcs/backends/jj.ts` exposes a non-exported `__internalCommitIdOf(rev)` consumed only by the boundary-I/O code that builds github.com URLs (`scripts/changeset/github-release-notes.cjs` after the audit determines whether it needs commit_id at all — `vcs.refs.readBlob` already replaced its previous `git show` use; tag/release URLs may eliminate the need entirely). |
+| **A `change_id`-typed wrapper class** (e.g. `class ChangeId extends String`) | The branded `RevisionExpr` (`sdk/src/vcs/types.ts:20`) is already the right wrapper. Adding a second wrapper bifurcates the type system without adding enforcement — TS structural subtyping makes nominal-string brands ergonomic; runtime classes don't survive JSON round-tripping (which `.planning/` files require). | Stick with `RevisionExpr` brand. The v1.2 surface flip is about *what value flows through `RevisionExpr` on jj*, not about adding a sibling type. |
 
 ---
 
 ## Stack Patterns by Variant
 
-**If the adapter is invoked from CJS (`bin/lib/*.cjs`):**
-- Use `const cp = require('node:child_process')` — same idiom as the existing git-side calls.
-- Prefer `execFileSync('jj', argv, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: {...process.env, JJ_USER, JJ_EMAIL}})`.
-- Catch errors via try/catch — `execFileSync` throws on non-zero exit with `.status`, `.stderr`, `.stdout` on the error.
+**If the audit count of `commit_id` references in `sdk/src/vcs/backends/jj.ts` exceeds ~30:**
+- Promote the inline regex audit to a small helper module (still pure Node, no deps),
+- Because: maintainability of a per-template-string classifier matters once you're past the
+  scale at which a single `.cjs` file stays readable. Current count is 7 (verified via grep);
+  not at that threshold.
 
-**If the adapter is invoked from TS (`sdk/src/vcs/`):**
-- Use `import { execFile, execFileSync, spawn } from 'node:child_process'` plus `import { promisify } from 'node:util'` for an async wrapper.
-- Type the adapter's return shapes against jj's `json(self)` schema. Generate TS types from a snapshot of the output (per-jj-version) rather than transcribing fields by hand.
-- Vitest `describe.each([gitBackend, jjBackend])(…)` for the parity matrix per TEST-02.
+**If a future milestone adds a third backend (e.g. Sapling/sl):**
+- Extend the existing `BACKENDS_AVAILABLE_FOR_VERB` allowlist mechanism (`sdk/src/vcs/backends.ts`)
+  rather than bifurcating the lint scripts further,
+- Because: lint-script sprawl is the failure mode to avoid. The two scripts (`lint-vcs-no-raw-git`
+  + `lint-vcs-no-commit-id`) are policies, not backends.
 
-**If the adapter is invoked from a hot path (e.g. `verify.cjs` running on every commit-ship):**
-- Always pass `--ignore-working-copy` if the call doesn't need to materialise pending edits.
-- Batch reads — one `jj log -T 'json(self) ++ "\n"' --no-graph -r '<revset>'` returning N revisions is dramatically cheaper than N individual `jj log -r <id>` calls.
-
-**If the operation is mutating (commit, rebase, abandon):**
-- Drop `--ignore-working-copy` (let jj snapshot first — that's correct).
-- Keep `--no-pager --color never --quiet`.
-- Don't try to undo with `.git`-style refs — use **`jj op restore <op_id>`** which the adapter should expose as a generic "undo last adapter mutation".
-
----
-
-## Version Compatibility & Floor Rationale
-
-| Component | Minimum | Recommended | Notes |
-|-----------|---------|-------------|-------|
-| jj | 0.36 | 0.40+ | 0.36 fixed colocated concurrency races; 0.31 added `json()` template fn; 0.34 made colocated default; 0.35 added per-workspace config; 0.40+ broadly de-risks template-`json()` schema for multiple commands. |
-| Node | 22 | 22 | Repo constraint; uses built-in `node:child_process`. |
-| TypeScript | 5.7 | 5.7+ | Matches `sdk/package.json` `^5.7.0`. |
-| vitest | 3.1 | 3.1+ | Matches `sdk/package.json` `^3.1.1`. |
-| pnpm | 11 | 11.0.8+ | Matches `package.json` `packageManager`. |
-
-**Capability-by-version matrix (verified from CHANGELOG summary, MEDIUM confidence on individual version attributions — Context7 was unavailable, used `github.com/jj-vcs/jj/releases` and one cross-source webfetch):**
-
-| Capability | First available |
-|------------|----------------|
-| `json(x)` template function | ~0.31 |
-| Colocated repos default-on for `jj git init`/`clone` | 0.34 |
-| Per-workspace config (`.jj/workspace-config.toml`) | 0.35 |
-| Concurrent `jj log` + mutating commands safe in colocated mode | 0.36 |
-| `--workspace` flag on config commands | 0.37 |
-| Op-log workspace origin tracking | 0.38 |
-| List manipulation in templates (`first()`, `last()`, `get()`) | 0.39 |
-| `Stringify` expressions in templates | 0.40 |
-| `replace()` with regex captures in templates | 0.41 |
+**If the boundary-I/O exception (github.com URL construction) turns out to need commit_id in
+more than one place:**
+- Add `sdk/src/vcs/internal/commit-id-for-boundary-io.ts` — a single module that calls the
+  jj-backend-private accessor, with a top-of-file comment that explains why this module is the
+  *only* legitimate cross-backend caller of `commit_id`-shape data,
+- Because: concentrating the exception in one auditable file is what makes the lint guard's
+  default-deny posture sustainable. The lint guard's allowlist gets one entry: that file path.
 
 ---
 
-## Confidence Levels (per claim)
+## Version Compatibility
 
-| Claim | Confidence | Verification |
-|-------|------------|--------------|
-| jj v0.41.0 is current stable as of 2026-05-09 | **HIGH** | Direct `curl github.com/api/.../releases` + local `jj --version` showing v0.40 (one minor behind). |
-| `jj log -T 'json(self)'` produces NDJSON with stable fields | **HIGH** | Run locally on this repo, output captured (sample in scratch). Caveat: docs say schema "isn't guaranteed across versions" — MEDIUM confidence on long-term stability. |
-| jj is lock-free; no `.git/index.lock` analog | **HIGH** | Direct quote from `docs.jj-vcs.dev/latest/technical/concurrency/`. |
-| jj has no native hook system | **HIGH** | Confirmed by absence in CLI reference + by community articles documenting workarounds. |
-| `agentic-jujutsu` is unsuitable as a dep | **MEDIUM-HIGH** | Surface analysis only — no deep audit. But marketing surface ("QuantumDAG", "AgentDB") + single maintainer is enough to disqualify for a load-bearing adapter dep. |
-| Minimum 0.36 for safe concurrent colocated ops | **HIGH** | Direct CHANGELOG quote: "It is now safe to continuously run e.g. `jj log` … while running other commands in another." |
-| `json()` arrived in 0.31 | **MEDIUM** | Single source (changelog summary fetch). Worth verifying directly against the v0.31 release notes when first implementing — flag for phase research. |
-| Op-log polling is a viable hook mechanism | **MEDIUM** | Synthesised from concurrency model; not a documented "blessed" pattern. Needs prototype validation in HOOK-01 phase. |
-| Wrapping jj binary via `$PATH` shim is a viable hook mechanism | **MEDIUM** | Documented in community articles but not in official jj docs. Coexistence with user's own jj aliases/shims is a known concern. |
+| Package A | Compatible With | Notes |
+|-----------|-----------------|-------|
+| `typescript@^5.7.0` | `vitest@^3.1.1` | Already validated through v1.1; no v1.2 change. |
+| `node@>=22` | `jj@0.41` | Already validated through v1.0+v1.1 on both Linux (jj) and macOS (git) lanes. |
+| `pnpm@11.0.8` (workspace) | `sdk/` workspace per `pnpm-workspace.yaml:1-2` | Already validated. |
+| New script `scripts/lint-vcs-no-commit-id.cjs` | Existing `scripts/lint-vcs-no-raw-git.cjs` | Run sequentially in `pretest` (mirroring how `lint:skill-deps` runs today via `package.json:65`). Both use mutually exclusive allowlists; no interaction. |
+| `format-migration/rewrite.ts` exports (`GIT_SHA_RE`, `findEligibleZones`) | Audit script (TS) **or** lint script (`.cjs`) | TS audit can `import { GIT_SHA_RE } from '../sdk/src/vcs/format-migration/rewrite.js'` (after `pnpm build:sdk`); `.cjs` lint should mirror the regex literal verbatim (the alphabet-disjointness invariant ensures correctness). |
+
+---
+
+## Integration Points (where the new pieces live)
+
+1. **Audit script.** `scripts/audit-id-namespace.cjs` — invoked manually by the v1.2 phase
+   author, output redirected to `.planning/intel/id-namespace-audit.md` (per `PROJECT.md:20`).
+   Mirrors the structure of `scripts/lint-vcs-no-raw-git.cjs`: argv parser → file walker →
+   per-line classifier → markdown emitter (instead of `process.exit(1)` like the lint).
+   Default scan root = repo root; `--scan-root <dir>` seam preserved for fixture testing.
+
+2. **Lint guard.** `scripts/lint-vcs-no-commit-id.cjs` — registered alongside the existing
+   `scripts/lint-vcs-no-raw-git.cjs`. Wired into CI by the same `pretest` chain that already
+   runs `lint:skill-deps` (`package.json:65`); a new `lint:vcs-no-commit-id` script entry plus
+   one `&&` in the `pretest` line. Allowlist: `scripts/lint-vcs-no-commit-id.allow.json`,
+   structurally identical to the no-raw-git allowlist (top-level `files: [...]`, `globs: [...]`).
+
+3. **Fixture test.** `tests/lint-vcs-no-commit-id-fixture.test.cjs` — mirrors the existing
+   `tests/lint-vcs-no-raw-git-fixture.test.cjs` (fixture file in tmp tree, scan with
+   `--scan-root`, assert violation reported). Drop-in copy with the regex swapped.
+
+4. **Deprecation surface.** `sdk/src/vcs/expr.ts` — add `@deprecated` JSDoc to `expr.commit`
+   pointing at `expr.rev`. The TS compiler then surfaces every consumer at build time.
+   No new tooling.
+
+5. **Boundary-I/O private accessor.** `sdk/src/vcs/backends/jj.ts` — add a non-exported
+   `__internalCommitIdOf(rev: RevisionExpr): string` consumed *only* by the (single, audited)
+   github.com-URL builder. Lint guard's allowlist explicitly covers the consumer file by exact
+   path; no glob.
 
 ---
 
 ## Sources
 
-- **Local verification (HIGH):**
-  - `jj --version` → `0.40.0` on this repo, 2026-05-09.
-  - `jj log -T 'json(self) ++ "\n"' -r @ --no-graph` produced valid NDJSON with stable fields.
-  - `jj op log -T 'json(self) ++ "\n"' --no-graph` produced operation-log JSON.
-  - `jj workspace list -T 'json(self) ++ "\n"'` produced workspace JSON.
-  - `jj log --help` / `jj op log --help` / `jj workspace --help` / `jj util --help` all inspected for flag conventions.
-  - GitHub releases API: `https://api.github.com/repos/jj-vcs/jj/releases` returned v0.41.0 dated 2026-05-07.
-- **Official docs (HIGH):**
-  - `https://docs.jj-vcs.dev/latest/technical/concurrency/` — lock-free design, op-log 3-way merge.
-  - `https://docs.jj-vcs.dev/latest/operation-log/` — op-log semantics.
-  - `https://docs.jj-vcs.dev/latest/git-compatibility/` — colocated-repo lifecycle.
-  - `https://docs.jj-vcs.dev/latest/templates/` — `json()` and `escape_json()` template functions, `Serialize` type.
-  - `https://docs.jj-vcs.dev/latest/cli-reference/` — global flag inventory.
-- **Changelog summary (MEDIUM, single source for individual version attributions):**
-  - `https://github.com/jj-vcs/jj/blob/main/CHANGELOG.md` — verified via WebFetch; cross-checked against GitHub releases listing.
-- **Web search (MEDIUM):**
-  - `cuffaro.com/2025-03-15-using-jujutsu-in-a-colocated-git-repository/` — colocated workflow.
-  - `agentic-jujutsu` package surface from `npmjs.com/package/agentic-jujutsu` and `github.com/ruvnet/agentic-flow`.
-  - `execa` posture from `github.com/sindresorhus/execa` and comparative `npm-compare.com` write-ups.
-- **Repo-internal context (HIGH):**
-  - `package.json` (root + `sdk/`) — confirms zero existing exec deps, Node ≥22, pnpm 11, TS 5.7, vitest 3.1.
-  - `.planning/intel/git-touchpoints.md` — confirms 244 ad-hoc `execSync('git …')` call sites, no central seam.
+- **In-tree primary sources** (HIGH confidence — read directly):
+  - `sdk/src/vcs/types.ts` — `RevisionExpr` brand (`:20`), `LogEntry.hash` shape (`:109-116`),
+    `VcsRefs` surface (`:310-341`)
+  - `sdk/src/vcs/backends/jj.ts` — every `commit_id` template invocation (`:225, 946, 965, 978`),
+    every `change_id` template invocation (`:900, 1178`), the `LogEntry.hash` PITFALL
+    comment at `:327-328`
+  - `sdk/src/vcs/format-migration/rewrite.ts` — `GIT_SHA_RE` (`:53`), `JJ_CID_RE` (`:63`),
+    `COMMIT_KEY_ALLOWLIST` (`:73-86`), `findEligibleZones()` (`:240-352`)
+  - `sdk/src/vcs/parse/jj-id.ts:33-34` — existing `commitIdOf(cwd, changeId)` translator
+    (the symbol the boundary-I/O private accessor will wrap)
+  - `scripts/lint-vcs-no-raw-git.cjs` — full template for the new `lint-vcs-no-commit-id.cjs`
+    fork (especially the `parseArgv`/`SCAN_ROOT` seam at `:31-40`, the allowlist machinery at
+    `:42-48,87-139`, and the violation reporter at `:189-202`)
+  - `scripts/lint-vcs-no-raw-git.allow.json` — structural template for the new allowlist file
+  - `package.json:60-75` — existing lint-script registration pattern (`pretest` chain)
+  - `sdk/package.json:48-57` — current dependency floor (zero new entries proposed)
+  - `pnpm-workspace.yaml` — workspace topology (no change)
+  - `.planning/PROJECT.md:15-28` — v1.2 milestone goal + target features (canonical scope)
+  - `.planning/MILESTONES.md:25-28` — SEED-001's *original* design and v1.2's *inversion* of it
+- **External version verification** (HIGH confidence — `npm view` 2026-05-14):
+  - `ts-morph@28.0.0` (released 2026-04-12) — verified current; **rejected** for v1.2 scope
+  - `@ast-grep/cli@0.42.2` (released 2026-05-10) — verified current; **rejected** for v1.2 scope
+  - `jscodeshift@17.3.0` — verified current; **rejected** for v1.2 scope
+- **External tool verification** (HIGH confidence — local `command -v`):
+  - `jj 0.41.0` available at `/Users/LoganDark/.local/bin/jj`; templates `change_id`,
+    `change_id.short()`, `commit_id`, `commit_id.short()` all first-class in this version
+    (also verified by their existing use in `sdk/src/vcs/backends/jj.ts`)
+  - `jq` at `/usr/bin/jq` — system dep already used by `scripts/secret-scan.sh`; available if
+    needed but the in-tree `parse/jj-*.ts` parsers handle the same data without it
+- **Memory-anchored constraints** (HIGH confidence):
+  - `project_no_raw_git` — whole-repo default-deny lint is the precedent the new lint mirrors
+  - `project_unified_revision_model` — premise inversion of SEED-001 (no cross-backend escape
+    hatch); informs the boundary-I/O private-accessor recommendation
+  - `feedback_sdk_commit_jj_safe` — confirms the surface-flip strategy doesn't break commit
+    routing (post-B-08 `gsd-sdk query commit` is jj-safe; v1.2 is consumer-side, not commit-path)
 
 ---
 
-*Stack research for: jj VCS adapter integration in GSD jj-port fork.*
-*Researched: 2026-05-09. Local jj 0.40.0; latest jj 0.41.0 (released 2026-05-07).*
+*Stack research for: GSD jj-port v1.2 (unified revision model — audit + flip + lint guard)*
+*Researched: 2026-05-14*
+*Headline: zero new deps; fork the lint, mirror the regex, hand-edit the surface, let `tsc` find the rest.*
