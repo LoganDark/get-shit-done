@@ -19,6 +19,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync, type Dirent } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
+import { execSync } from 'node:child_process';
 import { join, relative, basename } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -1177,6 +1178,81 @@ export const initIngestDocs: QueryHandler = async (_args, projectDir) => {
     has_git: pathExists(projectDir, '.git'),
     has_jj: pathExists(projectDir, '.jj'),    // Phase 6 plan 06-01 — parity with initNewProject
     project_path: '.planning/PROJECT.md',
+    commit_docs: config.commit_docs,
+  };
+  return { data: withProjectRoot(projectDir, result, config as Record<string, unknown>) };
+};
+
+// ─── initMigrateVcs ───────────────────────────────────────────────────────
+
+/**
+ * Init handler for migrate-vcs workflow (Phase 6 plan 06-03).
+ *
+ * Returns pre-flight probe data consumed by the `/gsd-migrate-vcs` workflow
+ * markdown so it can present user-facing refusals BEFORE dispatching to the
+ * `gsd-sdk query migrate-vcs` mutator verb:
+ *
+ *   - has_git / has_jj    — filesystem presence of .git / .jj
+ *   - current_adapter     — 'git' | 'jj' | 'auto' | 'absent' from config.json
+ *   - jj_available        — `jj --version` succeeds (false → --target jj path refused)
+ *   - dirty               — VcsAdapter status reports any working-copy entries
+ *   - conflicts           — VcsAdapter findConflicts({scope:'all'}) is non-empty
+ *   - project_path        — repo root (echoed for diagnostic prose)
+ *   - commit_docs         — propagated for workflow-side branch defaults
+ *
+ * Mirrors initIngestDocs' shape (peer handler above) per RESEARCH §
+ * `init.migrate-vcs` handler shape.
+ */
+export const initMigrateVcs: QueryHandler = async (_args, projectDir) => {
+  const config = await loadConfig(projectDir);
+
+  // Probe current_adapter via raw config.json read (loadConfig does not
+  // surface vcs.adapter — it's read-time-resolved by `index.ts:70`).
+  let currentAdapter: 'git' | 'jj' | 'auto' | 'absent' = 'absent';
+  try {
+    const raw = await readFile(join(projectDir, '.planning', 'config.json'), 'utf-8');
+    const json = JSON.parse(raw);
+    currentAdapter = json?.vcs?.adapter ?? 'absent';
+  } catch {
+    /* leave 'absent' */
+  }
+
+  // Probe `jj --version` to gate the --target jj path. Synchronous to keep
+  // the handler hot-path identical to initIngestDocs.
+  let jjAvailable = false;
+  try {
+    execSync('jj --version', { stdio: 'pipe' });
+    jjAvailable = true;
+  } catch {
+    /* false */
+  }
+
+  // Probe working-tree cleanliness via the adapter (preserves no-raw-git
+  // invariant — never call `git status` directly here).
+  let dirty = false;
+  let conflicts = false;
+  try {
+    const vcs = createVcsAdapter(projectDir);
+    const status = vcs.status();
+    dirty = (status?.entries?.length ?? 0) > 0;
+    try {
+      const conflictList = vcs.findConflicts({ scope: 'all' });
+      conflicts = (conflictList?.length ?? 0) > 0;
+    } catch {
+      /* adapter may not support findConflicts on this backend — leave false */
+    }
+  } catch {
+    /* adapter construction failed (no repo); leave both false */
+  }
+
+  const result: Record<string, unknown> = {
+    has_git: pathExists(projectDir, '.git'),
+    has_jj: pathExists(projectDir, '.jj'),
+    current_adapter: currentAdapter,
+    jj_available: jjAvailable,
+    dirty,
+    conflicts,
+    project_path: projectDir,
     commit_docs: config.commit_docs,
   };
   return { data: withProjectRoot(projectDir, result, config as Record<string, unknown>) };

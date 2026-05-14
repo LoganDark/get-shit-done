@@ -23,6 +23,8 @@ import { headRefQuery } from './head-ref.js';
 import { currentBranchQuery } from './current-branch.js';
 import { mergeQuery } from './merge.js';
 import { restoreQuery } from './restore.js';
+// Phase 6 plan 06-03: bidirectional VCS migration command.
+import { migrateVcsQuery } from './migrate-vcs.js';
 import { templateFill, templateSelect } from './template.js';
 import { verifySummary, verifyPathExists } from './verify.js';
 import { decisionsParse } from './decisions.js';
@@ -88,6 +90,8 @@ export const MUTATION_SURFACES_STATIC_CATALOG: ReadonlyArray<readonly [string, Q
   ['current-branch', currentBranchQuery],
   ['merge', mergeQuery],
   ['restore', restoreQuery],
+  // Phase 6 plan 06-03: bidirectional VCS migration command.
+  ['migrate-vcs', migrateVcsQuery],
   ['template.fill', templateFill],
   ['template.select', templateSelect],
   ['template select', templateSelect],

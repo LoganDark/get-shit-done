@@ -25,6 +25,7 @@ import {
   initListWorkspaces,
   initRemoveWorkspace,
   initIngestDocs,
+  initMigrateVcs,
 } from './init.js';
 
 let tmpDir: string;
@@ -611,5 +612,76 @@ describe('initIngestDocs', () => {
     const data = result.data as Record<string, unknown>;
     expect(data.project_exists).toBe(true);
     expect(data.planning_exists).toBe(true);
+  });
+
+  it('exposes has_jj peer of has_git (Phase 6 plan 06-01 signal)', async () => {
+    const result = await initIngestDocs([], tmpDir);
+    const data = result.data as Record<string, unknown>;
+    expect(typeof data.has_jj).toBe('boolean');
+    expect(typeof data.has_git).toBe('boolean');
+  });
+});
+
+describe('initMigrateVcs', () => {
+  it('returns flat JSON with the documented 8-field shape', async () => {
+    const result = await initMigrateVcs([], tmpDir);
+    const data = result.data as Record<string, unknown>;
+    expect(typeof data.has_git).toBe('boolean');
+    expect(typeof data.has_jj).toBe('boolean');
+    expect(typeof data.current_adapter).toBe('string');
+    expect(typeof data.jj_available).toBe('boolean');
+    expect(typeof data.dirty).toBe('boolean');
+    expect(typeof data.conflicts).toBe('boolean');
+    expect(data.project_path).toBe(tmpDir);
+    expect(data.commit_docs).toBeDefined();
+    expect(data.project_root).toBe(tmpDir);
+  });
+
+  it('returns has_jj=true when .jj/ exists', async () => {
+    await mkdir(join(tmpDir, '.jj'), { recursive: true });
+    const result = await initMigrateVcs([], tmpDir);
+    const data = result.data as Record<string, unknown>;
+    expect(data.has_jj).toBe(true);
+  });
+
+  it("returns has_jj=false when .jj/ absent", async () => {
+    const result = await initMigrateVcs([], tmpDir);
+    const data = result.data as Record<string, unknown>;
+    expect(data.has_jj).toBe(false);
+  });
+
+  it("returns current_adapter='absent' when config.json lacks vcs.adapter", async () => {
+    // The beforeEach-seeded config.json has no vcs section.
+    const result = await initMigrateVcs([], tmpDir);
+    const data = result.data as Record<string, unknown>;
+    expect(data.current_adapter).toBe('absent');
+  });
+
+  it("returns current_adapter='git' when config.json carries vcs.adapter=git", async () => {
+    await writeFile(
+      join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({ vcs: { adapter: 'git' } }),
+    );
+    const result = await initMigrateVcs([], tmpDir);
+    const data = result.data as Record<string, unknown>;
+    expect(data.current_adapter).toBe('git');
+  });
+
+  it("returns current_adapter='jj' when config.json carries vcs.adapter=jj", async () => {
+    await writeFile(
+      join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({ vcs: { adapter: 'jj' } }),
+    );
+    const result = await initMigrateVcs([], tmpDir);
+    const data = result.data as Record<string, unknown>;
+    expect(data.current_adapter).toBe('jj');
+  });
+
+  it('jj_available reflects environment (boolean, not throw)', async () => {
+    // Whatever the host installation state is, the handler MUST NOT throw
+    // and MUST return a boolean.
+    const result = await initMigrateVcs([], tmpDir);
+    const data = result.data as Record<string, unknown>;
+    expect(typeof data.jj_available).toBe('boolean');
   });
 });

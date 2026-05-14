@@ -105,11 +105,21 @@ All subsequent references to the project instruction file use `$INSTRUCTION_FILE
 
 **If `project_exists` is true:** Error — project already initialized. Use `/gsd-progress`.
 
-**If `has_git` is false:** Initialize git:
+**Greenfield VCS gate (ROADMAP SC #1 / #7 — Phase 6 plan 06-03):**
 
-```bash
-git init
-```
+Parse `$ARGUMENTS` for `--jj`, `--jj=native`, `--jj=colocated`, `--git`.
+
+The pre-flight `gsd-sdk query init.new-project` call returns `has_jj` as a peer of `has_git` (Phase 6 plan 06-01).
+
+| `has_jj` | `has_git` | `--jj` | `--git` | Action |
+|--------|---------|------|-------|--------|
+| true   | (any)   | (any)| (any) | Set `vcs.adapter=jj` in `.planning/config.json`; banner: "Detected `.jj/` — using jj backend"; continue. The SC #1 jj-binary smoke check (`jj --version`) gates this branch — if jj binary fails, surface clear error instead of silent fallback to git. |
+| false  | true    | (any)| (any) | Use existing git (default `vcs.adapter` behavior — Phase 3 D-17 sticky resolver); continue. |
+| false  | false   | absent | absent | ERROR: "Empty directory — pass `--git` or `--jj` (default `--jj` initializes colocated). See `/gsd-new-project --help`." |
+| false  | false   | set    | absent | Run `jj git init --colocate` (or `--no-colocate` when `--jj=native`); set `vcs.adapter=jj` in `config.json`; continue. |
+| false  | false   | absent | set    | Run `git init`; continue (vcs.adapter unset → Phase 3 D-17 resolver default). |
+
+This replaces upstream's silent `git init` fallback. The migration boundary (`/gsd-migrate-vcs`) is now invisible-default-free per ROADMAP SC #7.
 
 ## 2. Brownfield Offer
 

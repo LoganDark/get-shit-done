@@ -63,6 +63,7 @@ export const INIT_COMMAND_ALIASES: readonly FamilyCommandAlias[] = [
   { canonical: 'init.new-workspace', aliases: ['init new-workspace'], subcommand: 'new-workspace', mutation: false },
   { canonical: 'init.list-workspaces', aliases: ['init list-workspaces'], subcommand: 'list-workspaces', mutation: false },
   { canonical: 'init.remove-workspace', aliases: ['init remove-workspace'], subcommand: 'remove-workspace', mutation: false },
+  { canonical: 'init.migrate-vcs', aliases: ['init migrate-vcs'], subcommand: 'migrate-vcs', mutation: false },
 ] as const;
 
 export const PHASE_COMMAND_ALIASES: readonly FamilyCommandAlias[] = [
@@ -104,6 +105,7 @@ export interface NonFamilyCommandAlias {
 }
 
 export const NON_FAMILY_COMMAND_ALIASES: readonly NonFamilyCommandAlias[] = [
+  { canonical: 'branch-list', aliases: [], mutation: false },
   { canonical: 'check-commit', aliases: [], mutation: true },
   { canonical: 'check.decision-coverage-plan', aliases: ['check decision-coverage-plan'], mutation: false },
   { canonical: 'check.decision-coverage-verify', aliases: ['check decision-coverage-verify'], mutation: false },
@@ -113,6 +115,8 @@ export const NON_FAMILY_COMMAND_ALIASES: readonly NonFamilyCommandAlias[] = [
   { canonical: 'config-new-project', aliases: [], mutation: true },
   { canonical: 'config-set', aliases: [], mutation: true },
   { canonical: 'config-set-model-profile', aliases: [], mutation: true },
+  { canonical: 'current-branch', aliases: [], mutation: false },
+  { canonical: 'diff', aliases: [], mutation: false },
   { canonical: 'docs-init', aliases: [], mutation: true },
   { canonical: 'frontmatter.get', aliases: [], mutation: false },
   { canonical: 'frontmatter.merge', aliases: [], mutation: true },
@@ -121,17 +125,26 @@ export const NON_FAMILY_COMMAND_ALIASES: readonly NonFamilyCommandAlias[] = [
   { canonical: 'generate-claude-md', aliases: [], mutation: true },
   { canonical: 'generate-claude-profile', aliases: [], mutation: true },
   { canonical: 'generate-dev-preferences', aliases: [], mutation: true },
+  { canonical: 'head-ref', aliases: [], mutation: false },
   { canonical: 'hooks.fire', aliases: ['hooks fire'], mutation: true },
   { canonical: 'intel.patch-meta', aliases: ['intel patch-meta'], mutation: true },
   { canonical: 'intel.snapshot', aliases: ['intel snapshot'], mutation: true },
   { canonical: 'learnings.copy', aliases: ['learnings copy'], mutation: true },
   { canonical: 'learnings.delete', aliases: ['learnings delete'], mutation: true },
   { canonical: 'learnings.prune', aliases: ['learnings prune'], mutation: true },
+  { canonical: 'log', aliases: [], mutation: false },
+  { canonical: 'merge', aliases: [], mutation: true },
+  { canonical: 'migrate-vcs', aliases: [], mutation: true },
   { canonical: 'milestone.complete', aliases: ['milestone complete'], mutation: true },
   { canonical: 'phase.mvp-mode', aliases: ['phase mvp-mode'], mutation: false },
   { canonical: 'progress.bar', aliases: ['progress bar'], mutation: false },
+  { canonical: 'push', aliases: [], mutation: true },
   { canonical: 'requirements.mark-complete', aliases: ['requirements mark-complete'], mutation: true },
+  { canonical: 'reset', aliases: [], mutation: true },
+  { canonical: 'restore', aliases: [], mutation: true },
+  { canonical: 'revert', aliases: [], mutation: true },
   { canonical: 'stats.json', aliases: ['stats json'], mutation: false },
+  { canonical: 'status', aliases: [], mutation: false },
   { canonical: 'task.is-behavior-adding', aliases: ['task is-behavior-adding'], mutation: false },
   { canonical: 'template.fill', aliases: [], mutation: true },
   { canonical: 'template.select', aliases: ['template select'], mutation: true },

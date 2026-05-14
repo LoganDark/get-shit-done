@@ -57,6 +57,9 @@ export const NON_FAMILY_COMMAND_MANIFEST: readonly NonFamilyCommandManifestEntry
   { canonical: 'merge',          aliases: [], mutation: true,  outputMode: 'json' },
   { canonical: 'restore',        aliases: [], mutation: true,  outputMode: 'json' },
 
+  // Phase 6 plan 06-03: bidirectional VCS migration command.
+  { canonical: 'migrate-vcs',    aliases: [], mutation: true,  outputMode: 'json' },
+
   { canonical: 'todo.match-phase', aliases: ['todo match-phase'], mutation: false, outputMode: 'json' },
 
   { canonical: 'uat.render-checkpoint', aliases: ['uat render-checkpoint'], mutation: false, outputMode: 'json' },
