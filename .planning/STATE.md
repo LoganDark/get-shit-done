@@ -192,6 +192,12 @@ None yet.
   - Baseline data committed in `vmlpmxxprznkntmwynqvnrwxltxpnuyz`: 7 integration files, 98 tests / 7 skipped, 7394 ms median total, 3/3 runs green.
   - Plans 02..N can now proceed per D-09 (evidence-tied flips).
 
+## Quick Tasks Completed
+
+| Date | Slug | Summary | Status |
+|------|------|---------|--------|
+| 2026-05-14 | replace-the-greenfield-vcs-gate-matrix-i | new-project VCS gate: 12-row matrix + git-warning | done |
+
 ## Deferred Items
 
 Items acknowledged and carried forward from previous milestone close:
