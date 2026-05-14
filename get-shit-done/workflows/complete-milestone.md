@@ -172,23 +172,23 @@ Calculate milestone statistics:
 # Headline: `feat(...)` commit summary via the SDK log verb + jq subject filter
 # (LogOpts shape does not yet expose --grep/--format; client-side filter on subject).
 gsd-sdk query log --max-count 200 \
-  | jq -r '.data.entries[] | (.hash[0:7] + " " + .subject)' \
+  | jq -r '.entries[] | (.hash[0:7] + " " + .subject)' \
   | grep '^[a-f0-9]* feat(' \
   | head -20
 
 # Stat-summary of the milestone diff range — name-only diff via SDK; line-counts come from `wc -l` on
 # the diff names list. The verb does not yet expose `--stat`; jq + wc reconstructs the headline.
 gsd-sdk query diff --name-status --range "${FIRST_COMMIT}..${LAST_COMMIT}" \
-  | jq -r '.data.nameStatus[] | (.status + "\t" + .path)' \
+  | jq -r '.nameStatus[] | (.status + "\t" + .path)' \
   | wc -l
 
 find . -name "*.swift" -o -name "*.ts" -o -name "*.py" | xargs wc -l 2>/dev/null || true
 
 # First/last commit timestamps via the log entries' commit-date field
 gsd-sdk query log --range "${FIRST_COMMIT}" --max-count 1 \
-  | jq -r '.data.entries[0].committedAt // empty'
+  | jq -r '.entries[0].committedAt // empty'
 gsd-sdk query log --range "${LAST_COMMIT}" --max-count 1 \
-  | jq -r '.data.entries[0].committedAt // empty'
+  | jq -r '.entries[0].committedAt // empty'
 ```
 
 # TODO(05-05 sweep): when log gains a `--grep` / `--format` flag pass-through, drop the client-side jq subject filter.
@@ -642,7 +642,7 @@ fi
 ```bash
 BRANCH_PREFIX=$(echo "$PHASE_BRANCH_TEMPLATE" | sed 's/{.*//')
 PHASE_BRANCHES=$(gsd-sdk query branch-list --prefix "${BRANCH_PREFIX}" \
-  | jq -r '.data.bookmarks[]?.name // empty, .data.branches[]? // empty' \
+  | jq -r '.bookmarks[]?.name // empty, .branches[]? // empty' \
   | tr -d ' ')
 ```
 
@@ -651,7 +651,7 @@ PHASE_BRANCHES=$(gsd-sdk query branch-list --prefix "${BRANCH_PREFIX}" \
 ```bash
 BRANCH_PREFIX=$(echo "$MILESTONE_BRANCH_TEMPLATE" | sed 's/{.*//')
 MILESTONE_BRANCH=$(gsd-sdk query branch-list --prefix "${BRANCH_PREFIX}" \
-  | jq -r '.data.bookmarks[]?.name // empty, .data.branches[]? // empty' \
+  | jq -r '.bookmarks[]?.name // empty, .branches[]? // empty' \
   | tr -d ' ' \
   | head -1)
 ```
@@ -677,7 +677,7 @@ AskUserQuestion with options: Squash merge (Recommended), Merge with history, De
 **Squash merge:**
 
 ```bash
-CURRENT_BRANCH=$(gsd-sdk query current-branch | jq -r '.data.bookmarks[0] // .data.current // empty')
+CURRENT_BRANCH=$(gsd-sdk query current-branch | jq -r '.bookmarks[0] // .current // empty')
 # TODO(05-05 sweep): no `gsd-sdk query checkout` verb yet — workspace switch lives in WS-01/WS-02 territory;
 # until shimmed, the base-branch hop stays git-mode-only (jj users typically run via `jj new <base>`).
 git checkout ${BASE_BRANCH}
@@ -709,7 +709,7 @@ git checkout "$CURRENT_BRANCH"
 **Merge with history:**
 
 ```bash
-CURRENT_BRANCH=$(gsd-sdk query current-branch | jq -r '.data.bookmarks[0] // .data.current // empty')
+CURRENT_BRANCH=$(gsd-sdk query current-branch | jq -r '.bookmarks[0] // .current // empty')
 # TODO(05-05 sweep): no `gsd-sdk query checkout` verb yet.
 git checkout ${BASE_BRANCH}
 

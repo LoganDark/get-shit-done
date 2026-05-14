@@ -132,9 +132,21 @@ if [ -n "$FILES_OVERRIDE" ]; then
   REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
   
   for file_path in "${FILES_ARRAY[@]}"; do
-    # Security: validate path is within repository (prevent path traversal)
-    ABS_PATH=$(realpath -m "${file_path}" 2>/dev/null || echo "${file_path}")
-    if [[ "$ABS_PATH" != "$REPO_ROOT"* ]]; then
+    # Security: validate path is within repository (prevent path traversal).
+    # CR-06 fix (Plan 05-07 Task 2): use the same boundary form as
+    # agents/gsd-executor.md:451 — admit ONLY $REPO_ROOT itself OR strict
+    # descendants (with `/` boundary). The previous glob-prefix form
+    # ("$REPO_ROOT"*) admitted sibling-dir escape like /repobad when
+    # REPO_ROOT=/repo. Also: realpath failure is a HARD reject (the old
+    # `|| echo "${file_path}"` fallback returned the unresolved string,
+    # which combined with the buggy glob could bypass the check entirely
+    # on systems without coreutils).
+    ABS_PATH=$(realpath -m "${file_path}" 2>/dev/null)
+    if [ -z "$ABS_PATH" ]; then
+      echo "Error: realpath failed for path '${file_path}', skipping"
+      continue
+    fi
+    if [[ "$ABS_PATH" != "$REPO_ROOT" && "$ABS_PATH" != "$REPO_ROOT/"* ]]; then
       echo "Error: File path outside repository, skipping: ${file_path}"
       continue
     fi
@@ -216,7 +228,7 @@ if [ ${#REVIEW_FILES[@]} -eq 0 ]; then
   # The log query verb does not yet expose `--grep`/`--format` (LogOpts shape — Phase 2 CR-02);
   # filter client-side on the structured `.subject` field.
   PHASE_COMMITS=$(gsd-sdk query log --all --max-count 500 \
-    | jq -r ".data.entries[] | select(.subject | test(\"\\\(${PADDED_PHASE}\\\)|\\\(${PADDED_PHASE}-\")) | .hash" 2>/dev/null)
+    | jq -r ".entries[] | select(.subject | test(\"\\\(${PADDED_PHASE}\\\)|\\\(${PADDED_PHASE}-\")) | .hash" 2>/dev/null)
 
   if [ -n "$PHASE_COMMITS" ]; then
     DIFF_BASE=$(echo "$PHASE_COMMITS" | tail -1)^
@@ -231,7 +243,7 @@ if [ ${#REVIEW_FILES[@]} -eq 0 ]; then
     # structured name-only output; exclusion patterns are applied client-side
     # because `gsd-sdk query diff` does not yet expose pathspec-exclude pass-through.
     DIFF_FILES=$(gsd-sdk query diff --name-only --range "${DIFF_BASE}..HEAD" \
-      | jq -r '.data.nameOnly[]' 2>/dev/null \
+      | jq -r '.nameOnly[]' 2>/dev/null \
       | grep -Ev '^\.planning/|^ROADMAP\.md$|^STATE\.md$|-SUMMARY\.md$|-VERIFICATION\.md$|-PLAN\.md$|^package-lock\.json$|^yarn\.lock$|^Gemfile\.lock$|^poetry\.lock$')
 
     while IFS= read -r file; do
@@ -337,7 +349,7 @@ Compute DIFF_BASE for agent context (in case agent needs it):
 ```bash
 # Same SDK-routed log query + client-side subject filter as compute_file_scope.
 PHASE_COMMITS=$(gsd-sdk query log --all --max-count 500 \
-  | jq -r ".data.entries[] | select(.subject | test(\"\\\(${PADDED_PHASE}\\\)|\\\(${PADDED_PHASE}-\")) | .hash" 2>/dev/null)
+  | jq -r ".entries[] | select(.subject | test(\"\\\(${PADDED_PHASE}\\\)|\\\(${PADDED_PHASE}-\")) | .hash" 2>/dev/null)
 if [ -n "$PHASE_COMMITS" ]; then
   DIFF_BASE=$(echo "$PHASE_COMMITS" | tail -1)^
 else

@@ -51,7 +51,7 @@ Based on MODE, gather candidate commits.
 Run:
 ```bash
 gsd-sdk query log --max-count "${COUNT}" \
-  | jq -r '.data.entries[] | (.hash[0:7] + " " + .subject)'
+  | jq -r '.entries[] | (.hash[0:7] + " " + .subject)'
 ```
 
 The verb's LogOpts shape (Phase 2 CR-02) does not yet expose `--no-merges` / `--grep` — those flags are parsed-but-unused. Reconstruct the "oneline" form client-side from `.hash[0:7] + " " + .subject` and filter for GSD conventional commits matching `type(scope): message` pattern (e.g., `feat(04-01):`, `docs(03):`, `fix(02-03):`) on the subject string.
@@ -88,7 +88,7 @@ If the file does not exist, or `manifest.phases?.[TARGET_PHASE]` is missing:
   - Fallback: query the log via the SDK verb and filter client-side by subject (the LogOpts shape does not yet expose `--grep` / `--no-merges`):
     ```bash
     gsd-sdk query log --all --max-count 200 \
-      | jq -r '.data.entries[] | (.hash[0:7] + " " + .subject)' \
+      | jq -r '.entries[] | (.hash[0:7] + " " + .subject)' \
       | grep -E "\(0*${TARGET_PHASE}(-[0-9]+)?\):" \
       | head -50
     ```
@@ -101,7 +101,7 @@ If the file does not exist, or `manifest.phases?.[TARGET_PHASE]` is missing:
 Run:
 ```bash
 gsd-sdk query log --all --max-count 200 \
-  | jq -r '.data.entries[] | (.hash[0:7] + " " + .subject)' \
+  | jq -r '.entries[] | (.hash[0:7] + " " + .subject)' \
   | grep -E "\(${TARGET_PLAN}\)" \
   | head -50
 ```
@@ -211,7 +211,7 @@ Store the response as REVERT_REASON. Continue to execute_revert.
 
 **Dirty-tree guard (run first, before any revert):**
 
-Run `gsd-sdk query status --porcelain | jq -r '.data.raw // .data.stdout // ""'`. If the output is non-empty, display the dirty files and abort:
+Run `gsd-sdk query status --porcelain | jq -r '.raw // ""'`. If the output is non-empty, display the dirty files and abort:
 ```
 Working tree has uncommitted changes. Commit or stash them before running /gsd-undo.
 ```

@@ -351,7 +351,7 @@ Completed Tasks table gives continuation agent context. Commit hashes verify wor
 <continuation_handling>
 If spawned as continuation agent (`<completed_tasks>` in prompt):
 
-1. Verify previous commits exist: `gsd-sdk query log --max-count 5 | jq -r '.data.entries[] | (.hash[0:7] + " " + .subject)'`
+1. Verify previous commits exist: `gsd-sdk query log --max-count 5 | jq -r '.entries[] | (.hash[0:7] + " " + .subject)'`
 2. DO NOT redo completed tasks
 3. Start from resume point in prompt
 4. Handle based on checkpoint type: after human-action → verify it worked; after human-verify → continue; after decision → implement selected option
@@ -481,7 +481,7 @@ if [ -f .git ]; then  # worktree
 fi
 ```
 
-**1. Check modified files:** `gsd-sdk query status --porcelain | jq -r '.data.raw // .data.stdout // ""'`
+**1. Check modified files:** `gsd-sdk query status --porcelain | jq -r '.raw // ""'`
 
 **2. Identify task-related files individually** (NEVER bulk-stage; list specific paths to the commit verb):
 ```bash
@@ -521,7 +521,7 @@ gsd-sdk query commit "{type}({phase}-{plan}): {concise task description}
 ```
 
 **5. Record hash:**
-- **Single-repo:** `TASK_COMMIT=$(gsd-sdk query head-ref | jq -r '.data.head // empty' | cut -c1-7)` — track for SUMMARY.
+- **Single-repo:** `TASK_COMMIT=$(gsd-sdk query head-ref | jq -r '.head // empty' | cut -c1-7)` — track for SUMMARY.
 - **Multi-repo (sub_repos):** Extract hashes from `commit-to-subrepo` JSON output (`repos.{name}.hash`). Record all hashes for SUMMARY (e.g., `backend@abc1234, frontend@def5678`).
 
 **6. Post-commit deletion check:** After recording the hash, verify the commit did not accidentally delete tracked files. The diff verb does not yet expose `--diff-filter` pass-through (sweep TODO), so client-side filter on the name-status output:
@@ -529,14 +529,14 @@ gsd-sdk query commit "{type}({phase}-{plan}): {concise task description}
 # TODO(05-05 sweep): `gsd-sdk query diff` does not yet expose --diff-filter pass-through;
 # until then, filter the name-status output for `D` rows client-side.
 DELETIONS=$(gsd-sdk query diff --name-status --range "HEAD~1..HEAD" \
-  | jq -r '.data.nameStatus[]? | select(.status == "D") | .path' 2>/dev/null || true)
+  | jq -r '.nameStatus[]? | select(.status == "D") | .path' 2>/dev/null || true)
 if [ -n "$DELETIONS" ]; then
   echo "WARNING: Commit includes file deletions: $DELETIONS"
 fi
 ```
 Intentional deletions (e.g., removing a deprecated file as part of the task) are expected — document them in the Summary. Unexpected deletions are a Rule 1 bug: revert and fix before proceeding.
 
-**7. Check for untracked files:** After running scripts or tools, inspect the SDK status output: `gsd-sdk query status --porcelain | jq -r '.data.entries[]? | select(.status == "??") | .path'`. For any new untracked files: commit if intentional, add to `.gitignore` if generated/runtime output. Never leave generated files untracked.
+**7. Check for untracked files:** After running scripts or tools, inspect the SDK status output: `gsd-sdk query status --porcelain | jq -r '.entries[]? | select(.status == "??") | .path'`. For any new untracked files: commit if intentional, add to `.gitignore` if generated/runtime output. Never leave generated files untracked.
 </task_commit_protocol>
 
 <destructive_git_prohibition>
@@ -569,7 +569,7 @@ gsd-sdk query restore path/to/specific/file
 ```
 Never use blanket reset or clean operations that affect the entire working tree.
 
-To inspect what is untracked vs. genuinely new, use `gsd-sdk query status --porcelain | jq -r '.data.raw // .data.stdout // ""'` and evaluate each
+To inspect what is untracked vs. genuinely new, use `gsd-sdk query status --porcelain | jq -r '.raw // ""'` and evaluate each
 file individually. If a file appears untracked but is not part of your task, leave it alone.
 </destructive_git_prohibition>
 
@@ -638,7 +638,7 @@ After writing SUMMARY.md, verify claims before proceeding.
 **2. Check commits exist:**
 ```bash
 gsd-sdk query log --all --max-count 500 \
-  | jq -r '.data.entries[].hash[0:7]' \
+  | jq -r '.entries[].hash[0:7]' \
   | grep -q "{hash}" && echo "FOUND: {hash}" || echo "MISSING: {hash}"
 ```
 
