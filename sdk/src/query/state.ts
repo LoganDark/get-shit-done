@@ -25,7 +25,6 @@ import { join } from 'node:path';
 import { extractFrontmatter, stripFrontmatter } from './frontmatter.js';
 import { planningPaths, escapeRegex } from './helpers.js';
 import {
-  computeProgressPercent,
   normalizeProgressNumbers,
   normalizeStateStatus,
   shouldPreserveExistingProgress,

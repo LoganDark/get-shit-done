@@ -20,7 +20,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { resolve as resolvePath } from 'node:path';
-import { execGit } from '../exec.js';
+import { execGit, VcsExecError } from '../exec.js';
 import type { ExecResult } from '../exec.js';
 import { expr } from '../expr.js';
 import { toGitRev } from '../parse/git-rev.js';
@@ -46,6 +46,8 @@ import type {
   ReapResult,
   WorkspaceAdd,
   WorkspaceInfo,
+  WorkspaceMergeOpts,
+  WorkspaceMergeResult,
   ConflictResult,
   PushOpts,
   FetchOpts,
@@ -266,8 +268,10 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
   // an untrimmed spawnSync directly for the porcelain calls so the first
   // entry's XY prefix survives.
   const status = (opts: StatusOpts = {}): StatusResult => {
+    // Phase 7 D-07 (VCS-11): scoped variant — defaults to adapter's construction cwd if omitted.
+    const targetCwd = opts.cwd ?? cwd;
     if (opts.porcelain === false) {
-      const r = execGit(cwd, ['status']);
+      const r = execGit(targetCwd, ['status']);
       return { entries: [], raw: r.stdout };
     }
     // Strip trailing newline(s) only (TrimEnd) so byte-identity baselines for
@@ -275,7 +279,7 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     // first entry's leading-space (worktree-only modifications/deletions)
     // survives — execGit's full .trim() corrupts the latter (Phase 2.1 #3061).
     const statusTrimEnd = (gitArgs: string[]): { exitCode: number; stdout: string } => {
-      const r = spawnSync('git', gitArgs, { cwd, stdio: 'pipe', encoding: 'utf-8' });
+      const r = spawnSync('git', gitArgs, { cwd: targetCwd, stdio: 'pipe', encoding: 'utf-8' });
       return { exitCode: r.status ?? -1, stdout: (r.stdout ?? '').toString().replace(/\n+$/, '') };
     };
     // Parse path-safe entries from `-z` output; preserve byte-identity `raw` from
@@ -317,6 +321,13 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     // verify.cjs:1309 usage. Mutually exclusive with --name-only at the git
     // CLI level; if both are set, --name-status wins (callers should pick one).
     if (opts.nameStatus) args.push('--name-status');
+    // Phase 7 D-06 (VCS-10): typed enum → single-letter git --diff-filter flag.
+    if (opts.diffFilter) {
+      const letter = (
+        { added: 'A', modified: 'M', deleted: 'D', renamed: 'R', typechange: 'T' } as const
+      )[opts.diffFilter];
+      args.push(`--diff-filter=${letter}`);
+    }
     if (opts.rev) args.push(toGitRev(opts.rev));
     if (opts.paths && opts.paths.length > 0) args.push('--', ...opts.paths);
     const r = execGit(cwd, args);
@@ -385,13 +396,15 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         throw new Error(`bookmarks.move failed: ${r.stderr || r.stdout}`);
       }
     },
-    delete: (name: string, _opts?: { raw?: boolean }): void => {
+    delete: (name: string, opts?: { raw?: boolean; force?: boolean }): void => {
       // D-24 cr-01 fold-in: see bookmarks.create above for rationale. The
-      // `-D` flag is positional-flag-shaped; `--` separator after it pins
+      // `-D` / `-d` flag is positional-flag-shaped; `--` separator after it pins
       // actualName at the name positional regardless of name shape.
+      // Phase 7 D-09 (VCS-14): force=true → `-D` (override), force=false/undefined → `-d` (safe).
       const actualName = name;
       validateRefname(actualName);
-      const r = execGit(cwd, ['branch', '-D', '--', actualName]);
+      const flag = opts?.force ? '-D' : '-d';
+      const r = execGit(cwd, ['branch', flag, '--', actualName]);
       if (r.exitCode !== 0) {
         throw new Error(`bookmarks.delete failed: ${r.stderr || r.stdout}`);
       }
@@ -432,6 +445,52 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     const name = r.stdout.trim();
     if (!name || name === 'HEAD') return []; // detached
     return [name];
+  };
+
+  // Phase 7 D-04 (VCS-08): scoped current-bookmark probe. The targetCwd flows
+  // to execGit as the spawned-process cwd; `git rev-parse --abbrev-ref HEAD`
+  // resolves against that workspace's HEAD.
+  const currentBookmarksIn = (targetCwd: string): string[] => {
+    const r = execGit(targetCwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
+    if (r.exitCode !== 0) return [];
+    const name = r.stdout.trim();
+    if (!name || name === 'HEAD') return []; // detached
+    return [name];
+  };
+
+  // Phase 7 D-05 (VCS-09): returns commit hash on git via `git merge-base`.
+  // Throws VcsExecError on non-zero exit; throws Error on empty result
+  // (orphan-tree case — fork_point analog).
+  const mergeBase = (a: RevisionExpr, b: RevisionExpr): string => {
+    const r = execGit(cwd, ['merge-base', toGitRev(a), toGitRev(b)]);
+    if (r.exitCode !== 0) {
+      throw new VcsExecError(`refs.mergeBase failed: ${r.stderr || r.stdout}`, {
+        exitCode: r.exitCode,
+        stdout: r.stdout,
+        stderr: r.stderr,
+        timedOut: false,
+        args: ['merge-base', toGitRev(a), toGitRev(b)],
+      });
+    }
+    const hash = r.stdout.trim();
+    if (!hash) throw new Error('refs.mergeBase: empty merge-base result');
+    return hash;
+  };
+
+  // Phase 7 planner fold-in (VCS-15): read file content at a revision via
+  // `git show <rev>:<path>`. Consumed by Plan 4 (github-release-notes.cjs:71).
+  const readBlob = (rev: RevisionExpr, blobPath: string): string => {
+    const r = execGit(cwd, ['show', `${toGitRev(rev)}:${blobPath}`]);
+    if (r.exitCode !== 0) {
+      throw new VcsExecError(`refs.readBlob failed: ${r.stderr || r.stdout}`, {
+        exitCode: r.exitCode,
+        stdout: r.stdout,
+        stderr: r.stderr,
+        timedOut: false,
+        args: ['show', `${toGitRev(rev)}:${blobPath}`],
+      });
+    }
+    return r.stdout;
   };
 
   const resolveShort = (rev: RevisionExpr): string => {
@@ -483,6 +542,9 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     parent: expr.parent(),
     bookmarks,
     currentBookmarks,
+    currentBookmarksIn,
+    mergeBase,
+    readBlob,
     resolveShort,
     countCommits,
     rootCommits,
@@ -580,6 +642,67 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         abandoned.push({ name, changeId: entry.rev, path: entry.path });
       }
       return { abandoned, incomplete: [] };
+    },
+    // Phase 7 D-01..D-03 (VCS-12): mirrors upstream `git merge --no-ff -m <msg> <branch>`
+    // + `git branch -D <agentBookmark>`. The mainBookmark field is validated against
+    // the current branch — git's `merge --no-ff` advances HEAD-tracking branch
+    // implicitly, so an explicit mismatch is a programmer error (throws VcsExecError).
+    merge: (opts: WorkspaceMergeOpts): WorkspaceMergeResult => {
+      validateRefname(opts.mainBookmark);
+      // D-03 atomic main-advance: caller must be on the named main branch; explicit safety > implicit semantic.
+      const currentBranchRes = execGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
+      const currentBranch =
+        currentBranchRes.exitCode === 0 ? currentBranchRes.stdout.trim() : '';
+      if (currentBranch !== opts.mainBookmark) {
+        throw new VcsExecError(
+          `workspace.merge: mainBookmark must match current branch on git backend (got mainBookmark='${opts.mainBookmark}', HEAD on '${currentBranch}')`,
+          {
+            exitCode: 1,
+            stdout: '',
+            stderr: '',
+            timedOut: false,
+            args: ['rev-parse', '--abbrev-ref', 'HEAD'],
+          },
+        );
+      }
+      const branchRev = toGitRev(opts.branch);
+      const mergeRes = execGit(cwd, ['merge', '--no-ff', '-m', opts.message, branchRev]);
+      // Distinguish conflict (CONFLICT in stderr/stdout) vs other failure.
+      const conflicted =
+        mergeRes.exitCode !== 0 &&
+        /CONFLICT|Automatic merge failed/i.test((mergeRes.stderr || '') + (mergeRes.stdout || ''));
+      if (mergeRes.exitCode !== 0) {
+        return { ok: false, conflicted, changeId: null, stderr: mergeRes.stderr };
+      }
+      // Resolve the merge commit hash (HEAD after a successful merge).
+      const headRes = execGit(cwd, ['rev-parse', 'HEAD']);
+      const changeId = headRes.exitCode === 0 ? headRes.stdout.trim() : null;
+      // D-03: atomic agent-bookmark delete.
+      if (opts.agentBookmark) {
+        validateRefname(opts.agentBookmark);
+        const delRes = execGit(cwd, ['branch', '-D', '--', opts.agentBookmark]);
+        if (delRes.exitCode !== 0) {
+          // Non-fatal: merge already landed; surface in stderr.
+          return {
+            ok: true,
+            conflicted: false,
+            changeId,
+            stderr: `agentBookmark delete failed: ${delRes.stderr}`,
+          };
+        }
+      }
+      return { ok: true, conflicted: false, changeId, stderr: '' };
+    },
+    // Phase 7 D-08 (VCS-13): mirrors upstream `git worktree remove [--force] <path>`.
+    // Distinct from workspace.forget (Phase 4 metadata-only primitive).
+    remove: (worktreePath: string, opts?: { force?: boolean }): void => {
+      const args = opts?.force
+        ? ['worktree', 'remove', '--force', worktreePath]
+        : ['worktree', 'remove', worktreePath];
+      const r = execGit(cwd, args);
+      if (r.exitCode !== 0) {
+        throw new Error(`workspace.remove failed: ${r.stderr || r.stdout}`);
+      }
     },
   });
 
