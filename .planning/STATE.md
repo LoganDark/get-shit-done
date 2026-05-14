@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-05-14T15:19:55.660Z"
 last_activity: 2026-05-14
 progress:
-  total_phases: 0
+  total_phases: 1
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,184 +17,69 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-09)
+See: .planning/PROJECT.md (updated 2026-05-14)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 07 — reconcile fork capabilities with upstream (v1.1 first upstream sync)
+**Current focus:** Phase 8 — Unified Revision Model (v1.2 jujutsu is change-only — never commit id anywhere)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-05-14 — Milestone v1.2 started
+Phase: 8 of 8 (Unified Revision Model — Audit → Test-Prep → Flip → Lint Guard → Close-Gate)
+Plan: — of TBD (planning pending)
+Status: Ready to plan
+Last activity: 2026-05-14 — Roadmap created for v1.2; 14 requirements mapped to Phase 8
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 29
-- Average duration: —
-- Total execution time: —
+- Total plans completed: 62 (across v1.0 + v1.1)
+- Average duration: see per-phase table
+- Total execution time: 2 milestones, both shipped 2026-05-14
 
-**By Phase:**
+**By Phase (v1.0 + v1.1 archived):**
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 01 | 5 | - | - |
-| 03 | 7 | - | - |
-| 03.1 | 5 | - | - |
-| 05 | 8 | - | - |
-| 06 | 4 | - | - |
-
-**Recent Trend:**
-
-- Last 5 plans: —
-- Trend: —
+| Phase | Plans | Status |
+|-------|-------|--------|
+| 01–06 (v1.0) | 56 | Shipped |
+| 07 (v1.1) | 5 | Shipped |
+| 08 (v1.2) | TBD | Planning |
 
 *Updated after each plan completion*
-| Phase 01 P01 | 2m49s | 2 tasks | 4 files |
-| Phase 01 P02 | ~12m | 4 tasks | 14 files |
-| Phase 01 P03 | ~12m | 3 tasks | 14 files |
-| Phase 01 P04 | ~10m | 3 tasks | 6 files |
-| Phase 01 P05 | ~6m | 3 tasks | 5 files |
-| Phase 02 P01 | 1m | 1 tasks | 1 files |
-| Phase 02 P02 | 9m | 3 tasks | 3 files |
-| Phase 02 P03 | 7m | 4 tasks | 9 files |
-| Phase 02 P04 | 10m | 2 tasks | 8 files |
-| Phase 02 P05 | 12m | 2 tasks | 8 files |
-| Phase 02 P06 | ~6m | 4 tasks | 17 files |
-| Phase 02 P07 | ~10m | 1 tasks | 6 files |
-| Phase 02 P08 | ~25m | 1 tasks | 15 files |
-| Phase 02 P09 | ~30m | 2 tasks tasks | 19 files files |
-| Phase 02 P10 | ~11m | 2 tasks | 14 files |
-| Phase 02 P11 | 13m | 2 tasks tasks | 5 files files |
-| Phase 02 P12 | ~2m (resume-only) | 1 task | 1 files (+SUMMARY/STATE/ROADMAP/REQUIREMENTS) |
-| Phase 03 P01 | 22m | 5 tasks | 19 files |
-| Phase 03 P02 | fork-constrained | 3 tasks | 13 files |
-| Phase 03 P03 | 11min | 2 tasks | 10 files |
-| Phase 03 P04 | ~7min | 2 tasks tasks | 7 files files |
-| Phase 03 P05 | 11m | - tasks | - files |
-| Phase 03 P06 | ~25m | 2 tasks | 7 files |
-| Phase 03 P07 | ~30m | 3 tasks | 5 files (workflow + REQUIREMENTS + ROADMAP + CONTEXT + STATE) |
 
 ## Accumulated Context
 
 ### Roadmap Evolution
 
-- Phase 2.1 inserted after Phase 2: VCS Abstraction Audit — Drop Git-Only Concepts (URGENT)
-- Phase 6 added: Brownfield jj Migration — sticky vcs.adapter flip (Phase 3 D-17) + .planning SHA→change_id rewriter (Phase 3 D-19 tracker consumer)
-- Phase 03.1 inserted after Phase 3: make tests run faster (URGENT)
-- Phase 7 added: Reconcile fork capabilities with upstream — adapter operations for the wave-cleanup placeholder (7 verbs documented in worktree-safety.cjs stub), drop raw-git fallback blocks from execute-phase.md / quick.md, and bring new upstream test surfaces (shell-projection, installer-migrations, SDK-first seams) green on the jj-port
+- v1.2 opened 2026-05-14: SEED-001 subsumed and inverted into v1.2's premise (no escape hatch on cross-backend surface; commit_id leakage from jj is a defect)
+- Phase 8 mapped to all 14 v1.2 requirements (AUDIT-01..04, FLIP-01..04, LINT-01..03, PROMPT-05, TEST-12, MIGR-06) — single phase per research recommendation (SUMMARY + ARCHITECTURE)
+- v1.1 closed: Phase 7 (5/5 plans) shipped 2026-05-14
+- v1.0 closed: 8 phases (53/56 plans) shipped 2026-05-14
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- Pre-Phase-1: VCS adapter abstraction (frozen-object factory, TypeScript-first with `dist-cjs/` build target) is the highest-leverage move; Branch-by-Abstraction over Strangler Fig because git is deep in the SDK.
-- Pre-Phase-1: jj backend uses squash-based commit model (`jj squash -B @ -k -m`); `jj commit` is never invoked.
-- Pre-Phase-1: Working-copy auto-snapshot is allowed by default; `--ignore-working-copy` is never passed by adapter code.
-- Pre-Phase-1: Orchestrator pre-creates each subagent's head change and workspace (octopus structure created lazily on first fan-out).
-- Pre-Phase-1: Hooks Tier 1 only in v1 — colocated default + jj-native non-colocated direct trigger; PATH-shim wrapper deferred to v2.
-- [Phase ?]: Plan 01-01: introduced sdk/src/vcs/_placeholder.ts as a one-line stub to satisfy tsc's empty-include guard (TS18003); plan 01-02 may delete it once real adapter modules land
-- [Phase 01-02]: Plan 01-02: dist-cjs needs `package.json {type:commonjs}` shim — without it Node 25's require(esm) interop loads compiled CJS as null-prototype ESM; build:cjs script writes the shim
-- [Phase 01-02]: Plan 01-02: parseBackendsEnv returns structured `{available, requested, unavailable}` (B-4 shape) so callers can warn instead of silently running zero tests
-- [Phase 01-02]: Plan 01-02: createGitAdapterStub returns a frozen object whose every method throws GSDError('not yet implemented') — plan 03 swaps in real createGitAdapter without changing factory signature
-- [Phase 01-02]: Plan 01-02: deleted sdk/src/vcs/_placeholder.ts (real adapter modules now satisfy tsc empty-include guard)
-- [Phase 01-03]: Plan 01-03: dual-build module specifier resolution uses eval-guarded `__filename`/`import.meta.url` and filters for absolute-path-looking values — `node -e '…'` sets __filename to '[eval]' which createRequire rejects, so we fall through to a process.cwd() anchor.
-- [Phase 01-03]: Plan 01-03: vcs.findConflicts({scope:'all'}) returns [] on git — RESEARCH Open Q1 documents the asymmetry; Phase 3 jj backend implements the real `conflict()` revset semantics.
-- [Phase 01-03]: Plan 01-03: vcs.refs.bookmarks.list returns Bookmark[] with rev='' (RESEARCH Open Q2) — Phase 1 promotes to per-item rev-parse only when a caller demands resolved revs.
-- [Phase 01-03]: Plan 01-03: snapshot/restore uses strategy 3 (refs/gsd/test-snapshot + reset --hard + clean -fdx) — only strategy that pins HEAD without touching index/working-tree intermediates, matters for vitest parallel-module fixture restore.
-- [Phase 01-03]: Plan 01-03 [Rule 3]: get-shit-done/bin/lib/worktree-safety.cjs now exports readWorktreeList — promoted from internal helper to module surface so VcsAdapter.workspace.list can DI it (ADR-0004 alignment, RESEARCH Pitfall 5).
-- [Phase 01-03]: Plan 01-03: capture-vcs-baselines.cjs moved to tests/__tools__/ (rather than deleted) — Phase 2 will expand the baseline corpus as it migrates each call site.
-- [Phase ?]: Plan 01-04: vcs-fixture seeds an initial empty commit before snapshotting (W-5) so HEAD~1 / vcs.refs.parent resolves on the first test in any describe block.
-- [Phase ?]: Plan 01-04: tests/helpers.cjs uses Object.defineProperty lazy getters for BACKENDS_AVAILABLE / parseBackendsEnv re-exports — defers dist-cjs require until first access, keeps pre-build guard friendly for non-VCS tests.
-- [Phase ?]: Plan 01-04: skip-count CI guard uses W-3 dual-defense — workflow YAML pins fetch-depth: 0 on lint-tests checkout AND scripts/check-skip-count.cjs hard-fails under CI=true if origin/main is missing.
-- [Phase 01-05]: Plan 01-05: no-raw-git lint guard uses W-4 isolated-fixture pattern — `--scan-root <dir>` argv lets fixture tests scan os.tmpdir() trees so production-mode and fixture-mode scans cannot collide; `__lint-fixture-vcs-*` in .gitignore is belt-and-suspenders against accidental repo-root pollution.
-- [Phase 01-05]: Plan 01-05 [Rule 2]: extended allowlist to cover sdk/src/init-runner.ts (Phase 2 migration target — sibling to sdk/src/query/init.ts), sdk/src/**/*.integration.test.ts glob (legitimate fixture-seeding sites), and tests/__tools__/capture-vcs-baselines.cjs (plan-03 regenerator helper). Without these, the lint would fire on Phase 1's land state — RESEARCH Pitfall 2.
-- [Phase 01-05]: Plan 01-05: D-17/D-18 (whole-repo default-deny on ALL git invocations, not just mutating verbs) tightens VCS-07's literal wording. REQUIREMENTS.md VCS-07 marked Complete (01-05) with the tightening noted inline.
-- [Phase 02-01]: commit.test.ts:304 triage closed via mechanical 3-line beforeEach fix (commit.gpgsign + tag.gpgsign disablers lifted from git-backend.test.ts:31-32 per D-08) — D-03/D-04 gate now open for plan 02-08 paired commit.ts+commit.test.ts migration (D-06)
-- [Phase 02-02]: tests/helpers.cjs createTempGitProject post-init commit migrated to VcsAdapter (D-09 partial); bootstrap stays raw pending plan 02-03 gap-fill
-- [Phase 02-02]: Day-one allowlist shrink: 9 entries removed; lint exits 1 with 14 violations across 8 files on phase/02-migration (D-13 forcing function; main stays green)
-- [Phase 02-02]: sdk/src/vcs/jj/.gitkeep created as zero-conflict sidecar surface (UPSTREAM-02 / D-15)
-- [Phase ?]: [Phase 02-03]: 17 forward-complete adapter gaps closed + Blocker 3 (expr.commit) + Blocker 4 (workspace.context shape with gitDir/gitCommonDir) + W2 (gitOnly.configSet); per-file migration plans 02-04+ now mechanically swappable
-- [Phase ?]: [Phase 02-03]: tests/helpers.cjs::createTempGitProject closing migration — zero raw-git after this plan (D-09 fully holds)
-- [Phase ?]: [Phase 02-03]: range:<encoded>..<encoded> recursive translation in toGitRev/toJjRev avoids extending parseExpr; commit:<sha> emits verbatim; D-12 holds via SHA-shape validation in expr.commit factory
-- [Phase ?]: [Phase 02-04]: smoke-test (D-01) confirms relative-path require shape from bin/lib/*.cjs to dist-cjs (../../../sdk/dist-cjs/vcs/...); package-name @gsd-build/sdk does not resolve. Locks pattern for plans 02-05+.
-- [Phase ?]: [Phase 02-04]: worktree-safety.cjs uses two injection seams: deps.readPorcelain (surgical porcelain-reader override for line-80 mocks) + deps.vcs (VcsAdapter mock for context/prune); ADR-0004 deps={} signature preserved (W4).
-- [Phase ?]: [Phase 02-04]: prune-orphaned-worktrees and bug-2774 test files DEFERRED (Rule 4) — need workspace.add(branchCreate), merge, checkout, branch-rename adapter verbs before vcsTest retarget is mechanical; follow-up plan required.
-- [Phase ?]: [Phase 02-05]: init.cjs (3 sites) and init.ts (3 sites) byte-symmetric migration to VcsAdapter; lint 13→7 / 7→5 files; D-06 paired retarget via gitOnly.init()+configSet()
-- [Phase ?]: [Phase 02-05]: baseline-parity dispatch is args-shape-keyed not id-keyed — adding new baseline files auto-spawns new it() cases without requiring new dispatch clauses (D-08 mechanical-only)
-- [Phase ?]: [Phase 02-05]: init.cjs's detectChildRepos / cmdInitNewWorkspace / cmdInitWorkspaceStatus have no direct test coverage — pre-existing testing gap, surface for future maintenance
-- [Phase ?]: [Phase 02-06]: vcs.log() populates LogEntry.body via 'git log -z' format extension; bundled with Task 2 (Rule 3) — required for byte-equivalent reconstruction in check-decision-coverage migration
-- [Phase ?]: [Phase 02-06]: 4-file ascending-LOC migration (check-ship-ready 103 → check-decision-coverage 554 → progress 566 → init-runner 734); 10 sites closed; expr.commit(firstCommit) consumed in production (Blocker-3 closure); init-runner private execGit helper deleted as dead code; lint 7→5 / 5→3
-- [Phase 02-07]: graphify.cjs (594 LOC, 2 sites) migrated; first production consumer of expr.range factory from 02-03 — validates gap-fill end-to-end. Tri-state null preservation via vcs.refs.exists pre-check (Rule 2). Paired test enh-3170 retargeted (real, not vacuous); graphify.test.cjs vacuous (zero git invocations).
-- [Phase ?]: [Phase 02-08]: sdk/src/query/commit.ts migrated; W5 prescriptive imports; CommitInput amend/noVerify/pathspec gap-fill
-- [Phase ?]: [Phase 02-08]: commit.test.ts paired retarget (D-06) — bootstrap via gitOnly.init/configSet; setup via vcs.stage/vcs.commit; post-state probes via vcs.log/vcs.status/vcs.diff; git-rm synthesized via unlink+vcs.stage. Zero raw execSync('git ...') in test bodies.
-- [Phase ?]: [Phase 02-08]: verify.ts 3 dynamic execGit imports retargeted from './commit.js' to '../vcs/index.js' (Rule 3 — preserves existing semantics on the deleted commit.ts re-export); Plan 02-10 owns verify.ts proper migration
-- [Phase ?]: [Phase 02-08]: baseline-parity commit-clause needs fresh fixture (initFixture re-init in dispatch) — canonical execGit upstream call already commits the staged path; rerunning adapter on same fixture hits 'nothing to commit'. Mirrors 02-07's per-fixture re-init pattern for rev-parse HEAD
-- [Phase ?]: [Phase 02-09]: commands.cjs (1028 LOC, 14 sites) migrated to VcsAdapter; W1 split keeps source-migration commit at 5 files; first bin/lib production consumer of expr.commit; Pitfall 2 preserved
-- [Phase ?]: [Phase 02-09]: #2014 invariant safeguard via stagedOrUnstaged tracking — explicit --files with all-missing entries short-circuits to nothing_to_commit BEFORE vcs.commit; naive pathspec migration would record deletions
-- [Phase ?]: [Phase 02-09]: 3 vacuous-paired tests NOT touched per D-08 (no execSync('git ...) matches); workspace.test.cjs's backtick-quoted git worktree add lines NOT migrated per carried Rule 4 (workspace.add(branchCreate) deferred); lint 3→2 violations / 2→1 files
-- [Phase ?]: [Phase 02-10]: verify.cjs (1,390 LOC, 6 sites) + verify.ts (692 LOC, 3 sites) byte-symmetric migration; first production consumers of LogOpts.allRefs and DiffOpts.nameStatus gap-fills from 02-03; Blocker-3 closure expanded to 9 expr.commit consumers across 5 files
-- [Phase ?]: [Phase 02-10]: verify.cjs:1309 two-rev diff (base..HEAD) routes via expr.range(expr.commit(base), expr.head()); first production consumer of expr.range outside graphify.cjs; range form byte-equivalent to two-rev for linear-ancestor relationship drift detection guarantees
-- [Phase ?]: [Phase 02-10]: cat-file -t probes lose stdout-token discrimination (commit/tree/blob/tag) when migrated to vcs.refs.exists — plan-sanctioned semantic shift; expr.commit shape validation catches malformed inputs; documented at all 5 cat-file probe sites in verify.cjs/verify.ts
-- [Phase ?]: [Phase 02-11]: core.cjs (largest hotspot, 2,036 LOC) site 603 migrated; execGit helper + DEFAULT_GIT_TIMEOUT_MS deleted (every consumer retired by 02-04/02-09/02-10); Phase 2 production-source migration COMPLETE (lint guard exits 0); UPSTREAM-03 hotspot audit verified D-08 mechanical-only across all three hotspots — Phase 2 ready to merge to main
-- [Phase 02-12]: MIGR-04 + UPSTREAM-01 RECORDED-AS-DEFERRED per user sign-off 2026-05-11 ("Approve as-is" resume-signal); deferred-tracker `02-12-DEFERRED.md` exists at canonical path with verbatim ROADMAP success-criteria 4 + 5 replacement text preserved for the next phase-transition runner; requirements marked "Recorded as deferred to milestone-end task (post-Phase-5) per Phase 2 plan 02-12" in REQUIREMENTS.md (NOT Done); Phase 2 plan execution complete (12/12) — ready for phase-level verifier
-- [Phase 03]: Plan 03-01: notImpl(verb) indirect stub helper threads 27 verb stubs through one auditable choke point in jj.ts
-- [Phase 03]: Plan 03-01: test.skipIf(!ready(verb)) chosen over it.skip for D-12 per-verb gating; vitest runtime conditional is NOT counted by check-skip-count.cjs
-- [Phase 03]: Plan 03-01: BACKENDS_AVAILABLE_FOR_VERB.__vcsTestOnly.snapshot/restore gated separately from production verbs so plan-01 stub-throwing snapshot doesn't break the contract suite beforeAll teardown
-- [Phase 03]: Plan 03-01: jj-colocated tmp init uses 'jj git init --colocate' + 'jj config set --repo' — never raw git (preserves no-raw-git invariant)
-- [Phase 03]: Plan 03-01: sticky vcs.adapter lives in .planning/config.json (D-17 storage location); 4-level priority opts.kind > GSD_VCS > sticky > detect-with-git-wins-ties
-- [Phase 03]: Plan 03-01: format-migration tracker (D-19) has zero new entries — scaffolding plan introduces no .planning/ revision-id-encoding format
-- [Phase ?]: [Phase 03]: Plan 03-02: production jj NDJSON parsers + jj op log/restore body for __vcsTestOnly; allowlist flipped for jj-colocated unlocks contract-test fixture lane for plans 03-03..03-06
-- [Phase ?]: [Phase 03]: Plan 03-02: production jj NDJSON parsers + jj op log/restore body for __vcsTestOnly; allowlist flipped for jj-colocated unlocks contract-test fixture lane for plans 03-03..03-06
-- [Phase ?]: [Phase 03]: Plan 03-02: production jj NDJSON parsers + jj op log/restore body for __vcsTestOnly; allowlist flipped for jj-colocated unlocks contract-test fixture lane for plans 03-03..03-06
-- [Phase ?]: Plan 03-02: production jj NDJSON parsers + jj op log/restore for testOnly; allowlist flipped
-- [Phase ?]: Plan 03-02: production jj NDJSON parsers + jj op log/restore for testOnly; allowlist flipped
-- [Phase ?]: Plan 03-02: production jj NDJSON parsers + jj op log/restore for testOnly; allowlist flipped
-- [Phase ?]: Plan 03-02: production jj NDJSON parsers
-- [Phase ?]: Plan 03-02: production jj NDJSON parsers
-- [Phase ?]: Plan 03-02: production jj NDJSON parsers + jj op log/restore for testOnly; allowlist flipped for jj-colocated
-- [Phase ?]: Plan 03-02: VcsExecError constructor uses (message, fields) signature per exec.ts:51-76
-- [Phase ?]: Plan 03-02: inline snapshots (toMatchInlineSnapshot) used over external .snap files due to fork-constrained execution environment; hand-verified via node -e direct invocation
-- [Phase ?]: Plan 03-03: extracted parseJjBookmarkRecord to parse/jj-bookmark.ts for parity with other NDJSON parsers + unit-test isolation from jj binary
-- [Phase ?]: Plan 03-03: countCommits template uses 'commit_id ++ "\\n"' (not bare '"\\n"') to survive vcsExec stdout-trim — single-commit count was 0 with bare newline
-- [Phase ?]: Plan 03-03: refs.bookmarks.switch + refs.isIgnored remain VcsNotImplementedError on jj backend; audit (03-03-AUDIT.md) confirms no jj-reachable caller — Phase 4 reshape trigger
-- [Phase ?]: Plan 03-04: squash-based commit() body lands with SQUASH-01..07 + REFS-05 (D-01 advance) + D-04 (raw escape) + JJ-07 (env propagation) + WR-01 verbatim; SQUASH-05 grep gate stays green
-- [Phase ?]: Plan 03-04: ExecOptions extended with env?:Record<string,string>; vcsExec merges opts.env on top of process.env without mutating the calling process; envOpts() returns undefined when no JJ_USER/JJ_EMAIL set
-- [Phase ?]: Plan 03-04: hash resolution uses deterministic second jj log -r @- -T commit_id call rather than parsing Created new commit ... stdout from jj squash
-- [Phase ?]: Plan 03-04: bookmark-advance failure surfaces via merged CommitResult.stderr; squash is NOT rolled back (T-03.04-03 mitigation)
-- [Phase ?]: Plan 03-05 lands jj log/status/diff/findConflicts bodies; conflicts() PLURAL revset (RESEARCH Q1 correction; CONTEXT/REQUIREMENTS doc-fix deferred to plan 03-07); jj resolve --list -r <rev> empirically verified on jj 0.41
-- [Phase ?]: Plan 03-06: RESEARCH A4 empirically corrected — jj git push has no --force-with-lease flag because its default behavior IS already force-with-lease semantics; opts.force is a documented no-op
-- [Phase ?]: Plan 03-06: opts.ref on jj fetch is a documented no-op per RESEARCH A6; 03-06-AUDIT.md confirms zero production callers of vcs.fetch — silent-drop is safe in Phase 3
-- [Phase ?]: Plan 03-06: workspace.context returns Phase 3 literal stub {effectiveRoot:cwd, mode:'main', isLinked:false}; workspace.add/forget/prune throw VcsNotImplementedError (Phase 4 owns WS-*)
-- [Phase ?]: Plan 03-06: TEST-08 triage complete — all 7 worktree-bug tests carries-verbatim (markdown-structural, no vcsTest fixture); all pass under GSD_TEST_BACKENDS=jj-colocated; no ESCALATIONS
-- [Phase 03-07]: Plan 03-07: CI matrix activated with `backend: [git, jj-colocated]` axis on ubuntu-latest; jj install step pins v0.41.0 (D-14) via release tarball from github.com/jj-vcs/jj/releases (D-15 / CI-02); job-level `continue-on-error: ${{ matrix.backend == 'jj-colocated' }}` + `fail-fast: false` absorbs Phase-3 allow-failure window (D-11); GSD_TEST_BACKENDS env wired through; macos lane stays git-only (unknown-linux-musl tarball would fail on macOS); seam-coverage + alias-drift checks pinned to backend==git so jj-colocated cell on ubuntu-latest@24 doesn't re-run backend-independent gates.
-- [Phase 03-07]: Plan 03-07: conflict() → conflicts() revset doc-bug fixed in 3 primary doc surfaces (REQUIREMENTS.md CONFLICT-01, ROADMAP.md Phase 3 success criteria #3, 03-CONTEXT.md §Domain); historical artifacts in research/, intel/, prior-phase SUMMARYs left as-is (record of research-time hypothesis); the impl in jj.ts has used the plural since plan 03-05 — only the planning prose lagged.
-- [Phase 03-07]: Plan 03-07: phase-close invariant battery green: JJ-03 (0 --ignore-working-copy in jj backend), SQUASH-05 (no jj commit invocation), conflicts() plural present + singular absent in jj.ts, lint-vcs-no-raw-git 0 violations on 908 files, skip-count 18 = baseline (no regression), bug-triage doc has 0 TODO rows, every allowlist entry that should admit jj-colocated does, every entry that should stay git-only does (refs.isIgnored, refs.bookmarks.switch, workspace.add/forget/prune).
-- [Phase 03-07]: Plan 03-07: format-migration tracker (CONTEXT.md `<format_migration_tracker>` D-19) Net-new-surfaces section finalized empty — all 7 Phase-3 plans verified zero new revision-id-encoding `.planning/` formats introduced; Phase 6 inherits the tracker populated with only pre-existing surfaces (STATE/SUMMARY/LEARNINGS/REVIEW prose, SDK phase manifests, query commit output).
-- **Post-BROWN-01 (Phase 6 plan 06-04):** Phase 6 migration validated on sibling clone AND landed in-place against THIS repo (commit `4bb2b3c9` — 66 files rewritten, 0 orphans, zero prose corruption after B-07 rewriter redesign). jj is now permitted in this repo; the prior "use git not jj" memory rule is lifted. Squash-model commits per `project_squash_model.md` are the canonical idiom going forward (details still TBD).
+- **v1.2 open (Phase 8):** Unified revision model — cross-backend `vcs.*` namespace exposes ONE revision concept (`commit_id` on git, `change_id` on jj); jj backend never volunteers `commit_id` from any cross-backend verb. Inversion of SEED-001's escape-hatch idea — leakage is a defect.
+- **v1.2 phase shape:** Single phase (Phase 8) with sequential plans (audit → test-prep + flip → lint guard + prompt cleanup + close-gate). Lint script *development* parallelizable during Plan 1; first green run gates on Plan 2 close.
+- **v1.2 dogfood cutover model:** Phase boundary marker — commits in `commit_id` shape during the phase; single rewriter pass at close-gate (MIGR-06). No mid-phase rewrites; avoids Pitfall 5 (mixed-shape `.planning/` corruption).
+- **v1.2 LINT-03 boundary-I/O accessor:** Conditional. Build only if AUDIT identifies a real consumer; expected verdict is ZERO consumers (`github-release-notes.cjs` debunked as false-alarm in research). If zero, codify "no escape hatch exists" as the verified end state.
+- **v1.2 rename strategy:** Hard rename, no aliases (`LogEntry.hash` → `LogEntry.id`; `CommitResult.hash` → `CommitResult.id`). Compiler errors are the forcing function. Per PITFALLS Pitfall 8.
 
 ### Pending Todos
 
-None yet.
+None yet for v1.2.
 
 ### Blockers/Concerns
 
-- **Requirement-count discrepancy:** REQUIREMENTS.md self-reports "78 v1 requirements across 13 categories" but actually contains 86 requirements across 15 categories (added SQUASH and BROWN as separate sections during requirement definition, plus larger category sizes). Roadmap maps the actual 86. REQUIREMENTS.md footer should be reconciled at next phase transition.
-- **Phase 03.1 baseline unblocked (2026-05-13):** Both prior blockers resolved.
-  - Golden-parity drift (5 failures) fixed in `pxumponwopvsmlmvvlrusyqokxspskwv` (`fix(query): port five upstream CJS fixes to SDK …`). Debug session resolved at `.planning/debug/resolved/golden-parity-failures.md`.
-  - Slow Claude-CLI test hang gated behind `GSD_ENABLE_E2E=1` in `uxqknykpnlrvynmssypnzpotmrlzlvno` — three tests (lifecycle-e2e + 2 phase-runner E2E cases) now opt-in. Baseline harness no longer drives the LLM, so per-run wall-clock dropped from 15-50 min to ~5 s.
-  - Baseline data committed in `vmlpmxxprznkntmwynqvnrwxltxpnuyz`: 7 integration files, 98 tests / 7 skipped, 7394 ms median total, 3/3 runs green.
-  - Plans 02..N can now proceed per D-09 (evidence-tied flips).
-
-## Quick Tasks Completed
-
-| Date | Slug | Summary | Status |
-|------|------|---------|--------|
-| 2026-05-14 | replace-the-greenfield-vcs-gate-matrix-i | new-project VCS gate: 12-row matrix + git-warning | done |
+- **Audit Gap 1 (research):** SEED-001's `vcs.commit() → CommitResult.hash` is INCORRECTLY listed as already-correct in `FEATURES.md`; ARCHITECTURE.md proves it still uses `commit_id` template at `jj.ts:222-227`. FLIP-01 and FLIP-03 both touch this — Plan 2 success requires both flipping the template AND renaming the field.
+- **Risk 4 (research, low severity):** jj 0.41 NDJSON `json(self)` template must emit `change_id` field for parser flips. AUDIT Plan 1 includes a one-shot probe; mitigation if absent is a two-pass parse or explicit `'json(self.change_id() ++ ...)'` template — bounded.
+- **Pitfall 1 (carried risk):** silent stable-identity semantic flip on `LogEntry.hash` → `LogEntry.id` (snapshot-stable on git, rebase-stable on jj). Mitigated by hard rename (forcing function) + audit verdict-per-consumer classification (snapshot-needed / rebase-stable-needed / indifferent).
+- **A3 colocated pre-commit gap (carried from v1.0):** jj 0.41 doesn't auto-fire `.git/hooks/pre-commit` after `jj squash` colocated. Three fix paths in Phase 4 LEARNINGS Open Q1. Carries past v1.2 — NOT in v1.2 scope.
+- **Orchestrator parallelization rewrite (carried from v1.0):** `execute-phase.md` raw-git worktree dispatch (~lines 714+) → jj octopus + reap. `parallelization` knob stays `false` until rewired. Carries past v1.2 — NOT in v1.2 scope.
 
 ## Deferred Items
 
@@ -202,21 +87,19 @@ Items acknowledged and carried forward from previous milestone close:
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| *(none — first milestone)* | | | |
+| Architecture | Orchestrator parallelization rewrite (raw-git worktree dispatch → jj octopus + reap) | Carries past v1.2 | v1.0 → v1.1 → v1.2 open |
+| Hooks | A3 colocated pre-commit gap (jj 0.41 doesn't auto-fire `.git/hooks/pre-commit` after `jj squash` colocated) | Carries past v1.2 | v1.0 → v1.1 → v1.2 open |
+| Lint | LINT-04 markdown / `.planning/` prose-level lint (separate from `lint-vcs-no-commit-id.cjs`) | Deferred to v1.3 | v1.2 open |
+| API | TEST-13 `vcs.refs.matchPrefix(id, prefix)` alphabet-aware short-prefix matching | Conditional on v1.2 audit verdict | v1.2 open |
+| Naming | NAMING-01 cosmetic rename `rootCommits` → `rootRevisions` | Deferred (low value, high churn) | v1.2 open |
+| API | API-01 public `vcs.refs.idAlphabet` introspection | Deferred (no consumer asks yet) | v1.2 open |
 
 ## Session Continuity
 
-Last session: 2026-05-14T12:31:50.079Z
-Stopped at: Phase 7 context gathered
-Resume file: .planning/phases/07-reconcile-fork-capabilities-with-upstream-add-missing-adapte/07-CONTEXT.md
-
-## Known Pre-Existing Test Failures (Non-Blocking)
-
-- `sdk/src/query/commit.test.ts:304` — "fatal: failed to write commit object" during git init/commit setup. Not introduced by 01-02; surfaced when running the full unit suite. Out of scope per executor SCOPE BOUNDARY.
-- `sdk/src/query/config-mutation.test.ts:441` — `expect(raw.commit_docs).toBe(true)` failing. Not introduced by 01-02. Out of scope.
-
-These should be triaged in a future maintenance plan.
+Last session: 2026-05-14
+Stopped at: v1.2 roadmap drafted — Phase 8 with 14 requirements mapped, 6 success criteria, single-phase shape per research recommendation
+Resume file: None — next step is `/gsd-plan-phase 8`
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- `/gsd-plan-phase 8` to decompose Phase 8 into executable plans (research recommends ~3 sequential plans).

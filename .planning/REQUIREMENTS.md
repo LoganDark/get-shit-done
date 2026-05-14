@@ -87,30 +87,31 @@ Explicit exclusions for v1.2. Documented to prevent scope creep.
 
 ## Traceability
 
-Filled by roadmap creation step. Empty for now.
+All 14 v1.2 requirements map to Phase 8 (Unified Revision Model — Audit → Test-Prep → Flip → Lint Guard → Close-Gate). Single-phase shape per research recommendation (SUMMARY.md + ARCHITECTURE.md): audit is a hard precondition for the flip; test-prep matcher introduced before flip; flip before lint guard's first green run; PROMPT-05 deletions after flip + after AUDIT-04; MIGR-06 close-gate rewriter pass.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUDIT-01 | Phase ? | Pending |
-| AUDIT-02 | Phase ? | Pending |
-| AUDIT-03 | Phase ? | Pending |
-| AUDIT-04 | Phase ? | Pending |
-| FLIP-01 | Phase ? | Pending |
-| FLIP-02 | Phase ? | Pending |
-| FLIP-03 | Phase ? | Pending |
-| FLIP-04 | Phase ? | Pending |
-| LINT-01 | Phase ? | Pending |
-| LINT-02 | Phase ? | Pending |
-| LINT-03 | Phase ? | Pending |
-| PROMPT-05 | Phase ? | Pending |
-| TEST-12 | Phase ? | Pending |
-| MIGR-06 | Phase ? | Pending |
+| AUDIT-01 | Phase 8 | Pending |
+| AUDIT-02 | Phase 8 | Pending |
+| AUDIT-03 | Phase 8 | Pending |
+| AUDIT-04 | Phase 8 | Pending |
+| FLIP-01 | Phase 8 | Pending |
+| FLIP-02 | Phase 8 | Pending |
+| FLIP-03 | Phase 8 | Pending |
+| FLIP-04 | Phase 8 | Pending |
+| LINT-01 | Phase 8 | Pending |
+| LINT-02 | Phase 8 | Pending |
+| LINT-03 | Phase 8 | Pending |
+| PROMPT-05 | Phase 8 | Pending |
+| TEST-12 | Phase 8 | Pending |
+| MIGR-06 | Phase 8 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 14 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 14 ⚠️ (will resolve via roadmap step)
+- Mapped to phases: 14 ✓
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-05-14*
+*Roadmap mapped: 2026-05-14 (Phase 8)*
 *Milestone: v1.2 jujutsu is change-only — never commit id anywhere*
