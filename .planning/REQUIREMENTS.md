@@ -149,33 +149,33 @@ These requirement IDs were coined during Phase 7 planning (2026-05-14). They are
 
 ### Adapter Verbs (VCS — Phase 7)
 
-- [ ] **VCS-08**: `refs.bookmarks.currentIn(cwd: string): string[]` — scoped current-bookmark probe. Returns `string[]` (D-04; mirrors Phase 2.1 D-15 `currentBookmarks`). git backend: `git -C <cwd> rev-parse --abbrev-ref HEAD` (returns `[]` on detached HEAD). jj backend: NDJSON template scan with divergent-bookmark `??` guard + refname regex, but invoked with `vcsExec(targetCwd, ...)` so the spawned process's cwd selects the workspace.
-- [ ] **VCS-09**: `refs.mergeBase(a: RevisionExpr, b: RevisionExpr): string` — common-ancestor probe. git backend: `git merge-base <a> <b>` (returns commit hash). jj backend: `jj log -r 'fork_point(<a> | <b>)' -T 'change_id ++ "
+- [x] **VCS-08**: `refs.bookmarks.currentIn(cwd: string): string[]` — scoped current-bookmark probe. Returns `string[]` (D-04; mirrors Phase 2.1 D-15 `currentBookmarks`). git backend: `git -C <cwd> rev-parse --abbrev-ref HEAD` (returns `[]` on detached HEAD). jj backend: NDJSON template scan with divergent-bookmark `??` guard + refname regex, but invoked with `vcsExec(targetCwd, ...)` so the spawned process's cwd selects the workspace.
+- [x] **VCS-09**: `refs.mergeBase(a: RevisionExpr, b: RevisionExpr): string` — common-ancestor probe. git backend: `git merge-base <a> <b>` (returns commit hash). jj backend: `jj log -r 'fork_point(<a> | <b>)' -T 'change_id ++ "
 "' --no-graph -n 1` (returns change_id per D-05). Throws `VcsExecError` on empty result.
-- [ ] **VCS-10**: `diff({ diffFilter })` extension — accepts typed enum `'added' | 'modified' | 'deleted' | 'renamed' | 'typechange'` (D-06; no leaking single-letter git convention). git backend emits `--diff-filter=<letter>`. jj backend post-filters `parseDiffSummary` output on status letter. Single-filter only (array form deferred).
-- [ ] **VCS-11**: `status({ cwd })` extension — adds optional `cwd?: string` to existing `StatusOpts` (D-07). Defaults to adapter's construction cwd when omitted. Internal exec passes the override as the spawned process's working directory; on jj, this is the workspace selector (not `--repository`).
-- [ ] **VCS-12**: `workspace.merge({ branch, message, ff: false, agentBookmark? })` — 2-parent merge change (D-01..D-03). jj backend: `jj new -r @ -r <branchRev> -m <message>` then in-tree conflict probe via `findConflicts({scope:'working-copy'})`; on success, atomic `jj bookmark delete <agentBookmark>` (D-03). git backend: `git merge --no-ff -m <msg> <branch>` then `git branch -D <agentBookmark>`. Returns `{ ok, conflicted, changeId, stderr }` (SQUASH-06 conflict-return semantics — no auto-abandon). Held under `acquireJjWriteLock` with `mainRepoRoot: cwd` (Pitfall 3).
-- [ ] **VCS-13**: `workspace.remove(path, { force? })` — composite forget+rm (D-08). jj backend: resolve path→name via `workspace.list()` (Pattern 4); `jj workspace forget <name>` FIRST, then `fs.rmSync(onDiskPath, { recursive:true, force:true })` — order matters (Pitfall 4). git backend: `git worktree remove --force <path>`. Path resolution uses `join(cwd, '.claude/jj-workspaces', name)` (matches reap convention).
-- [ ] **VCS-14**: `refs.bookmarks.delete(name, { force })` extension — adds `force?: boolean` flag (D-09). git backend: `force=true` → `branch -D` (override); `force=false` → `branch -d` (safe). jj backend: `force` is a documented no-op (jj's `bookmark delete` already removes regardless of state); JSDoc notes divergent-bookmark semantic shift (Pitfall 5).
-- [ ] **VCS-15**: `refs.readBlob(rev: RevisionExpr, path: string): string` — read file content at a specific revision (Phase 7 planner judgment-call: folded into Plan 1 per RESEARCH Pitfall 7 / Open Q4, NOT deferred to Phase 7.1 INSERTED). git backend: `git show <rev>:<path>` via `execGit(cwd, ['show', `${toGitRev(rev)}:${path}`])`. jj backend: `jj file show -r <rev> -- <path>` (jj 0.41 native verb). Throws `VcsExecError` on missing-file or non-existent rev. Consumed by `scripts/changeset/github-release-notes.cjs:71` (Plan 4).
+- [x] **VCS-10**: `diff({ diffFilter })` extension — accepts typed enum `'added' | 'modified' | 'deleted' | 'renamed' | 'typechange'` (D-06; no leaking single-letter git convention). git backend emits `--diff-filter=<letter>`. jj backend post-filters `parseDiffSummary` output on status letter. Single-filter only (array form deferred).
+- [x] **VCS-11**: `status({ cwd })` extension — adds optional `cwd?: string` to existing `StatusOpts` (D-07). Defaults to adapter's construction cwd when omitted. Internal exec passes the override as the spawned process's working directory; on jj, this is the workspace selector (not `--repository`).
+- [x] **VCS-12**: `workspace.merge({ branch, message, ff: false, agentBookmark? })` — 2-parent merge change (D-01..D-03). jj backend: `jj new -r @ -r <branchRev> -m <message>` then in-tree conflict probe via `findConflicts({scope:'working-copy'})`; on success, atomic `jj bookmark delete <agentBookmark>` (D-03). git backend: `git merge --no-ff -m <msg> <branch>` then `git branch -D <agentBookmark>`. Returns `{ ok, conflicted, changeId, stderr }` (SQUASH-06 conflict-return semantics — no auto-abandon). Held under `acquireJjWriteLock` with `mainRepoRoot: cwd` (Pitfall 3).
+- [x] **VCS-13**: `workspace.remove(path, { force? })` — composite forget+rm (D-08). jj backend: resolve path→name via `workspace.list()` (Pattern 4); `jj workspace forget <name>` FIRST, then `fs.rmSync(onDiskPath, { recursive:true, force:true })` — order matters (Pitfall 4). git backend: `git worktree remove --force <path>`. Path resolution uses `join(cwd, '.claude/jj-workspaces', name)` (matches reap convention).
+- [x] **VCS-14**: `refs.bookmarks.delete(name, { force })` extension — adds `force?: boolean` flag (D-09). git backend: `force=true` → `branch -D` (override); `force=false` → `branch -d` (safe). jj backend: `force` is a documented no-op (jj's `bookmark delete` already removes regardless of state); JSDoc notes divergent-bookmark semantic shift (Pitfall 5).
+- [x] **VCS-15**: `refs.readBlob(rev: RevisionExpr, path: string): string` — read file content at a specific revision (Phase 7 planner judgment-call: folded into Plan 1 per RESEARCH Pitfall 7 / Open Q4, NOT deferred to Phase 7.1 INSERTED). git backend: `git show <rev>:<path>` via `execGit(cwd, ['show', `${toGitRev(rev)}:${path}`])`. jj backend: `jj file show -r <rev> -- <path>` (jj 0.41 native verb). Throws `VcsExecError` on missing-file or non-existent rev. Consumed by `scripts/changeset/github-release-notes.cjs:71` (Plan 4).
 
 ### Wave-Cleanup Executor (WAVE — Phase 7)
 
-- [ ] **WAVE-01**: `executeWorktreeWaveCleanupPlan(plan, _deps={})` body at `get-shit-done/bin/lib/worktree-safety.cjs:402` rewritten from `not_implemented_in_jj_port` stub to real orchestration through VCS-08..VCS-14. Per-entry try/catch: `currentBookmarksIn` → `mergeBase` → `diff{diffFilter:'deleted', nameOnly}` → `status{cwd}` → `workspace.merge` (D-03 atomic) → `workspace.remove`. Verb #7 (`bookmarks.delete{force}`) NOT called in happy path because D-03 already deletes agent bookmark inside `merge()`. Preserves `cmdWorktreeCleanupWave` (worktree-safety.cjs:413) result-envelope keys (`ok`, `action`, `entries`, `pending`). `_deps.vcs` injection seam preserved (ADR-0004 alignment).
+- [x] **WAVE-01**: `executeWorktreeWaveCleanupPlan(plan, _deps={})` body at `get-shit-done/bin/lib/worktree-safety.cjs:402` rewritten from `not_implemented_in_jj_port` stub to real orchestration through VCS-08..VCS-14. Per-entry try/catch: `currentBookmarksIn` → `mergeBase` → `diff{diffFilter:'deleted', nameOnly}` → `status{cwd}` → `workspace.merge` (D-03 atomic) → `workspace.remove`. Verb #7 (`bookmarks.delete{force}`) NOT called in happy path because D-03 already deletes agent bookmark inside `merge()`. Preserves `cmdWorktreeCleanupWave` (worktree-safety.cjs:413) result-envelope keys (`ok`, `action`, `entries`, `pending`). `_deps.vcs` injection seam preserved (ADR-0004 alignment).
 
 ### Workflow Markdown Hard-Delete (PROMPT — Phase 7)
 
-- [ ] **PROMPT-04**: `if command -v gsd-sdk >/dev/null 2>&1; then ... else ... fi` blocks in `get-shit-done/workflows/execute-phase.md:774-891` and `get-shit-done/workflows/quick.md:787-911` hard-deleted per RESEARCH Pitfall 8. The entire conditional collapses to a single line: `gsd-sdk query worktree.cleanup-wave --manifest "$X" || exit 1`. Net diff: ~1 line replaces ~117 deletions (execute-phase.md) / ~125 deletions (quick.md). No multi-runtime sibling files exist (Assumption A5); `bin/install.js` transform pipeline regenerates Codex/Gemini/OpenCode variants at install time.
+- [x] **PROMPT-04**: `if command -v gsd-sdk >/dev/null 2>&1; then ... else ... fi` blocks in `get-shit-done/workflows/execute-phase.md:774-891` and `get-shit-done/workflows/quick.md:787-911` hard-deleted per RESEARCH Pitfall 8. The entire conditional collapses to a single line: `gsd-sdk query worktree.cleanup-wave --manifest "$X" || exit 1`. Net diff: ~1 line replaces ~117 deletions (execute-phase.md) / ~125 deletions (quick.md). No multi-runtime sibling files exist (Assumption A5); `bin/install.js` transform pipeline regenerates Codex/Gemini/OpenCode variants at install time.
 
 ### Cross-Backend Migration (MIGR — Phase 7)
 
-- [ ] **MIGR-05**: `scripts/changeset/github-release-notes.cjs` migrated from `cp.execFileSync('git', args, ...)` (line 37 `runGit` helper) to cross-backend VcsAdapter calls per D-17. Three call sites covered: (a) `validateGitRef` (line 56) → `vcs.refs.exists`; (b) `changedFragmentPaths` (line 63) → `vcs.diff({ rev: expr.range(...), nameOnly: true, paths: ['.changeset'] })`; (c) `readFileAtRef` (line 71) → `vcs.refs.readBlob(rev, path)` (VCS-15). The `runGit` helper and the inline `// vcs-lint:allow-git-here` annotation deleted (D-17 — no separate JSON allowlist file). Stale jj-port JSDoc at lines 33-36 deleted (file is now cross-backend). Preserves upstream-mergeability per D-18.
+- [x] **MIGR-05**: `scripts/changeset/github-release-notes.cjs` migrated from `cp.execFileSync('git', args, ...)` (line 37 `runGit` helper) to cross-backend VcsAdapter calls per D-17. Three call sites covered: (a) `validateGitRef` (line 56) → `vcs.refs.exists`; (b) `changedFragmentPaths` (line 63) → `vcs.diff({ rev: expr.range(...), nameOnly: true, paths: ['.changeset'] })`; (c) `readFileAtRef` (line 71) → `vcs.refs.readBlob(rev, path)` (VCS-15). The `runGit` helper and the inline `// vcs-lint:allow-git-here` annotation deleted (D-17 — no separate JSON allowlist file). Stale jj-port JSDoc at lines 33-36 deleted (file is now cross-backend). Preserves upstream-mergeability per D-18.
 
 ### Upstream Test-Surface Triage (TEST — Phase 7)
 
-- [ ] **TEST-09**: `tests/installer-migration-{report,authoring,install-integration}.test.cjs` + `tests/installer-migrations.test.cjs` (4 files) run green on both `git` and `jj-colocated` backends per D-14. Strict-green per D-15: phase doesn't close until both lanes green. RESEARCH A3 expects zero VCS-touching content (4/4 files have zero git/vcs/jj refs); deltas documented in 07-LEARNINGS.md. Any failure rooting to an adapter-verb gap beyond VCS-08..VCS-15 → spawn Phase 7.1 INSERTED per D-16.
-- [ ] **TEST-10**: `tests/shell-command-projection-dispatch.test.cjs` + `tests/bug-3413-shell-command-projection.test.cjs` + `tests/bug-3441-path-action-projection.test.cjs` + `tests/bug-3442-shim-projection-drift-guard.test.cjs` (4 files) run green on both backends per D-14. `shell-command-projection-dispatch.test.cjs` tests `execGit` helper itself — legitimately git-only; document the carve-out. Deltas to 07-LEARNINGS.md.
-- [ ] **TEST-11**: `sdk/src/query-raw-output-projection.test.ts` runs green on both backends per D-14. Snapshot-projection-style test of the SDK query envelope; expected zero backend dependency. Deltas to 07-LEARNINGS.md.
+- [x] **TEST-09**: `tests/installer-migration-{report,authoring,install-integration}.test.cjs` + `tests/installer-migrations.test.cjs` (4 files) run green on both `git` and `jj-colocated` backends per D-14. Strict-green per D-15: phase doesn't close until both lanes green. RESEARCH A3 expects zero VCS-touching content (4/4 files have zero git/vcs/jj refs); deltas documented in 07-LEARNINGS.md. Any failure rooting to an adapter-verb gap beyond VCS-08..VCS-15 → spawn Phase 7.1 INSERTED per D-16.
+- [x] **TEST-10**: `tests/shell-command-projection-dispatch.test.cjs` + `tests/bug-3413-shell-command-projection.test.cjs` + `tests/bug-3441-path-action-projection.test.cjs` + `tests/bug-3442-shim-projection-drift-guard.test.cjs` (4 files) run green on both backends per D-14. `shell-command-projection-dispatch.test.cjs` tests `execGit` helper itself — legitimately git-only; document the carve-out. Deltas to 07-LEARNINGS.md.
+- [x] **TEST-11**: `sdk/src/query-raw-output-projection.test.ts` runs green on both backends per D-14. Snapshot-projection-style test of the SDK query envelope; expected zero backend dependency. Deltas to 07-LEARNINGS.md.
 
 
 ## v2 Requirements
@@ -312,20 +312,20 @@ These are capabilities GSD could gain by exploiting jj idioms; explicitly v2+ to
 | BROWN-01 | Phase 6 | Pending (re-bucketed from Phase 5 per Phase 5 CONTEXT D-31) |
 | BROWN-02 | Phase 6 | Pending (re-bucketed from Phase 5 per Phase 5 CONTEXT D-31) |
 | CI-03 | Phase 5 | Complete (Phase 5 plan 05-05 — docs note landed in `.github/workflows/test.yml` header block: GitHub Actions workflows stay on git per the permanent architectural boundary — GitHub *is* git) |
-| VCS-08 | Phase 7 | Pending |
-| VCS-09 | Phase 7 | Pending |
-| VCS-10 | Phase 7 | Pending |
-| VCS-11 | Phase 7 | Pending |
-| VCS-12 | Phase 7 | Pending |
-| VCS-13 | Phase 7 | Pending |
-| VCS-14 | Phase 7 | Pending |
-| VCS-15 | Phase 7 | Pending (8th-verb fold-in per planner judgment on RESEARCH Open Q4; readBlob for github-release-notes.cjs migration) |
-| WAVE-01 | Phase 7 | Pending |
-| PROMPT-04 | Phase 7 | Pending |
-| MIGR-05 | Phase 7 | Pending |
-| TEST-09 | Phase 7 | Pending |
-| TEST-10 | Phase 7 | Pending |
-| TEST-11 | Phase 7 | Pending |
+| VCS-08 | Phase 7 | Complete (2026-05-14)
+| VCS-09 | Phase 7 | Complete (2026-05-14)
+| VCS-10 | Phase 7 | Complete (2026-05-14)
+| VCS-11 | Phase 7 | Complete (2026-05-14)
+| VCS-12 | Phase 7 | Complete (2026-05-14)
+| VCS-13 | Phase 7 | Complete (2026-05-14)
+| VCS-14 | Phase 7 | Complete (2026-05-14)
+| VCS-15 | Phase 7 | Complete (2026-05-14) (8th-verb fold-in per planner judgment on RESEARCH Open Q4; readBlob for github-release-notes.cjs migration)
+| WAVE-01 | Phase 7 | Complete (2026-05-14)
+| PROMPT-04 | Phase 7 | Complete (2026-05-14)
+| MIGR-05 | Phase 7 | Complete (2026-05-14)
+| TEST-09 | Phase 7 | Complete (2026-05-14)
+| TEST-10 | Phase 7 | Complete (2026-05-14)
+| TEST-11 | Phase 7 | Complete (2026-05-14)
 
 **Coverage:**
 - v1 requirements: 86 total (across 15 categories) — note: original footer reported "78 across 13" but actual content sums to 86 across 15 sections (SQUASH and BROWN are separate top-level sections, plus larger per-category sizes than initially summarized). Reconcile at next phase transition.

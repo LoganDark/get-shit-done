@@ -205,7 +205,7 @@ Plans:
 
 *Reconcile fork capabilities with the upstream code surface brought in by the May 2026 merge — fill adapter gaps and bring new upstream test surfaces green on jj. v1.0 shipped 2026-05-14 (8/8 phases). See MILESTONES.md for the v1.0 retrospective.*
 
-### Phase 7: Reconcile fork capabilities with upstream - add missing adapter operations, ensure new tests are passing, etc
+### Phase 7: Reconcile fork capabilities with upstream - add missing adapter operations, ensure new tests are passing, etc — Complete (2026-05-14)
 
 **Goal:** Close the 5 gaps the May 2026 upstream merge exposed: (1) land 7 new VcsAdapter verbs + 1 readBlob fold-in covering wave-cleanup needs (VCS-08..VCS-15); (2) wire the worktree.cleanup-wave executor to use them (WAVE-01); (3) drop the raw-git `else`-branch fallbacks in execute-phase.md / quick.md (PROMPT-04); (4) migrate scripts/changeset/github-release-notes.cjs to the cross-backend adapter per D-17/D-18 (MIGR-05); (5) verify upstream's new test surfaces (installer-migrations, shell-command-projection, query-raw-output-projection) pass on both backends per strict-green D-15 (TEST-09..11). Single Phase 7 covers all 5 (D-10). Sequential prefix → parallel fan-out (D-11): Plan 1 verbs → Plan 2 executor → Plans 3+4+5 parallel.
 **Requirements**: VCS-08, VCS-09, VCS-10, VCS-11, VCS-12, VCS-13, VCS-14, VCS-15, WAVE-01, PROMPT-04, MIGR-05, TEST-09, TEST-10, TEST-11
@@ -213,11 +213,11 @@ Plans:
 **Plans:** 5 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — Land 8 VcsAdapter verbs (types.ts + git/jj backends + per-domain live tests + cross-backend contract tests + expr.range smoke test). Wave 1, sequential prefix. (VCS-08..VCS-15)
-- [ ] 07-02-PLAN.md — Wire executeWorktreeWaveCleanupPlan at worktree-safety.cjs:402 through the 7 verbs; drop the not_implemented_in_jj_port stub. Wave 2, sequential prefix. (WAVE-01)
-- [ ] 07-03-PLAN.md — Hard-delete the raw-git else-branch fallback in execute-phase.md (lines 774-891) and quick.md (lines 787-911). Wave 3, parallel. (PROMPT-04)
-- [ ] 07-04-PLAN.md — Migrate scripts/changeset/github-release-notes.cjs to cross-backend VcsAdapter; drop inline vcs-lint allow-git-here annotation; preserves upstream-mergeability per D-18. First production consumer of VCS-15 readBlob. Wave 3, parallel. (MIGR-05)
-- [ ] 07-05-PLAN.md — Test-surface strict-green triage on both backends (installer-migrations + shell-command-projection + bug-3413/3441/3442 + query-raw-output-projection); document deltas in 07-LEARNINGS.md; spawn Phase 7.1 INSERTED per D-16 if any failure roots to a verb gap beyond VCS-08..VCS-15. Wave 3, parallel (close gate). (TEST-09, TEST-10, TEST-11)
+- [x] 07-01-PLAN.md — Land 8 VcsAdapter verbs (types.ts + git/jj backends + per-domain live tests + cross-backend contract tests + expr.range smoke test). Wave 1, sequential prefix. (VCS-08..VCS-15)
+- [x] 07-02-PLAN.md — Wire executeWorktreeWaveCleanupPlan at worktree-safety.cjs:402 through the 7 verbs; drop the not_implemented_in_jj_port stub. Wave 2, sequential prefix. (WAVE-01)
+- [x] 07-03-PLAN.md — Hard-delete the raw-git else-branch fallback in execute-phase.md (lines 774-891) and quick.md (lines 787-911). Wave 3, parallel. (PROMPT-04)
+- [x] 07-04-PLAN.md — Migrate scripts/changeset/github-release-notes.cjs to cross-backend VcsAdapter; drop inline vcs-lint allow-git-here annotation; preserves upstream-mergeability per D-18. First production consumer of VCS-15 readBlob. Wave 3, parallel. (MIGR-05)
+- [x] 07-05-PLAN.md — Test-surface strict-green triage on both backends (installer-migrations + shell-command-projection + bug-3413/3441/3442 + query-raw-output-projection); document deltas in 07-LEARNINGS.md; spawn Phase 7.1 INSERTED per D-16 if any failure roots to a verb gap beyond VCS-08..VCS-15. Wave 3, parallel (close gate). (TEST-09, TEST-10, TEST-11)
 
 ---
 *Last updated: 2026-05-13 — Phase 5 planned (5 plans). Plans cover: P1 foundational infra (A3 D-32 fix + 11 new SDK query verbs + D-31 deferral edits moving BROWN-01/02 to Phase 6), P2 daily-driver CMD-01..05 + execute-phase.md/quick.md rewrites + 5 integration tests, P3 lifecycle CMD-06..09/11 + undo/complete-milestone/code-review + agent prompts + 6 tests (CMD-06 documents jj-destructive-undo semantic shift per Pitfall 6), P4 brownfield CMD-10 with synth-jj-fixtures + D-34 coverage-gap docs, P5 CI hardening + close (7 flake fixes + 10-green soak + required-blocking flip + MIGR-02 cosmetic sweep + PROMPT-03 trust-installer closure per D-37). Note: ROADMAP success criterion #3 will be amended by plan 05-01 per D-31 (BROWN dogfood re-bucketed to Phase 6); the legacy wording on line 149 remains in this file until 05-01 lands the edit.*
