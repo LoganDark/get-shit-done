@@ -2,11 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: first upstream sync
-status: planning
-last_updated: "2026-05-14T11:53:03.576Z"
-last_activity: 2026-05-14
+status: Defining requirements
+stopped_at: Phase 7 context gathered
+last_updated: "2026-05-14T12:31:50.084Z"
+last_activity: 2026-05-14 — Milestone v1.1 started
 progress:
-  total_phases: 0
+  total_phases: 1
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -206,9 +207,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-13T21:59:08.524Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-command-translations-brownfield-validation-ci-hardening/05-CONTEXT.md
+Last session: 2026-05-14T12:31:50.079Z
+Stopped at: Phase 7 context gathered
+Resume file: .planning/phases/07-reconcile-fork-capabilities-with-upstream-add-missing-adapte/07-CONTEXT.md
 
 ## Known Pre-Existing Test Failures (Non-Blocking)
 
