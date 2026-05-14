@@ -19,8 +19,22 @@ const {
 const { createTempGitProject, createTempDir, cleanup } = require('./helpers.cjs');
 
 // ─── execGit ─────────────────────────────────────────────────────────────────
+//
+// jj-port carve-out (Phase 7 plan 07-05 strict-green triage): upstream's
+// `execGit` raw-git wrapper was removed from `shell-command-projection.cjs` per
+// the fork-wide `project_no_raw_git` invariant — all VCS reads/writes route
+// through `createVcsAdapter()`. See the comment at
+// `get-shit-done/bin/lib/shell-command-projection.cjs:375` for the
+// removal rationale. Re-introducing `execGit` would violate the lint guard
+// `scripts/lint-vcs-no-raw-git.cjs` and the architectural decision recorded in
+// `.planning/phases/07-…/07-LEARNINGS.md`. The remaining helpers in this file
+// (`execNpm`, `execTool`, `probeTty`, `normalizeContent`, `platformWriteSync`,
+// `platformReadSync`, `platformEnsureDir`) all continue to run on both
+// backends. Failure identical on git lane and jj-colocated lane → not a
+// backend delta; D-15 strict-green close-gate is satisfied by the documented
+// carve-out path in CONTEXT D-14 ("document every delta").
 
-describe('execGit', () => {
+describe.skip('execGit', () => { // allow-skip: jj-port removed upstream execGit; project_no_raw_git invariant — see 07-LEARNINGS.md
   let tmpDir;
 
   beforeEach(() => { tmpDir = createTempGitProject(); });
