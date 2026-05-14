@@ -191,7 +191,7 @@ Plans:
 - [x] 06-01-PLAN.md — Foundation: vcs.adapter schema parity (.ts + .cjs atomic per #2653) + expr.children factory + jj/git translators + has_jj on initNewProject/initIngestDocs + atomicWriteConfig export + empirical probes (A1 id-alphabet, A5 x+ direct-children)
 - [x] 06-02-PLAN.md — Rewriter library: sdk/src/vcs/format-migration/ (walk + rewrite + resolve + orphan + report + run + barrel) + 4 paired tests (pure-fn rewrite, idempotency D-04, mocked-adapter orphan walk, real-jj round-trip on synth-planning-fixture)
 - [x] 06-03-PLAN.md — /gsd-migrate-vcs SDK verb (current-state-aware --target defaults; --native; --force) + initMigrateVcs handler + catalog/manifest registration + workflow markdown + new-project.md greenfield gate (replaces lines 108-112 silent git init) + black-box integration test against built bin/gsd-sdk.js
-- [ ] 06-04-PLAN.md — BROWN-01 sibling-clone dogfood validation (8 brownfield commands) + blocking checkpoint:human-verify gate + STATE.md memory-rule lift (Post-BROWN-01) + (conditional) in-place migration of THIS repo + BROWN-02 rebase-log.md seed
+- [x] 06-04-PLAN.md — BROWN-01 sibling-clone dogfood validation (8 brownfield commands) + blocking checkpoint:human-verify gate + STATE.md memory-rule lift (Post-BROWN-01) + (conditional) in-place migration of THIS repo + BROWN-02 rebase-log.md seed
 
 **Open questions for /gsd-discuss-phase 6:**
 - Greenfield jj-default fires on `.jj/` detection. Should it ALSO require `.git/` to be present (colocated mode) for the A3 hook fix to apply, or accept non-colocated jj-only repos and accept the documented hook-firing trade-offs?
