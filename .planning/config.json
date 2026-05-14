@@ -1,7 +1,7 @@
 {
   "model_profile": "inherit",
   "commit_docs": true,
-  "parallelization": false,
+  "parallelization": true,
   "search_gitignored": false,
   "brave_search": false,
   "firecrawl": false,
@@ -28,7 +28,7 @@
     "skip_discuss": false,
     "code_review": true,
     "code_review_depth": "standard",
-    "_auto_chain_active": false
+    "_auto_chain_active": true
   },
   "hooks": {
     "context_warnings": true
