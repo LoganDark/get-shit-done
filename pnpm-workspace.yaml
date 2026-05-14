@@ -2,5 +2,7 @@ packages:
   - sdk
 allowBuilds:
   esbuild: true
+  fallow: true
 onlyBuiltDependencies:
   - esbuild
+  - fallow

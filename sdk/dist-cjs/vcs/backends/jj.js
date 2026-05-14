@@ -351,7 +351,12 @@ function createJjAdapter(cwd) {
      * entry parsing.
      */
     const status = (opts = {}) => {
-        const r = (0, exec_js_1.vcsExec)(cwd, 'jj', jjArgv('status'));
+        // Phase 7 D-07 (VCS-11): scoped variant — defaults to adapter's construction
+        // cwd if omitted. The jjArgv mandatory `--repository <cwd>` prefix stays
+        // pinned to the adapter root; only the spawned-process cwd switches —
+        // jj 0.41 uses the spawned cwd to select the workspace within the repo.
+        const targetCwd = opts.cwd ?? cwd;
+        const r = (0, exec_js_1.vcsExec)(targetCwd, 'jj', jjArgv('status'));
         if (r.exitCode !== 0)
             return { entries: [], raw: r.stderr || r.stdout };
         if (opts.porcelain === false) {
@@ -391,9 +396,16 @@ function createJjAdapter(cwd) {
      */
     const diff = (opts = {}) => {
         const args = ['diff'];
-        if (opts.nameOnly)
+        // Phase 7 D-06 (VCS-10): when diffFilter is set, the jj backend must
+        // probe --summary output to parse status letters and then post-filter.
+        // jj 0.41 rejects `--name-only --summary` together (mutually exclusive),
+        // so when diffFilter is requested we use --summary alone and derive
+        // nameOnly from the filtered nameStatus result below.
+        const useSummary = opts.nameStatus === true || opts.diffFilter !== undefined;
+        const useNameOnly = opts.nameOnly === true && !useSummary;
+        if (useNameOnly)
             args.push('--name-only');
-        if (opts.nameStatus)
+        if (useSummary)
             args.push('--summary');
         if (opts.rev)
             args.push('-r', (0, jj_rev_js_1.toJjRev)(opts.rev));
@@ -406,12 +418,25 @@ function createJjAdapter(cwd) {
         }
         const result = {
             raw: r.stdout,
-            nameOnly: opts.nameOnly
+            nameOnly: useNameOnly
                 ? r.stdout.split('\n').map((s) => s.trim()).filter(Boolean)
                 : [],
         };
-        if (opts.nameStatus) {
+        if (useSummary) {
             result.nameStatus = parseDiffSummary(r.stdout);
+            // When the caller requested nameOnly:true alongside summary-shaped
+            // probes (because diffFilter forced --summary), derive nameOnly from
+            // the parsed entries so the contract surface matches the request.
+            if (opts.nameOnly === true) {
+                result.nameOnly = result.nameStatus.map((e) => e.path);
+            }
+        }
+        // Phase 7 D-06 (VCS-10): post-filter parsed entries by status letter.
+        if (opts.diffFilter && result.nameStatus) {
+            const letter = { added: 'A', modified: 'M', deleted: 'D', renamed: 'R', typechange: 'T' }[opts.diffFilter];
+            const filtered = result.nameStatus.filter((e) => e.status === letter);
+            result.nameOnly = filtered.map((e) => e.path);
+            result.nameStatus = filtered;
         }
         return result;
     };
@@ -651,10 +676,19 @@ function createJjAdapter(cwd) {
                 throw new Error(`refs.bookmarks.move failed: ${r.stderr || r.stdout}`);
             }
         },
+        /**
+         * Phase 7 D-09 (VCS-14): widen opts with force?: boolean. On jj, force is
+         * a documented no-op — jj's `bookmark delete` already removes the LOCAL
+         * view regardless of state. Divergent remote-tracking bookmarks are
+         * unaffected (Pitfall 5 in 07-RESEARCH.md): the cross-backend `force` flag
+         * does NOT have identical semantics across backends. Flag preserved for
+         * API parity with git's branch -D.
+         */
         delete: (name, opts) => {
             const actualName = addPrefix(name, opts?.raw);
             // D-24 cr-01 fold-in: see bookmarks.create above for rationale.
             (0, refs_validator_js_1.validateRefname)(actualName);
+            // opts.force: documented no-op on jj (jj's bookmark delete is unconditional).
             const args = jjArgv('bookmark', 'delete', '--', actualName);
             const r = (0, exec_js_1.vcsExec)(cwd, 'jj', args);
             if (r.exitCode !== 0) {
@@ -732,6 +766,82 @@ function createJjAdapter(cwd) {
                 return stripped;
             })
                 .map(stripPrefix);
+        },
+        /**
+         * Phase 7 D-04 (VCS-08): scoped current-bookmark probe. Same body as
+         * `currentBookmarks` but the vcsExec call uses `targetCwd` as the
+         * spawned-process cwd; the `jjArgv` mandatory `--repository <cwd>` prefix
+         * stays pinned to the adapter root. jj 0.41 uses the spawned process's
+         * cwd to select the workspace within the repo (matches existing
+         * acquireJjWriteLock convention at jj.ts:1011-1018).
+         */
+        currentBookmarksIn: (targetCwd) => {
+            const args = jjArgv('log', '-r', '@-', '-T', 'bookmarks.join("\\n")', '--no-graph', '-n', '1');
+            const r = (0, exec_js_1.vcsExec)(targetCwd, 'jj', args);
+            if (r.exitCode !== 0)
+                return [];
+            return r.stdout
+                .split('\n')
+                .map((s) => s.trim())
+                .filter(Boolean)
+                .map((s) => {
+                if (s.endsWith('??')) {
+                    throw new types_js_1.VcsBookmarkDivergentError({
+                        bookmarkName: stripPrefix(s.slice(0, -2)),
+                        divergentTargets: [],
+                    });
+                }
+                const stripped = s.replace(/\*$/, '');
+                if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(stripped)) {
+                    throw new Error(`currentBookmarksIn: template contract drift — '${s}' has an unrecognized suffix or shape (expected refname after '*'/'??' marker strip)`);
+                }
+                return stripped;
+            })
+                .map(stripPrefix);
+        },
+        /**
+         * Phase 7 D-05 (VCS-09): returns change_id (per D-05 user override despite
+         * rebase-stability tradeoff). fork_point(x) is the jj revset for the common
+         * ancestor(s) of x — equivalent to `heads(::x_1 & ::x_2 & ...)`. Verified
+         * locally against jj 0.41.0 per 07-RESEARCH.md §Sources.
+         */
+        mergeBase: (a, b) => {
+            const aJj = (0, jj_rev_js_1.toJjRev)(a);
+            const bJj = (0, jj_rev_js_1.toJjRev)(b);
+            const args = jjArgv('log', '-r', `fork_point(${aJj} | ${bJj})`, '-T', 'change_id ++ "\\n"', '--no-graph', '-n', '1');
+            const r = (0, exec_js_1.vcsExec)(cwd, 'jj', args);
+            if (r.exitCode !== 0) {
+                throw new exec_js_1.VcsExecError(`refs.mergeBase failed: ${r.stderr || r.stdout}`, {
+                    exitCode: r.exitCode,
+                    stdout: r.stdout,
+                    stderr: r.stderr,
+                    timedOut: r.timedOut,
+                    args,
+                });
+            }
+            const first = r.stdout.split('\n').map((s) => s.trim()).find(Boolean);
+            if (!first)
+                throw new Error('refs.mergeBase: empty fork_point result');
+            return first;
+        },
+        /**
+         * Phase 7 planner fold-in (VCS-15): read file content at a revision via
+         * `jj file show -r <rev> -- <path>`. jj 0.41 has first-class
+         * `jj file show` — verified per 07-RESEARCH.md §Sources.
+         */
+        readBlob: (rev, blobPath) => {
+            const args = jjArgv('file', 'show', '-r', (0, jj_rev_js_1.toJjRev)(rev), '--', blobPath);
+            const r = (0, exec_js_1.vcsExec)(cwd, 'jj', args);
+            if (r.exitCode !== 0) {
+                throw new exec_js_1.VcsExecError(`refs.readBlob failed: ${r.stderr || r.stdout}`, {
+                    exitCode: r.exitCode,
+                    stdout: r.stdout,
+                    stderr: r.stderr,
+                    timedOut: r.timedOut,
+                    args,
+                });
+            }
+            return r.stdout;
         },
         resolveShort: (rev) => {
             const args = jjArgv('log', '-r', (0, jj_rev_js_1.toJjRev)(rev), '-T', 'commit_id.short()', '--no-graph', '-n', '1');
@@ -905,6 +1015,106 @@ function createJjAdapter(cwd) {
                 phaseDir: opts.phaseDir,
                 entries: tracked,
             });
+        },
+        /**
+         * Phase 7 D-01..D-03 (VCS-12): 2-parent merge change via `jj new -r @ -r
+         * <branch> -m <message>`. Atomic main-bookmark advance + agent-bookmark
+         * delete under acquireJjWriteLock RAII (D-03). SQUASH-06 conflict-return
+         * semantics per D-02 — in-tree conflict at @ surfaces { ok: false,
+         * conflicted: true } with NO auto-abandon.
+         *
+         * Order under the lock (matters):
+         *   1. `jj new -r @ -r <branch> -m <msg>` — create 2-parent merge change
+         *   2. resolve change_id of new @
+         *   3. findConflicts({scope:'working-copy'}) — conflict probe ok-path
+         *   4. `jj bookmark set <mainBookmark> -r @` — atomic main-advance (D-03)
+         *   5. `jj bookmark delete -- <agentBookmark>` — atomic agent cleanup (D-03)
+         *
+         * A conflicted merge does NOT advance main and the agent bookmark is left
+         * alone — caller decides resolution path.
+         */
+        merge: (opts) => {
+            const lockHandle = (0, lock_js_1.acquireJjWriteLock)(cwd, { mainRepoRoot: cwd });
+            try {
+                const branchRev = (0, jj_rev_js_1.toJjRev)(opts.branch);
+                // 1. Create the 2-parent merge change at @.
+                const newRes = (0, exec_js_1.vcsExec)(cwd, 'jj', jjArgv('new', '-r', '@', '-r', branchRev, '-m', opts.message), envOpts());
+                if (newRes.exitCode !== 0) {
+                    return { ok: false, conflicted: false, changeId: null, stderr: newRes.stderr };
+                }
+                // 2. Resolve the new merge's change_id.
+                const idRes = (0, exec_js_1.vcsExec)(cwd, 'jj', jjArgv('log', '-r', '@', '-T', 'change_id ++ "\\n"', '--no-graph', '-n', '1'));
+                const changeId = idRes.stdout.split('\n').map((s) => s.trim()).find(Boolean) ?? null;
+                // 3. D-02: SQUASH-06 conflict-return — probe in-tree conflict at @,
+                //    surface, do NOT auto-abandon.
+                const conflicts = findConflicts({ scope: 'working-copy' });
+                if (conflicts.length > 0) {
+                    return { ok: false, conflicted: true, changeId, stderr: '' };
+                }
+                // 4. D-03 atomic main-advance: point the named main bookmark at the
+                //    new merge change (@). Order matters: this MUST land AFTER the
+                //    findConflicts ok-path probe and BEFORE the agent-bookmark delete,
+                //    so a conflicted merge does NOT advance main and a successful
+                //    merge advances main atomically with the agent-bookmark cleanup
+                //    under the same RAII lock.
+                (0, refs_validator_js_1.validateRefname)(opts.mainBookmark);
+                const setRes = (0, exec_js_1.vcsExec)(cwd, 'jj', jjArgv('bookmark', 'set', opts.mainBookmark, '-r', '@'));
+                if (setRes.exitCode !== 0) {
+                    return {
+                        ok: false,
+                        conflicted: false,
+                        changeId,
+                        stderr: `mainBookmark advance failed: ${setRes.stderr}`,
+                    };
+                }
+                // 5. D-03: atomic agent-bookmark delete (force-style: jj's bookmark
+                //    delete is unconditional regardless of D-09 force-flag value).
+                if (opts.agentBookmark) {
+                    (0, refs_validator_js_1.validateRefname)(opts.agentBookmark);
+                    const delRes = (0, exec_js_1.vcsExec)(cwd, 'jj', jjArgv('bookmark', 'delete', '--', opts.agentBookmark));
+                    if (delRes.exitCode !== 0) {
+                        return {
+                            ok: true,
+                            conflicted: false,
+                            changeId,
+                            stderr: `agentBookmark delete failed: ${delRes.stderr}`,
+                        };
+                    }
+                }
+                return { ok: true, conflicted: false, changeId, stderr: '' };
+            }
+            finally {
+                lockHandle.release();
+            }
+        },
+        /**
+         * Phase 7 D-08 (VCS-13): composite forget + rm-rf on jj. Pitfall 4: forget
+         * MUST run BEFORE rmSync — deleting the on-disk dir first leaves stale
+         * metadata in `.jj/op_log` and the workspace_root pointer. Subsequent
+         * `workspace.list()` would report a ghost workspace whose path doesn't
+         * exist. Order matters.
+         *
+         * Distinct from `workspace.forget` (Phase 4 metadata-only primitive). The
+         * resolve-path-to-name pattern mirrors the existing forget() body at
+         * jj.ts:926-942.
+         */
+        remove: (workspacePathOrName, opts) => {
+            const entries = workspace.list();
+            const matchByName = entries.find((e) => e.path === workspacePathOrName);
+            const name = matchByName?.path ?? (0, node_path_1.basename)(workspacePathOrName);
+            const onDiskPath = (0, node_path_1.join)(cwd, '.claude/jj-workspaces', name);
+            // 1. forget metadata first (Pitfall 4 order). Security (T-07.01-03):
+            //    `--` separator before user-influenced positional.
+            const args = jjArgv('workspace', 'forget', '--', name);
+            const r = (0, exec_js_1.vcsExec)(cwd, 'jj', args);
+            if (r.exitCode !== 0 && !opts?.force) {
+                throw new Error(`workspace.remove forget failed: ${r.stderr || r.stdout}`);
+            }
+            // 2. rm -rf the on-disk dir. Path is constrained to the
+            //    .claude/jj-workspaces/<name> layout (D-16) — no path traversal
+            //    because `name` is either a workspace.list() entry path or a
+            //    basename of the input string.
+            (0, node_fs_1.rmSync)(onDiskPath, { recursive: true, force: true });
         },
     });
     /**
