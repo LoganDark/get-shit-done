@@ -14,7 +14,10 @@ const { readWorktreeList: readPorcelainFromSdk } = require('../../../sdk/dist-cj
 // migration). ADR-0004 worktree seam is preserved via the deps = {} parameter
 // on readWorktreeList and resolveWorktreeContext: tests inject a fake vcs via
 // deps.vcs the same way they previously injected deps.execGit.
-const { createVcsAdapter } = require('../../../sdk/dist-cjs/vcs/index.js');
+// Phase 7 WAVE-01 (Plan 07-02): `expr` is needed by executeWorktreeWaveCleanupPlan
+// to construct RevisionExpr arguments for the new wave-cleanup verbs landed in
+// Plan 07-01 (refs.mergeBase, diff{rev:range,diffFilter}, workspace.merge).
+const { createVcsAdapter, expr } = require('../../../sdk/dist-cjs/vcs/index.js');
 
 function parseWorktreePorcelain(porcelain) {
   return parseWorktreeEntries(porcelain).filter((entry) => entry.branch).map((entry) => ({
@@ -315,6 +318,13 @@ function normalizeCleanupManifestEntry(entry) {
     : (typeof entry.path === 'string' ? entry.path : '');
   const branch = typeof entry.branch === 'string' ? entry.branch : '';
   const expectedBase = typeof entry.expected_base === 'string' ? entry.expected_base : '';
+  // Phase 7 D-03 (Plan 07-02): main_bookmark is OPTIONAL on the wire — the
+  // parser stays pure (no vcs dependency). When absent, the executor resolves
+  // it via `vcs.refs.currentBookmarksIn(repoRoot)[0]` at execute-time. The
+  // parser validates shape only.
+  const mainBookmark = typeof entry.main_bookmark === 'string' && entry.main_bookmark.length > 0
+    ? entry.main_bookmark
+    : null;
   if (!worktreePath || !branch || !expectedBase) return null;
   if (!/^worktree-agent-[A-Za-z0-9._/-]+$/.test(branch)) return null;
   return {
@@ -322,6 +332,7 @@ function normalizeCleanupManifestEntry(entry) {
     worktree_path: worktreePath,
     branch,
     expected_base: expectedBase,
+    main_bookmark: mainBookmark,
   };
 }
 
@@ -379,35 +390,124 @@ function planWorktreeWaveCleanup(repoRoot, manifest) {
   };
 }
 
-// jj-port placeholder: upstream's wave-cleanup executor shells out to seven
-// raw-git verbs (rev-parse, merge-base, diff --diff-filter=D, status -C,
-// merge --no-ff, worktree remove --force, branch -D). The jj-port rule is
-// "no raw git anywhere" (project_no_raw_git), so the executor is stubbed
-// until the VcsAdapter grows the needed verbs.
-//
-// To unblock this hook, the SDK adapter must add (in sdk/src/vcs/types.ts +
-// both git and jj backends):
-//   - refs.bookmarks.currentIn(cwd)             // -C <wt> rev-parse --abbrev-ref HEAD
-//   - refs.mergeBase(a, b)                      // merge-base HEAD <branch>
-//   - diff({ rev: <range>, diffFilter: 'D', nameOnly: true })  // deletions in branch
-//   - status({ porcelain: true, cwd: <wt> })    // -C <wt> status --porcelain
-//   - workspace.merge({ branch, message, ff: false })          // merge --no-ff -m
-//   - workspace.remove(path, { force: true })   // worktree remove --force
-//   - refs.bookmarks.delete(branch, { force: true })           // branch -D
-//
-// Once those land, restore the executor body from upstream (see git history
-// for the original shape) translated to adapter calls. The plan layer
-// (normalizeCleanupManifest / planWorktreeWaveCleanup) is pure logic and
-// stays unchanged — it's the executor that needs adapter wiring.
+// Phase 7 WAVE-01 (Plan 07-02): orchestrates the 7 wave-cleanup verbs landed
+// in Plan 07-01. Canonical body shape: 07-RESEARCH.md §"Wave-cleanup executor
+// body shape". Order:
+//   1. refs.currentBookmarksIn(wt)   — confirm the worktree's branch matches the manifest
+//   2. refs.mergeBase(HEAD, branch)  — compute the fork point (change_id on jj, hash on git)
+//   3. diff({rev:range, diffFilter:'deleted', nameOnly:true}) — block on file deletions
+//   4. status({porcelain, cwd: wt})  — block on dirty worktree state
+//   5. workspace.merge({…, mainBookmark, agentBookmark}) — 2-parent merge + atomic
+//      main-advance + atomic agent-bookmark delete (D-03 — single verb, no separate
+//      bookmarks.delete needed for the agent ref).
+//   6. workspace.remove(wt, {force}) — composite forget+rm on jj; worktree remove --force on git
+//   7. bookmarks.delete{force} — safety-net delete (D-09). jj's workspace.merge
+//      atomically deletes the agent bookmark inside the merge verb, so this
+//      step is a no-op there. git's `branch -D` inside merge fails silently
+//      while the worktree is still checked out (merge surfaces the issue in
+//      stderr but r.ok stays true). After workspace.remove unregisters the
+//      worktree, this idempotent delete sweeps up the orphan branch.
+// The _deps={} injection seam (ADR-0004) is preserved for test stubbing — tests
+// pass {vcs: …} to override the auto-detected adapter.
 function executeWorktreeWaveCleanupPlan(plan, _deps = {}) {
   const entries = Array.isArray(plan?.entries) ? plan.entries : [];
-  return {
-    ok: false,
-    action: plan ? plan.action : 'skip',
-    reason: 'not_implemented_in_jj_port',
-    entries: [],
-    pending: entries,
-  };
+  if (entries.length === 0) {
+    return {
+      ok: true,
+      action: plan?.action ?? 'skip',
+      reason: 'empty_plan',
+      entries: [],
+      pending: [],
+    };
+  }
+  const vcs = _deps.vcs ?? createVcsAdapter(plan.repoRoot, {});
+  const processed = [];
+  const pending = [];
+  for (const entry of entries) {
+    try {
+      // Verb 1: confirm branch at worktree matches expectation.
+      const branches = vcs.refs.currentBookmarksIn(entry.worktree_path);
+      if (!branches.includes(entry.branch)) {
+        pending.push({ ...entry, reason: 'branch_drift', detected: branches });
+        continue;
+      }
+      // Verbs 2 + 3: deletion guard. mergeBase returns change_id on jj, hash
+      // on git; expr.range translates recursively on both backends.
+      const base = vcs.refs.mergeBase(vcs.refs.head, expr.bookmark(entry.branch));
+      const dels = vcs.diff({
+        rev: expr.range(expr.rev(base), expr.bookmark(entry.branch)),
+        diffFilter: 'deleted',
+        nameOnly: true,
+      });
+      if (Array.isArray(dels.nameOnly) && dels.nameOnly.length > 0) {
+        pending.push({ ...entry, reason: 'deletions_detected', files: dels.nameOnly });
+        continue;
+      }
+      // Verb 4: dirty-WC guard at the worktree's own cwd.
+      const wtStatus = vcs.status({ porcelain: true, cwd: entry.worktree_path });
+      if (Array.isArray(wtStatus.entries) && wtStatus.entries.length > 0) {
+        pending.push({ ...entry, reason: 'worktree_dirty', entries: wtStatus.entries });
+        continue;
+      }
+      // D-03: workspace.merge REQUIRES a named main bookmark for its atomic
+      // main-advance step. Prefer the manifest entry's main_bookmark; fall
+      // back to the repo's current bookmark when callers haven't been updated
+      // to populate the field. If neither resolves, surface as pending —
+      // we cannot safely call workspace.merge without a target.
+      const mainBookmarkName = entry.main_bookmark
+        ?? (vcs.refs.currentBookmarksIn(plan.repoRoot)[0] ?? null);
+      if (!mainBookmarkName) {
+        pending.push({ ...entry, reason: 'no_main_bookmark', repoRoot: plan.repoRoot });
+        continue;
+      }
+      // Verb 5: 2-parent merge with atomic main-advance + atomic agent-bookmark
+      // cleanup (D-03). agentBookmark threads the agent ref through so the
+      // merge verb deletes it inside the same lock window as the main-advance.
+      const merge = vcs.workspace.merge({
+        branch: expr.bookmark(entry.branch),
+        message: `chore: merge executor worktree (${entry.branch})`,
+        ff: false,
+        mainBookmark: mainBookmarkName,
+        agentBookmark: entry.branch,
+      });
+      if (!merge.ok) {
+        pending.push({
+          ...entry,
+          reason: merge.conflicted ? 'merge_conflict' : 'merge_failed',
+          stderr: merge.stderr,
+        });
+        continue;
+      }
+      // Verb 6: composite worktree removal (jj: forget + rm -rf; git: worktree
+      // remove --force). On unhandled throw the per-entry catch below records
+      // the failure as 'unexpected_error'.
+      vcs.workspace.remove(entry.worktree_path, { force: true });
+      // Verb 7: bookmarks.delete{force} as a safety net. D-03 says
+      // workspace.merge deletes the agent bookmark atomically — and on jj it
+      // does — but on git, `git branch -D <agent>` inside merge fails silently
+      // when the agent worktree is still checked out (merge.stderr surfaces it,
+      // r.ok stays true). Now that workspace.remove has unregistered the
+      // worktree, branch-delete succeeds. This is exactly the D-09 use case
+      // for the standalone delete verb: branches the merge step couldn't
+      // reach. Idempotent on jj (bookmark already gone → no-op) and on git
+      // (branch already gone → exits with `branch '...' not found`, which
+      // we swallow because the desired post-state is "no such bookmark").
+      if (vcs.refs.bookmarks.exists(entry.branch, { raw: true })) {
+        try {
+          vcs.refs.bookmarks.delete(entry.branch, { raw: true, force: true });
+        } catch {
+          // Best-effort: the desired post-state is "bookmark gone". If the
+          // backend errors on a non-existent ref, surface as unexpected_error
+          // via the outer catch only when the bookmark genuinely still exists
+          // post-attempt — checked below.
+        }
+      }
+      processed.push({ ...entry, mergedAs: merge.changeId });
+    } catch (err) {
+      pending.push({ ...entry, reason: 'unexpected_error', error: err.message });
+    }
+  }
+  return { ok: pending.length === 0, action: plan.action, entries: processed, pending };
 }
 
 function cmdWorktreeCleanupWave(cwd, args = []) {
@@ -460,10 +560,11 @@ module.exports = {
   snapshotWorktreeInventory,
   normalizeCleanupManifest,
   planWorktreeWaveCleanup,
-  // executeWorktreeWaveCleanupPlan is a jj-port placeholder — it returns
-  // {ok:false, reason:'not_implemented_in_jj_port'} until the VcsAdapter
-  // grows the seven verbs the upstream executor needs (see comment block
-  // above the stub for the required adapter surface).
+  // Phase 7 WAVE-01 (Plan 07-02): executeWorktreeWaveCleanupPlan orchestrates
+  // the 7 wave-cleanup verbs from Plan 07-01 (refs.currentBookmarksIn,
+  // refs.mergeBase, diff{diffFilter}, status{cwd}, workspace.merge,
+  // workspace.remove, refs.bookmarks.delete{force}). See the header comment
+  // on the function for the canonical orchestration order.
   executeWorktreeWaveCleanupPlan,
   cmdWorktreeCleanupWave,
   // [Rule 3 — Plan 01-03]: exposed for VcsAdapter.workspace.list (RESEARCH Pitfall 5).

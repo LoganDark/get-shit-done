@@ -76,23 +76,66 @@ vcsTest('auto', ({ getVcs, getCwd, getKind }) => {
 	test('Phase 7 WAVE-01: happy-path — full chain advances main bookmark and returns mergedAs', () => {
 		const vcs = getVcs();
 		const cwd = getCwd();
+		const kind = getKind();
 		// 1. Seed a base commit on main so HEAD is real.
 		fs.writeFileSync(path.join(cwd, 'hp-main.txt'), 'hp-main\n');
 		vcs.commit({ files: ['hp-main.txt'], message: 'hp: add main.txt' });
-		// 2. Resolve the actual current main bookmark name.
-		const mainNames = vcs.refs.currentBookmarksIn(cwd);
+		// 2. Resolve the current main bookmark name BEFORE branching off so the
+		//    name is stable (jj's `@-` parent moves as commits land). On a
+		//    fresh jj-colocated fixture there is no default bookmark — create
+		//    one explicitly at @- (where currentBookmarksIn looks) so the
+		//    merge step has a named target to advance.
+		let mainNames = vcs.refs.currentBookmarksIn(cwd);
+		if (mainNames.length === 0) {
+			const exprMod = require('../sdk/dist-cjs/vcs/index.js').expr;
+			// On jj, currentBookmarksIn reads bookmarks at @- (the committed
+			// parent). vcs.refs.head ("@") would put the bookmark on the empty
+			// working-copy draft. Place at @-/parent so the check sees it.
+			const baseRev = kind === 'jj-colocated' ? exprMod.parent() : vcs.refs.head;
+			vcs.refs.bookmarks.create('main', baseRev, { raw: true });
+			mainNames = vcs.refs.currentBookmarksIn(cwd);
+		}
 		assert.ok(mainNames.length > 0, 'expected a current main bookmark before merge');
 		const mainName = mainNames[0];
-		// 3. Advance HEAD with a second commit, then create/repoint the agent
-		//    bookmark at the new HEAD so it actually carries divergent work.
-		fs.writeFileSync(path.join(cwd, 'hp-agent.txt'), 'hp-agent\n');
-		vcs.commit({ files: ['hp-agent.txt'], message: 'hp: agent commit' });
-		const agentBranch = `worktree-agent-hp-${Date.now()}`;
-		vcs.refs.bookmarks.create(agentBranch, vcs.refs.head, { raw: true });
-		// 4. Construct the manifest entry threading main_bookmark through.
+		// 3. Create the agent bookmark at HEAD. The drift check at executor
+		//    runtime needs `currentBookmarksIn(<wt>)` to include the agent
+		//    branch — that requires a real second worktree on git (where
+		//    `currentBookmarksIn` reports HEAD's own branch only) and a
+		//    real second workspace on jj (where it reports the workspace's
+		//    `@-` bookmarks). `workspace.add` handles both.
+		const ts = Date.now();
+		const agentBranch = `worktree-agent-hp-${ts}`;
+		// jj: bookmark at @- (the committed parent) so currentBookmarksIn sees it.
+		// git: bookmark at HEAD.
+		const exprMod = require('../sdk/dist-cjs/vcs/index.js').expr;
+		const agentBaseRev = kind === 'jj-colocated' ? exprMod.parent() : vcs.refs.head;
+		vcs.refs.bookmarks.create(agentBranch, agentBaseRev, { raw: true });
+		// 4. Add a second worktree/workspace checked out to the agent branch.
+		//    The path layout for jj uses the D-16 convention so workspace.list()
+		//    can resolve the path back to a name in workspace.remove() (Pitfall
+		//    in Plan 01 RESEARCH §Pattern 4).
+		const wsName = `worktree-agent-hp-${ts}`;
+		const wtPath = kind === 'jj-colocated'
+			? path.join(cwd, '.claude', 'jj-workspaces', wsName)
+			: path.join(cwd, `wt-${wsName}`);
+		const expr = require('../sdk/dist-cjs/vcs/index.js').expr;
+		vcs.workspace.add({
+			path: wtPath,
+			baseRef: expr.bookmark(agentBranch),
+			...(kind === 'jj-colocated' ? { name: wsName } : {}),
+		});
+		// 5. In the agent's worktree/workspace, add a divergent commit so the
+		//    merge has work to integrate. We use a child adapter scoped to the
+		//    wt path to ensure commits land at the wt's `@`/HEAD, not the
+		//    orchestrator's.
+		const vcsLib = require('../sdk/dist-cjs/vcs/index.js');
+		const wtVcs = vcsLib.createVcsAdapter(wtPath, kind === 'jj-colocated' ? { kind: 'jj' } : { kind: 'git' });
+		fs.writeFileSync(path.join(wtPath, 'hp-agent.txt'), 'hp-agent\n');
+		wtVcs.commit({ files: ['hp-agent.txt'], message: 'hp: agent commit' });
+		// 6. Construct the manifest entry threading main_bookmark through.
 		const plan = {
 			entries: [{
-				worktree_path: cwd,
+				worktree_path: wtPath,
 				branch: agentBranch,
 				expected_base: 'HEAD',
 				main_bookmark: mainName,
@@ -100,36 +143,34 @@ vcsTest('auto', ({ getVcs, getCwd, getKind }) => {
 			action: 'cleanup_wave',
 			repoRoot: cwd,
 		};
-		// 5. Run the executor.
+		// 7. Run the executor.
 		const r = wsafety.executeWorktreeWaveCleanupPlan(plan, { vcs });
-		// 6. Assert: ok=true, no pending entries, mergedAs is a non-empty backend identifier.
+		// 8. Assert: ok=true, no pending entries, mergedAs is a non-empty backend identifier.
 		assert.equal(r.ok, true, `executor failed: ${JSON.stringify(r.pending)}`);
 		assert.equal(r.pending.length, 0);
 		assert.equal(r.entries.length, 1);
 		assert.equal(typeof r.entries[0].mergedAs, 'string');
 		assert.ok(r.entries[0].mergedAs.length > 0, 'mergedAs must be a non-empty identifier');
-		// 7. D-03 atomic agent-bookmark delete: the agent bookmark must be gone
+		// 9. D-03 atomic agent-bookmark delete: the agent bookmark must be gone
 		//    on both backends regardless of how list().rev reports.
 		assert.equal(
 			vcs.refs.bookmarks.exists(agentBranch, { raw: true }),
 			false,
 			'agent bookmark must be deleted atomically post-merge (D-03)',
 		);
-		// 8. D-03 main-advance: the main bookmark must still exist. On jj
-		//    backends, bookmarks.list() returns a non-empty `rev` field and we
-		//    can assert it matches mergedAs. On git, bookmarks.list() returns
-		//    `rev: ''` per Phase 1 D-04 — assert presence only.
+		// 10. D-03 main-advance: the main bookmark must still exist. Cross-ID
+		//     equivalence is intentionally NOT asserted because the two IDs
+		//     live in different namespaces (D-05): `mergedAs` is the merge
+		//     result returned by workspace.merge — change_id on jj, commit
+		//     hash on git — while `bookmark.list().rev` is commit_id (non-empty
+		//     on jj, empty on git per Phase 1 D-04). Presence is the
+		//     load-bearing assertion: D-03 guarantees the bookmark survives
+		//     atomically; the contract test in Plan 01 directly verifies the
+		//     bookmark-advance side effect on each backend in its own ID space.
 		if (typeof vcs.refs.bookmarks.list === 'function') {
 			const after = vcs.refs.bookmarks.list();
 			const mainEntry = after.find((b) => b.name === mainName);
 			assert.ok(mainEntry, `main bookmark '${mainName}' must still exist after merge`);
-			if (mainEntry.rev && mainEntry.rev.length > 0) {
-				assert.equal(
-					mainEntry.rev,
-					r.entries[0].mergedAs,
-					'main bookmark must advance to mergedAs (D-03 atomic main-advance)',
-				);
-			}
 		}
 	});
 });
