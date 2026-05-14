@@ -117,6 +117,10 @@ export interface LogEntry {
 
 export interface StatusOpts {
   porcelain?: boolean;
+  // Phase 7 D-07 (VCS-11): scoped variant — defaults to adapter's construction cwd if omitted.
+  // Internal exec routes spawned-process cwd to this path; git passes -C / jj uses --repository
+  // anchored to adapter root while the spawned cwd selects the workspace.
+  cwd?: string;
 }
 
 export interface StatusEntry {
@@ -132,6 +136,12 @@ export interface StatusResult {
   raw: string;
 }
 
+// Phase 7 D-06: typed enum for diff status filtering. No leaking of git's
+// single-letter convention onto the cross-backend surface (Phase 2.1 D-01).
+// Backends translate internally: git emits --diff-filter=<letter>; jj
+// post-filters `jj diff --summary` output via parseDiffSummary.
+export type DiffFilter = 'added' | 'modified' | 'deleted' | 'renamed' | 'typechange';
+
 export interface DiffOpts {
   staged?: boolean;
   nameOnly?: boolean;
@@ -139,6 +149,8 @@ export interface DiffOpts {
   paths?: string[];
   // Plan 02-03 Task 2 gap-fill: emit `git diff --name-status` semantics when true.
   nameStatus?: boolean;
+  // Phase 7 D-06 (VCS-10): cross-backend typed enum, no leaking git's single-letter convention.
+  diffFilter?: DiffFilter;
 }
 export interface DiffNameStatusEntry {
   path: string;
@@ -170,6 +182,43 @@ export interface WorkspaceAdd {
    * value; defaults to path basename if omitted.
    */
   name?: string;
+}
+
+/**
+ * Phase 7 D-01..D-03 (VCS-12): 2-parent merge change with atomic main-bookmark
+ * advance + optional agent-bookmark delete.
+ *
+ * On jj backend: rendered as `jj new -r @ -r <branch> -m <message>` (preserves
+ * both-parent provenance — the exact reason upstream chose `git merge --no-ff`
+ * over fast-forward). After the merge change lands and findConflicts({scope:
+ * 'working-copy'}) reports clean, `jj bookmark set <mainBookmark> -r @` advances
+ * main atomically, then `jj bookmark delete -- <agentBookmark>` (if set) cleans
+ * up. All three jj invocations live under one acquireJjWriteLock RAII.
+ *
+ * On git backend: mirrors upstream verbatim — `git merge --no-ff -m <message>
+ * <branch>` (advances HEAD-tracking branch implicitly), then `git branch -D
+ * <agentBookmark>` if set. The mainBookmark field is validated against the
+ * current branch (throws VcsExecError if mismatch) because git's `merge --no-ff`
+ * only advances the currently-checked-out branch — explicit safety > implicit
+ * semantic.
+ *
+ * D-02 (SQUASH-06 conflict-return): in-tree conflict at @ after `jj new`
+ * returns { ok: false, conflicted: true, changeId, stderr: '' } with NO
+ * auto-abandon. Caller decides resolution path.
+ */
+export interface WorkspaceMergeOpts {
+  branch: RevisionExpr;
+  message: string;
+  ff: false;  // D-01: type-locked false — ff:true is not a Phase 7 use case
+  mainBookmark: string;  // D-03 atomic main-advance: REQUIRED. Caller names the main bookmark to advance after merge lands. Validated via validateRefname before reaching argv.
+  agentBookmark?: string;  // D-03: atomically deleted after main bookmark advance
+}
+
+export interface WorkspaceMergeResult {
+  ok: boolean;
+  conflicted: boolean;  // D-02: SQUASH-06 conflict-return semantics (no auto-abandon)
+  changeId: string | null;
+  stderr: string;
 }
 
 /**
@@ -272,6 +321,17 @@ export interface VcsRefs {
    * `.length === 0` for detached/anonymous detection.
    */
   currentBookmarks(): string[];
+  // Phase 7 D-04 (VCS-08): scoped current-bookmark probe; string[] mirrors currentBookmarks
+  // (Phase 2.1 D-15). Spawned-process cwd selects the workspace; --repository stays pinned
+  // to adapter root on jj.
+  currentBookmarksIn(cwd: string): string[];
+  // Phase 7 D-05 (VCS-09): returns change_id on jj (via fork_point(x) revset),
+  // commit hash on git (via `git merge-base`). User override of recommendation —
+  // change_id chosen for jj despite known rebase-stability tradeoff.
+  mergeBase(a: RevisionExpr, b: RevisionExpr): string;
+  // Phase 7 planner fold-in (VCS-15): read file content at a revision. Consumed by Plan 4
+  // (github-release-notes.cjs:71 migration). git: `git show <rev>:<path>`; jj: `jj file show -r <rev> -- <path>`.
+  readBlob(rev: RevisionExpr, path: string): string;
   resolveShort(rev: RevisionExpr): string;
   countCommits(opts: { rev?: RevisionExpr }): number;
   rootCommits(opts: { rev?: RevisionExpr }): string[];
@@ -291,7 +351,14 @@ export interface VcsBookmarks {
    */
   create(name: string, rev: RevisionExpr, opts?: { raw?: boolean }): void;
   move(name: string, rev: RevisionExpr, opts?: { raw?: boolean }): void;
-  delete(name: string, opts?: { raw?: boolean }): void;
+  /**
+   * Phase 7 D-09 (VCS-14): extend opts with force?: boolean. On git, force=true → `branch -D`
+   * (override), force=false/undefined → `branch -d` (safe). On jj, force is a documented no-op
+   * — jj's `bookmark delete` already removes the LOCAL view regardless of state. Divergent
+   * remote-tracking bookmarks are unaffected on jj (Pitfall 5 in 07-RESEARCH.md). The flag
+   * is preserved for API parity with git's branch -D.
+   */
+  delete(name: string, opts?: { raw?: boolean; force?: boolean }): void;
   exists(name: string, opts?: { raw?: boolean }): boolean;
   // Plan 02-03 Task 1 gap-fill (RESEARCH §Forward-Complete Gaps Summary);
   // Phase 3 D-04 extended `opts` with the raw-name escape.
@@ -327,6 +394,21 @@ export interface VcsWorkspace {
    * main workspace, NEVER from inside a subagent workspace (D-15 / Pitfall 1).
    */
   reap(opts: { phaseNamePrefix: string; phaseDir: string }): ReapResult;
+  /**
+   * Phase 7 D-01..D-03 (VCS-12): 2-parent merge change. On jj synthesized via
+   * `jj new -r @ -r <branch>` + `jj describe -m`. On git mirrors `git merge
+   * --no-ff -m <msg> <branch>`. Returns conflicted-result on in-tree conflict
+   * (no auto-abandon, SQUASH-06). Atomic main-bookmark advance + optional
+   * agent-bookmark delete under jj write lock (D-03).
+   */
+  merge(opts: WorkspaceMergeOpts): WorkspaceMergeResult;
+  /**
+   * Phase 7 D-08 (VCS-13): composite forget + rm -rf on jj; `worktree remove
+   * --force` on git. Distinct from workspace.forget (Phase 4 metadata-only
+   * primitive). Forget MUST run before rmSync on jj (Pitfall 4) — deleting
+   * the on-disk dir first leaves stale metadata in .jj/op_log.
+   */
+  remove(path: string, opts?: { force?: boolean }): void;
 }
 
 // Phase 2.1 D-07: the public hooks namespace interface has been DELETED.
