@@ -220,7 +220,7 @@ The cleanup tail (commit fixes -> remove worktree -> drop recovery sentinel) MUS
 # Derive worktree path from padded_phase (parsed from config in next step,
 # but the shell snippet below is illustrative — adapt once config is parsed).
 # In practice: parse padded_phase from config first, then run:
-branch=$(gsd-sdk query current-branch | jq -r '.data.bookmarks[0] // .data.current // empty')
+branch=$(gsd-sdk query current-branch | jq -r '.bookmarks[0] // .current // empty')
 test -n "$branch" || { echo "Detached HEAD / anonymous head is not supported for review-fix (#2686)"; exit 1; }
 
 # Recovery-sentinel handling (#2839):
@@ -498,7 +498,7 @@ gsd-sdk query commit "fix(02): CR-01 ..." --files \
 
 **Extract commit hash:**
 ```bash
-COMMIT_HASH=$(gsd-sdk query head-ref | jq -r '.data.head // empty' | cut -c1-7)
+COMMIT_HASH=$(gsd-sdk query head-ref | jq -r '.head // empty' | cut -c1-7)
 ```
 
 **If commit FAILS after successful edit:**
