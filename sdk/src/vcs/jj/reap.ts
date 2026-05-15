@@ -29,6 +29,7 @@ import { rmSync, existsSync } from 'node:fs';
 import { vcsExec } from '../exec.js';
 import type { ReapResult, IncompleteWorkEntry } from '../types.js';
 import { appendIncomplete } from './incomplete-work.js';
+import { enumerateConflictedPaths } from './conflict-paths.js';
 
 /**
  * Inline mandatory-flags prefix. UPSTREAM-02 sidecar discipline: this file does
@@ -67,6 +68,36 @@ function isEmptyHead(
 		);
 	}
 	return r.stdout.trim().length === 0;
+}
+
+/**
+ * Phase 9 D-11: in-tree conflict probe. Reuses jj 0.41's `conflicts()` revset
+ * (PLURAL — see backends/jj.ts:562-567 for the naming-correction record;
+ * upstream docs still say singular `conflict()` but the binary requires the
+ * plural form). Returns `true` iff `headChange` carries an in-tree conflict.
+ *
+ * D-10: this probe is the jj-side producer for the new
+ * `IncompleteWorkEntry.reason === 'merge-in-tree-conflict'` classifier
+ * branch in `performJjReap`. The git-side producer lands in Phase 10. Both
+ * backends feed the same closed-union queue file; the D-14 phase-merge gate
+ * at backends/jj.ts:182-194 treats unknown reasons as fail-safe block.
+ *
+ * Runs from `mainRepoRoot` (D-15 / Pitfall 1) so auto-snapshot can't corrupt
+ * the probe target — same discipline as `isEmptyHead` above.
+ */
+function hasInTreeConflict(mainRepoRoot: string, headChange: string): boolean {
+	const args = [
+		...jjArgvFlags(mainRepoRoot),
+		'log', '-r', `conflicts() & ${headChange}`,
+		'-T', 'change_id ++ "\\n"', '--no-graph',
+	];
+	const r = vcsExec(mainRepoRoot, 'jj', args);
+	if (r.exitCode !== 0) {
+		throw new Error(
+			`reap: conflict probe failed (head=${headChange}): ${r.stderr || r.stdout}`,
+		);
+	}
+	return r.stdout.trim().length > 0;
 }
 
 /**
@@ -157,6 +188,49 @@ export function performJjReap(opts: PerformJjReapOpts): ReapResult {
 				rmSync(entry.path, { recursive: true, force: true });
 			}
 			abandoned.push({ name: entry.name, changeId: entry.headChange, path: entry.path });
+		} else if (hasInTreeConflict(opts.mainRepoRoot, entry.headChange)) {
+			// Phase 9 D-09/D-10/D-11: in-tree conflict on the subagent's head
+			// (typically produced by the N-parent octopus merge in fanIn).
+			// Mirrors the crash-recovery branch below but swaps the reason
+			// literal to 'merge-in-tree-conflict'. The on-disk dir + workspace
+			// tracking are LEFT intact (same as crashed-work branch) so the
+			// human reviewer can inspect the conflicted state before deciding
+			// to resolve or discard.
+			//
+			// Probe the conflicted paths via the UPSTREAM-02 sidecar. WR-04:
+			// the sentinel `['<UNRESOLVABLE>']` is recorded verbatim — the
+			// downstream D-14 phase-merge gate treats unknown/empty conflict
+			// info as fail-safe block (09-CONTEXT A1), so surfacing the
+			// sentinel beats silently dropping it.
+			const conflictedPaths = enumerateConflictedPaths(
+				opts.mainRepoRoot,
+				entry.headChange,
+			);
+			const idxMatch = /-subagent-(\d+)/.exec(entry.name);
+			const idx = idxMatch ? idxMatch[1] : '?';
+			const message = `subagent ${idx}: incomplete work`;
+			const squashArgs = [
+				...jjArgvFlags(opts.mainRepoRoot),
+				'squash', '-r', entry.headChange, '-k', '-m', message,
+			];
+			const squashRes = vcsExec(opts.mainRepoRoot, 'jj', squashArgs);
+			if (squashRes.exitCode !== 0) {
+				throw new Error(
+					`reap: in-tree-conflict squash for ${entry.name} failed `
+						+ `(conflictedPaths=${conflictedPaths.join(',')}): `
+						+ `${squashRes.stderr || squashRes.stdout}`,
+				);
+			}
+			const queueEntry: IncompleteWorkEntry = {
+				subagentName: entry.name,
+				changeIdShort: entry.headChange.slice(0, 8),
+				workspacePath: entry.path,
+				reason: 'merge-in-tree-conflict',
+			};
+			appendIncomplete(opts.phaseDir, queueEntry);
+			incomplete.push(queueEntry);
+			// Mirror the crashed-work branch's pitfall-3-inverse: LEAVE the
+			// on-disk dir + workspace tracking intact for human review.
 		} else {
 			// Crash-recovery path (D-12): head has real work. Squash as
 			// 'subagent N: incomplete work' preserving change_id (-k) so the
