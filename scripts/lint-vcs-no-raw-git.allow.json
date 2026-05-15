@@ -5,6 +5,7 @@
 	"entries": [
 		{ "path": "sdk/src/vcs/exec.ts", "reason": "VCS adapter internals — this IS the adapter implementation; raw `git` invocation is the substrate the cross-backend surface wraps.", "owner": "@LoganDark" },
 		{ "path": "sdk/src/vcs/backends/git.ts", "reason": "VCS adapter internals — the git backend implementation; raw `git` is the substrate.", "owner": "@LoganDark" },
+		{ "path": "sdk/src/vcs/git/parallel.ts", "reason": "VCS adapter internals — git-side parallel-dispatch substrate; raw `git worktree`/`merge`/`branch -D` are the substrate the cross-backend `workspace.parallel.*` surface wraps.", "owner": "@LoganDark" },
 		{ "path": "sdk/src/vcs/__tests__/vcs-fixture.ts", "reason": "Test fixtures — parameterized contract suite requires raw `git`/`jj` setup commands to construct deterministic test repos.", "owner": "@LoganDark" },
 		{ "path": "sdk/src/vcs/__tests__/git-backend.test.ts", "reason": "Test fixtures — git-backend test asserts raw git semantics directly.", "owner": "@LoganDark" },
 		{ "path": "sdk/src/vcs/__tests__/exec.test.ts", "reason": "Test fixtures — exec wrapper tests must invoke raw git to verify the wrapping.", "owner": "@LoganDark" },
