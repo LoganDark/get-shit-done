@@ -62,7 +62,7 @@
     "build:sdk": "pnpm --filter @gsd-build/sdk build",
     "check:alias-drift": "pnpm --filter @gsd-build/sdk check:alias-drift",
     "prepublishOnly": "pnpm run build:hooks && pnpm run build:sdk",
-    "pretest": "pnpm run build:sdk && pnpm run lint:skill-deps",
+    "pretest": "pnpm run build:sdk && pnpm run lint:skill-deps && node scripts/lint-vcs-no-commit-id.cjs",
     "pretest:coverage": "pnpm run build:sdk",
     "lint:descriptions": "node scripts/lint-descriptions.cjs",
     "lint:skill-deps": "node scripts/lint-skill-deps.cjs",
