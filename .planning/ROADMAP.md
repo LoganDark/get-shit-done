@@ -87,7 +87,12 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
   3. `git merge --no-ff <p1> <p2> <p3>` octopus form for N≥3 verified on test-fixture across CI git versions; `git worktree remove --force` is forbidden in the cross-backend path (non-force only).
   4. `IncompleteWorkEntry.reason` enum (widened to 2 values in Phase 9) gets its git-side producer landed here: `git merge` exit code + `git diff --name-only --diff-filter=U` populates `'merge-in-tree-conflict'` correctly. (`'partial-wave-live-workspace'` is NOT added — PARALLEL-03 dropped at Phase 9 discuss.)
   5. New `parallel-*` test files use Pattern B random-prefix `mkdtemp`; vitest skip-count baseline unchanged (`scripts/check-skip-count.cjs` green); no `retry: N` added to vitest config.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 10-01-PLAN.md — Cascade-amendment doc edits (ROADMAP SC3 + REQUIREMENTS PARALLEL-02 + TEST-15) per CONTEXT D-09/D-10/D-11
+- [ ] 10-02-PLAN.md — Ship sdk/src/vcs/git/parallel.ts sidecar (performGitParallelDispatch + performGitParallelFanIn with halt-on-conflict + re-callable loop + crash classifier)
+- [ ] 10-03-PLAN.md — Wire backends/git.ts to the sidecar (replace Phase 9 throwing stub) + single +1 allowlist entry
+- [ ] 10-04-PLAN.md — Author cmd-parallel-git.test.ts contract tests (TEST-13 N=2/3/4 + conflict + crash + idempotency re-call)
 
 ### Phase 11: Orchestrator + agent rewire + workspace.assert-dispatched-cwd
 **Goal**: Workflows + agents call only the new cross-backend `vcs.workspace.parallel.*` verbs; the ~440 LOC of raw-git block in `execute-phase.md` (~290) and `quick.md` (~150) is deleted; subagent prompts never inspect backend kind.
@@ -154,7 +159,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 9. jj-side parallel verbs | 5/5 | Complete   | 2026-05-15 |
-| 10. git-side parallel verbs + classifier extension | 0/0 | Not started | - |
+| 10. git-side parallel verbs + classifier extension | 0/4 | Not started | - |
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 0/0 | Not started | - |
 | 12. A3 colocated pre-commit fix (parallel track) | 0/0 | Not started | - |
 | 13. CI parallel-path lane + lint close-gate | 0/0 | Not started | - |
