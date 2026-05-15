@@ -32,6 +32,7 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { acquireJjWriteLock } from '../jj/lock.js';
 import { performJjReap } from '../jj/reap.js';
 import { readIncomplete } from '../jj/incomplete-work.js';
+import { enumerateConflictedPaths as _enumerateConflictedPaths } from '../jj/conflict-paths.js';
 import { fireHook } from '../hook-bridge.js';
 import { firePrePushHook } from '../jj/pre-push.js';
 import {
@@ -521,40 +522,14 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
    * said the commit IS conflicted — surface drift instead of silently
    * passing.
    */
-  const enumerateConflictedPaths = (rev: string): string[] => {
-    // Primary: jj resolve --list -r <rev>
-    const primaryArgs = jjArgv('resolve', '--list', '-r', rev);
-    const primary = vcsExec(cwd, 'jj', primaryArgs);
-    if (primary.exitCode === 0 && primary.stdout.trim().length > 0) {
-      return primary.stdout
-        .split('\n')
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((line) => {
-          // Output: `<path>   <conflict description>` — extract path only.
-          const m = /^(\S+)/.exec(line);
-          return m ? m[1] : line;
-        });
-    }
-    // Fallback: jj diff -r <rev> --summary, filter for the C status
-    // letter. IN-04: `U` removed — jj 0.41 never emits it on `diff
-    // --summary`.
-    const fallbackArgs = jjArgv('diff', '-r', rev, '--summary');
-    const fallback = vcsExec(cwd, 'jj', fallbackArgs);
-    if (fallback.exitCode !== 0) return ['<UNRESOLVABLE>'];
-    const paths = fallback.stdout
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => {
-        const m = /^C (.+)$/.exec(line);
-        return m ? m[1] : '';
-      })
-      .filter(Boolean);
-    // WR-04: conflicts() flagged this rev but no enumeration form
-    // yielded anything — surface the drift rather than silently
-    // passing [] through to the verify gate.
-    return paths.length > 0 ? paths : ['<UNRESOLVABLE>'];
-  };
+  // Phase 9 plan 02 (UPSTREAM-02): the enumeration body lives in the sidecar
+  // at `../jj/conflict-paths.ts` so both `reap.ts` (D-09/D-10/D-11 classifier)
+  // and `parallel.ts` (plan 03) can consume it without importing from
+  // `backends/jj.ts`. This binding preserves the original `(rev) => string[]`
+  // closure shape so the `findConflicts` caller below (and any future
+  // in-this-file caller) is unchanged.
+  const enumerateConflictedPaths = (rev: string): string[] =>
+    _enumerateConflictedPaths(cwd, rev);
 
   /**
    * `vcs.findConflicts({scope})` — surfaces in-tree conflicted commits.
