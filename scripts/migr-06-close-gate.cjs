@@ -55,6 +55,12 @@ function assertInsidePhaseDir(absPath) {
 
 const GIT_SHA_RE = /(?<![0-9a-fA-F])([0-9a-f]{7,40})(?![0-9a-fA-F])/g;
 
+// WR-02: this set MUST be a superset of the canonical
+// `COMMIT_KEY_ALLOWLIST` exported from sdk/src/vcs/format-migration/rewrite.ts.
+// Drift is a silent bit-rot risk — a key added to the canonical set but
+// missed here means the close-gate skips frontmatter values the canonical
+// rewriter would have migrated. A unit test in
+// tests/scripts/migr-06-close-gate.test.cjs asserts the superset relation.
 const COMMIT_KEY_ALLOWLIST = new Set([
 	'resolution_commit', 'commit', 'commit_hash', 'commit_id',
 	'source_commit', 'migration_commit', 'first_commit', 'last_commit',
@@ -236,4 +242,10 @@ function main() {
 	}
 }
 
-main();
+// WR-02: export internals for the superset-assertion test. Only run main when
+// invoked directly (not when require()'d from a test).
+if (require.main === module) {
+	main();
+}
+
+module.exports = { COMMIT_KEY_ALLOWLIST };
