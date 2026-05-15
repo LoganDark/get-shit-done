@@ -16,9 +16,15 @@
  * `parse/jj-op-log.ts` / `parse/jj-workspace-list.ts`.
  *
  * Pinned NDJSON shape (jj 0.41.0, per `tests/fixtures/jj-ndjson/jj-bookmark-list-divergent.ndjson`):
- *   {"name":"gsd/phase-3","target":["<commit_id>"]}
+ *   {"name":"gsd/phase-3","target":["<change_id>"]}
  *   {"name":"gsd/divergent","target":["<a>","<b>"]}   // divergent
- *   {"name":"main","target":["<commit_id>"]}         // raw / no-prefix bookmark
+ *   {"name":"main","target":["<change_id>"]}         // raw / no-prefix bookmark
+ *
+ * Phase 8 D-05 unified contract: `Bookmark.rev` carries the active backend's
+ * canonical revision identifier — `change_id` on jj. The parser accepts
+ * string ids transparently, so the FLIP work is in the template-emission
+ * caller (jj.ts `bookmark list` invocation) — verified to emit change_id
+ * via the standard `json(self)` template per .planning/intel/jj-041-ndjson-probe.md.
  *
  * (RESEARCH §"jj bookmark list" — the `target` field is always an array;
  * length-1 is the steady-state, length>1 is the D-02 divergence signal.)

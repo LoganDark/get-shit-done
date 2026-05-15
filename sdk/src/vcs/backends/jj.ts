@@ -697,7 +697,18 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
   // via `parseJjBookmarkRecord` when the `target` array reports >1 entry.
   const bookmarks: VcsBookmarks = Object.freeze({
     list: (): Bookmark[] => {
-      const args = jjArgv('bookmark', 'list', '-T', 'json(self) ++ "\\n"');
+      // Phase 8 FLIP-01: the default `json(self)` template emits
+      // `target: [<commit_id>]`; we need `change_id` per the unified revision
+      // contract (D-05). Custom template emits identical JSON shape (the
+      // parser is transparent over the rev-string alphabet) but reads
+      // `change_id` from each target Commit. Probed live during Plan 2
+      // execution; pinned by tests/fixtures/jj-ndjson/jj-bookmark-list-divergent.ndjson.
+      const args = jjArgv(
+        'bookmark',
+        'list',
+        '-T',
+        '"{\\"name\\":" ++ json(self.name()) ++ ",\\"target\\":[" ++ self.added_targets().map(|c| json(c.change_id())).join(",") ++ "]}\\n"',
+      );
       const r = vcsExec(cwd, 'jj', args);
       if (r.exitCode !== 0) {
         throw new VcsExecError(`refs.bookmarks.list failed: ${r.stderr || r.stdout}`, {
@@ -945,7 +956,7 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
         '-r',
         toJjRev(rev),
         '-T',
-        'commit_id.short()',
+        'change_id.shortest()',
         '--no-graph',
         '-n',
         '1',
@@ -964,7 +975,7 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       // empty stdout after trim and miscount as zero). `.split('\n')` +
       // `.filter(Boolean)` is the same idiom used by every other parser in
       // this file.
-      const args = jjArgv('log', '-r', target, '-T', 'commit_id ++ "\\n"', '--no-graph');
+      const args = jjArgv('log', '-r', target, '-T', 'change_id ++ "\\n"', '--no-graph');
       const r = vcsExec(cwd, 'jj', args);
       if (r.exitCode !== 0) return 0;
       return r.stdout.split('\n').filter(Boolean).length;
@@ -977,7 +988,7 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
         '-r',
         `root() & ::${target}`,
         '-T',
-        'commit_id ++ "\\n"',
+        'change_id ++ "\\n"',
         '--no-graph',
       );
       const r = vcsExec(cwd, 'jj', args);
@@ -1082,7 +1093,9 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
      * "\n"'` NDJSON via `parseJjWorkspaceList` (production from plan 03-02).
      *
      * On a fresh single-workspace colocated repo this returns a one-element
-     * array `[{path: 'default', rev: <40-char-commit_id>, locked: false}]`.
+     * array `[{path: 'default', rev: <12+-char change_id>, locked: false}]`
+     * (Phase 8 FLIP-01: `WorkspaceInfo.rev` carries the active backend's
+     * canonical revision identifier — `change_id` on jj per D-05).
      * `locked` is always false (jj has no lock primitive — PITFALL 4).
      *
      * Phase 4 reshapes when multi-workspace flows land. Phase 3 just needs
