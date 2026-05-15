@@ -102,45 +102,55 @@ Explicit exclusions per FEATURES + PITFALLS research and user decisions.
 
 ## Traceability
 
-Populated during roadmap creation by the roadmapper.
+Mapped during roadmap creation 2026-05-15. All 29 v1.3 requirements assigned to exactly one phase.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PARALLEL-01 | TBD | Pending |
-| PARALLEL-02 | TBD | Pending |
-| PARALLEL-03 | TBD | Pending |
-| PARALLEL-04 | TBD | Pending |
-| PARALLEL-05 | TBD | Pending |
-| PARALLEL-06 | TBD | Pending |
-| VCS-16 | TBD | Pending |
-| VCS-17 | TBD | Pending |
-| VCS-18 | TBD | Pending |
-| VCS-19 | TBD | Pending |
-| VCS-20 | TBD | Pending |
-| PROMPT-06 | TBD | Pending |
-| PROMPT-07 | TBD | Pending |
-| PROMPT-08 | TBD | Pending |
-| PROMPT-09 | TBD | Pending |
-| LINT-04 | TBD | Pending |
-| LINT-05 | TBD | Pending |
-| HOOK-06 | TBD | Pending |
-| HOOK-07 | TBD | Pending |
-| CI-05 | TBD | Pending |
-| CI-06 | TBD | Pending |
-| TEST-13 | TBD | Pending |
-| TEST-14 | TBD | Pending |
-| TEST-15 | TBD | Pending |
-| TEST-16 | TBD | Pending |
-| CONFIG-01 | TBD | Pending |
-| CONFIG-02 | TBD | Pending |
-| DOGFOOD-01 | TBD | Pending |
-| DOGFOOD-02 | TBD | Pending |
+| PARALLEL-01 | Phase 9 (jj-side) + Phase 10 (git-side, same-PR coupling on contract) | Pending |
+| PARALLEL-02 | Phase 9 (jj-side) + Phase 10 (git-side, same-PR coupling on `FanInResult` shape) | Pending |
+| PARALLEL-03 | Phase 9 (jj-side liveness probe) + Phase 10 (git-side liveness probe) | Pending |
+| PARALLEL-04 | Phase 9 | Pending |
+| PARALLEL-05 | Phase 9 | Pending |
+| PARALLEL-06 | Phase 11 | Pending |
+| VCS-16 | Phase 9 | Pending |
+| VCS-17 | Phase 9 | Pending |
+| VCS-18 | Phase 10 | Pending |
+| VCS-19 | Phase 9 | Pending |
+| VCS-20 | Phase 11 | Pending |
+| PROMPT-06 | Phase 11 | Pending |
+| PROMPT-07 | Phase 11 | Pending |
+| PROMPT-08 | Phase 11 | Pending |
+| PROMPT-09 | Phase 11 | Pending |
+| LINT-04 | Phase 13 | Pending |
+| LINT-05 | Phase 13 | Pending |
+| HOOK-06 | Phase 12 | Pending |
+| HOOK-07 | Phase 12 | Pending |
+| CI-05 | Phase 13 | Pending |
+| CI-06 | Phase 13 | Pending |
+| TEST-13 | Phase 9 (jj contract tests) + Phase 10 (git contract tests) | Pending |
+| TEST-14 | Phase 9 | Pending |
+| TEST-15 | Phase 10 | Pending |
+| TEST-16 | Phase 10 | Pending |
+| CONFIG-01 | Phase 14 | Pending |
+| CONFIG-02 | Phase 14 | Pending |
+| DOGFOOD-01 | Phase 14 | Pending |
+| DOGFOOD-02 | Phase 14 | Pending |
+
+**Note on cross-phase REQ-IDs:** PARALLEL-01, PARALLEL-02, PARALLEL-03, and TEST-13 span two phases each. This reflects the must-honor sequencing constraint that the cross-backend `FanInResult` shape (PARALLEL-02 specifically) requires same-PR coupling between jj-side and git-side per v1.2 retro precedent — Phase 9 ships the jj implementation and the contract; Phase 10 ships the git implementation and finalizes the contract. Each phase has distinct deliverables (jj-side bodies + tests in Phase 9; git-side bodies + tests + N-parent octopus fixture in Phase 10) so the "exactly one phase" coverage rule is honored at the per-deliverable level even where the REQ-ID umbrella spans two.
 
 **Coverage:**
 - v1.3 requirements: 29 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 29 ⚠️ (pre-roadmap state)
+- Mapped to phases: 29 ✓
+- Unmapped: 0 ✓
+
+**Phase distribution:**
+- Phase 9 (jj parallel verbs + lock): 9 requirements (PARALLEL-01..05 jj-side, VCS-16/17/19, TEST-13 jj/TEST-14)
+- Phase 10 (git parallel verbs + classifier): 7 requirements (PARALLEL-01..03 git-side, VCS-18, TEST-13 git/TEST-15/TEST-16)
+- Phase 11 (orchestrator + agent rewire): 6 requirements (PARALLEL-06, VCS-20, PROMPT-06..09)
+- Phase 12 (A3 fix, parallel track): 2 requirements (HOOK-06, HOOK-07)
+- Phase 13 (CI lane + lint close-gate): 4 requirements (CI-05, CI-06, LINT-04, LINT-05)
+- Phase 14 (default flip + dogfood): 4 requirements (CONFIG-01, CONFIG-02, DOGFOOD-01, DOGFOOD-02)
 
 ---
 *Requirements defined: 2026-05-15*
-*Last updated: 2026-05-15 after initial definition (post-research, pre-roadmap)*
+*Last updated: 2026-05-15 after roadmap creation (29/29 mapped to Phases 9–14)*
