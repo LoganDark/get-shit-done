@@ -97,6 +97,36 @@ describe('Phase 3 plan 03-03 — parseJjBookmarkRecord (D-02 divergence)', () =>
       /malformed NDJSON/,
     );
   });
+
+  // IN-03 (REVIEW.md): contract drift on record.target — non-array values
+  // (string, null, missing, number) must throw a typed contract-drift error
+  // instead of silently collapsing to rev: ''. Mirrors the record.name
+  // contract check directly above the divergence check in jj-bookmark.ts.
+  it('throws contract-drift Error when record.target is a string (IN-03)', () => {
+    expect(() =>
+      parseJjBookmarkRecord(
+        '{"name":"gsd/foo","target":"not-an-array"}',
+        stripPrefix,
+      ),
+    ).toThrow(/contract drift — record\.target is not an array \(got string\)/);
+  });
+
+  it('throws contract-drift Error when record.target is null (IN-03)', () => {
+    expect(() =>
+      parseJjBookmarkRecord(
+        '{"name":"gsd/foo","target":null}',
+        stripPrefix,
+      ),
+    ).toThrow(/contract drift — record\.target is not an array \(got object\)/);
+  });
+
+  it('throws contract-drift Error when record.target is missing (IN-03)', () => {
+    expect(() =>
+      parseJjBookmarkRecord('{"name":"gsd/foo"}', stripPrefix),
+    ).toThrow(
+      /contract drift — record\.target is not an array \(got undefined\)/,
+    );
+  });
 });
 
 // ─── live integration tests against jj 0.41 ─────────────────────────────────

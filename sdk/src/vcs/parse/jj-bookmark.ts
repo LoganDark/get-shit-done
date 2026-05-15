@@ -69,15 +69,27 @@ export function parseJjBookmarkRecord(
     );
   }
   const recordName: string = record.name;
-  if (Array.isArray(record.target) && record.target.length > 1) {
+  // IN-03 (REVIEW.md): mirror the record.name contract-drift check above —
+  // if record.target is not an array (string, null, number, object, etc.)
+  // throw loudly rather than silently collapsing to rev: ''. The pinned
+  // NDJSON shape (jj 0.41.0) ALWAYS emits target as an array; a non-array
+  // value indicates either a tampered fixture or a future jj-version
+  // template change, and either case should surface as a typed error at
+  // the parser boundary instead of poisoning callers with empty-string
+  // revs.
+  if (!Array.isArray(record.target)) {
+    const preview = line.length > 80 ? line.slice(0, 80) + '...' : line;
+    throw new Error(
+      `parseJjBookmarkRecord: contract drift — record.target is not an array (got ${typeof record.target}): ${preview}`,
+    );
+  }
+  if (record.target.length > 1) {
     throw new VcsBookmarkDivergentError({
       bookmarkName: recordName,
       divergentTargets: record.target as readonly string[],
     });
   }
   const firstTarget =
-    Array.isArray(record.target) && record.target.length > 0
-      ? (record.target[0] as string)
-      : '';
+    record.target.length > 0 ? (record.target[0] as string) : '';
   return { name: stripPrefix(recordName), rev: firstTarget };
 }
