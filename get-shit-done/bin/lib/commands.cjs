@@ -481,23 +481,23 @@ function cmdCommitToSubrepo(cwd, message, files, raw) {
     const commitResult = subVcs.commit({ message, files: subFiles });                  // line 402 (was: commit -m <msg>)
     if (commitResult.exitCode !== 0) {
       if (commitResult.stdout.includes('nothing to commit') || commitResult.stderr.includes('nothing to commit')) {
-        repos[repo] = { committed: false, hash: null, files: repoFiles, reason: 'nothing_to_commit' };
+        repos[repo] = { committed: false, id: null, files: repoFiles, reason: 'nothing_to_commit' };
         continue;
       }
-      repos[repo] = { committed: false, hash: null, files: repoFiles, reason: 'error', error: commitResult.stderr };
+      repos[repo] = { committed: false, id: null, files: repoFiles, reason: 'error', error: commitResult.stderr };
       continue;
     }
 
-    // Get hash
+    // Get id
     // Plan 02-09: vcs.refs.resolveShort(refs.head) replaces
     // `rev-parse --short HEAD`. Mirrors plan 02-08 site 309 closure shape.
-    let hash = null;
+    let id = null;
     try {
-      hash = subVcs.refs.resolveShort(subVcs.refs.head);                               // line 413 (was: rev-parse --short HEAD)
+      id = subVcs.refs.resolveShort(subVcs.refs.head);                                 // line 413 (was: rev-parse --short HEAD)
     } catch {
-      hash = null;
+      id = null;
     }
-    repos[repo] = { committed: true, hash, files: repoFiles };
+    repos[repo] = { committed: true, id, files: repoFiles };
   }
 
   const result = {
