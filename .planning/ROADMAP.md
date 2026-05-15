@@ -56,7 +56,10 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
   4. `scripts/lint-vcs-no-commit-id.cjs` ships parallel to `scripts/lint-vcs-no-raw-git.cjs` with default-deny patterns (`'commit_id'` literals, `.commit_id` field accesses, hex-shape regexes, 40-char hex string literals); per-entry allowlist schema enforces `reason` + `expires` + `owner` fields and CI-fails on missing fields or expired entries; first green run of the lint is the validation that the FLIP is complete (achievable only AFTER FLIP-01..03 land); CI step required-blocking on jj-colocated lane. **LINT-03 conditional:** if AUDIT-01/02 identify a real boundary-I/O consumer, `sdk/src/vcs/backends/jj-internal.ts` exists with a lint rule whole-repo default-denying its imports except an audit-identified allowlist (CI fails on >1 importer); if AUDIT identifies ZERO consumers, the requirement closes by codifying "no boundary-I/O accessor exists" as the verified end state — the inversion of SEED-001 holds. (LINT-01..03)
   5. Every `if (vcs.kind === 'jj') { /* commit_id branch */ } else { /* commit_id branch */ }` block in `get-shit-done/bin/lib/*.cjs` and `get-shit-done/workflows/*.md` that exists *for id reasons* (driven by AUDIT-04) is deleted and replaced with the unified `vcs.refs.resolveShort(expr.rev(...))` / `commitResult.id` / `entry.id` access; the deletions land AFTER FLIP-01..03 (so the unified API exists to delete toward) and AFTER AUDIT-04 surfaces the candidate sites; `vcs.kind` branching for non-id reasons (capability gaps, allowlist resolution) remains unaffected. (PROMPT-05)
   6. Phase-boundary-marker dogfood-cutover model holds: commits made BEFORE the FLIP plan lands carry `commit_id`-shape ids in `.planning/` (still resolvable on jj); commits AFTER FLIP carry `change_id`-shape ids; at v1.2 close-gate, a SINGLE B-07-style rewriter pass over `.planning/phases/<v1.2-dir>/` normalizes the directory to change_id; `format-migration/rewrite.ts` `COMMIT_KEY_ALLOWLIST` extended with any new commit-bearing keys discovered by AUDIT-04 in `.planning/` formats added during v1.0+v1.1; one-time grep at close-gate confirms prose hex tokens are historical-only. (MIGR-06)
-**Plans**: TBD (research recommends ~3 sequential plans within this single phase: Plan 1 = Audit + side-task lint-script *development* in parallel; Plan 2 = Test-prep + Flip + consumer sweep + golden re-record; Plan 3 = Lint guard activation + PROMPT-05 deletions + MIGR-06 close-gate rewriter pass; planner may split further if Plan 1 audit explodes scope.)
+**Plans**: 3 plans
+- [ ] 08-01-PLAN.md — Audit + lint script development (wave 1; Plan 1)
+- [ ] 08-02-PLAN.md — Test-prep matcher + FLIP-01..04 + consumer sweep + golden re-record (wave 2; Plan 2 depends on Plan 1)
+- [ ] 08-03-PLAN.md — Lint activation + PROMPT-05 + LINT-03 conditional + MIGR-06 close-gate rewriter pass (wave 3; Plan 3 depends on Plan 1 + Plan 2)
 
 ## Progress
 
@@ -67,15 +70,15 @@ Phases execute in numeric order: 1 → 2 → 2.1 → 3 → 03.1 → 4 → 5 → 
 |-----------|--------|-------|-------------|-------------|
 | v1.0 MVP  | 8      | 53/56 | Complete    | 2026-05-14  |
 | v1.1 first upstream sync | 1 | 5/5 | Complete | 2026-05-14 |
-| v1.2 jujutsu is change-only — never commit id anywhere | 1 | 0/TBD | Planning | — |
+| v1.2 jujutsu is change-only — never commit id anywhere | 1 | 0/3 | Planning | — |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 8. Unified Revision Model | v1.2 | 0/TBD | Not started | - |
+| 8. Unified Revision Model | v1.2 | 0/3 | Planned | - |
 
 ## Next
 
-`/gsd-plan-phase 8` to decompose Phase 8 into executable plans.
+`/gsd-execute-phase 8` to execute Phase 8's 3 plans in wave order (Plan 1 → Plan 2 → Plan 3).
 
 ---
-*Last updated: 2026-05-14 — v1.2 milestone roadmap drafted. Phase 8 maps all 14 v1.2 requirements (AUDIT-01..04, FLIP-01..04, LINT-01..03, PROMPT-05, TEST-12, MIGR-06) into a single phase with 6 success criteria covering audit, test-prep, surface flip, lint enforcement, prompt cleanup, and close-gate `.planning/` migration. Per-milestone artifacts in `.planning/milestones/`.*
+*Last updated: 2026-05-15 — v1.2 Phase 8 decomposed into 3 sequential plans per RESEARCH.md recommendation. Plan 1 (wave 1): Audit + lint script development. Plan 2 (wave 2): Test-prep matcher + FLIP-01..04 + ~12 production / ~11 test consumer sweep + golden re-record. Plan 3 (wave 3): Lint CI activation + PROMPT-05 invariant verification + LINT-03 conditional close + MIGR-06 close-gate rewriter pass. All 14 v1.2 requirements covered across plans; all 5 D-IDs referenced.*
