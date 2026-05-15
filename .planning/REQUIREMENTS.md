@@ -13,7 +13,7 @@
 The two new high-level verbs that define v1.3's deliverable surface. Verb namespace locked at `vcs.workspace.parallel.*` (sub-sub-namespace under `workspace`, precedent: `refs.bookmarks.*`).
 
 - [x] **PARALLEL-01**: `vcs.workspace.parallel.dispatch(plan): ParallelDispatchHandle` ships on both backends. jj composes `octopus.createPhaseStructure` + N× `createSubagentSlot`. git wraps `git worktree add` with internal serialization (Pitfall 5 — `.git/config.lock` race). Returns `{ phaseRoot, workspaces: [{ name, path, baseRev, agentId }], manifest, phaseNumber, mainBookmark }`. Handle is frozen pure JSON data (D-05 in `09-CONTEXT.md`).
-- [ ] **PARALLEL-02**: `vcs.workspace.parallel.fanIn(handle, results): FanInResult` ships on both backends. jj uses one N-parent `jj new <p1>...<pN>` octopus form + batched `jj bookmark delete`. git uses N-parent `git merge --no-ff <p1>...<pN>` + batched `git update-ref -d`. Returns `{ merged, conflicted, conflictedPaths, incompleteQueued, failedReaped, surplusBookmarks }` — same shape on both backends; `conflicted: boolean` distinguishes in-tree-conflict-success from crash (Pitfall 2). `results` arg shape: `Array<{ agentId, exitCode, lastChangeId?, stderr? }>` (D-07 in `09-CONTEXT.md`).
+- [x] **PARALLEL-02**: `vcs.workspace.parallel.fanIn(handle, results): FanInResult` ships on both backends. jj uses one N-parent `jj new <p1>...<pN>` octopus form + batched `jj bookmark delete`. git uses N-parent `git merge --no-ff <p1>...<pN>` + batched `git update-ref -d`. Returns `{ merged, conflicted, conflictedPaths, incompleteQueued, failedReaped, surplusBookmarks }` — same shape on both backends; `conflicted: boolean` distinguishes in-tree-conflict-success from crash (Pitfall 2). `results` arg shape: `Array<{ agentId, exitCode, lastChangeId?, stderr? }>` (D-07 in `09-CONTEXT.md`).
 - [x] **PARALLEL-05**: `ParallelDispatchHandle.workspaces[].baseRev` JSDoc documents stability semantics across `jj rebase` (rebase-stability differentiator — change_id stable on jj, commit_id stable on git per v1.2 unified revision model).
 - [ ] **PARALLEL-06**: `dispatch({ plan, maxConcurrency })` input field honored — numeric cap on concurrent agent workspaces. Default `undefined` (no cap; runtime's natural agent-cap rules). Differentiator surfaced for the dogfood phase's measurement story.
 
@@ -107,7 +107,7 @@ Mapped during roadmap creation 2026-05-15. Updated 2026-05-15 after Phase 9 disc
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PARALLEL-01 | Phase 9 (jj-side) + Phase 10 (git-side, same-PR coupling on contract) | Complete |
-| PARALLEL-02 | Phase 9 (jj-side) + Phase 10 (git-side, same-PR coupling on `FanInResult` shape) | Pending |
+| PARALLEL-02 | Phase 9 (jj-side) + Phase 10 (git-side, same-PR coupling on `FanInResult` shape) | Complete |
 | ~~PARALLEL-03~~ | ~~Phase 9 + Phase 10~~ | **Dropped 2026-05-15 (Phase 9 D-01)** |
 | ~~PARALLEL-04~~ | ~~Phase 9~~ | **Dropped 2026-05-15 (Phase 9 D-02)** |
 | PARALLEL-05 | Phase 9 | Complete |

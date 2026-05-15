@@ -73,7 +73,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 **Plans**: 5 plans
   - [x] 09.01-PLAN.md — Cross-backend type surface (VcsWorkspaceParallel + Parallel* types; IncompleteWorkEntry.reason union tightening; VcsWorkspace.parallel field) [Wave 1]
   - [x] 09.02-PLAN.md — Reap classifier extension + conflict-paths sidecar extraction + incomplete-work parse-time validation [Wave 1]
-  - [ ] 09.03-PLAN.md — sdk/src/vcs/jj/parallel.ts composition layer (performJjParallelDispatch + performJjParallelFanIn) + JjVcsAdapter wire-in [Wave 2]
+  - [x] 09.03-PLAN.md — sdk/src/vcs/jj/parallel.ts composition layer (performJjParallelDispatch + performJjParallelFanIn) + JjVcsAdapter wire-in [Wave 2]
   - [ ] 09.04-PLAN.md — GitVcsAdapter throwing stub (workspace.parallel.{dispatch,fanIn} throw VcsNotImplementedError until Phase 10) [Wave 2]
   - [ ] 09.05-PLAN.md — Contract tests cmd-parallel-jj.test.ts (TEST-13 N=2/3/4 scenarios + TEST-14 divergent() topology assertion) [Wave 3]
 
@@ -153,7 +153,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 9. jj-side parallel verbs | 2/5 | In Progress|  |
+| 9. jj-side parallel verbs | 3/5 | In Progress|  |
 | 10. git-side parallel verbs + classifier extension | 0/0 | Not started | - |
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 0/0 | Not started | - |
 | 12. A3 colocated pre-commit fix (parallel track) | 0/0 | Not started | - |
