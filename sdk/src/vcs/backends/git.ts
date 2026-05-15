@@ -28,6 +28,7 @@ import { readWorktreeList } from '../parse/worktree-list.js';
 import {
   __vcsTestOnly,
   VcsIncompleteSubagentsError,
+  VcsNotImplementedError,
 } from '../types.js';
 import { readIncomplete } from '../jj/incomplete-work.js';
 import { validateRefname } from '../refs-validator.js';
@@ -713,6 +714,24 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         throw new Error(`workspace.remove failed: ${r.stderr || r.stdout}`);
       }
     },
+    // Phase 9 (VCS-16, PARALLEL-01/02 git-side): cross-backend parallel-dispatch
+    // namespace. Throwing stub — Phase 10 ships the real body in a new sidecar
+    // file sdk/src/vcs/git/parallel.ts and replaces these stubs with a wire-in.
+    // Idiom mirrors the 8 existing VcsNotImplementedError callsites in
+    // backends/jj.ts (lines 125, 166, 789, 1023). The `never` return type is
+    // assignable to VcsWorkspaceParallel's concrete return types.
+    parallel: Object.freeze({
+      dispatch(): never {
+        throw new VcsNotImplementedError(
+          'workspace.parallel.dispatch is not yet implemented on the git backend; Phase 10 ships the body',
+        );
+      },
+      fanIn(): never {
+        throw new VcsNotImplementedError(
+          'workspace.parallel.fanIn is not yet implemented on the git backend; Phase 10 ships the body',
+        );
+      },
+    }),
   });
 
   // Phase 4 D-19: kernel-enforced via .git/index.lock; the adapter primitive is
