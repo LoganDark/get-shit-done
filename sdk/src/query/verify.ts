@@ -511,8 +511,14 @@ export const verifySummary: QueryHandler = async (args, projectDir) => {
   // SHA shape validation — preserving the spirit of the existing probe.
   const { createVcsAdapter, expr } = await import('../vcs/index.js');
   const vcs = createVcsAdapter(projectDir);
-  const commitHashPattern = /\b[0-9a-f]{7,40}\b/g;
-  const hashes = content.match(commitHashPattern) || [];
+  // WR-06: accept BOTH alphabets — commit_id ([0-9a-f]) and change_id ([k-z]).
+  // The probe must work on jj-colocated repos post-FLIP where SUMMARY.md cites
+  // change_ids, and on legacy/git repos where SUMMARY.md cites commit_ids.
+  // expr.rev() is alphabet-agnostic (see SHA_OR_CHANGE_ID_RE in vcs/expr.ts).
+  // Variable renamed from commitHashPattern → revIdPattern to reflect the
+  // post-FLIP unified concept (a revision id, either alphabet).
+  const revIdPattern = /\b(?:[0-9a-f]{7,40}|[k-z]{7,40})\b/g;
+  const hashes = content.match(revIdPattern) || [];
   let commitsExist = false;
   for (const hash of hashes.slice(0, 3)) {
     let exists = false;
