@@ -122,9 +122,23 @@ function emitMarkdown(result) {
 		'|---|-----------|---------|------------|---------|-------|',
 	];
 	for (const f of result.findings) {
-		lines.push(`| ${f.audit_row} | \`${f.path}:${f.line}\` | \`${f.surface}\` | \`${f.callerUse.replace(/\|/g, '\\|')}\` | ${f.verdict ?? 'TBD'} | |`);
+		lines.push(`| ${f.audit_row} | \`${f.path}:${f.line}\` | \`${f.surface}\` | \`${escapeMarkdownCell(f.callerUse)}\` | ${f.verdict ?? 'TBD'} | |`);
 	}
 	return lines.join('\n') + '\n';
+}
+
+// IN-02 (REVIEW.md): full markdown-table cell escaping. The audit table is
+// human-read and the prior `replace(/\|/g, '\\|')` was partial — a literal
+// backslash followed by `|` produced a double-escape, embedded backticks
+// flipped the cell into nested code-mode, and embedded newlines broke the
+// table row entirely. Order matters: escape `\` first so subsequent
+// inserted backslashes (from `|` escape) are NOT re-escaped.
+function escapeMarkdownCell(s) {
+	return String(s)
+		.replace(/\\/g, '\\\\')
+		.replace(/\|/g, '\\|')
+		.replace(/`/g, '\\`')
+		.replace(/\r\n|\r|\n/g, '<br>');
 }
 
 function emitJson(result) {
