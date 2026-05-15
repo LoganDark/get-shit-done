@@ -385,21 +385,38 @@ describe.sequential.skipIf(!jjAvailable)(
 		});
 
 		it('throws on unknown reason value', () => {
+			// Phase 9 CR-01: queue format is now JSONL.
 			writeFileSync(
 				join(phaseDir, 'incomplete-work.md'),
-				'- subagent-1: head=abc123def456, workspace=/tmp/x, reason=garbage-value\n',
+				JSON.stringify({
+					subagentName: 'subagent-1',
+					changeIdShort: 'abc123def456',
+					workspacePath: '/tmp/x',
+					reason: 'garbage-value',
+				}) + '\n',
 			);
 			expect(() => readIncomplete(phaseDir)).toThrow(/unknown reason/);
 		});
 
 		it('accepts both known reason values without throwing', () => {
 			// Overwrite with two entries — one of each known reason. Parser
-			// must accept both and return them in order.
+			// must accept both and return them in order. Phase 9 CR-01: queue
+			// format is now JSONL.
 			writeFileSync(
 				join(phaseDir, 'incomplete-work.md'),
 				[
-					'- subagent-1: head=abc123def456, workspace=/tmp/x, reason=crashed-with-uncommitted-work',
-					'- phase-09-merge: head=def456abc123, workspace=/tmp/y, reason=merge-in-tree-conflict',
+					JSON.stringify({
+						subagentName: 'subagent-1',
+						changeIdShort: 'abc123def456',
+						workspacePath: '/tmp/x',
+						reason: 'crashed-with-uncommitted-work',
+					}),
+					JSON.stringify({
+						subagentName: 'phase-09-merge',
+						changeIdShort: 'def456abc123',
+						workspacePath: '/tmp/y',
+						reason: 'merge-in-tree-conflict',
+					}),
 					'',
 				].join('\n'),
 			);

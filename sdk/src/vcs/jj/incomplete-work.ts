@@ -1,10 +1,19 @@
 /**
  * sdk/src/vcs/jj/incomplete-work.ts — Phase 4 plan 04 (D-13 / D-14 / D-06)
  *
- * Crash queue file format. Markdown, append-only.
+ * Crash queue file format. JSONL (one JSON object per line), append-only.
  * Path: .planning/phases/{N}/incomplete-work.md
  * Entry shape (per D-13):
- *   `- {subagentName}: head={change_id_short}, workspace={path}, reason={reason}`
+ *   `{"subagentName":"...","changeIdShort":"...","workspacePath":"...","reason":"..."}`
+ *
+ * Phase 9 CR-01 fix: format switched from a delimiter-based markdown line
+ * (`- name: head=..., workspace=..., reason=...`) to JSONL because the old
+ * writer accepted `workspacePath` / `subagentName` strings containing the
+ * `,` / `:` delimiters, while the reader's `[^:]+` / `[^,]+` regex did not —
+ * silent round-trip corruption at the persistence boundary the D-14
+ * phase-merge gate relies on for fail-safe blocking. JSONL is structurally
+ * unambiguous and matches the `parseJjLog` / `parseJjWorkspaceList`
+ * convention already used elsewhere in the sidecar.
  *
  * D-06: change_id native from day 1 — no SHA-style id is encoded; entries
  * carry change_id_short only. The Phase 3 D-19 format-migration tracker
@@ -53,7 +62,16 @@ function queuePath(phaseDir: string): string {
  * duplicates.
  */
 export function appendIncomplete(phaseDir: string, entry: IncompleteWorkEntry): void {
-	const line = `- ${entry.subagentName}: head=${entry.changeIdShort}, workspace=${entry.workspacePath}, reason=${entry.reason}\n`;
+	// Phase 9 CR-01 fix: JSONL writer. JSON.stringify escapes embedded `,` /
+	// `:` / `"` / newlines in any field, eliminating the round-trip corruption
+	// the regex-based reader would silently absorb. Trailing `\n` so
+	// append-then-append produces one valid JSONL object per line.
+	const line = JSON.stringify({
+		subagentName: entry.subagentName,
+		changeIdShort: entry.changeIdShort,
+		workspacePath: entry.workspacePath,
+		reason: entry.reason,
+	}) + '\n';
 	appendFileSync(queuePath(phaseDir), line);
 }
 
@@ -61,12 +79,14 @@ export function appendIncomplete(phaseDir: string, entry: IncompleteWorkEntry): 
  * Parse the queue file into structured entries.
  * Returns [] if the file is absent or empty.
  *
- * Line format: `- {subagentName}: head={change_id_short}, workspace={path}, reason={reason}`
+ * Line format (post-CR-01): one JSON object per line
+ *   `{"subagentName":"...","changeIdShort":"...","workspacePath":"...","reason":"..."}`
  * Comments (lines starting with `#`) and blank lines are ignored — humans
  * empty the file by deleting entries, possibly preserving a header comment.
  *
- * Malformed entry lines (not blank, not comment, regex non-match) surface as
- * a typed Error per the parseJjWorkspaceList convention (T-04.04-04 mitigate).
+ * Malformed entry lines (not blank, not comment, JSON.parse throws OR
+ * required field missing) surface as a typed Error per the parseJjWorkspaceList
+ * convention (T-04.04-04 mitigate).
  */
 export function readIncomplete(phaseDir: string): IncompleteWorkEntry[] {
 	const p = queuePath(phaseDir);
@@ -74,18 +94,40 @@ export function readIncomplete(phaseDir: string): IncompleteWorkEntry[] {
 	const raw = readFileSync(p, 'utf-8');
 	const lines = raw.split('\n');
 	const entries: IncompleteWorkEntry[] = [];
-	// Single-line parse regex; tolerant of leading whitespace.
-	const ENTRY_RE = /^\s*-\s+([^:]+):\s+head=([^,]+),\s+workspace=([^,]+),\s+reason=(.*)$/;
 	for (const line of lines) {
 		if (!line.trim()) continue;
 		if (line.trimStart().startsWith('#')) continue;
-		const m = ENTRY_RE.exec(line);
-		if (!m) {
-			// Malformed line — surface via typed error rather than silent skip.
+		// Phase 9 CR-01 fix: JSON.parse each non-blank, non-`#` line. The
+		// writer at appendIncomplete emits exactly one JSON object per line
+		// via JSON.stringify, which escapes embedded delimiter bytes so the
+		// regex-based round-trip corruption defect is structurally
+		// impossible to reproduce.
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(line);
+		} catch (err) {
+			throw new Error(
+				`incomplete-work.md: malformed entry in ${p}: ${line.slice(0, 120)} (${(err as Error).message})`,
+			);
+		}
+		if (
+			!parsed
+			|| typeof parsed !== 'object'
+			|| typeof (parsed as Record<string, unknown>).subagentName !== 'string'
+			|| typeof (parsed as Record<string, unknown>).changeIdShort !== 'string'
+			|| typeof (parsed as Record<string, unknown>).workspacePath !== 'string'
+			|| typeof (parsed as Record<string, unknown>).reason !== 'string'
+		) {
 			throw new Error(
 				`incomplete-work.md: malformed entry in ${p}: ${line.slice(0, 120)}`,
 			);
 		}
+		const rec = parsed as {
+			subagentName: string;
+			changeIdShort: string;
+			workspacePath: string;
+			reason: string;
+		};
 		// Phase 9 plan 02 task 3 (D-09): parse-time reason validation against
 		// the closed 2-value union landed in types.ts. Unknown values fail
 		// loudly here rather than silently propagating to the D-14 phase-merge
@@ -93,17 +135,16 @@ export function readIncomplete(phaseDir: string): IncompleteWorkEntry[] {
 		// fail-safe block but offers no useful diagnostic). The cast
 		// `as IncompleteWorkEntry['reason']` resolves cleanly against the
 		// closed union — a free-form `string` would be rejected by tsc.
-		const reasonRaw = m[4].trim();
-		if (!KNOWN_REASONS.has(reasonRaw as IncompleteWorkEntry['reason'])) {
+		if (!KNOWN_REASONS.has(rec.reason as IncompleteWorkEntry['reason'])) {
 			throw new Error(
-				`incomplete-work.md: unknown reason "${reasonRaw}" in ${p}: ${line.slice(0, 120)}`,
+				`incomplete-work.md: unknown reason "${rec.reason}" in ${p}: ${line.slice(0, 120)}`,
 			);
 		}
 		entries.push({
-			subagentName: m[1].trim(),
-			changeIdShort: m[2].trim(),
-			workspacePath: m[3].trim(),
-			reason: reasonRaw as IncompleteWorkEntry['reason'],
+			subagentName: rec.subagentName,
+			changeIdShort: rec.changeIdShort,
+			workspacePath: rec.workspacePath,
+			reason: rec.reason as IncompleteWorkEntry['reason'],
 		});
 	}
 	return entries;
