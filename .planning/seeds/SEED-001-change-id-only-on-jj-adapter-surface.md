@@ -1,8 +1,11 @@
 ---
 id: SEED-001
-status: dormant
+status: superseded
 planted: 2026-05-14
 planted_during: v1.1 / Phase 7 close-out
+superseded_by: v1.2 / Phase 8 (Unified Revision Model — Audit → Test-Prep → Flip → Lint Guard → Close-Gate)
+superseded_on: 2026-05-15
+superseded_note: v1.2 inverted this seed's premise. The seed proposed an escape hatch (`vcs.jjOnly.commitIdOf`) on the cross-backend surface; v1.2 ships the opposite — `commit_id` leakage from jj is treated as a defect, audited to zero, and CI-blocked via `scripts/lint-vcs-no-commit-id.cjs` (1032 files / 0 violations). `commitIdOf` survives only as a backend-private boundary-io accessor consumed by `format-migration/*` cross-namespace translators; no SDK workflow code branches on `vcs.kind` for id reasons.
 trigger_when: starting v1.2 OR any milestone themed "adapter cleanup" / "jj surface" / "id model" / "change-id migration"
 scope: medium
 ---
