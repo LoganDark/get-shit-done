@@ -107,7 +107,14 @@ export interface LogOpts {
 }
 
 export interface LogEntry {
-  hash: string;
+  /**
+   * The active backend's canonical revision identifier.
+   * - On git: `commit_id` (40-char hex). Snapshot-stable.
+   * - On jj: `change_id` (12-char [k-z] reverse-base32). Rebase-stable.
+   * Do NOT assume hex form. For short display, use `vcs.refs.resolveShort(expr.rev(id))`
+   * (backend-aware short-prefix); never `.slice(0, 7)`.
+   */
+  id: string;
   parents: string[];
   author: string;
   date: string;

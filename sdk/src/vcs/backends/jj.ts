@@ -324,8 +324,8 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
    *    `--` end-of-options separator (WR-01: verified working on jj 0.41;
    *    neutralizes leading-`-` paths that would otherwise be parsed as
    *    flags by jj's CLI — same defense the git backend uses at git.ts:202).
-   * PITFALL 1: `LogEntry.hash` is `commit_id` (40-char hex), NEVER
-   * `change_id` — pinned by `parseJjLog`.
+   * `LogEntry.id` is the active backend's canonical revision identifier —
+   * `commit_id` on git, `change_id` on jj. Pinned by `parseJjLog`.
    */
   const log = (opts: LogOpts = {}): LogEntry[] => {
     const args: string[] = ['log', '-T', 'json(self) ++ "\\n"', '--no-graph'];
