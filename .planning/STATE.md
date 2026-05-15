@@ -3,8 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: jujutsu is change-only — never commit id anywhere
 status: planning
-last_updated: "2026-05-14T15:19:55.660Z"
-last_activity: 2026-05-14
+stopped_at: Phase 8 context gathered
+last_updated: "2026-05-15T04:19:25.194Z"
+last_activity: 2026-05-14 — Roadmap created for v1.2; 14 requirements mapped to Phase 8
 progress:
   total_phases: 1
   completed_phases: 0
@@ -96,9 +97,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-14
-Stopped at: v1.2 roadmap drafted — Phase 8 with 14 requirements mapped, 6 success criteria, single-phase shape per research recommendation
-Resume file: None — next step is `/gsd-plan-phase 8`
+Last session: 2026-05-15T04:19:25.188Z
+Stopped at: Phase 8 context gathered
+Resume file: .planning/phases/08-unified-revision-model-audit-test-prep-flip-lint-guard-close/08-CONTEXT.md
 
 ## Operator Next Steps
 
