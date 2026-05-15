@@ -49,6 +49,7 @@ import { createPhaseStructure, createSubagentSlot } from './octopus.js';
 import { performJjReap } from './reap.js';
 import { enumerateConflictedPaths } from './conflict-paths.js';
 import { appendIncomplete } from './incomplete-work.js';
+import { parseJjWorkspaceList } from '../parse/jj-workspace-list.js';
 
 /**
  * Inline mandatory jj-flags prefix. UPSTREAM-02 sidecar discipline: this
@@ -311,14 +312,52 @@ export function performJjParallelFanIn(
 ): FanInResult {
 	const phaseTag = String(handle.phaseNumber).padStart(2, '0');
 
-	// 1. N-parent jj new at @: `-r @ -r <ws1>.baseRev -r <ws2>.baseRev ...`.
-	// Lift the 2-parent precedent at backends/jj.ts:1180-1188 to N parents.
-	// NOTE: per D-14 carry, baseRev is rebase-stable; we feed it raw to
-	// `-r` because vcsExec accepts string argv and `jj` resolves change_ids
-	// from the k-z alphabet natively.
-	const newArgs: string[] = [...jjArgvFlags(mainRepoRoot), 'new', '-r', '@'];
+	// Pre-step: re-resolve each workspace's CURRENT head from `jj workspace
+	// list -T 'json(self) ++ "\n"'`. The handle's `ws.baseRev` is the
+	// dispatch-time SLOT head — empty by construction. Agents land their
+	// work AFTER dispatch (typical `jj squash -B @ -k -m "..."` moves the WC
+	// diff into a NEW change between `@-` and `@`); the slot head never
+	// advances. Feeding `baseRev` raw to the N-parent `jj new` would merge
+	// empty slot heads, silently dropping every agent's work and making the
+	// merge change indistinguishable from the dispatch-time scaffold.
+	//
+	// Bug-fix rationale (plan 09.05 Rule 1): the production-code merge target
+	// must be the workspace's current `@` (which is the agent's working-copy
+	// head; for `-B @` flows this is the empty WC placeholder above the
+	// work change, but the work change itself is still reachable from this
+	// `@` via `@-` and therefore included in the merge tree). Mirrors the
+	// same `workspace.list()` re-resolution that `backends/jj.ts:1115-1135`
+	// (`workspace.reap`) performs for the same reason.
+	const wsListArgs = [
+		...jjArgvFlags(mainRepoRoot),
+		'workspace', 'list', '-T', 'json(self) ++ "\\n"',
+	];
+	const wsListRes = vcsExec(mainRepoRoot, 'jj', wsListArgs);
+	if (wsListRes.exitCode !== 0) {
+		throw new Error(
+			`parallel.fanIn: workspace list (pre-merge head re-resolution) failed: ${wsListRes.stderr || wsListRes.stdout}`,
+		);
+	}
+	const currentHeads = new Map<string, string>();
+	for (const entry of parseJjWorkspaceList(wsListRes.stdout)) {
+		currentHeads.set(entry.path, entry.rev);
+	}
+	const mergeParents: string[] = [];
 	for (const ws of handle.workspaces) {
-		newArgs.push('-r', ws.baseRev);
+		// Re-resolved current `@` of the workspace; fall back to the stale
+		// `baseRev` if the workspace dropped out of `jj workspace list`
+		// (defensive — keeps the argv list well-formed). For a clean
+		// `-B @` flow the agent's work change is `@-` and therefore
+		// transitively reachable from `@`.
+		const currentHead = currentHeads.get(ws.name) ?? ws.baseRev;
+		mergeParents.push(currentHead);
+	}
+
+	// 1. N-parent jj new at @: `-r @ -r <p1> -r <p2> ...`. Lift the 2-parent
+	// precedent at backends/jj.ts:1180-1188 to N parents.
+	const newArgs: string[] = [...jjArgvFlags(mainRepoRoot), 'new', '-r', '@'];
+	for (const p of mergeParents) {
+		newArgs.push('-r', p);
 	}
 	newArgs.push(
 		'-m',
@@ -334,11 +373,37 @@ export function performJjParallelFanIn(
 	// 2. Resolve the new merge change_id at `@`.
 	const mergeChangeId = resolveChangeId(mainRepoRoot, '@');
 
-	// 3. Probe conflicts via the UPSTREAM-02 sidecar. The probe runs from
-	// `mainRepoRoot` (no `--ignore-working-copy` — D-13 carry; this is a
-	// read, not a write).
-	const conflictedPaths = enumerateConflictedPaths(mainRepoRoot, mergeChangeId);
-	const conflicted = conflictedPaths.length > 0;
+	// 3. Probe conflicts. Two-stage to avoid `enumerateConflictedPaths`'s
+	// `<UNRESOLVABLE>` fallback firing on non-conflicted merges:
+	//   stage 1: `conflicts() & <mergeChangeId>` revset — boolean gate, mirrors
+	//            reap.ts's `hasInTreeConflict` probe at reap.ts:88-101.
+	//   stage 2: only if stage 1 said yes, enumerate paths via the sidecar.
+	//
+	// Bug-fix rationale (plan 09.05 Rule 1): the original parallel.ts called
+	// `enumerateConflictedPaths` unconditionally and derived `conflicted` from
+	// its return length. But the sidecar's WR-04 contract is "return
+	// `['<UNRESOLVABLE>']` when `conflicts()` flagged the rev but enumeration
+	// drew a blank" — it assumes the caller already gated on `conflicts()`.
+	// On a clean merge the sidecar still returned `['<UNRESOLVABLE>']`
+	// (primary `jj resolve --list` printed nothing → fallback `jj diff
+	// --summary` exit 0 but no `C ` lines → WR-04 sentinel), making
+	// `conflicted` always true. Gate explicitly here so the sidecar's
+	// behavior matches its contract.
+	const conflictsProbeArgs = [
+		...jjArgvFlags(mainRepoRoot),
+		'log', '-r', `conflicts() & ${mergeChangeId}`,
+		'-T', 'change_id ++ "\\n"', '--no-graph',
+	];
+	const conflictsProbe = vcsExec(mainRepoRoot, 'jj', conflictsProbeArgs);
+	if (conflictsProbe.exitCode !== 0) {
+		throw new Error(
+			`parallel.fanIn: conflicts() probe at ${mergeChangeId} failed: ${conflictsProbe.stderr || conflictsProbe.stdout}`,
+		);
+	}
+	const conflicted = conflictsProbe.stdout.trim().length > 0;
+	const conflictedPaths = conflicted
+		? enumerateConflictedPaths(mainRepoRoot, mergeChangeId)
+		: [];
 
 	let incompleteQueued = 0;
 	const merged: string[] = [];
@@ -406,9 +471,14 @@ export function performJjParallelFanIn(
 		// D-08 invariant: re-list the gsd/phase-{NN}-subagent-* bookmark set
 		// post-delete; on the clean path the result MUST be empty. Surfacing
 		// any leftover is the cross-backend contract handed to plan 05.
+		//
+		// Bug-fix rationale (plan 09.05 Rule 1): `jj bookmark list` does NOT
+		// accept `--no-graph` (jj 0.41: "unexpected argument '--no-graph'") —
+		// unlike `jj log`, the `bookmark list` subcommand has no graph mode to
+		// suppress. Removing the flag.
 		const listArgs = [
 			...jjArgvFlags(mainRepoRoot),
-			'bookmark', 'list', '-T', 'name ++ "\n"', '--no-graph',
+			'bookmark', 'list', '-T', 'name ++ "\n"',
 		];
 		const listRes = vcsExec(mainRepoRoot, 'jj', listArgs);
 		if (listRes.exitCode !== 0) {
@@ -424,8 +494,18 @@ export function performJjParallelFanIn(
 	}
 
 	// 4. Reap crashed agents — those with exitCode !== 0 in the results array.
-	// Build the entries[] payload from handle.workspaces (the dispatch-side
-	// metadata is the source of truth for the on-disk path + head change_id).
+	// Reuses the `currentHeads` map built at the top of this function (the
+	// same re-resolved-current-head map the N-parent merge consumed).
+	//
+	// Bug-fix rationale (plan 09.05 Rule 1): `ws.baseRev` is the EMPTY slot
+	// head materialized at dispatch time. A crashed agent's uncommitted work
+	// landed in a NEW change via auto-snapshot, so its workspace `@` no longer
+	// equals `ws.baseRev`. Feeding `ws.baseRev` as the `headChange` to
+	// `performJjReap` makes `isEmptyHead` probe the wrong revision (the
+	// already-empty slot head) and reap classifies the workspace as empty
+	// rather than crashed — silently dropping the queue entry the orchestrator
+	// expects. Re-resolving via `workspace.list()` matches the production path
+	// `backends/jj.ts:1115-1135` (`workspace.reap`) takes for the same reason.
 	const crashed = results.filter((r) => r.exitCode !== 0);
 	if (crashed.length > 0) {
 		const crashedAgentIds = new Set(crashed.map((r) => r.agentId));
@@ -433,7 +513,11 @@ export function performJjParallelFanIn(
 			.filter((ws) => crashedAgentIds.has(ws.agentId))
 			.map((ws) => ({
 				name: ws.name,
-				headChange: ws.baseRev,
+				// Re-resolved current `@` from `jj workspace list`; fall back to
+				// the stale `ws.baseRev` only if the workspace dropped out of
+				// `jj workspace list` (e.g., already forgotten) — that case
+				// still hands a defined string to reap rather than `undefined`.
+				headChange: currentHeads.get(ws.name) ?? ws.baseRev,
 				path: ws.path,
 			}));
 		const reapResult = performJjReap({

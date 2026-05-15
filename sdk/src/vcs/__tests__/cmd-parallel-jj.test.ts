@@ -1,0 +1,412 @@
+/**
+ * sdk/src/vcs/__tests__/cmd-parallel-jj.test.ts — Phase 9 plan 05 (TEST-13 + TEST-14)
+ *
+ * Behavioral gate for Phase 9: covers `vcs.workspace.parallel.{dispatch,fanIn}`
+ * on the jj backend across N ∈ {2, 3, 4} clean fan-in, the in-tree-conflict
+ * joint assertion (D-16 / W3 (a) — ALL THREE assertions co-located in ONE `it`
+ * block), the crashed-worker queue-entry scenario, and the TEST-14
+ * `jj log -r 'divergent()'` topology proof.
+ *
+ * Structural rules (locked by 09-CONTEXT + 09.05-PLAN):
+ *   - Pattern A: `describe.sequential.skipIf(!jjAvailable)` per scenario
+ *     (D-15). Tests cannot run when `jj --version` is unavailable.
+ *   - Pattern B: random-prefix `mkdtemp` to guard against parallel-test-FILE
+ *     collisions under `tmpdir()` (D-15 / Pitfall 9).
+ *   - W2 lifecycle lock-in: each value of N ∈ {2, 3, 4} owns its OWN describe
+ *     block (top-level for-loop wraps `describe.sequential.skipIf(...)`, NOT
+ *     `it(...)`). Each describe has its own `beforeAll` (fresh `mkdtemp`) and
+ *     `afterAll` (`rmSync`), so N=2's state cannot leak into N=3 or N=4.
+ *   - W3 (a) joint-assertion lock-in (D-16): the in-tree-conflict scenario is
+ *     a SINGLE `it` block asserting (i) `conflicted === true`, (ii)
+ *     `conflictedPaths` populated, (iii) queue entry with
+ *     `reason === 'merge-in-tree-conflict'`. The queue entry is produced by
+ *     fanIn itself (per plan 09.03 action §7 W3 (a)), NOT by reap. D-16 is NOT
+ *     split across multiple `it` blocks.
+ *   - Never use retry config; never use a skip modifier on describe/it/test
+ *     (D-15 / Pitfall 9). Flakes are fixed at the fixture level — not papered
+ *     over.
+ *
+ * `handle.phaseRoot` must exist on disk before fanIn enqueues a queue entry
+ * (parallel.ts:140 contract: "`appendIncomplete` create the queue file lazily;
+ * `mkdir -p` is the caller's responsibility"). The setup helper materializes
+ * `.planning/phases/09-test/` so `derivePhaseRoot(repo, 9)` resolves to an
+ * existing directory.
+ */
+
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execSync } from 'node:child_process';
+import { createJjAdapter } from '../backends/jj.js';
+import { readIncomplete } from '../jj/incomplete-work.js';
+
+let jjAvailable = false;
+try {
+	execSync('jj --version', { stdio: 'pipe' });
+	jjAvailable = true;
+} catch {
+	// jj not on PATH; every describe in this file skips.
+}
+
+/**
+ * Build a fresh colocated jj repo under a random-prefix mkdtemp. The repo has
+ * one seed change with `seed.txt` so `@-` is a non-root parent that
+ * `createPhaseStructure(repo, '@-', 9)` can fork from. Also pre-creates the
+ * phase-9 phase directory so `derivePhaseRoot` resolves to an existing path
+ * for `appendIncomplete`.
+ *
+ * Pattern B: random suffix on the prefix string guards against the
+ * parallel-test-FILE collision mode documented in Phase 4 LEARNINGS /
+ * 09-CONTEXT D-15 (Pitfall 9).
+ */
+function setupJjRepo(): string {
+	const dir = mkdtempSync(
+		join(
+			tmpdir(),
+			`gsd-jj-parallel-${Math.random().toString(36).slice(2, 10)}-`,
+		),
+	);
+	execSync('jj git init --colocate', { cwd: dir, stdio: 'pipe' });
+	execSync('jj config set --repo user.email "test@test.com"', {
+		cwd: dir,
+		stdio: 'pipe',
+	});
+	execSync('jj config set --repo user.name "Test"', {
+		cwd: dir,
+		stdio: 'pipe',
+	});
+	writeFileSync(join(dir, 'seed.txt'), 'seed\n');
+	execSync('jj squash -B @ -k -m "seed"', { cwd: dir, stdio: 'pipe' });
+	// Materialize .planning/phases/09-test/ so derivePhaseRoot(repo, 9) resolves
+	// to an existing dir. The `09-` prefix is what derivePhaseRoot scans for at
+	// parallel.ts:147 (`d === padded || d.startsWith(`${padded}-`)`).
+	mkdirSync(join(dir, '.planning', 'phases', '09-test'), { recursive: true });
+	return dir;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// W2 lifecycle lock-in: for-loop wraps `describe.sequential.skipIf(...)`. Each
+// iteration N ∈ {2, 3, 4} produces an INDEPENDENT describe with its own
+// beforeAll(setupJjRepo) and afterAll(rmSync). Vitest evaluates describe
+// callbacks synchronously during collection — the for-loop runs at module-load
+// time, registering three sibling describes. State cannot leak across N values.
+// ───────────────────────────────────────────────────────────────────────────
+
+for (const N of [2, 3, 4] as const) {
+	describe.sequential.skipIf(!jjAvailable)(
+		`workspace.parallel — N=${N} clean dispatch + fanIn + divergent() topology`,
+		() => {
+			let dir: string;
+			let vcs: ReturnType<typeof createJjAdapter>;
+
+			beforeAll(() => {
+				dir = setupJjRepo();
+				vcs = createJjAdapter(dir);
+			});
+
+			afterAll(() => {
+				if (dir) rmSync(dir, { recursive: true, force: true });
+			});
+
+			// End-to-end clean-path scenario for this N. Combined into ONE `it`
+			// block because each describe owns ONE dispatched octopus structure
+			// (re-dispatching into the same dir would collide on the already-
+			// created `phase-09-subagent-{idx}` workspace names — jj rejects
+			// duplicate workspace adds). The TEST-14 `divergent()` assertion is
+			// folded in at the end so it runs against the post-fanIn topology
+			// the same scenario just produced.
+			//
+			// Per-test timeout 30s: each scenario shells out ~N×6 jj subprocesses
+			// (dispatch + N squashes + fanIn fan-out + probe + divergent log),
+			// and the default 5s budget runs hot for N ∈ {3, 4} on machines
+			// under load. No retry config (D-15) — timeout adjustment is the
+			// approved knob.
+			it(`N=${N}: dispatch creates ${N} distinct change_ids; clean fanIn returns conflicted===false, merged.length===1, surplusBookmarks empty; post-fanIn divergent() is empty`, { timeout: 30000 }, () => {
+				const plan = Array.from({ length: N }, (_, i) => ({
+					agentId: `agent-${i + 1}`,
+					planId: `plan-${i + 1}`,
+				}));
+				const handle = vcs.workspace.parallel.dispatch({
+					plan,
+					phaseNumber: 9,
+					mainBookmark: 'main',
+				});
+				// Dispatch invariants (TEST-13, first must_have): N workspaces,
+				// distinct change_ids, frozen pure-JSON handle (D-05).
+				expect(handle.workspaces.length).toBe(N);
+				const baseRevs = new Set(handle.workspaces.map((w) => w.baseRev));
+				expect(baseRevs.size).toBe(N);
+				expect(Object.isFrozen(handle)).toBe(true);
+				expect(Object.isFrozen(handle.workspaces)).toBe(true);
+				expect(Object.isFrozen(handle.workspaces[0])).toBe(true);
+				for (let i = 0; i < N; i++) {
+					expect(handle.workspaces[i].agentId).toBe(`agent-${i + 1}`);
+				}
+				expect(handle.phaseRoot).toContain('09-test');
+				expect(handle.manifest).toBeTruthy();
+
+				// Simulate clean work in each workspace: each agent edits a
+				// DISTINCT file (`agent-N.txt`) so the octopus merge has nothing
+				// to conflict on. Squash into the workspace's `@` so the head
+				// carries the diff (parallels `jj-octopus.test.ts:67-68`).
+				for (let i = 0; i < N; i++) {
+					const ws = handle.workspaces[i];
+					writeFileSync(
+						join(ws.path, `agent-${i + 1}.txt`),
+						`clean work ${i + 1}\n`,
+					);
+					execSync(`jj squash -B @ -k -m "subagent ${i + 1} clean"`, {
+						cwd: ws.path,
+						stdio: 'pipe',
+					});
+				}
+
+				// Clean fanIn (TEST-13, second must_have): merged carries the
+				// single N-parent merge change_id; conflicted is false; the
+				// surplusBookmarks D-08 invariant holds; no queue entries.
+				const result = vcs.workspace.parallel.fanIn(
+					handle,
+					handle.workspaces.map((w) => ({
+						agentId: w.agentId,
+						exitCode: 0,
+					})),
+				);
+				expect(result.conflicted).toBe(false);
+				expect(result.conflictedPaths.length).toBe(0);
+				expect(result.merged.length).toBe(1);
+				expect(result.surplusBookmarks.length).toBe(0);
+				expect(result.incompleteQueued).toBe(0);
+				expect(result.failedReaped.length).toBe(0);
+
+				// TEST-14 topology assertion: post-fanIn `divergent()` is empty.
+				// Runs against the same post-fanIn state the scenario just
+				// produced — the octopus collapsed cleanly into a single merge
+				// change at `@`, so no divergent change_ids exist anywhere.
+				const r = execSync(
+					`jj --repository ${dir} log -r 'divergent()' --no-graph -T 'change_id ++ "\\n"'`,
+					{ encoding: 'utf-8' },
+				);
+				expect(r.trim()).toBe('');
+			});
+		},
+	);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// W3 (a) joint-assertion lock-in (D-16): ONE `it` block asserts ALL THREE of
+// (i) conflicted === true, (ii) conflictedPaths populated, (iii) queue entry
+// with reason === 'merge-in-tree-conflict'. The queue entry is produced by
+// fanIn itself (parallel.ts:359 — `appendIncomplete(handle.phaseRoot, ...)`
+// under the `conflicted` branch), NOT by reap.
+// ───────────────────────────────────────────────────────────────────────────
+
+describe.sequential.skipIf(!jjAvailable)(
+	'workspace.parallel — in-tree conflict joint assertion (D-16, W3 (a))',
+	() => {
+		let dir: string;
+		let vcs: ReturnType<typeof createJjAdapter>;
+
+		beforeAll(() => {
+			dir = setupJjRepo();
+			// Seed CONFLICT.txt at the root change BEFORE dispatch — every
+			// subsequent workspace forks from this state, so all N workspaces
+			// see "base content\n" as the file's value at fork time.
+			writeFileSync(join(dir, 'CONFLICT.txt'), 'base content\n');
+			execSync('jj squash -B @ -k -m "seed conflict file"', {
+				cwd: dir,
+				stdio: 'pipe',
+			});
+			vcs = createJjAdapter(dir);
+		});
+
+		afterAll(() => {
+			if (dir) rmSync(dir, { recursive: true, force: true });
+		});
+
+		it('N=2 in-tree-conflict: conflicted===true AND conflictedPaths populated AND queue entry reason="merge-in-tree-conflict" — ALL THREE in ONE scenario', { timeout: 30000 }, () => {
+			const handle = vcs.workspace.parallel.dispatch({
+				plan: [
+					{ agentId: 'agent-1', planId: 'plan-1' },
+					{ agentId: 'agent-2', planId: 'plan-2' },
+				],
+				phaseNumber: 9,
+				mainBookmark: 'main',
+			});
+			// Workspace 1: CONFLICT.txt = "version A\n"
+			writeFileSync(
+				join(handle.workspaces[0].path, 'CONFLICT.txt'),
+				'version A\n',
+			);
+			execSync('jj squash -B @ -k -m "subagent 1 work"', {
+				cwd: handle.workspaces[0].path,
+				stdio: 'pipe',
+			});
+			// Workspace 2: CONFLICT.txt = "version B\n"
+			writeFileSync(
+				join(handle.workspaces[1].path, 'CONFLICT.txt'),
+				'version B\n',
+			);
+			execSync('jj squash -B @ -k -m "subagent 2 work"', {
+				cwd: handle.workspaces[1].path,
+				stdio: 'pipe',
+			});
+			// Both agents exit cleanly — exitCode 0. The fanIn-side W3 (a)
+			// producer (parallel.ts:348-365) is the one expected to enqueue,
+			// because both `clean` agents produced an N-parent octopus that
+			// itself carries an in-tree conflict on CONFLICT.txt.
+			const result = vcs.workspace.parallel.fanIn(handle, [
+				{ agentId: 'agent-1', exitCode: 0 },
+				{ agentId: 'agent-2', exitCode: 0 },
+			]);
+			// ── Assertion (i): the conflicted boolean (D-08 surface) is true.
+			expect(result.conflicted).toBe(true);
+			// ── Assertion (ii): conflictedPaths populated. The
+			// `enumerateConflictedPaths` sidecar (jj/conflict-paths.ts) returns
+			// either the actual file path or `'<UNRESOLVABLE>'` if neither the
+			// `jj resolve --list` nor the `jj diff --summary` enumeration form
+			// succeeded. Both forms are acceptable here — the load-bearing
+			// invariant is "the array is non-empty".
+			expect(result.conflictedPaths.length).toBeGreaterThan(0);
+			expect(
+				result.conflictedPaths.some(
+					(p) => p.includes('CONFLICT.txt') || p === '<UNRESOLVABLE>',
+				),
+			).toBe(true);
+			// ── Assertion (iii): the queue file at handle.phaseRoot now has an
+			// IncompleteWorkEntry with reason === 'merge-in-tree-conflict'.
+			// readIncomplete is the parser side of the same on-disk format the
+			// fanIn producer writes (incomplete-work.ts). It enforces the
+			// Phase 9 D-09 closed-union — an unknown reason would throw here.
+			const queue = readIncomplete(handle.phaseRoot);
+			expect(queue.some((e) => e.reason === 'merge-in-tree-conflict')).toBe(
+				true,
+			);
+			// Bonus: incompleteQueued counter reflects the enqueue.
+			expect(result.incompleteQueued).toBeGreaterThanOrEqual(1);
+			// On the conflicted path the main bookmark was NOT advanced and the
+			// agent bookmarks were NOT deleted — so `merged` is empty (no clean
+			// merge change_id to report).
+			expect(result.merged.length).toBe(0);
+			// And `surplusBookmarks` is empty by construction: the field reports
+			// unexpected LEFTOVERS from a delete-attempt, not "all bookmarks
+			// alive". No delete was attempted on the conflicted path.
+			expect(result.surplusBookmarks.length).toBe(0);
+		});
+	},
+);
+
+// ───────────────────────────────────────────────────────────────────────────
+// Crashed-worker scenario: one agent crashes (exitCode 1) with uncommitted
+// work in its workspace `@`. fanIn's reap branch (parallel.ts:429-449) routes
+// the crashed workspace through `performJjReap`, which classifies the
+// non-empty head as `crashed-with-uncommitted-work` and appends to the queue.
+// ───────────────────────────────────────────────────────────────────────────
+
+describe.sequential.skipIf(!jjAvailable)(
+	'workspace.parallel — crashed worker queue entry',
+	() => {
+		let dir: string;
+		let vcs: ReturnType<typeof createJjAdapter>;
+
+		beforeAll(() => {
+			dir = setupJjRepo();
+			vcs = createJjAdapter(dir);
+		});
+
+		afterAll(() => {
+			if (dir) rmSync(dir, { recursive: true, force: true });
+		});
+
+		it('one crashed worker (exitCode: 1, uncommitted work): queue entry reason="crashed-with-uncommitted-work"', { timeout: 30000 }, () => {
+			const handle = vcs.workspace.parallel.dispatch({
+				plan: [
+					{ agentId: 'agent-1', planId: 'plan-1' },
+					{ agentId: 'agent-2', planId: 'plan-2' },
+				],
+				phaseNumber: 9,
+				mainBookmark: 'main',
+			});
+			// Workspace 1: clean work that squashes into `@`.
+			writeFileSync(join(handle.workspaces[0].path, 'clean.txt'), 'clean\n');
+			execSync('jj squash -B @ -k -m "subagent 1 clean"', {
+				cwd: handle.workspaces[0].path,
+				stdio: 'pipe',
+			});
+			// Workspace 2: crashed — non-empty `@` (auto-snapshot via `jj st`),
+			// no explicit squash. This mirrors the fixture mechanism at
+			// jj-reap.test.ts:115-151 — the WC content moves INTO `@` via the
+			// auto-snapshot, so reap sees a non-empty head to classify.
+			writeFileSync(
+				join(handle.workspaces[1].path, 'crashed-work.txt'),
+				'partial output\n',
+			);
+			execSync('jj st', { cwd: handle.workspaces[1].path, stdio: 'pipe' });
+			// agent-2 reports exitCode 1 + a stderr. fanIn's reap branch picks
+			// up the workspace and routes through performJjReap.
+			const result = vcs.workspace.parallel.fanIn(handle, [
+				{ agentId: 'agent-1', exitCode: 0 },
+				{ agentId: 'agent-2', exitCode: 1, stderr: 'crashed' },
+			]);
+			// Queue carries the crashed-worker entry.
+			expect(result.incompleteQueued).toBeGreaterThanOrEqual(1);
+			const queue = readIncomplete(handle.phaseRoot);
+			expect(
+				queue.some((e) => e.reason === 'crashed-with-uncommitted-work'),
+			).toBe(true);
+		});
+	},
+);
+
+// ───────────────────────────────────────────────────────────────────────────
+// Parse-time reason validation (covers plan 09.02 task 3): readIncomplete
+// must throw on an unknown `reason` value in the queue file. This is the
+// Phase 9 D-09 closed-union invariant — the parser is the load-bearing gate
+// that the D-14 phase-merge gate (backends/jj.ts:182-194) relies on for
+// fail-safe blocking.
+// ───────────────────────────────────────────────────────────────────────────
+
+describe.sequential.skipIf(!jjAvailable)(
+	'readIncomplete parse-time validation (Phase 9 D-09 closed-union)',
+	() => {
+		let phaseDir: string;
+
+		beforeAll(() => {
+			phaseDir = mkdtempSync(
+				join(
+					tmpdir(),
+					`gsd-jj-parse-${Math.random().toString(36).slice(2, 10)}-`,
+				),
+			);
+		});
+
+		afterAll(() => {
+			if (phaseDir) rmSync(phaseDir, { recursive: true, force: true });
+		});
+
+		it('throws on unknown reason value', () => {
+			writeFileSync(
+				join(phaseDir, 'incomplete-work.md'),
+				'- subagent-1: head=abc123def456, workspace=/tmp/x, reason=garbage-value\n',
+			);
+			expect(() => readIncomplete(phaseDir)).toThrow(/unknown reason/);
+		});
+
+		it('accepts both known reason values without throwing', () => {
+			// Overwrite with two entries — one of each known reason. Parser
+			// must accept both and return them in order.
+			writeFileSync(
+				join(phaseDir, 'incomplete-work.md'),
+				[
+					'- subagent-1: head=abc123def456, workspace=/tmp/x, reason=crashed-with-uncommitted-work',
+					'- phase-09-merge: head=def456abc123, workspace=/tmp/y, reason=merge-in-tree-conflict',
+					'',
+				].join('\n'),
+			);
+			const entries = readIncomplete(phaseDir);
+			expect(entries.length).toBe(2);
+			expect(entries[0].reason).toBe('crashed-with-uncommitted-work');
+			expect(entries[1].reason).toBe('merge-in-tree-conflict');
+		});
+	},
+);
