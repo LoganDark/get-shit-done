@@ -573,8 +573,23 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
   // ─── workspace ───────────────────────────────────────────────────────────
   const workspace = Object.freeze({
     add: (input: WorkspaceAdd): WorkspaceInfo => {
+      // Phase 10 plan 04 (Rule 1 auto-fix): when `input.name` is set, render
+      // as `git worktree add <path> -b <name> [<baseRef>]` so the worktree
+      // gets a NEW branch with the requested name. The git-side parallel
+      // dispatch sidecar (`sdk/src/vcs/git/parallel.ts:197-200`) relies on
+      // this behavior to eagerly materialize `worktree-agent-<id>` branches;
+      // before this fix `name` was silently ignored on git, leaving a
+      // detached/no-named branch state that broke the subsequent
+      // `git rev-parse worktree-agent-<id>` lookup.
+      //
+      // Mirrors the JSDoc contract on `WorkspaceAdd.name` (types.ts:193-197)
+      // which previously specified jj-only semantics — this widens it to
+      // both backends so sidecar callers can compose uniformly. The default
+      // (no `name`) preserves the historical Phase 4 git behavior of
+      // checking out an existing branch / detached HEAD at `path`.
       const baseRevArg = input.baseRef ? [toGitRev(input.baseRef)] : [];
-      const r = execGit(cwd, ['worktree', 'add', input.path, ...baseRevArg]);
+      const branchArg = input.name ? ['-b', input.name] : [];
+      const r = execGit(cwd, ['worktree', 'add', ...branchArg, input.path, ...baseRevArg]);
       if (r.exitCode !== 0) {
         throw new Error(`workspace.add failed: ${r.stderr || r.stdout}`);
       }
