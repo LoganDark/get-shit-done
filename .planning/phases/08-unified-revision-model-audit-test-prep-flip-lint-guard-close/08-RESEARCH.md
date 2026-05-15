@@ -697,7 +697,7 @@ const phaseDir = '.planning/phases/08-unified-revision-model-audit-test-prep-fli
 
 **If this table is empty:** All other claims in this research were verified against current source files or are directly copied from CONTEXT.md locked decisions.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Matcher signature: literal kind vs options bag** (D-02 last bullet — Claude's Discretion)
    - What we know: vitest 3 supports both signatures (`expect.toBeIdOf('jj')` and `expect.toBeIdOf({ kind: 'jj', allowShort: true })`); module augmentation supports overloads.
