@@ -1,7 +1,7 @@
 {
   "id": "commands-cjs-921-rev-list-root",
   "source": "get-shit-done/bin/lib/commands.cjs:921",
-  "captured_at": "2026-05-10",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [
@@ -25,7 +25,7 @@
   ],
   "expected": {
     "exitCode": 0,
-    "stdout": "be55c4c55a5b4707092578d11f46ea37eafcc78e",
+    "stdout": "c588f5584c2b2e36c70366094337e305f0ef7ece",
     "stderr": "",
     "timedOut": false,
     "error": null

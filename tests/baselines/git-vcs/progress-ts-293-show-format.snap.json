@@ -1,7 +1,7 @@
 {
   "id": "progress-ts-293-show-format",
   "source": "sdk/src/query/progress.ts:293",
-  "captured_at": "2026-05-10",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [
@@ -22,7 +22,7 @@
   ],
   "expected": {
     "exitCode": 0,
-    "stdout": "2026-05-09",
+    "stdout": "2026-05-14",
     "stderr": "",
     "timedOut": false,
     "error": null

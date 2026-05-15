@@ -1,7 +1,7 @@
 {
   "id": "check-ship-ready-ts-50-config-get",
   "source": "sdk/src/query/check-ship-ready.ts:50",
-  "captured_at": "2026-05-10",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [

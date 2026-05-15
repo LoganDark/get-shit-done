@@ -1,7 +1,7 @@
 {
   "id": "verify-cjs-1305-cat-file",
   "source": "get-shit-done/bin/lib/verify.cjs:1305",
-  "captured_at": "2026-05-10",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [

@@ -1,7 +1,7 @@
 {
   "id": "check-decision-coverage-ts-385-log-pretty",
   "source": "sdk/src/query/check-decision-coverage.ts:385",
-  "captured_at": "2026-05-10",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [

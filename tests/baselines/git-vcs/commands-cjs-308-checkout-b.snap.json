@@ -1,7 +1,7 @@
 {
   "id": "commands-cjs-308-checkout-b",
   "source": "get-shit-done/bin/lib/commands.cjs:308",
-  "captured_at": "2026-05-10",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [

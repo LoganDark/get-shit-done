@@ -1,7 +1,7 @@
 {
   "id": "commands-cjs-994-diff-cached",
   "source": "get-shit-done/bin/lib/commands.cjs:994",
-  "captured_at": "2026-05-09",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [

@@ -1,7 +1,7 @@
 {
   "id": "commands-cjs-402-commit",
   "source": "get-shit-done/bin/lib/commands.cjs:402",
-  "captured_at": "2026-05-10",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [
@@ -24,7 +24,7 @@
   ],
   "expected": {
     "exitCode": 0,
-    "stdout": "[master d4e1a80] msg\n 1 file changed, 1 insertion(+)\n create mode 100644 bar.txt",
+    "stdout": "[master a008f5f] msg\n 1 file changed, 1 insertion(+)\n create mode 100644 bar.txt",
     "stderr": "",
     "timedOut": false,
     "error": null

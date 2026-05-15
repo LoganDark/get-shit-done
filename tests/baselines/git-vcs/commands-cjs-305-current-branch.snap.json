@@ -1,7 +1,7 @@
 {
   "id": "commands-cjs-305-current-branch",
   "source": "get-shit-done/bin/lib/commands.cjs:305",
-  "captured_at": "2026-05-10",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [

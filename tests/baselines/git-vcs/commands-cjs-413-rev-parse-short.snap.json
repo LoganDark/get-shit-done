@@ -1,7 +1,7 @@
 {
   "id": "commands-cjs-413-rev-parse-short",
   "source": "get-shit-done/bin/lib/commands.cjs:413",
-  "captured_at": "2026-05-10",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [
@@ -21,7 +21,7 @@
   ],
   "expected": {
     "exitCode": 0,
-    "stdout": "be55c4c",
+    "stdout": "c588f55",
     "stderr": "",
     "timedOut": false,
     "error": null

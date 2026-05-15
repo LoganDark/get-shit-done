@@ -1,7 +1,7 @@
 {
   "id": "check-ship-ready-ts-41-current-branch",
   "source": "sdk/src/query/check-ship-ready.ts:41",
-  "captured_at": "2026-05-10",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [

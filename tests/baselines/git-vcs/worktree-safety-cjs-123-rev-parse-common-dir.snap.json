@@ -1,7 +1,7 @@
 {
   "id": "worktree-safety-cjs-123-rev-parse-common-dir",
   "source": "get-shit-done/bin/lib/worktree-safety.cjs:123",
-  "captured_at": "2026-05-10",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [

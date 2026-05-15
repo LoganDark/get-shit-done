@@ -1,7 +1,7 @@
 {
   "id": "progress-ts-286-rev-list-count",
   "source": "sdk/src/query/progress.ts:286",
-  "captured_at": "2026-05-10",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [

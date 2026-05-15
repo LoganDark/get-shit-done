@@ -1,7 +1,7 @@
 {
   "id": "init-ts-1009-status-porcelain",
   "source": "sdk/src/query/init.ts:1009",
-  "captured_at": "2026-05-10",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [

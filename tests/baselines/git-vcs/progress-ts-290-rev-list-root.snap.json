@@ -1,7 +1,7 @@
 {
   "id": "progress-ts-290-rev-list-root",
   "source": "sdk/src/query/progress.ts:290",
-  "captured_at": "2026-05-10",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [
@@ -25,7 +25,7 @@
   ],
   "expected": {
     "exitCode": 0,
-    "stdout": "aa66cf34896b260b39cc43e80f5ca7310de74bad",
+    "stdout": "043689963113826f2e1666027124e99fe27ff25c",
     "stderr": "",
     "timedOut": false,
     "error": null

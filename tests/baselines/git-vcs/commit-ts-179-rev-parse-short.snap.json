@@ -1,7 +1,7 @@
 {
   "id": "commit-ts-179-rev-parse-short",
   "source": "sdk/src/query/commit.ts:179",
-  "captured_at": "2026-05-10",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [
@@ -25,7 +25,7 @@
   ],
   "expected": {
     "exitCode": 0,
-    "stdout": "c9cf61d",
+    "stdout": "f2f05d2",
     "stderr": "",
     "timedOut": false,
     "error": null

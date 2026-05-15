@@ -1,7 +1,7 @@
 {
   "id": "verify-cjs-1224-log-all",
   "source": "get-shit-done/bin/lib/verify.cjs:1224",
-  "captured_at": "2026-05-10",
+  "captured_at": "2026-05-15",
   "fixture": {
     "init": "git init",
     "config": [
@@ -22,7 +22,7 @@
   ],
   "expected": {
     "exitCode": 0,
-    "stdout": "3aa42d7 initial",
+    "stdout": "35d37d5 initial",
     "stderr": "",
     "timedOut": false,
     "error": null
