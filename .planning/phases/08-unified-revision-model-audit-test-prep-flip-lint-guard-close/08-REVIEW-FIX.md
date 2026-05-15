@@ -2,11 +2,11 @@
 phase: 08-unified-revision-model-audit-test-prep-flip-lint-guard-close
 fixed_at: 2026-05-15T00:00:00Z
 review_path: .planning/phases/08-unified-revision-model-audit-test-prep-flip-lint-guard-close/08-REVIEW.md
-fix_scope: critical_warning
-findings_in_scope: 6
-fixed: 5
-skipped: 1
-iteration: 1
+fix_scope: all
+findings_in_scope: 10
+fixed: 10
+skipped: 0
+iteration: 2
 status: all_fixed
 ---
 
@@ -14,84 +14,96 @@ status: all_fixed
 
 **Fixed at:** 2026-05-15
 **Source review:** `.planning/phases/08-unified-revision-model-audit-test-prep-flip-lint-guard-close/08-REVIEW.md`
-**Iteration:** 1
+**Iteration:** 2 (cumulative; iteration 1 covered the 6 critical+warning findings, iteration 2 extends to the 4 Info findings under `fix_scope=all`)
 
 **Summary:**
-- Findings in scope: 6 (1 Critical + 5 Warning; Info findings out of scope per `fix_scope=critical_warning`)
-- Fixed: 5 (4 fresh + 1 already-fixed CR-01 verified)
-- Skipped: 1 (CR-01 — verified already fixed in commit `54843ae7`; treated as fixed for status purposes, listed under Skipped for documentation completeness)
+- Findings in scope: 10 (1 Critical + 5 Warning + 4 Info)
+- Fixed: 10 (6 from iteration 1, 4 fresh in iteration 2)
+- Skipped: 0
 
-Note: `status: all_fixed` because CR-01 was already addressed by an upstream commit before this fix run (`54843ae7 — fix(08): sweep missed cmdCommitToSubrepo .hash to .id`). All 5 in-scope warnings (WR-01..WR-05) received fresh fixes in this iteration.
+All 10 review findings now have an applied fix on the branch. Iteration 1 closed the critical/warning scope (1 + 5); iteration 2 closes the four Info-tier findings (IN-01..IN-04). Project lints + targeted tests pass after iteration 2.
 
-## Fixed Issues
+## Fixed Issues — Iteration 1 (already landed prior to this run)
 
 ### CR-01: cmdCommitToSubrepo renders every repo as ":skip" because of an inconsistent hash/id rename
 
 **Files modified:** `get-shit-done/bin/lib/commands.cjs`
-**Commit:** `54843ae7` (pre-existing; not re-committed)
-**Applied fix:** Renamed all 3 producer sites (`hash:` → `id:` on lines 484, 487, 500) plus the local var `hash` → `id` (lines 491-498). Confirmed by reading the current file state — output line 508 reads `v.id`, producers emit `id`, render aligns.
-**Verification:** Re-read `get-shit-done/bin/lib/commands.cjs:480-510` — current source shows `repos[repo] = { committed: false, id: null, … }` on the two error paths and `repos[repo] = { committed: true, id, … }` on the success path. The `output(...)` call at line 508 reads `v.id`. CR-01 contract is restored.
+**Commit:** `54843ae7` (pre-existing, landed before iteration 1)
+**Applied fix:** Renamed all 3 producer sites (`hash:` → `id:` on lines 484, 487, 500) plus the local var `hash` → `id` (lines 491-498). Verified by re-reading: producers emit `id:`, render at line 508 reads `v.id`, contract restored.
 
 ### WR-01: lint-vcs-no-commit-id.cjs allowlist path-resolution silently breaks when --scan-root points anywhere but REPO_ROOT
 
 **Files modified:** `scripts/lint-vcs-no-commit-id.cjs`
-**Commit:** `umuqqpnzvnwl` (combined with WR-03 — both same file)
-**Applied fix:** Option (a) from the review — added a 4-line block comment above the `path.relative(SCAN_ROOT, …)` call documenting the fixture-test rationale, mirroring the existing comment in `scripts/lint-vcs-no-raw-git.cjs:115-118`. No code change. Allowlist semantics preserved.
+**Commit:** `umuqqpnzvnwl` (iteration 1; combined with WR-03)
+**Applied fix:** Option (a) from the review — added a documentation block above the `path.relative(SCAN_ROOT, …)` call explaining the fixture-test rationale, mirroring the existing convention in `scripts/lint-vcs-no-raw-git.cjs`. Allowlist semantics preserved; no code change.
 
 ### WR-02: migr-06-close-gate.cjs duplicates SDK rewriter logic instead of consuming the canonical implementation
 
 **Files modified:** `scripts/migr-06-close-gate.cjs`, `tests/scripts/migr-06-close-gate.test.cjs` (new)
-**Commit:** `oxxwxwtmwxmr`
-**Applied fix:** Chose the lower-risk option from the review — kept the inline duplication, locked it with a unit test. Verified the inline `COMMIT_KEY_ALLOWLIST` is currently IDENTICAL to the canonical one in `sdk/src/vcs/format-migration/rewrite.ts:73-86` (both have the same 12 keys: `resolution_commit, commit, commit_hash, commit_id, source_commit, migration_commit, first_commit, last_commit, sha, hash, rev, revision`). Added a header comment explaining the superset invariant. Made the script export its allowlist via `module.exports` (guarded with `require.main === module` so direct invocation still works). New test `tests/scripts/migr-06-close-gate.test.cjs` spawns `npx tsx` against `rewrite.ts`, JSON-serializes the canonical Set, and asserts every canonical key is present in the close-gate's set — fails loudly on drift.
-**Note on full canonical consumption:** Did not switch to consuming `rewrite.ts` via tsx (the more invasive option in the review) because (a) the script is one-shot and has already run for this phase, (b) adding a tsx hop to a close-gate script multiplies failure modes for marginal gain when the assertion test catches the drift the maintainer was worried about. Documented decision in commit message.
+**Commit:** `oxxwxwtmwxmr` (iteration 1)
+**Applied fix:** Kept the inline duplication, locked it with a unit test asserting the close-gate's `COMMIT_KEY_ALLOWLIST` is a superset of the canonical set in `sdk/src/vcs/format-migration/rewrite.ts`. Made the script export the allowlist via `module.exports` guarded by `require.main === module`.
 
 ### WR-03: lint-vcs-no-commit-id.cjs hex-regex pattern only matches JS regex literal form
 
 **Files modified:** `scripts/lint-vcs-no-commit-id.cjs`, `scripts/audit-id-namespace.cjs`, `tests/scripts/audit-id-namespace.test.cjs`
-**Commit:** `umuqqpnzvnwl` (combined with WR-01)
-**Applied fix:** Expanded both PATTERNS arrays (lint script line 60 and audit script line 36) — character class went from `/\/\^?…/` to `` /[`'"\/]\^?…/ ``, accepting backtick, single-quote, double-quote, OR forward-slash as the opening delimiter. The audit's `hex_regex` kind label is unchanged; the lint's label was renamed from `"hex-shape regex literal"` to `"hex-shape regex literal or string"` to reflect both forms. Added 3 fixture tests to `tests/scripts/audit-id-namespace.test.cjs`: JS regex-literal form `/^[0-9a-f]{40}$/`, single-quoted `'^[0-9a-f]{12}$'`, double-quoted `"[0-9a-f]{8}"`. All 3 fixtures emit a `hex_regex` row. The lint still passes against the whole repo (1033 files, 0 violations).
+**Commit:** `umuqqpnzvnwl` (iteration 1; combined with WR-01)
+**Applied fix:** Expanded both PATTERNS character classes to accept backtick, single-quote, double-quote, OR forward-slash as the opening delimiter. Added 3 fixture tests covering JS regex-literal, single-quoted, and double-quoted hex regex forms.
 
 ### WR-04: migrateVcsQuery rejects `--cwd` with no value via a misleading "unknown flag" error
 
 **Files modified:** `sdk/src/query/migrate-vcs.ts`
-**Commit:** `vlspussqxttq`
-**Applied fix:** Split the three two-arg flags (`--cwd`, `--target`, `--workstream`) into explicit branches. Each branch first checks the literal flag name, then validates that `args[i + 1]` exists; on missing value it returns a flag-specific error string (e.g. `migrate-vcs: --cwd requires a path argument`, `… --target requires a value (git|jj)`, `… --workstream requires a name argument`) instead of falling through to the catch-all `unknown flag` branch. Built SDK clean; no TS errors.
+**Commit:** `vlspussqxttq` (iteration 1)
+**Applied fix:** Split the three two-arg flags (`--cwd`, `--target`, `--workstream`) into explicit branches, each emitting a flag-specific error string when the value is missing.
 
 ### WR-05: git.ts diff() silently produces nonsensical nameOnly output when both nameOnly and nameStatus are passed
 
 **Files modified:** `sdk/src/vcs/backends/git.ts`
-**Commit:** `prtpnprmvwpn`
-**Applied fix:** Gated BOTH the `--name-only` arg push (line 318) and the `result.nameOnly` field population (line 336) on `opts.nameOnly && !opts.nameStatus`. When both opts are set, the new behavior is: do NOT append `--name-only` to argv (so git's CLI sees only `--name-status`), and leave `result.nameOnly: []`. The `result.nameStatus` parser is untouched and still works. Added 5-line WR-05 comment block above the new arg gate explaining the precedence. Built SDK clean; no TS errors.
+**Commit:** `prtpnprmvwpn` (iteration 1)
+**Applied fix:** Gated both the `--name-only` arg push and the `result.nameOnly` field population on `opts.nameOnly && !opts.nameStatus`. When both opts are set, the adapter now emits only `--name-status` and leaves `result.nameOnly: []`.
 
-## Skipped Issues
+## Fixed Issues — Iteration 2 (this run, `fix_scope=all`)
 
-### CR-01: cmdCommitToSubrepo renders every repo as ":skip" because of an inconsistent hash/id rename
+### IN-01: migr-06-close-gate.cjs containment guard is redundant when walkMd starts at PHASE_DIR
 
-**File:** `get-shit-done/bin/lib/commands.cjs:508` (with producer sites at 484, 487, 500)
-**Reason:** Already fixed before this fix run. Commit `54843ae7 — fix(08): sweep missed cmdCommitToSubrepo .hash to .id (Plan 2 consumer-sweep gap; resolves REVIEW.md CR-01 BLOCKER)` was authored on 2026-05-15 and landed prior to this orchestration. Re-read of the current source confirms the rename is in place: producers emit `id:`, render reads `v.id`. No additional change required.
-**Original issue:** The hard-rename sweep was INCOMPLETE — per-repo result objects were constructed with the legacy `hash:` field but the closing `output(...)` call read `v.id`, so the rendered text always showed `repo:skip` regardless of success.
+**Files modified:** `scripts/migr-06-close-gate.cjs`
+**Commit:** `mxswozzkvtqs` (iteration 2)
+**Applied fix:** Appended an explanatory comment block above `assertInsidePhaseDir` describing the defense-in-depth rationale: `walkMd` is rooted at PHASE_DIR, but `entry.isDirectory()` returns true for a symlinked directory inside PHASE_DIR, so recursion would follow the link and produce absolute paths outside PHASE_DIR. The guard catches that case and aborts. The comment explicitly warns "Do NOT strip as dead code" so a future contributor doesn't remove it.
+**Verification:** `node -c scripts/migr-06-close-gate.cjs` (syntax OK); both repo lints still exit 0.
 
-## Verification
+### IN-02: emitMarkdown produces unsafe pipe-escaping for table cell values
 
-After all fixes were applied, the following gates were run and exit 0:
+**Files modified:** `scripts/audit-id-namespace.cjs`
+**Commit:** `zzporsmvqwoo` (iteration 2)
+**Applied fix:** Option (a) from the review (full escaping). Replaced the inline `.replace(/\|/g, '\\|')` with a dedicated `escapeMarkdownCell(s)` helper that, in order, escapes `\` first (so subsequent inserted backslashes are not re-escaped), then `|`, then `` ` ``, then collapses `\r\n` / `\r` / `\n` to `<br>` so embedded newlines no longer break the table row.
+**Verification:** `node -c scripts/audit-id-namespace.cjs` (syntax OK); `node --test tests/scripts/audit-id-namespace.test.cjs` → 10/10 pass.
+
+### IN-03: parseJjBookmarkRecord throws on non-array target instead of treating it as malformed
+
+**Files modified:** `sdk/src/vcs/parse/jj-bookmark.ts`, `sdk/src/vcs/__tests__/jj-refs.test.ts`
+**Commit:** `pqrlrutnxomx` (iteration 2)
+**Applied fix:** Added a mirror of the `record.name` contract-drift check immediately before the existing length>1 divergence check — if `record.target` is not an array (string, null, missing, number, etc.), throw a typed `Error` with a 80-char preview and an explicit `(got <typeof>)` annotation. Simplified the subsequent divergence and first-target reads now that the `Array.isArray` invariant is established. Added 3 new vitest cases to the parser-level suite (`jj-refs.test.ts`) covering the string, null, and missing-key cases.
+**Verification:** SDK builds clean (`tsc` + `tsc -p tsconfig.cjs.json`); `vitest run src/vcs/__tests__/jj-refs.test.ts` → 31/31 pass (28 prior + 3 new IN-03 cases).
+
+### IN-04: seed-lint-allowlist.cjs has no idempotency assertion despite the JSDoc claim
+
+**Files modified:** `scripts/seed-lint-allowlist.cjs`
+**Commit:** `vouwuyoqqoll` (iteration 2)
+**Applied fix:** Wrapped the `fs.writeFileSync` in a read-and-compare guard. The new content is computed once into `newContent`, the existing on-disk bytes are read (or treated as empty if the file doesn't exist), and the write is skipped when the byte sequences match. The log line on the skip path explicitly reports "no changes (… already up to date, N entries)" so the caller still gets actionable output.
+**Verification:** `node -c scripts/seed-lint-allowlist.cjs` (syntax OK). Live mtime check: captured `stat -c %Y` before, slept 1 s, re-ran the seeder, captured `stat -c %Y` after — `delta=0` confirming the file was not touched and the JSDoc idempotency claim now holds.
+
+## Verification Gates (post iteration 2)
+
+All gates green after iteration 2:
 
 - `node scripts/lint-vcs-no-commit-id.cjs` → ok, 1033 files scanned, 0 violations
 - `node scripts/lint-vcs-no-raw-git.cjs` → ok, 1071 files scanned, 0 violations
 - `pnpm --filter @gsd-build/sdk build` → exit 0 (tsc + tsc -p tsconfig.cjs.json)
-- `node --test tests/scripts/*.test.cjs` → 20 tests pass, 0 fail (16 pre-existing + 3 new WR-03 fixtures + 1 new WR-02 superset test)
-
-## Out-of-Scope (Info findings — `fix_scope=critical_warning`)
-
-The following 4 Info-tier findings were intentionally NOT fixed (scope limit per orchestrator config):
-- IN-01: migr-06-close-gate.cjs containment guard comment (defense-in-depth docstring)
-- IN-02: emitMarkdown unsafe pipe-escaping (annotate or fully-escape)
-- IN-03: parseJjBookmarkRecord throws on non-array target (contract-drift consistency)
-- IN-04: seed-lint-allowlist.cjs no idempotency assertion (mtime preservation)
-
-These remain available for a future `fix_scope=all` pass.
+- `node --test tests/scripts/*.test.cjs` → 20/20 pass (16 pre-existing + 3 WR-03 fixture cases + 1 WR-02 superset assertion)
+- `pnpm --filter @gsd-build/sdk exec vitest run src/vcs/__tests__/jj-refs.test.ts` → 31/31 pass (28 prior + 3 new IN-03 cases)
+- Live idempotency probe: re-running `node scripts/seed-lint-allowlist.cjs` against an existing identical allowlist leaves `stat -c %Y` unchanged.
 
 ---
 
 _Fixed: 2026-05-15_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 1_
+_Iteration: 2_
