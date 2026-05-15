@@ -62,6 +62,11 @@ const COMMIT_ID_PATTERNS = [
   //   - String passed to new RegExp(...) or .test(): '[0-9a-f]{40}' or "[0-9a-f]{40}"
   // The character class [`'"\/] covers all three opening delimiters.
   { re: /[`'"\/]\^?\[0-9a-f\]\{[0-9]+(?:,[0-9]+)?\}/, label: "hex-shape regex literal or string" },
+  // WR-07: also match the word-boundary form (`/\b[0-9a-f]{N}\b/`) the WR-03
+  // pattern missed. This was the gap that let the verify.ts/verify.cjs leak
+  // (WR-06) slip past the lint guard. Mirrors the same addition in
+  // scripts/audit-id-namespace.cjs PATTERNS.
+  { re: /[`'"\/]\\b\[0-9a-f\]\{[0-9]+(?:,[0-9]+)?\}\\b/, label: "hex-shape regex literal (\\b...\\b form)" },
   { re: /['"][0-9a-f]{40}['"]/, label: "40-char hex string literal" },
 ];
 

@@ -37,6 +37,12 @@ const PATTERNS = Object.freeze([
 	// AND string form used with new RegExp(...) or .test() ('[0-9a-f]{N}'). The
 	// character class [`'"\/] covers all three opening delimiters.
 	{ re: /[`'"\/]\^?\[0-9a-f\]\{[0-9]+(?:,[0-9]+)?\}/, kind: 'hex_regex' },
+	// WR-07: also match the word-boundary form (`/\b[0-9a-f]{N}\b/`) that the
+	// WR-03 pattern missed (no leading `^` or quote delimiter — leading `\b`
+	// inside the regex body). This catches `verify.ts`/`verify.cjs`-style
+	// `\b[0-9a-f]{7,40}\b` literals that the prior coverage gap let slip past
+	// the audit and the lint guard (Phase 8 Plan 3 self-audit lesson).
+	{ re: /[`'"\/]\\b\[0-9a-f\]\{[0-9]+(?:,[0-9]+)?\}\\b/, kind: 'hex_regex' },
 	{ re: /['"][0-9a-f]{40}['"]/, kind: '40_char_hex_literal' },
 	{ re: /\.slice\(\s*0\s*,\s*(?:7|8|12)\s*\)/, kind: 'short_slice' },
 ]);

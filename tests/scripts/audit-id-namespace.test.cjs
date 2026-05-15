@@ -32,8 +32,8 @@ test('AUDIT_VERDICT is frozen', () => {
 	assert.equal(Object.isFrozen(AUDIT_VERDICT), true);
 });
 
-test('PATTERNS array: 8 patterns', () => {
-	assert.equal(PATTERNS.length, 8);
+test('PATTERNS array: 9 patterns', () => {
+	assert.equal(PATTERNS.length, 9);
 });
 
 test('classifier emits row for literal commit_id', () => {
@@ -137,6 +137,42 @@ test('classifier emits row for hex_regex in double-quoted string form', () => {
 		assert.ok(
 			result.findings.some(f => f.surface === 'hex_regex'),
 			'double-quoted [0-9a-f]{N} must be matched by hex_regex pattern',
+		);
+	} finally {
+		fs.rmSync(tmp, { recursive: true });
+	}
+});
+
+// WR-07: hex_regex must ALSO match the word-boundary form (`/\b[0-9a-f]{N}\b/`),
+// which the WR-03 pattern missed. This was the coverage gap that allowed the
+// `verify.ts`/`verify.cjs` commit_id-leak (WR-06) to slip past the lint guard.
+test('classifier emits row for hex_regex in word-boundary form (/\\b[0-9a-f]{N}\\b/)', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'audit-test-hex-wb-'));
+	try {
+		fs.mkdirSync(path.join(tmp, 'sdk/src'), { recursive: true });
+		fs.writeFileSync(path.join(tmp, 'sdk/src/x.ts'), `const pat = /\\b[0-9a-f]{7,40}\\b/g;\n`);
+		const result = auditIdNamespace({ scanRoots: ['sdk/src'], repoRoot: tmp });
+		assert.ok(
+			result.findings.some(f => f.surface === 'hex_regex'),
+			'word-boundary /\\b[0-9a-f]{N}\\b/ must be matched by hex_regex pattern (WR-07)',
+		);
+	} finally {
+		fs.rmSync(tmp, { recursive: true });
+	}
+});
+
+// WR-07 completeness: also lock in the slash-anchored form so all four
+// hex-regex source variants (anchored-slash, single-quoted, double-quoted,
+// word-boundary) have explicit regression coverage.
+test('classifier emits row for hex_regex in slash-anchored form (/^[0-9a-f]{N}$/)', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'audit-test-hex-anchor-'));
+	try {
+		fs.mkdirSync(path.join(tmp, 'sdk/src'), { recursive: true });
+		fs.writeFileSync(path.join(tmp, 'sdk/src/x.ts'), `const pat = /^[0-9a-f]{40}$/;\n`);
+		const result = auditIdNamespace({ scanRoots: ['sdk/src'], repoRoot: tmp });
+		assert.ok(
+			result.findings.some(f => f.surface === 'hex_regex'),
+			'slash-anchored /^[0-9a-f]{N}$/ must be matched by hex_regex pattern',
 		);
 	} finally {
 		fs.rmSync(tmp, { recursive: true });
