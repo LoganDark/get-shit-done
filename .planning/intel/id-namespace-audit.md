@@ -151,11 +151,11 @@ RESEARCH thresholds:
 
 
 
-## LINT-03 outcome
+## LINT-03 outcome — LINT-03 verified end state
 
 Boundary-io verdict count: 2 (from `.planning/intel/id-namespace-audit.json` `verdicts['boundary-io']`).
 
-Per CONTEXT D-05 + LINT-03 conditional decision tree: the 2 boundary-io rows are both in `sdk/src/vcs/parse/jj-id.ts` reverse-resolve helper. This count is below the 5-row threshold for firing the `jj-internal.ts` build path; **LINT-03 closes as verified end state.** The two rows are recorded in `scripts/lint-vcs-no-commit-id.allow.json` as the legitimate jj-internal accessor.
+Per CONTEXT D-05 + LINT-03 conditional decision tree: the 2 boundary-io rows are both in `sdk/src/vcs/parse/jj-id.ts` reverse-resolve helper. This count is below the 5-row threshold for firing the `jj-internal.ts` build path; **LINT-03 closes as the LINT-03 verified end state** — no `sdk/src/vcs/backends/jj-internal.ts` exists. The two rows are recorded in `scripts/lint-vcs-no-commit-id.allow.json` as the legitimate jj-internal accessor.
 
 The inversion of SEED-001 holds: every cross-backend verb on the jj backend emits `change_id`, never `commit_id`; no legitimate consumer exists that requires backend-private `commit_id` access via the cross-backend `vcs.*` namespace; the LINT-03 rule has no surface to enforce beyond the existing `jj-id.ts` accessor.
 
