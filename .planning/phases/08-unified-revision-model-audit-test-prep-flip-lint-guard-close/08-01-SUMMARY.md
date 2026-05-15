@@ -92,12 +92,12 @@ completed: 2026-05-15
 
 Each task was committed atomically via `gsd-sdk query commit` (which routes through the jj adapter per B-08 post-fix; the user's squash-centric model means each commit snapshots the WC and squashes into the parent change):
 
-1. **Task 1: Build shared scripts/lib/ modules** — `f8ac84825455` (`feat`) — `scripts/lib/allowlist-parser.cjs`, `scripts/lib/glob-to-regex.cjs`, `tests/scripts/allowlist-parser.test.cjs` (9 node:test cases)
-2. **Task 2: Build audit-id-namespace.cjs** — `b3df35b23bb1` (`feat`) — `scripts/audit-id-namespace.cjs`, `tests/scripts/audit-id-namespace.test.cjs` (7 node:test cases)
-3. **Task 3: Run audit, classify verdicts** — `4d57133b73eb` (`docs`) — `.planning/intel/id-namespace-audit.md`, `.planning/intel/id-namespace-audit.json` (101 findings classified; 0 unclear; Plan split decision recorded)
-4. **Task 4: jj 0.41 NDJSON probe** — `1b2175ff5dd7` (`docs`) — `.planning/intel/jj-041-ndjson-probe.md` (Risk 4 VERIFIED GREEN baseline)
-5. **Task 5: Migrate raw-git allowlist** — `78ce48af39a8` (`refactor`) — `scripts/lint-vcs-no-raw-git.allow.json` (per-entry schema; 23 entries; zero expires), `scripts/lint-vcs-no-raw-git.cjs` (consumes shared parser)
-6. **Task 6: Build commit-id lint** — `a5b512428ba2` (`feat`) — `scripts/lint-vcs-no-commit-id.cjs`, `scripts/lint-vcs-no-commit-id.allow.json` (seeded from audit `verdicts['boundary-io']`)
+1. **Task 1: Build shared scripts/lib/ modules** — `wmsywpyvmkzk` (`feat`) — `scripts/lib/allowlist-parser.cjs`, `scripts/lib/glob-to-regex.cjs`, `tests/scripts/allowlist-parser.test.cjs` (9 node:test cases)
+2. **Task 2: Build audit-id-namespace.cjs** — `plooyxmounkw` (`feat`) — `scripts/audit-id-namespace.cjs`, `tests/scripts/audit-id-namespace.test.cjs` (7 node:test cases)
+3. **Task 3: Run audit, classify verdicts** — `qouxyzpuslqn` (`docs`) — `.planning/intel/id-namespace-audit.md`, `.planning/intel/id-namespace-audit.json` (101 findings classified; 0 unclear; Plan split decision recorded)
+4. **Task 4: jj 0.41 NDJSON probe** — `twmrqsysknxn` (`docs`) — `.planning/intel/jj-041-ndjson-probe.md` (Risk 4 VERIFIED GREEN baseline)
+5. **Task 5: Migrate raw-git allowlist** — `qtokvtrxzumz` (`refactor`) — `scripts/lint-vcs-no-raw-git.allow.json` (per-entry schema; 23 entries; zero expires), `scripts/lint-vcs-no-raw-git.cjs` (consumes shared parser)
+6. **Task 6: Build commit-id lint** — `owxzwonopstk` (`feat`) — `scripts/lint-vcs-no-commit-id.cjs`, `scripts/lint-vcs-no-commit-id.allow.json` (seeded from audit `verdicts['boundary-io']`)
 
 Note: commit_ids reported here are stable for the chain after each `gsd-sdk query commit` operation. The jj squash-centric model assigns a NEW commit_id on every WC snapshot, so during execution the @-pointed commit_id shifts after the next snapshot — change_ids (which are stable) anchor the actual identity. This is exactly the Plan 8 v1.2 milestone driver: the cross-backend `VcsAdapter` should expose ONE revision concept, and commit_id leakage is the defect this phase eliminates.
 
@@ -137,7 +137,7 @@ The 5 user-confirmed decisions from `08-CONTEXT.md` (D-01 through D-05) all carr
 - **Fix:** Updated all internal CJS-to-CJS require paths to use explicit `.cjs` extension. Verified against existing in-repo conventions (`scripts/changeset/cli.cjs` uses `require('./parse.cjs')` — exact precedent). All 4 require sites updated: `scripts/lib/allowlist-parser.cjs:30` (internal to-glob-to-regex), `scripts/lint-vcs-no-raw-git.cjs:5` (parser import), `scripts/lint-vcs-no-commit-id.cjs:25` (parser import), `tests/scripts/allowlist-parser.test.cjs:5` (test import).
 - **Files modified:** All 4 above.
 - **Verification:** `node --test tests/scripts/allowlist-parser.test.cjs` exits 0 with all 9 tests passing.
-- **Committed in:** Resolved inline in Task 1 commit `f8ac84825455` before the commit happened (no separate commit needed).
+- **Committed in:** Resolved inline in Task 1 commit `wmsywpyvmkzk` before the commit happened (no separate commit needed).
 
 **2. [Rule 1 — Bug] Plan's literal "grep -c expires count = 1" acceptance criterion conflicts with plan's own recommended error-message template**
 - **Found during:** Task 1 acceptance check
@@ -145,7 +145,7 @@ The 5 user-confirmed decisions from `08-CONTEXT.md` (D-01 through D-05) all carr
 - **Fix:** Consolidated the JSDoc block (single sentence mentioning `expires` once at line 19) and removed the trailing `, expires is NOT required` clause from the error message body. The error still cites D-04 by name; the JSDoc still explains the field is intentionally NOT validated. Functional behavior unchanged.
 - **Files modified:** `scripts/lib/allowlist-parser.cjs` (JSDoc + error message text)
 - **Verification:** `grep -c "expires" scripts/lib/allowlist-parser.cjs` returns 1; all 9 tests still pass.
-- **Committed in:** Resolved inline in Task 1 commit `f8ac84825455` before the commit happened.
+- **Committed in:** Resolved inline in Task 1 commit `wmsywpyvmkzk` before the commit happened.
 
 ---
 

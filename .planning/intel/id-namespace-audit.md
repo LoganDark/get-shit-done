@@ -196,3 +196,43 @@ Discriminator applied per RESEARCH §Workflow `vcs.kind`-branch decision pattern
 Each KEEP site now carries an inline `// PROMPT-05 KEEP:` annotation citing the gitOnly.* capability rationale + Phase 8 CONTEXT `<out-of-scope>`.
 
 **Expected outcome confirmed:** zero deletes (per pre-Plan-3 grep + Plan 1 audit findings). **PROMPT-05 closes by invariant verification.**
+
+
+## Post-pass audit (Phase 8 close-gate)
+
+**Re-ran:** `node scripts/audit-id-namespace.cjs --json` after Plan 3 close-gate (MIGR-06 rewriter pass + lint activation).
+
+**Raw verdict counts (re-run):**
+
+| Verdict | Count |
+|---------|-------|
+| safe | 0 |
+| flip-clean | 0 |
+| needs-rename | 0 |
+| needs-resolveShort | 0 |
+| boundary-io | 0 |
+| historical-prose | 0 |
+| unclear | 75 |
+
+**Important interpretation note:** The audit script's verdict-assignment is intentionally a *human* step per Plan 1 D-01 ("The script enumerates `file:line` rows; the human fills the verdict column from the closed enum"). A fresh `--json` re-run emits all rows under `unclear` because no human pass has yet been performed on the post-FLIP repo state. The "0 flip-clean / 0 needs-rename / 0 boundary-io" numbers above are NOT an automated invariant — they reflect that an unclassified raw scan defaults all rows to `unclear`.
+
+**Where the actual close-gate verification lives:** `node scripts/lint-vcs-no-commit-id.cjs` exits 0 (FLIP completeness proof per Success Criterion 4). The lint is the architectural enforcement; the audit re-run is a diagnostic snapshot showing which surfaces survived the FLIP for future periodic sweeps.
+
+**Distribution of post-pass unclear rows by surface:**
+
+| Surface | Count |
+|---------|-------|
+| 40_char_hex_literal | 15 |
+| field_access | 5 |
+| hash_field_access | 19 |
+| hex_regex | 4 |
+| literal_commit_id | 22 |
+| short_slice | 10 |
+
+The `hash_field_access` rows (19) are inherent: after FLIP, `.hash` accesses survive on TypeScript fields named `hash` in non-VcsAdapter surfaces (e.g., file-content SHA-256 hashes, snapshot.hashes Record). The `literal_commit_id` rows (22) include scan-script self-references, JSDoc references documenting the unified contract, and parser test fixtures. All are covered by `scripts/lint-vcs-no-commit-id.allow.json` (Plan 3 Task 1).
+
+**Migration produced by close-gate rewriter (MIGR-06):**
+
+- 1 file rewritten: `.planning/phases/08-…/08-01-SUMMARY.md` — 12 commit-id-shape backtick spans migrated to change-id-shape (12-char k-z).
+- 1 orphan emitted: `08-RESEARCH.md@42388` carrying the illustrative `abc1234` example hex (intentionally unresolvable; emitted verbatim per B-07 safety net).
+- Idempotency verified: second invocation byte-identical to first.

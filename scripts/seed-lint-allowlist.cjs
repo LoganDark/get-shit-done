@@ -101,6 +101,11 @@ const SELF_REFERENCES = [
 		reason: 'Scan scripts — seeder JSDoc + manual-append reasons literally mention `commit_id` / `.commit_id` / `commit_id.short()` etc. to document which audit verdicts the seeder consumes and the per-row rationale categories.',
 		owner: '@LoganDark',
 	},
+	{
+		path: 'scripts/migr-06-close-gate.cjs',
+		reason: 'Scan scripts — close-gate rewriter (one-shot MIGR-06) literally contains `commit_id` strings + GIT_SHA_RE-style hex-shape regex (mirroring the canonical sdk/src/vcs/format-migration/rewrite.ts shape) to migrate commit_id-shape backticks to change_id-shape.',
+		owner: '@LoganDark',
+	},
 ];
 
 // Manual appends for paths the audit does NOT scan (audit scan roots are
