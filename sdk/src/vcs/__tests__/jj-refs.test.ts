@@ -166,10 +166,14 @@ describe.skipIf(!jjAvailable)(
     });
 
     // ─── refs.resolveShort ───────────────────────────────────────────────
-    it('refs.resolveShort(expr.parent()) returns non-empty hex string', () => {
+    it('refs.resolveShort(expr.parent()) returns non-empty short change_id', () => {
+      // Phase 8 FLIP-01: jj backend now emits change_id.shortest() (k-z
+      // alphabet) instead of commit_id.short() per the unified revision
+      // contract (D-05). Length can be as short as 1 char when there's no
+      // disambiguating overlap with sibling commits.
       const short = vcs.refs.resolveShort(expr.parent());
       expect(short.length).toBeGreaterThan(0);
-      expect(short).toMatch(/^[a-f0-9]+$/);
+      expect(short).toMatch(/^[k-z]+$/);
     });
 
     // ─── refs.countCommits ───────────────────────────────────────────────
@@ -179,10 +183,13 @@ describe.skipIf(!jjAvailable)(
     });
 
     // ─── refs.rootCommits ────────────────────────────────────────────────
-    it('refs.rootCommits({}) returns at least one commit_id', () => {
+    it('refs.rootCommits({}) returns at least one root revision id', () => {
+      // Phase 8 FLIP-01: rootCommits emits change_id (k-z alphabet) per the
+      // unified revision contract (D-05). The jj root commit's change_id is
+      // the all-z sentinel "zzzzzzzz..." (legitimate k-z form).
       const roots = vcs.refs.rootCommits({});
       expect(roots.length).toBeGreaterThanOrEqual(1);
-      expect(roots[0]).toMatch(/^[a-f0-9]+$/);
+      expect(roots[0]).toMatch(/^[k-z]+$/);
     });
 
     // ─── refs.remotes ────────────────────────────────────────────────────

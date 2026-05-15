@@ -36,11 +36,13 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
     else expect(vcs.kind).toBe('jj');
   });
 
-  test.skipIf(!ready('commit'))('vcs.commit({files,message}) produces a hash', ({ vcs, cwd }) => {
+  test.skipIf(!ready('commit'))('vcs.commit({files,message}) produces an id', ({ vcs, cwd }) => {
     writeFileSync(join(cwd, 'a.txt'), 'a');
     const r = vcs.commit({ files: ['a.txt'], message: 'add a' });
     expect(r.exitCode).toBe(0);
-    expect(r.hash).toMatch(/^[0-9a-f]+$/);
+    // Phase 8 FLIP-03: CommitResult.id carries the backend's canonical
+    // revision identifier (commit_id on git, change_id on jj).
+    expect(r.id).toBeIdOf(kind);
   });
 
   test.skipIf(!ready('log') || !ready('commit'))('vcs.log returns at least one entry after a commit', ({ vcs, cwd }) => {
@@ -48,7 +50,7 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
     vcs.commit({ files: ['b.txt'], message: 'add b' });
     const entries = vcs.log({ maxCount: 5 });
     expect(entries.length).toBeGreaterThan(0);
-    expect(entries[0].hash).toMatch(/^[0-9a-f]+$/);
+    expect(entries[0].id).toBeIdOf(kind);
   });
 
   test.skipIf(!ready('status'))('vcs.status({porcelain:true}) lists untracked files', ({ vcs, cwd }) => {

@@ -270,14 +270,14 @@ function cmdCommit(cwd, message, files, raw, amend, noVerify) {
 
   // Check commit_docs config
   if (!config.commit_docs) {
-    const result = { committed: false, hash: null, reason: 'skipped_commit_docs_false' };
+    const result = { committed: false, id: null, reason: 'skipped_commit_docs_false' };
     output(result, raw, 'skipped');
     return;
   }
 
   // Check if .planning is gitignored
   if (isGitIgnored(cwd, '.planning')) {
-    const result = { committed: false, hash: null, reason: 'skipped_gitignored' };
+    const result = { committed: false, id: null, reason: 'skipped_gitignored' };
     output(result, raw, 'skipped');
     return;
   }
@@ -363,7 +363,7 @@ function cmdCommit(cwd, message, files, raw, amend, noVerify) {
   // #2014 invariant: explicit --files with all-missing entries short-circuits
   // BEFORE vcs.commit. Mirrors the prior `stagedOrUnstaged.length === 0` gate.
   if (!amend && explicitFiles && filesToCommit.length === 0) {
-    const result = { committed: false, hash: null, reason: 'nothing_to_commit' };
+    const result = { committed: false, id: null, reason: 'nothing_to_commit' };
     output(result, raw, 'nothing');
     return;
   }
@@ -384,7 +384,7 @@ function cmdCommit(cwd, message, files, raw, amend, noVerify) {
     // worktree where .planning/ is fully untracked would miss the match.
     const surviving = status.entries.filter(e => filesToCommit.some(p => e.path.startsWith(p) || p.startsWith(e.path)));
     if (surviving.length === 0) {
-      const result = { committed: false, hash: null, reason: 'nothing_to_commit' };
+      const result = { committed: false, id: null, reason: 'nothing_to_commit' };
       output(result, raw, 'nothing');
       return;
     }
@@ -400,13 +400,13 @@ function cmdCommit(cwd, message, files, raw, amend, noVerify) {
     : vcs.commit({ message, files: filesToCommit, noVerify });                         // line 339 (was: commit -m <msg> [+ --no-verify])
   if (commitResult.exitCode !== 0) {
     if (commitResult.stdout.includes('nothing to commit') || commitResult.stderr.includes('nothing to commit')) {
-      const result = { committed: false, hash: null, reason: 'nothing_to_commit' };
+      const result = { committed: false, id: null, reason: 'nothing_to_commit' };
       output(result, raw, 'nothing');
       return;
     }
     const result = {
       committed: false,
-      hash: null,
+      id: null,
       reason: 'commit_failed',
       error: commitResult.stderr || commitResult.stdout,
     };
@@ -414,17 +414,18 @@ function cmdCommit(cwd, message, files, raw, amend, noVerify) {
     return;
   }
 
-  // Get short hash
+  // Get short revision id (backend-aware via resolveShort — short commit_id on
+  // git, short change_id on jj per Phase 8 FLIP-01).
   // Plan 02-09: vcs.refs.resolveShort(vcs.refs.head) replaces
   // `rev-parse --short HEAD`. Mirrors plan 02-08 sites 179/309 closure shape.
-  let hash = null;
+  let id = null;
   try {
-    hash = vcs.refs.resolveShort(vcs.refs.head);                                       // line 352 (was: rev-parse --short HEAD)
+    id = vcs.refs.resolveShort(vcs.refs.head);                                         // line 352 (was: rev-parse --short HEAD)
   } catch {
-    hash = null;
+    id = null;
   }
-  const result = { committed: true, hash, reason: 'committed' };
-  output(result, raw, hash || 'committed');
+  const result = { committed: true, id, reason: 'committed' };
+  output(result, raw, id || 'committed');
 }
 
 function cmdCommitToSubrepo(cwd, message, files, raw) {

@@ -505,7 +505,7 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           const limit = limitIdx >= 0 ? Math.abs(parseInt(args[limitIdx], 10)) : 50;
           const entries = vcs.log({ maxCount: limit, allRefs: true });
           const reconstructed = entries
-            .map((e) => `${(e.hash || '').slice(0, 7)} ${e.subject || ''}`)
+            .map((e) => `${(e.id || '').slice(0, 7)} ${e.subject || ''}`)
             .join('\n');
           if (baseline.match?.stdout?.startsWith('regex:')) {
             const re = new RegExp(baseline.match.stdout.slice('regex:'.length));

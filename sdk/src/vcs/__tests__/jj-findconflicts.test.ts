@@ -94,11 +94,13 @@ describe.skipIf(!jjAvailable)('Phase 3 plan 03-05 Task 2 — findConflicts on jj
       expect(conflicts.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('scope:all returns commit_id (40-char hex, NOT change_id)', () => {
+    it('scope:all returns change_id (k-z alphabet per Phase 8 FLIP-01 unified revision contract)', () => {
+      // Phase 8 FLIP-02 + FLIP-03: ConflictResult.rev derives from
+      // LogEntry.id, which carries change_id on the jj backend per D-05.
       const vcs = createJjAdapter(conflictDir);
       const conflicts = vcs.findConflicts({ scope: 'all' });
       for (const c of conflicts) {
-        expect(c.rev).toMatch(/^[a-f0-9]{40}$/);
+        expect(c.rev).toBeIdOf('jj');
       }
     });
 

@@ -10,7 +10,7 @@
  * import { commit, checkCommit } from './commit.js';
  *
  * await commit(['docs: update state', '.planning/STATE.md'], '/project');
- * // { data: { committed: true, hash: 'abc1234', message: 'docs: update state', files: [...] } }
+ * // { data: { committed: true, id: 'abc1234', message: 'docs: update state', files: [...] } }
  *
  * await checkCommit([], '/project');
  * // { data: { can_commit: true, reason: 'commit_docs_enabled', ... } }
@@ -178,18 +178,20 @@ export const commit: QueryHandler = async (args, projectDir, workstream) => {
     return { data: { committed: false, reason: commitResult.stderr || 'commit failed', exitCode: commitResult.exitCode } };
   }
 
-  // vcs.commit already resolves HEAD's hash (full SHA). Compute the short form
-  // for caller-facing display via vcs.refs.resolveShort.
-  let hash: string | null = null;
+  // vcs.commit already resolves HEAD's revision id (full canonical form).
+  // Compute the short form for caller-facing display via vcs.refs.resolveShort
+  // (backend-aware: `commit_id.short()` on git, `change_id.shortest()` on jj
+  // per Phase 8 FLIP-01).
+  let id: string | null = null;
   try {
-    hash = vcs.refs.resolveShort(vcs.refs.head);
+    id = vcs.refs.resolveShort(vcs.refs.head);
   } catch {
     // Resolution failure (e.g. rare detached-HEAD edge cases) is non-fatal —
-    // the commit landed; surface a null hash rather than a thrown error.
-    hash = null;
+    // the commit landed; surface a null id rather than a thrown error.
+    id = null;
   }
 
-  return { data: { committed: true, hash, message: sanitized, files: stagedFiles } };
+  return { data: { committed: true, id, message: sanitized, files: stagedFiles } };
 };
 
 // ─── checkCommit ──────────────────────────────────────────────────────────
@@ -320,17 +322,17 @@ export const commitToSubrepo: QueryHandler = async (args, projectDir, workstream
       return { data: { committed: false, reason: commitResult.stderr || 'commit failed' } };
     }
 
-    let hash: string;
+    let id: string;
     try {
-      hash = subVcs.refs.resolveShort(subVcs.refs.head);
+      id = subVcs.refs.resolveShort(subVcs.refs.head);
     } catch {
       // Mirror the pre-migration spawnSync shape: if rev-parse fails, surface
       // an empty string (the original `hashResult.stdout.trim()` on a failed
-      // spawn would also yield ''). Callers treat empty-string hash as "set
+      // spawn would also yield ''). Callers treat empty-string id as "set
       // but unknown" — non-fatal.
-      hash = '';
+      id = '';
     }
-    return { data: { committed: true, hash, message: sanitized } };
+    return { data: { committed: true, id, message: sanitized } };
   } catch (err) {
     return { data: { committed: false, reason: String(err) } };
   }

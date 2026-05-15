@@ -77,9 +77,12 @@ describe.sequential.skipIf(!jjAvailable)(
       expect(entry.path).toBe('default');
     });
 
-    it('the single entry has a 40-char hex rev', () => {
+    it('the single entry has a change_id rev (Phase 8 FLIP-01 unified contract)', () => {
+      // Phase 8 FLIP-01: workspace-list parser reads `target.change_id` per
+      // the unified revision contract (D-05). WorkspaceInfo.rev now carries
+      // change_id (k-z alphabet, 12+ chars) on jj — not commit_id hex.
       const [entry] = vcs.workspace.list();
-      expect(entry.rev).toMatch(/^[a-f0-9]{40}$/);
+      expect(entry.rev).toBeIdOf('jj');
     });
 
     it('the single entry has locked === false (jj has no lock primitive)', () => {
@@ -407,15 +410,16 @@ describe.sequential.skipIf(!jjAvailable)(
       expect(r.conflicted).toBe(false);
       expect(typeof r.changeId).toBe('string');
       expect(r.changeId?.length ?? 0).toBeGreaterThan(0);
-      // D-03 main-advance: p7-main now points at the merge change. jj
-      // returns commit_id from bookmark list (40-char hex), while merge.changeId
-      // is the jj change_id (k-z alphabet); both identify the same commit.
+      // D-03 main-advance: p7-main now points at the merge change. Phase 8
+      // FLIP-01: jj backend's bookmark list now emits change_id per the
+      // unified revision contract (D-05). Both Bookmark.rev and merge.changeId
+      // are change_id (k-z alphabet); they identify the same change.
       // Cross-check: bookmark exists AND points at @ (the merge change).
       const bookmarks = vcs.refs.bookmarks.list();
       const mainEntry = bookmarks.find((b) => b.name === 'p7-main');
       expect(mainEntry).toBeDefined();
-      expect(mainEntry?.rev).toMatch(/^[0-9a-f]{40}$/);  // commit_id form
-      // Cross-check via change_id form too: refs.exists on the change_id reports true.
+      expect(mainEntry?.rev).toBeIdOf('jj');  // Phase 8 FLIP-01: jj backend emits change_id
+      // Cross-check via change_id form: refs.exists on the change_id reports true.
       expect(r.changeId).toMatch(/^[k-z]+$/);  // change_id form (k-z alphabet)
       // Agent bookmark deleted atomically.
       expect(vcs.refs.bookmarks.exists('p7-agent', { raw: true })).toBe(false);

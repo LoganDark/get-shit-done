@@ -152,10 +152,10 @@ describe('GSDTransport', () => {
 
   it('formats native raw output via formatNativeRaw when provided', async () => {
     const registry = new QueryRegistry();
-    registry.register('commit', async () => ({ data: { hash: 'abc123' } }));
+    registry.register('commit', async () => ({ data: { id: 'abc123' } }));
 
     const adapters = {
-      dispatchNative: vi.fn(async () => ({ data: { hash: 'abc123' } })),
+      dispatchNative: vi.fn(async () => ({ data: { id: 'abc123' } })),
       execSubprocessJson: vi.fn(async () => ({ ok: false })),
       execSubprocessRaw: vi.fn(async () => 'subprocess-raw'),
       formatNativeRaw: vi.fn(() => 'raw-native-output'),
@@ -262,10 +262,10 @@ describe('GSDTransport', () => {
 
   it('forces raw subprocess path when workstream present and mode is raw', async () => {
     const registry = new QueryRegistry();
-    registry.register('commit', async () => ({ data: { hash: 'abc' } }));
+    registry.register('commit', async () => ({ data: { id: 'abc' } }));
 
     const adapters = {
-      dispatchNative: vi.fn(async () => ({ data: { hash: 'abc' } })),
+      dispatchNative: vi.fn(async () => ({ data: { id: 'abc' } })),
       execSubprocessJson: vi.fn(async () => ({ ok: 'json-subprocess' })),
       execSubprocessRaw: vi.fn(async () => 'raw-subprocess'),
     };

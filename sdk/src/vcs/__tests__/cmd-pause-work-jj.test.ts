@@ -74,7 +74,7 @@ describe.skipIf(!jjAvailable)(
 				files: ['.planning/STATE.md'],
 			});
 			expect(r.exitCode).toBe(0);
-			expect(r.hash).toBeTruthy();
+			expect(r.id).toBeIdOf('jj');
 		});
 
 		it('Test 2: commit appears in vcs.log — message visible in ancestry', () => {

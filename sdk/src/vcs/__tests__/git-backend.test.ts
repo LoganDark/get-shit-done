@@ -43,14 +43,14 @@ afterEach(() => {
 });
 
 describe('createGitAdapter — commit', () => {
-  it('commit({files, message}) stages, commits, returns hash', () => {
+  it('commit({files, message}) stages, commits, returns id', () => {
     const vcs = createGitAdapter(tmpDir);
     writeFileSync(join(tmpDir, 'a.txt'), 'hello\n');
     const r = vcs.commit({ files: ['a.txt'], message: 'add a' });
     expect(r.exitCode).toBe(0);
-    expect(r.hash).toBeTruthy();
+    expect(r.id).toBeIdOf('git');
     const headHash = execSync('git rev-parse HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
-    expect(r.hash).toBe(headHash);
+    expect(r.id).toBe(headHash);
   });
 
   it('commit({message}) (no files) runs git commit -am', () => {
@@ -63,7 +63,7 @@ describe('createGitAdapter — commit', () => {
     writeFileSync(join(tmpDir, 'tracked.txt'), 'second\n');
     const r = vcs.commit({ message: 'update tracked' });
     expect(r.exitCode).toBe(0);
-    expect(r.hash).toBeTruthy();
+    expect(r.id).toBeIdOf('git');
   });
 
   it('commit({files: []}) is rejected as ambiguous (WR-01)', () => {
@@ -86,7 +86,7 @@ describe('createGitAdapter — commit', () => {
     writeFileSync(join(tmpDir, 'sibling.txt'), 'sibling\n');
     const r = vcs.commit({ files: [dashName], message: 'add dash file' });
     expect(r.exitCode).toBe(0);
-    expect(r.hash).toBeTruthy();
+    expect(r.id).toBeIdOf('git');
     // Confirm dashName was committed.
     const showRes = execSync(`git show --name-only --format= HEAD`, {
       cwd: tmpDir,
@@ -100,12 +100,12 @@ describe('createGitAdapter — commit', () => {
 });
 
 describe('createGitAdapter — log', () => {
-  it('log({maxCount: 1}) returns one LogEntry with HEAD hash', () => {
+  it('log({maxCount: 1}) returns one LogEntry with HEAD id', () => {
     const vcs = createGitAdapter(tmpDir);
     const entries = vcs.log({ maxCount: 1 });
     expect(entries.length).toBe(1);
     const headHash = execSync('git rev-parse HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
-    expect(entries[0].hash).toBe(headHash);
+    expect(entries[0].id).toBe(headHash);
     expect(entries[0].subject).toBe('initial');
   });
 });
@@ -175,7 +175,7 @@ describe('createGitAdapter — workspace', () => {
     try {
       const info = vcs.workspace.add({ path: wtPath });
       expect(info.path).toBe(wtPath);
-      expect(info.rev).toBeTruthy();
+      expect(info.rev).toBeIdOf('git');
       // workspace.list delegates to worktree-safety.cjs::readWorktreeList.
       // If that import failed (downstream consumer), surface it as a clear skip.
       let list;

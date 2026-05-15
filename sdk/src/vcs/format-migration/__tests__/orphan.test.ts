@@ -84,12 +84,12 @@ describe('resolveAncestor — happy paths', () => {
       const rev = (opts?.rev ?? '') as unknown as string;
       logCalls.push(rev);
       if (rev === `parents:rev:${ORPHAN}`) {
-        return [{ hash: PARENT_HASH, parents: [], author: '', date: '', subject: '' }];
+        return [{ id: PARENT_HASH, parents: [], author: '', date: '', subject: '' }];
       }
       if (rev === `children:rev:${PARENT_CHANGE}`) {
         return [
-          { hash: CHILD_1, parents: [], author: '', date: '', subject: '' },
-          { hash: CHILD_2, parents: [], author: '', date: '', subject: '' },
+          { id: CHILD_1, parents: [], author: '', date: '', subject: '' },
+          { id: CHILD_2, parents: [], author: '', date: '', subject: '' },
         ];
       }
       return [];
@@ -123,9 +123,9 @@ describe('resolveAncestor — happy paths', () => {
 
     const vcs = mockAdapter((opts) => {
       const rev = (opts?.rev ?? '') as unknown as string;
-      if (rev === `parents:rev:${ORPHAN}`) return [{ hash: P1, parents: [], author: '', date: '', subject: '' }];
-      if (rev === `parents:rev:${P1}`)     return [{ hash: P2, parents: [], author: '', date: '', subject: '' }];
-      if (rev === `parents:rev:${P2}`)     return [{ hash: P3, parents: [], author: '', date: '', subject: '' }];
+      if (rev === `parents:rev:${ORPHAN}`) return [{ id: P1, parents: [], author: '', date: '', subject: '' }];
+      if (rev === `parents:rev:${P1}`)     return [{ id: P2, parents: [], author: '', date: '', subject: '' }];
+      if (rev === `parents:rev:${P2}`)     return [{ id: P3, parents: [], author: '', date: '', subject: '' }];
       if (rev === `children:rev:${P3_CHANGE}`) return [];
       return [];
     });
@@ -162,7 +162,7 @@ describe('resolveAncestor — null-returning paths', () => {
         stepCount++;
         // Generate a shape-valid SHA-shaped string.
         const hex = stepCount.toString(16).padStart(8, '0');
-        return [{ hash: hex, parents: [], author: '', date: '', subject: '' }];
+        return [{ id: hex, parents: [], author: '', date: '', subject: '' }];
       }
       return [];
     });
@@ -191,7 +191,7 @@ describe('resolveAncestor — jj→git direction asymmetry', () => {
       const rev = (opts?.rev ?? '') as unknown as RevisionExpr | undefined;
       const revStr = rev as unknown as string;
       if (revStr === `parents:rev:${ORPHAN}`) {
-        return [{ hash: PARENT_CHANGE, parents: [], author: '', date: '', subject: '' }];
+        return [{ id: PARENT_CHANGE, parents: [], author: '', date: '', subject: '' }];
       }
       // jj→git never asks the adapter for `children:` — assert no other call.
       throw new Error(`unexpected log({ rev: ${String(rev)} })`);
@@ -213,7 +213,7 @@ describe('resolveAncestor — non-VcsExecError errors propagate', () => {
     const vcs = mockAdapter((opts) => {
       const rev = (opts?.rev ?? '') as unknown as string;
       if (rev === `parents:rev:${ORPHAN}`) {
-        return [{ hash: PARENT, parents: [], author: '', date: '', subject: '' }];
+        return [{ id: PARENT, parents: [], author: '', date: '', subject: '' }];
       }
       return [];
     });

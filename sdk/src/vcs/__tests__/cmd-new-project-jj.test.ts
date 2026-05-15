@@ -81,6 +81,6 @@ describe.skipIf(!jjAvailable)('CMD-01 (/gsd-new-project) — jj-colocated', () =
 			files: ['seed.txt'],
 		});
 		expect(r.exitCode).toBe(0);
-		expect(r.hash).toBeTruthy();
+		expect(r.id).toBeIdOf('jj');
 	});
 });

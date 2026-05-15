@@ -80,10 +80,10 @@ describe.sequential.skipIf(!jjAvailable)('Phase 3 plan 03-04 — jj commit() sem
     writeFileSync(join(dir, 'a.txt'), 'content-a\n');
     const r = vcs.commit({ files: ['a.txt'], message: 'first squash' });
     expect(r.exitCode).toBe(0);
-    expect(r.hash).toBeTruthy();
-    expect(r.hash).toMatch(/^[a-f0-9]{40}$/);
+    expect(r.id).toBeIdOf('jj');
+    // Phase 8 FLIP-03: r.id is now change_id (k-z alphabet), not commit_id.
     // Verify content lives in the new commit at @-:
-    expect(jjT('@-', 'commit_id')).toBe(r.hash);
+    expect(jjT('@-', 'change_id')).toBe(r.id);
     expect(jjT('@-', 'description')).toContain('first squash');
   });
 
@@ -91,7 +91,7 @@ describe.sequential.skipIf(!jjAvailable)('Phase 3 plan 03-04 — jj commit() sem
     writeFileSync(join(dir, 'b.txt'), 'content-b\n');
     const r = vcs.commit({ message: 'second squash' });
     expect(r.exitCode).toBe(0);
-    expect(r.hash).toBeTruthy();
+    expect(r.id).toBeIdOf('jj');
     expect(jjT('@-', 'description')).toContain('second squash');
   });
 
@@ -127,7 +127,7 @@ describe.sequential.skipIf(!jjAvailable)('Phase 3 plan 03-04 — jj commit() sem
       message: 'mixed squash',
     });
     expect(r.exitCode).toBe(0);
-    expect(r.hash).toBeTruthy();
+    expect(r.id).toBeIdOf('jj');
   });
 
   it('REFS-05 + D-01: bookmark advance after squash adds gsd/ prefix', () => {
@@ -138,12 +138,12 @@ describe.sequential.skipIf(!jjAvailable)('Phase 3 plan 03-04 — jj commit() sem
       bookmark: 'phase-3',
     });
     expect(r.exitCode).toBe(0);
-    // Probe the gsd/phase-3 bookmark's target commit_id.
+    // Phase 8 FLIP-03: r.id is change_id; probe bookmark target.change_id() too.
     const target = execSync(
-      `jj --repository ${JSON.stringify(dir)} --no-pager --color never --quiet bookmark list 'gsd/phase-3' -T 'normal_target.commit_id() ++ "\\n"'`,
+      `jj --repository ${JSON.stringify(dir)} --no-pager --color never --quiet bookmark list 'gsd/phase-3' -T 'normal_target.change_id() ++ "\\n"'`,
       { cwd: dir, encoding: 'utf8' },
     ).trim();
-    expect(target).toBe(r.hash);
+    expect(target).toBe(r.id);
   });
 
   it('D-04: bookmarkRaw bypasses gsd/ prefix', () => {
@@ -155,10 +155,10 @@ describe.sequential.skipIf(!jjAvailable)('Phase 3 plan 03-04 — jj commit() sem
     });
     expect(r.exitCode).toBe(0);
     const target = execSync(
-      `jj --repository ${JSON.stringify(dir)} --no-pager --color never --quiet bookmark list 'rawname' -T 'normal_target.commit_id() ++ "\\n"'`,
+      `jj --repository ${JSON.stringify(dir)} --no-pager --color never --quiet bookmark list 'rawname' -T 'normal_target.change_id() ++ "\\n"'`,
       { cwd: dir, encoding: 'utf8' },
     ).trim();
-    expect(target).toBe(r.hash);
+    expect(target).toBe(r.id);
   });
 
   it('WR-01: commit({files:[]}) throws verbatim ambiguity error', () => {

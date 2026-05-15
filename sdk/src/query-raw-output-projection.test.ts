@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { formatQueryRawOutput } from './query-raw-output-projection.js';
 
 describe('formatQueryRawOutput', () => {
-  it('formats commit hash', () => {
-    expect(formatQueryRawOutput('commit', { committed: true, hash: 'abc123' })).toBe('abc123');
+  it('formats commit id (Phase 8 FLIP-03: data.hash -> data.id rename)', () => {
+    expect(formatQueryRawOutput('commit', { committed: true, id: 'abc123' })).toBe('abc123');
   });
 
-  it('returns committed when hash missing', () => {
+  it('returns committed when id missing', () => {
     expect(formatQueryRawOutput('commit', { committed: true })).toBe('committed');
   });
 

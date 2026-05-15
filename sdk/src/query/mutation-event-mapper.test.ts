@@ -11,7 +11,7 @@ describe('buildMutationEvent', () => {
   });
 
   it('maps git family', () => {
-    const e = buildMutationEvent(sid, 'commit', [], { data: { hash: 'abc', committed: true } });
+    const e = buildMutationEvent(sid, 'commit', [], { data: { id: 'abc', committed: true } });
     expect(e.type).toBe(GSDEventType.GitCommit);
   });
 

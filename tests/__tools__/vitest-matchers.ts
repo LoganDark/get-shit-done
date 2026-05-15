@@ -15,19 +15,33 @@
  */
 
 import { expect } from 'vitest';
-import type { VcsKind } from '../../sdk/src/vcs/types.js';
+import type { VcsKind, VcsBackendKey } from '../../sdk/src/vcs/types.js';
+
+/**
+ * Accept the broader `VcsBackendKey` (`'git' | 'jj-colocated' | 'jj-native'`)
+ * in addition to `VcsKind` so `describe.for(selectedBackends())` closures
+ * can pass their loop variable directly. Both `jj-*` keys collapse to the
+ * jj alphabet/length for matcher purposes — there is no shape distinction
+ * between colocated and native jj revision ids.
+ */
+type ToBeIdOfKind = VcsKind | VcsBackendKey;
 
 interface ToBeIdOfOpts {
-	kind: VcsKind;
+	kind: ToBeIdOfKind;
 	allowShort?: boolean;
 }
 
+function normalizeKind(k: ToBeIdOfKind): VcsKind {
+	return k === 'git' ? 'git' : 'jj';
+}
+
 expect.extend({
-	toBeIdOf(received: unknown, kindOrOpts: VcsKind | ToBeIdOfOpts) {
+	toBeIdOf(received: unknown, kindOrOpts: ToBeIdOfKind | ToBeIdOfOpts) {
 		const opts: ToBeIdOfOpts = typeof kindOrOpts === 'string'
 			? { kind: kindOrOpts }
 			: kindOrOpts;
-		const { kind, allowShort = false } = opts;
+		const kind = normalizeKind(opts.kind);
+		const allowShort = opts.allowShort ?? false;
 		const min = allowShort ? 7 : (kind === 'git' ? 40 : 12);
 		const max = kind === 'git' ? 40 : 32;
 		const alphabet = kind === 'git' ? /^[0-9a-f]+$/ : /^[k-z]+$/;

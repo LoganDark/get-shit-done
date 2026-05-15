@@ -30,8 +30,8 @@ beforeEach(() => {
   });
   diffMock.mockReturnValue({ raw: '', nameOnly: [], nameStatus: undefined });
   logMock.mockReturnValue([
-    { hash: 'a'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's0' },
-    { hash: 'b'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's1' },
+    { id: 'a'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's0' },
+    { id: 'b'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's1' },
   ]);
 });
 

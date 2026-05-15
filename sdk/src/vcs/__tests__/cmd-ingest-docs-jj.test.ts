@@ -95,7 +95,7 @@ describe.skipIf(!jjAvailable)(
 				],
 			});
 			expect(r.exitCode).toBe(0);
-			expect(r.hash).toBeTruthy();
+			expect(r.id).toBeIdOf('jj');
 
 			// jj squash-based commit lands the message on @-'s description (jj
 			// squash -B @ -k -m); head @ is a fresh empty commit. Query the

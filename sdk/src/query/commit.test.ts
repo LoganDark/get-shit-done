@@ -167,7 +167,7 @@ describe('commit', () => {
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), '# State\n');
     const result = await commit(['test commit', '--force'], tmpDir);
     expect((result.data as { committed: boolean }).committed).toBe(true);
-    expect((result.data as { hash: string }).hash).toBeTruthy();
+    expect((result.data as { id: string }).id).toBeIdOf({ kind: 'git', allowShort: true });
   });
 
   it('stages files and creates commit with correct message', async () => {
@@ -179,7 +179,7 @@ describe('commit', () => {
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), '# State\n');
     const result = await commit(['docs: update state'], tmpDir);
     expect((result.data as { committed: boolean }).committed).toBe(true);
-    expect((result.data as { hash: string }).hash).toBeTruthy();
+    expect((result.data as { id: string }).id).toBeIdOf({ kind: 'git', allowShort: true });
 
     // Verify commit message via VcsAdapter (Plan 02-08 D-06): vcs.log
     // returns LogEntry[] with .subject (subject line of HEAD's commit

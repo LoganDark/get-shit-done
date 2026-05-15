@@ -137,7 +137,7 @@ describe.skipIf(!jjAvailable)(
 				});
 				// Squash itself succeeded; pre-commit landed but failed.
 				expect(r.exitCode).toBe(0);
-				expect(r.hash).toBeTruthy();
+				expect(r.id).toBeIdOf('jj');
 				// Hook failure surfaces via merged stderr.
 				expect(r.stderr).toMatch(/pre-commit hook failed/);
 			});

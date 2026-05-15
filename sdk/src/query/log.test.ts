@@ -28,12 +28,12 @@ beforeEach(() => {
   // Default log() return: a chain of 6 commits so HEAD~N resolution succeeds
   // for the common workflow shapes (HEAD~1, HEAD~5).
   logMock.mockReturnValue([
-    { hash: 'a'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's0' },
-    { hash: 'b'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's1' },
-    { hash: 'c'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's2' },
-    { hash: 'd'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's3' },
-    { hash: 'e'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's4' },
-    { hash: 'f'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's5' },
+    { id: 'a'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's0' },
+    { id: 'b'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's1' },
+    { id: 'c'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's2' },
+    { id: 'd'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's3' },
+    { id: 'e'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's4' },
+    { id: 'f'.repeat(40), parents: [], author: 'x', date: '2026', subject: 's5' },
   ]);
 });
 

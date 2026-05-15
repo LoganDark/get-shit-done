@@ -60,8 +60,9 @@ describe.skipIf(!jjAvailable)('Phase 3 plan 03-05 — jj log/status/diff', () =>
       // Fresh repo has an empty WC commit at @ — log() returns at least one entry
       expect(Array.isArray(entries)).toBe(true);
       expect(entries.length).toBeGreaterThanOrEqual(1);
-      // Hash is a 40-char hex commit_id (PITFALL 1)
-      expect(entries[0].hash).toMatch(/^[a-f0-9]{40}$/);
+      // Phase 8 FLIP-02: LogEntry.id is the active backend's canonical
+      // revision identifier (change_id on jj per D-05).
+      expect(entries[0].id).toBeIdOf('jj');
     });
 
     it('honors maxCount: 1', () => {

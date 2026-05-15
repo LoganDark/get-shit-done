@@ -46,7 +46,11 @@ describe('parseJjLog (Phase 3 plan 03-02 — production parser)', () => {
     expect(entries).toHaveLength(3);
 
     const first = entries[0]!;
-    expect(first.hash).toBe('2f5d3b9b1c0d4e5f6a7b8c9d0e1f2a3b4c5d6e7f');
+    // Phase 8 FLIP-02: LogEntry.id is now the canonical revision identifier
+    // (change_id on jj per D-05) — the parser reads `record.change_id` from
+    // the json(self) emission.
+    expect(first.id).toBe('pymwzqwoplmnstvkruwzpymwzqwoplmn');
+    expect(first.id).toBeIdOf('jj');
     expect(first.subject).toBe('third commit');
     expect(first.author).toBe('Test');
     expect(first.date).toBe('2026-05-12T10:00:00+00:00');
@@ -75,7 +79,7 @@ describe('parseJjLog (Phase 3 plan 03-02 — production parser)', () => {
     const entries = parseJjLog(fixture);
     expect(entries).toHaveLength(1);
     expect(entries[0]!.parents).toHaveLength(2);
-    expect(entries[0]!.hash).toBe('deadbeef00000000000000000000000000000000');
+    expect(entries[0]!.id).toBe('vwxyzklmnopqrstuvwxyzklmnopqrstu');
   });
 
   it('throws a typed error on malformed NDJSON (T-03.02-01)', () => {
@@ -91,7 +95,7 @@ describe('parseJjLog (Phase 3 plan 03-02 — production parser)', () => {
         {
           "author": "Test",
           "date": "2026-05-12T10:00:00+00:00",
-          "hash": "2f5d3b9b1c0d4e5f6a7b8c9d0e1f2a3b4c5d6e7f",
+          "id": "pymwzqwoplmnstvkruwzpymwzqwoplmn",
           "parents": [
             "1111111111111111111111111111111111111111",
           ],
@@ -102,7 +106,7 @@ describe('parseJjLog (Phase 3 plan 03-02 — production parser)', () => {
           "body": "with body line
       ",
           "date": "2026-05-12T09:00:00+00:00",
-          "hash": "1111111111111111111111111111111111111111",
+          "id": "qrstuvwxyzklmnopqrstuvwxyzklmnop",
           "parents": [
             "2222222222222222222222222222222222222222",
           ],
@@ -111,7 +115,7 @@ describe('parseJjLog (Phase 3 plan 03-02 — production parser)', () => {
         {
           "author": "Test",
           "date": "2026-05-12T08:00:00+00:00",
-          "hash": "2222222222222222222222222222222222222222",
+          "id": "klmnopqrstuvwxyzklmnopqrstuvwxyz",
           "parents": [],
           "subject": "first commit",
         },
@@ -126,7 +130,7 @@ describe('parseJjLog (Phase 3 plan 03-02 — production parser)', () => {
         {
           "author": "Test",
           "date": "2026-05-12T11:00:00+00:00",
-          "hash": "deadbeef00000000000000000000000000000000",
+          "id": "vwxyzklmnopqrstuvwxyzklmnopqrstu",
           "parents": [
             "1234567890123456789012345678901234567890",
             "abcdefabcdefabcdefabcdefabcdefabcdefabcd",
@@ -219,13 +223,16 @@ describe('parseJjWorkspaceList (Phase 3 plan 03-02 — production parser)', () =
     expect(parseJjWorkspaceList('')).toEqual([]);
   });
 
-  it('maps {name, target.commit_id} → WorkspaceInfo for default workspace', () => {
+  it('maps {name, target.change_id} → WorkspaceInfo for default workspace', () => {
+    // Phase 8 FLIP-01: parser reads `target.change_id` (was `target.commit_id`)
+    // per the unified revision contract (D-05). WorkspaceInfo.rev carries the
+    // active backend's canonical revision identifier — change_id on jj.
     const fixture = loadFixture('jj-workspace-list-default.ndjson');
     const entries = parseJjWorkspaceList(fixture);
     expect(entries).toEqual([
       {
         path: 'default',
-        rev: '2f5d3b9b1c0d4e5f6a7b8c9d0e1f2a3b4c5d6e7f',
+        rev: 'pymwzqwoplmnstvkruwzpymwzqwoplmn',
         locked: false, // PITFALL 4: jj has no lock primitive
       },
     ]);
@@ -244,7 +251,7 @@ describe('parseJjWorkspaceList (Phase 3 plan 03-02 — production parser)', () =
         {
           "locked": false,
           "path": "default",
-          "rev": "2f5d3b9b1c0d4e5f6a7b8c9d0e1f2a3b4c5d6e7f",
+          "rev": "pymwzqwoplmnstvkruwzpymwzqwoplmn",
         },
       ]
     `);

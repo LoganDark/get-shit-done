@@ -13,10 +13,18 @@
  * Source: https://vitest.dev/guide/extending-matchers#typescript-extension
  */
 
-import type { VcsKind } from '../../sdk/src/vcs/types.js';
+import type { VcsKind, VcsBackendKey } from '../../sdk/src/vcs/types.js';
+
+/**
+ * The matcher accepts either the cross-backend `VcsKind` (the canonical
+ * 'git' | 'jj' literal) or the more granular `VcsBackendKey`
+ * ('git' | 'jj-colocated' | 'jj-native') so `describe.for(selectedBackends())`
+ * closures can pass their loop variable directly.
+ */
+type ToBeIdOfKind = VcsKind | VcsBackendKey;
 
 interface CustomMatchers<R = unknown> {
-	toBeIdOf(kind: VcsKind | { kind: VcsKind; allowShort?: boolean }): R;
+	toBeIdOf(kind: ToBeIdOfKind | { kind: ToBeIdOfKind; allowShort?: boolean }): R;
 }
 
 declare module 'vitest' {
