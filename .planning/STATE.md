@@ -4,13 +4,13 @@ milestone: v1.3
 milestone_name: jj octopus merge for subagents fully functional
 status: executing
 stopped_at: Phase 9 context gathered
-last_updated: "2026-05-15T14:06:35.555Z"
-last_activity: 2026-05-15 -- Phase 09 planning complete
+last_updated: "2026-05-15T14:23:19.290Z"
+last_activity: 2026-05-15
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 5
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-15 at v1.3 open)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** v1.3 — Phase 9 ready for planning (jj-side parallel verbs)
+**Current focus:** Phase 09 — jj-side-parallel-verbs
 
 ## Current Position
 
-Phase: 9 — jj-side parallel verbs (context captured; not yet planned)
-Plan: —
+Phase: 09 (jj-side-parallel-verbs) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-05-15 -- Phase 09 planning complete
+Last activity: 2026-05-15
 
 ## Performance Metrics
 
@@ -48,6 +48,7 @@ Last activity: 2026-05-15 -- Phase 09 planning complete
 | v1.3 | 6 (Phases 9–14) | 0 | Planning |
 
 *Updated after each plan completion*
+| Phase 09 P01 | 6min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,8 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.3-specific decisions 
 - **Dogfood phase is LAST** (Pitfall 10 blast-radius). Phase 14, after CI green.
 - **CI parallel-path lane ships BEFORE default-flip** (CI-05/06 in Phase 13 → CONFIG-01/02 in Phase 14). Validates verbs in real CI before user-observable flip.
 - **Same-PR coupling on `FanInResult` shape**: PARALLEL-02 jj-side contract + git-side contract must ship together (per v1.2 retro precedent). Phase 10 finalizes the cross-backend shape.
+- [Phase ?]: Phase 9 Plan 01: VcsWorkspaceParallel type contract landed; wave-2 compile gate active (backends/jj.ts + incomplete-work.ts fail tsc until plans 02/03/04 wire parallel field + closed-union reason)
+- [Phase ?]: Phase 9 Plan 01: kept baselineOpId? on ParallelDispatchHandle.workspaces[] as documented forward-compat reservation (D-06 planner discretion) rather than YAGNI-stripping
 
 ### Pending Todos
 
@@ -101,9 +104,9 @@ Items acknowledged and carried forward from previous milestone close (status upd
 
 ## Session Continuity
 
-Last session: 2026-05-15T11:45:01.193Z
+Last session: 2026-05-15T14:22:46.057Z
 Stopped at: Phase 9 context gathered
-Resume file: .planning/phases/09-jj-side-parallel-verbs/09-CONTEXT.md
+Resume file: None
 
 ## Operator Next Steps
 

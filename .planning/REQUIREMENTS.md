@@ -14,7 +14,7 @@ The two new high-level verbs that define v1.3's deliverable surface. Verb namesp
 
 - [ ] **PARALLEL-01**: `vcs.workspace.parallel.dispatch(plan): ParallelDispatchHandle` ships on both backends. jj composes `octopus.createPhaseStructure` + N× `createSubagentSlot`. git wraps `git worktree add` with internal serialization (Pitfall 5 — `.git/config.lock` race). Returns `{ phaseRoot, workspaces: [{ name, path, baseRev, agentId }], manifest, phaseNumber, mainBookmark }`. Handle is frozen pure JSON data (D-05 in `09-CONTEXT.md`).
 - [ ] **PARALLEL-02**: `vcs.workspace.parallel.fanIn(handle, results): FanInResult` ships on both backends. jj uses one N-parent `jj new <p1>...<pN>` octopus form + batched `jj bookmark delete`. git uses N-parent `git merge --no-ff <p1>...<pN>` + batched `git update-ref -d`. Returns `{ merged, conflicted, conflictedPaths, incompleteQueued, failedReaped, surplusBookmarks }` — same shape on both backends; `conflicted: boolean` distinguishes in-tree-conflict-success from crash (Pitfall 2). `results` arg shape: `Array<{ agentId, exitCode, lastChangeId?, stderr? }>` (D-07 in `09-CONTEXT.md`).
-- [ ] **PARALLEL-05**: `ParallelDispatchHandle.workspaces[].baseRev` JSDoc documents stability semantics across `jj rebase` (rebase-stability differentiator — change_id stable on jj, commit_id stable on git per v1.2 unified revision model).
+- [x] **PARALLEL-05**: `ParallelDispatchHandle.workspaces[].baseRev` JSDoc documents stability semantics across `jj rebase` (rebase-stability differentiator — change_id stable on jj, commit_id stable on git per v1.2 unified revision model).
 - [ ] **PARALLEL-06**: `dispatch({ plan, maxConcurrency })` input field honored — numeric cap on concurrent agent workspaces. Default `undefined` (no cap; runtime's natural agent-cap rules). Differentiator surfaced for the dogfood phase's measurement story.
 
 > **PARALLEL-03 and PARALLEL-04 dropped at Phase 9 discuss (2026-05-15)** — see `.planning/phases/09-jj-side-parallel-verbs/09-CONTEXT.md` D-01 / D-02. The orchestrator-awaits-`Agent()` invariant makes the liveness scenario impossible in production; `octopus.ts`'s topology gives each subagent a distinct change so no shared-ancestor concurrent-squash exists. No `acquireJjRepoLock`, no `liveWorkspaces` field on `FanInResult`.
@@ -23,10 +23,10 @@ The two new high-level verbs that define v1.3's deliverable surface. Verb namesp
 
 Adapter interface + sidecar files. Mechanical wiring once the verb contracts in PARALLEL-* are set. REQ-IDs continue from v1.1's VCS-15.
 
-- [ ] **VCS-16**: New `VcsWorkspaceParallel` interface in `sdk/src/vcs/types.ts` exposing `dispatch` + `fanIn` + result types. Lives under `VcsWorkspace.parallel` (sub-sub-namespace).
-- [ ] **VCS-17**: New `sdk/src/vcs/jj/parallel.ts` composition layer. Imports `octopus.ts` + `reap.ts` + `workspace.merge`. Consumed by `backends/jj.ts`. Sidecar discipline (UPSTREAM-02): does NOT import from `backends/jj.ts`; inline `jjArgvFlags` per `octopus.ts:45` template.
+- [x] **VCS-16**: New `VcsWorkspaceParallel` interface in `sdk/src/vcs/types.ts` exposing `dispatch` + `fanIn` + result types. Lives under `VcsWorkspace.parallel` (sub-sub-namespace).
+- [x] **VCS-17**: New `sdk/src/vcs/jj/parallel.ts` composition layer. Imports `octopus.ts` + `reap.ts` + `workspace.merge`. Consumed by `backends/jj.ts`. Sidecar discipline (UPSTREAM-02): does NOT import from `backends/jj.ts`; inline `jjArgvFlags` per `octopus.ts:45` template.
 - [ ] **VCS-18**: New `sdk/src/vcs/git/parallel.ts` (new dir + file). Lifts ~100 LOC `executeWorktreeWaveCleanupPlan` body into TS plus the worktree-dispatch loop currently in `execute-phase.md:521-810`. Consumed by `backends/git.ts`. Joins `lint-vcs-no-raw-git.allow.json` as a single adapter-internal entry with reason "git backend `parallel.*` verb body — adapter-internal substrate, not workflow-facing".
-- [ ] **VCS-19**: `WAVE_WORKTREE_MANIFEST` schema extension — adds `plan_id`, `agent_id`, `backend` fields. Backwards-compatible (existing consumers ignore new fields; reader tolerates absence).
+- [x] **VCS-19**: `WAVE_WORKTREE_MANIFEST` schema extension — adds `plan_id`, `agent_id`, `backend` fields. Backwards-compatible (existing consumers ignore new fields; reader tolerates absence).
 - [ ] **VCS-20**: `gsd-sdk query workspace.assert-dispatched-cwd` SDK verb — backend-opaque sanity check that the calling process is running inside a dispatched workspace. Consumed by the rewritten subagent prompts (PROMPT-06).
 
 ### Workflow + agent rewire (PROMPT)
@@ -110,12 +110,12 @@ Mapped during roadmap creation 2026-05-15. Updated 2026-05-15 after Phase 9 disc
 | PARALLEL-02 | Phase 9 (jj-side) + Phase 10 (git-side, same-PR coupling on `FanInResult` shape) | Pending |
 | ~~PARALLEL-03~~ | ~~Phase 9 + Phase 10~~ | **Dropped 2026-05-15 (Phase 9 D-01)** |
 | ~~PARALLEL-04~~ | ~~Phase 9~~ | **Dropped 2026-05-15 (Phase 9 D-02)** |
-| PARALLEL-05 | Phase 9 | Pending |
+| PARALLEL-05 | Phase 9 | Complete |
 | PARALLEL-06 | Phase 11 | Pending |
-| VCS-16 | Phase 9 | Pending |
-| VCS-17 | Phase 9 | Pending |
+| VCS-16 | Phase 9 | Complete |
+| VCS-17 | Phase 9 | Complete |
 | VCS-18 | Phase 10 | Pending |
-| VCS-19 | Phase 9 | Pending |
+| VCS-19 | Phase 9 | Complete |
 | VCS-20 | Phase 11 | Pending |
 | PROMPT-06 | Phase 11 | Pending |
 | PROMPT-07 | Phase 11 | Pending |
