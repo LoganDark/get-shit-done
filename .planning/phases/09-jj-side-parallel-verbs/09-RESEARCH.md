@@ -784,7 +784,7 @@ Assertions:
 | A4 | The git-side throwing stub of `workspace.parallel.{dispatch,fanIn}` shipping in Phase 9 will not break any existing git-backend consumer because no current consumer calls these verbs (they're net-new). | Git-side Stub Question | If any existing test exercises `workspace.parallel` on the git backend, the stub flips it red. Mitigation: grep `workspace.parallel` across the test suite at plan-time. Already verified: no hits as of 2026-05-15. |
 | A5 | `WAVE_WORKTREE_MANIFEST` reader at `worktree-safety.cjs:319-342` will tolerate the new `plan_id` and `backend` fields' **absence** silently (so old-writer + new-reader compatibility works during Phase 9→10→11 staging). | Manifest Schema Extension | If a downstream consumer hard-requires `plan_id`/`backend`, mixed-version writes break. Mitigation: confirm at plan-time that `plan_id`/`backend` consumers are net-new (Phase 11), not retrofitted. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Agent bookmark creation timing.**
    - What we know: `createSubagentSlot` (`octopus.ts:280-324`) creates the head and workspace but **does not** create an agent bookmark.
