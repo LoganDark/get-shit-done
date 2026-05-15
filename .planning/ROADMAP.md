@@ -41,7 +41,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 
 **Milestone Goal:** The cross-backend `VcsAdapter` exposes ONE concept of "a revision." Workflows always work with revisions and never know or care what shape the revision has under the hood — `commit_id` on git, `change_id` on jj. The fact that jj also has `commit_id`s is a backend-internal detail that NEVER crosses the adapter boundary. The jj backend never volunteers a `commit_id` from any cross-backend verb. **Phase-level invariant:** the cross-backend `vcs.*` namespace exposes ONE revision concept; `commit_id` leakage from jj is a defect (inversion of SEED-001).
 
-- [ ] **Phase 8: Unified Revision Model — Audit → Test-Prep → Flip → Lint Guard → Close-Gate** — Audit every `commit_id`-reachable site in production + tests + workflow prose; introduce `expectIdShape` matcher up-front; flip the 7 jj template sites + rename `LogEntry.hash`/`CommitResult.hash` → `.id`; ship `lint-vcs-no-commit-id.cjs` parallel to existing raw-git guard; delete `vcs.kind`-branching for id reasons; close-gate `.planning/` rewriter pass extending Phase 6 B-07.
+- [x] **Phase 8: Unified Revision Model — Audit → Test-Prep → Flip → Lint Guard → Close-Gate** — Audit every `commit_id`-reachable site in production + tests + workflow prose; introduce `expectIdShape` matcher up-front; flip the 7 jj template sites + rename `LogEntry.hash`/`CommitResult.hash` → `.id`; ship `lint-vcs-no-commit-id.cjs` parallel to existing raw-git guard; delete `vcs.kind`-branching for id reasons; close-gate `.planning/` rewriter pass extending Phase 6 B-07. (completed 2026-05-15)
 
 ## Phase Details
 
@@ -57,9 +57,9 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
   5. Every `if (vcs.kind === 'jj') { /* commit_id branch */ } else { /* commit_id branch */ }` block in `get-shit-done/bin/lib/*.cjs` and `get-shit-done/workflows/*.md` that exists *for id reasons* (driven by AUDIT-04) is deleted and replaced with the unified `vcs.refs.resolveShort(expr.rev(...))` / `commitResult.id` / `entry.id` access; the deletions land AFTER FLIP-01..03 (so the unified API exists to delete toward) and AFTER AUDIT-04 surfaces the candidate sites; `vcs.kind` branching for non-id reasons (capability gaps, allowlist resolution) remains unaffected. (PROMPT-05)
   6. Phase-boundary-marker dogfood-cutover model holds: commits made BEFORE the FLIP plan lands carry `commit_id`-shape ids in `.planning/` (still resolvable on jj); commits AFTER FLIP carry `change_id`-shape ids; at v1.2 close-gate, a SINGLE B-07-style rewriter pass over `.planning/phases/<v1.2-dir>/` normalizes the directory to change_id; `format-migration/rewrite.ts` `COMMIT_KEY_ALLOWLIST` extended with any new commit-bearing keys discovered by AUDIT-04 in `.planning/` formats added during v1.0+v1.1; one-time grep at close-gate confirms prose hex tokens are historical-only. (MIGR-06)
 **Plans**: 3 plans
-- [ ] 08-01-PLAN.md — Audit + lint script development (wave 1; Plan 1)
-- [ ] 08-02-PLAN.md — Test-prep matcher + FLIP-01..04 + consumer sweep + golden re-record (wave 2; Plan 2 depends on Plan 1)
-- [ ] 08-03-PLAN.md — Lint activation + PROMPT-05 + LINT-03 conditional + MIGR-06 close-gate rewriter pass (wave 3; Plan 3 depends on Plan 1 + Plan 2)
+- [x] 08-01-PLAN.md — Audit + lint script development (wave 1; Plan 1)
+- [x] 08-02-PLAN.md — Test-prep matcher + FLIP-01..04 + consumer sweep + golden re-record (wave 2; Plan 2 depends on Plan 1)
+- [x] 08-03-PLAN.md — Lint activation + PROMPT-05 + LINT-03 conditional + MIGR-06 close-gate rewriter pass (wave 3; Plan 3 depends on Plan 1 + Plan 2)
 
 ## Progress
 
@@ -74,7 +74,7 @@ Phases execute in numeric order: 1 → 2 → 2.1 → 3 → 03.1 → 4 → 5 → 
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 8. Unified Revision Model | v1.2 | 0/3 | Planned | - |
+| 8. Unified Revision Model | v1.2 | 3/3 | Complete   | 2026-05-15 |
 
 ## Next
 

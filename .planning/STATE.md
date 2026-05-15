@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: jujutsu is change-only — never commit id anywhere
-status: executing
+status: milestone_complete
 stopped_at: Phase 8 context gathered
-last_updated: "2026-05-15T05:24:27.545Z"
-last_activity: 2026-05-15 -- Phase 08 planning complete
+last_updated: "2026-05-15T05:27:29.338Z"
+last_activity: 2026-05-15 -- Phase 08 execution started
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
   completed_plans: 0
-  percent: 0
+  percent: 100
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-14)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 8 — Unified Revision Model (v1.2 jujutsu is change-only — never commit id anywhere)
+**Current focus:** Phase 08 — unified-revision-model-audit-test-prep-flip-lint-guard-close
 
 ## Current Position
 
-Phase: 8 of 8 (Unified Revision Model — Audit → Test-Prep → Flip → Lint Guard → Close-Gate)
-Plan: — of TBD (planning pending)
-Status: Ready to execute
-Last activity: 2026-05-15 -- Phase 08 planning complete
+Phase: 08
+Plan: Not started
+Status: Milestone complete
+Last activity: 2026-05-15
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -36,7 +36,7 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 62 (across v1.0 + v1.1)
+- Total plans completed: 65 (across v1.0 + v1.1)
 - Average duration: see per-phase table
 - Total execution time: 2 milestones, both shipped 2026-05-14
 
