@@ -315,7 +315,12 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
   const diff = (opts: DiffOpts = {}): DiffResult => {
     const args = ['diff'];
     if (opts.staged) args.push('--cached');
-    if (opts.nameOnly) args.push('--name-only');
+    // WR-05: --name-only and --name-status are mutually exclusive at the git
+    // CLI level (last one wins). If a caller passes BOTH, do NOT also append
+    // --name-only — its output would be replaced by --name-status anyway, and
+    // populating result.nameOnly from that stdout below would yield rows of
+    // "M\tpath" garbage. nameStatus takes precedence; nameOnly silently no-ops.
+    if (opts.nameOnly && !opts.nameStatus) args.push('--name-only');
     // Plan 02-03 Task 2 gap-fill: --name-status emits one line per changed
     // path prefixed by a single status letter (A/M/D/R/C/T/U/X/B). Mirrors
     // verify.cjs:1309 usage. Mutually exclusive with --name-only at the git
@@ -333,7 +338,11 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     const r = execGit(cwd, args);
     const result: DiffResult = {
       raw: r.stdout,
-      nameOnly: opts.nameOnly ? r.stdout.split('\n').filter(Boolean) : [],
+      // WR-05: only populate nameOnly when --name-only was actually appended
+      // above (i.e. nameOnly was set AND nameStatus was not). If both were
+      // passed, --name-status won at the CLI level and stdout is "STATUS\tpath"
+      // — splitting that into nameOnly would yield contaminated entries.
+      nameOnly: opts.nameOnly && !opts.nameStatus ? r.stdout.split('\n').filter(Boolean) : [],
     };
     if (opts.nameStatus) {
       // Format: "<STATUS>\t<path>" per line; rename/copy entries use
