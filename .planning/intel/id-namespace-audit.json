@@ -1,0 +1,726 @@
+{
+  "$schema_version": 1,
+  "scanned_at": "2026-05-15T05:35:33.308Z",
+  "verdicts": {
+    "safe": [
+      {
+        "audit_row": 10,
+        "path": "sdk/src/vcs/__tests__/adapter-contract.test.ts",
+        "line": 163,
+        "surface": "40_char_hex_literal",
+        "callerUse": "expect(vcs.refs.exists(expr.rev('ffffffffffffffffffffffffffffffffffffffff'))).toBe(false);"
+      },
+      {
+        "audit_row": 11,
+        "path": "sdk/src/vcs/__tests__/baseline-parity.test.ts",
+        "line": 488,
+        "surface": "40_char_hex_literal",
+        "callerUse": "const bogus = vcs.refs.exists(expr.rev('0123456789abcdef0123456789abcdef01234567'));"
+      },
+      {
+        "audit_row": 19,
+        "path": "sdk/src/vcs/__tests__/expr.test.ts",
+        "line": 97,
+        "surface": "40_char_hex_literal",
+        "callerUse": "const SHA = 'abc1234deadbeef000000000000000000000aaaa';"
+      },
+      {
+        "audit_row": 25,
+        "path": "sdk/src/vcs/__tests__/git-backend.test.ts",
+        "line": 421,
+        "surface": "hex_regex",
+        "callerUse": "expect(roots[0]).toMatch(/^[0-9a-f]{40}$/);"
+      },
+      {
+        "audit_row": 59,
+        "path": "sdk/src/vcs/__tests__/parse-worktree-list.test.ts",
+        "line": 23,
+        "surface": "40_char_hex_literal",
+        "callerUse": "head: 'deadbeefcafebabedeadbeefcafebabedeadbeef',"
+      },
+      {
+        "audit_row": 65,
+        "path": "sdk/src/vcs/format-migration/__tests__/rewrite.test.ts",
+        "line": 149,
+        "surface": "40_char_hex_literal",
+        "callerUse": "const fullSha = 'bae15ddeee32297cd54deab40eec317d8f961f86';"
+      },
+      {
+        "audit_row": 68,
+        "path": "sdk/src/vcs/format-migration/rewrite.ts",
+        "line": 77,
+        "surface": "literal_commit_id",
+        "callerUse": "'commit_id',"
+      },
+      {
+        "audit_row": 78,
+        "path": "get-shit-done/bin/lib/graphify.cjs",
+        "line": 357,
+        "surface": "hex_regex",
+        "callerUse": "const COMMIT_HASH_RE = /^[0-9a-f]{4,40}$/i;"
+      },
+      {
+        "audit_row": 83,
+        "path": "get-shit-done/bin/lib/verify.cjs",
+        "line": 1393,
+        "surface": "40_char_hex_literal",
+        "callerUse": "const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';"
+      },
+      {
+        "audit_row": 84,
+        "path": "scripts/audit-id-namespace.cjs",
+        "line": 32,
+        "surface": "field_access",
+        "callerUse": "{ re: /\\.commit_id\\b/, kind: 'field_access' },"
+      },
+      {
+        "audit_row": 85,
+        "path": "scripts/audit-id-namespace.cjs",
+        "line": 35,
+        "surface": "hash_field_access",
+        "callerUse": "{ re: /\\.hash\\b/, kind: 'hash_field_access' },"
+      },
+      {
+        "audit_row": 86,
+        "path": "scripts/audit-id-namespace.cjs",
+        "line": 110,
+        "surface": "hash_field_access",
+        "callerUse": "'- `needs-rename` — type-level rename (e.g., `LogEntry.hash` → `LogEntry.id`)',"
+      },
+      {
+        "audit_row": 87,
+        "path": "scripts/audit-id-namespace.cjs",
+        "line": 112,
+        "surface": "literal_commit_id",
+        "callerUse": "'- `boundary-io` — legitimate backend-private `commit_id` access (LINT-03 conditional driver)',"
+      }
+    ],
+    "flip-clean": [
+      {
+        "audit_row": 4,
+        "path": "sdk/src/query/log.ts",
+        "line": 72,
+        "surface": "hash_field_access",
+        "callerUse": "return expr.rev(entries[n].hash);"
+      },
+      {
+        "audit_row": 7,
+        "path": "sdk/src/query-raw-output-projection.ts",
+        "line": 23,
+        "surface": "hash_field_access",
+        "callerUse": "return d.hash != null ? String(d.hash) : 'committed';"
+      },
+      {
+        "audit_row": 28,
+        "path": "sdk/src/vcs/__tests__/jj-commit.test.ts",
+        "line": 86,
+        "surface": "literal_commit_id",
+        "callerUse": "expect(jjT('@-', 'commit_id')).toBe(r.hash);"
+      },
+      {
+        "audit_row": 31,
+        "path": "sdk/src/vcs/__tests__/jj-commit.test.ts",
+        "line": 143,
+        "surface": "field_access",
+        "callerUse": "`jj --repository ${JSON.stringify(dir)} --no-pager --color never --quiet bookmark list 'gsd/phase-3' -T 'normal_target.commit_id() ++ \"\\\\n\"'`,"
+      },
+      {
+        "audit_row": 33,
+        "path": "sdk/src/vcs/__tests__/jj-commit.test.ts",
+        "line": 158,
+        "surface": "field_access",
+        "callerUse": "`jj --repository ${JSON.stringify(dir)} --no-pager --color never --quiet bookmark list 'rawname' -T 'normal_target.commit_id() ++ \"\\\\n\"'`,"
+      },
+      {
+        "audit_row": 38,
+        "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
+        "line": 53,
+        "surface": "40_char_hex_literal",
+        "callerUse": "expect(first.parents).toEqual(['1111111111111111111111111111111111111111']);"
+      },
+      {
+        "audit_row": 40,
+        "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
+        "line": 82,
+        "surface": "literal_commit_id",
+        "callerUse": "expect(() => parseJjLog('{\"commit_id\":\"abc\",not-valid-json')).toThrow("
+      },
+      {
+        "audit_row": 41,
+        "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
+        "line": 94,
+        "surface": "40_char_hex_literal",
+        "callerUse": "\"hash\": \"2f5d3b9b1c0d4e5f6a7b8c9d0e1f2a3b4c5d6e7f\","
+      },
+      {
+        "audit_row": 42,
+        "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
+        "line": 96,
+        "surface": "40_char_hex_literal",
+        "callerUse": "\"1111111111111111111111111111111111111111\","
+      },
+      {
+        "audit_row": 43,
+        "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
+        "line": 105,
+        "surface": "40_char_hex_literal",
+        "callerUse": "\"hash\": \"1111111111111111111111111111111111111111\","
+      },
+      {
+        "audit_row": 44,
+        "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
+        "line": 107,
+        "surface": "40_char_hex_literal",
+        "callerUse": "\"2222222222222222222222222222222222222222\","
+      },
+      {
+        "audit_row": 45,
+        "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
+        "line": 114,
+        "surface": "40_char_hex_literal",
+        "callerUse": "\"hash\": \"2222222222222222222222222222222222222222\","
+      },
+      {
+        "audit_row": 46,
+        "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
+        "line": 129,
+        "surface": "40_char_hex_literal",
+        "callerUse": "\"hash\": \"deadbeef00000000000000000000000000000000\","
+      },
+      {
+        "audit_row": 47,
+        "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
+        "line": 131,
+        "surface": "40_char_hex_literal",
+        "callerUse": "\"1234567890123456789012345678901234567890\","
+      },
+      {
+        "audit_row": 48,
+        "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
+        "line": 132,
+        "surface": "40_char_hex_literal",
+        "callerUse": "\"abcdefabcdefabcdefabcdefabcdefabcdefabcd\","
+      },
+      {
+        "audit_row": 50,
+        "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
+        "line": 228,
+        "surface": "40_char_hex_literal",
+        "callerUse": "rev: '2f5d3b9b1c0d4e5f6a7b8c9d0e1f2a3b4c5d6e7f',"
+      },
+      {
+        "audit_row": 51,
+        "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
+        "line": 247,
+        "surface": "40_char_hex_literal",
+        "callerUse": "\"rev\": \"2f5d3b9b1c0d4e5f6a7b8c9d0e1f2a3b4c5d6e7f\","
+      },
+      {
+        "audit_row": 52,
+        "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
+        "line": 279,
+        "surface": "literal_commit_id",
+        "callerUse": "\"jj --repository . --no-pager --color never --quiet log -r @- -T 'commit_id' --no-graph -n 1\","
+      },
+      {
+        "audit_row": 53,
+        "path": "sdk/src/vcs/__tests__/jj-refs.test.ts",
+        "line": 63,
+        "surface": "40_char_hex_literal",
+        "callerUse": "expect(bookmark.rev).toBe('2f5d3b9b1c0d4e5f6a7b8c9d0e1f2a3b4c5d6e7f');"
+      },
+      {
+        "audit_row": 54,
+        "path": "sdk/src/vcs/__tests__/jj-refs.test.ts",
+        "line": 82,
+        "surface": "40_char_hex_literal",
+        "callerUse": "'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',"
+      },
+      {
+        "audit_row": 55,
+        "path": "sdk/src/vcs/__tests__/jj-refs.test.ts",
+        "line": 83,
+        "surface": "40_char_hex_literal",
+        "callerUse": "'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',"
+      },
+      {
+        "audit_row": 56,
+        "path": "sdk/src/vcs/__tests__/jj-refs.test.ts",
+        "line": 92,
+        "surface": "40_char_hex_literal",
+        "callerUse": "expect(bookmark.rev).toBe('1111111111111111111111111111111111111111');"
+      },
+      {
+        "audit_row": 61,
+        "path": "sdk/src/vcs/backends/jj.ts",
+        "line": 225,
+        "surface": "literal_commit_id",
+        "callerUse": "'log', '-r', '@-', '-T', 'commit_id', '--no-graph', '-n', '1',"
+      },
+      {
+        "audit_row": 63,
+        "path": "sdk/src/vcs/backends/jj.ts",
+        "line": 597,
+        "surface": "hash_field_access",
+        "callerUse": "const paths = enumerateConflictedPaths(entry.hash);"
+      },
+      {
+        "audit_row": 64,
+        "path": "sdk/src/vcs/backends/jj.ts",
+        "line": 598,
+        "surface": "hash_field_access",
+        "callerUse": "results.push({ rev: entry.hash, paths, scope: opts.scope });"
+      },
+      {
+        "audit_row": 66,
+        "path": "sdk/src/vcs/format-migration/orphan.ts",
+        "line": 77,
+        "surface": "hash_field_access",
+        "callerUse": "cursor = parents[0].hash;"
+      },
+      {
+        "audit_row": 67,
+        "path": "sdk/src/vcs/format-migration/orphan.ts",
+        "line": 103,
+        "surface": "hash_field_access",
+        "callerUse": "children = childEntries.map((c) => c.hash);"
+      },
+      {
+        "audit_row": 75,
+        "path": "sdk/src/vcs/parse/jj-log.ts",
+        "line": 56,
+        "surface": "field_access",
+        "callerUse": "hash: record.commit_id ?? '',"
+      },
+      {
+        "audit_row": 76,
+        "path": "sdk/src/vcs/parse/jj-workspace-list.ts",
+        "line": 46,
+        "surface": "field_access",
+        "callerUse": "rev: record.target?.commit_id ?? '',"
+      },
+      {
+        "audit_row": 77,
+        "path": "get-shit-done/bin/lib/commands.cjs",
+        "line": 507,
+        "surface": "hash_field_access",
+        "callerUse": "output(result, raw, Object.entries(repos).map(([r, v]) => `${r}:${v.hash || 'skip'}`).join(' '));"
+      }
+    ],
+    "needs-rename": [
+      {
+        "audit_row": 1,
+        "path": "sdk/src/query/commit.test.ts",
+        "line": 170,
+        "surface": "hash_field_access",
+        "callerUse": "expect((result.data as { hash: string }).hash).toBeTruthy();"
+      },
+      {
+        "audit_row": 2,
+        "path": "sdk/src/query/commit.test.ts",
+        "line": 182,
+        "surface": "hash_field_access",
+        "callerUse": "expect((result.data as { hash: string }).hash).toBeTruthy();"
+      },
+      {
+        "audit_row": 5,
+        "path": "sdk/src/query/mutation-event-mapper.ts",
+        "line": 68,
+        "surface": "hash_field_access",
+        "callerUse": "hash: (data?.hash as string) ?? null,"
+      },
+      {
+        "audit_row": 8,
+        "path": "sdk/src/vcs/__tests__/adapter-contract.test.ts",
+        "line": 43,
+        "surface": "hash_field_access",
+        "callerUse": "expect(r.hash).toMatch(/^[0-9a-f]+$/);"
+      },
+      {
+        "audit_row": 9,
+        "path": "sdk/src/vcs/__tests__/adapter-contract.test.ts",
+        "line": 51,
+        "surface": "hash_field_access",
+        "callerUse": "expect(entries[0].hash).toMatch(/^[0-9a-f]+$/);"
+      },
+      {
+        "audit_row": 13,
+        "path": "sdk/src/vcs/__tests__/cmd-discuss-phase-jj.test.ts",
+        "line": 68,
+        "surface": "hash_field_access",
+        "callerUse": "expect(r.hash).toBeTruthy();"
+      },
+      {
+        "audit_row": 14,
+        "path": "sdk/src/vcs/__tests__/cmd-import-jj.test.ts",
+        "line": 114,
+        "surface": "hash_field_access",
+        "callerUse": "expect(r.hash).toBeTruthy();"
+      },
+      {
+        "audit_row": 15,
+        "path": "sdk/src/vcs/__tests__/cmd-ingest-docs-jj.test.ts",
+        "line": 98,
+        "surface": "hash_field_access",
+        "callerUse": "expect(r.hash).toBeTruthy();"
+      },
+      {
+        "audit_row": 16,
+        "path": "sdk/src/vcs/__tests__/cmd-map-codebase-jj.test.ts",
+        "line": 91,
+        "surface": "hash_field_access",
+        "callerUse": "expect(r.hash).toBeTruthy();"
+      },
+      {
+        "audit_row": 17,
+        "path": "sdk/src/vcs/__tests__/cmd-new-project-jj.test.ts",
+        "line": 84,
+        "surface": "hash_field_access",
+        "callerUse": "expect(r.hash).toBeTruthy();"
+      },
+      {
+        "audit_row": 18,
+        "path": "sdk/src/vcs/__tests__/cmd-pause-work-jj.test.ts",
+        "line": 77,
+        "surface": "hash_field_access",
+        "callerUse": "expect(r.hash).toBeTruthy();"
+      },
+      {
+        "audit_row": 20,
+        "path": "sdk/src/vcs/__tests__/git-backend.test.ts",
+        "line": 51,
+        "surface": "hash_field_access",
+        "callerUse": "expect(r.hash).toBeTruthy();"
+      },
+      {
+        "audit_row": 21,
+        "path": "sdk/src/vcs/__tests__/git-backend.test.ts",
+        "line": 53,
+        "surface": "hash_field_access",
+        "callerUse": "expect(r.hash).toBe(headHash);"
+      },
+      {
+        "audit_row": 22,
+        "path": "sdk/src/vcs/__tests__/git-backend.test.ts",
+        "line": 66,
+        "surface": "hash_field_access",
+        "callerUse": "expect(r.hash).toBeTruthy();"
+      },
+      {
+        "audit_row": 23,
+        "path": "sdk/src/vcs/__tests__/git-backend.test.ts",
+        "line": 89,
+        "surface": "hash_field_access",
+        "callerUse": "expect(r.hash).toBeTruthy();"
+      },
+      {
+        "audit_row": 24,
+        "path": "sdk/src/vcs/__tests__/git-backend.test.ts",
+        "line": 108,
+        "surface": "hash_field_access",
+        "callerUse": "expect(entries[0].hash).toBe(headHash);"
+      },
+      {
+        "audit_row": 26,
+        "path": "sdk/src/vcs/__tests__/jj-commit.test.ts",
+        "line": 83,
+        "surface": "hash_field_access",
+        "callerUse": "expect(r.hash).toBeTruthy();"
+      },
+      {
+        "audit_row": 27,
+        "path": "sdk/src/vcs/__tests__/jj-commit.test.ts",
+        "line": 84,
+        "surface": "hash_field_access",
+        "callerUse": "expect(r.hash).toMatch(/^[a-f0-9]{40}$/);"
+      },
+      {
+        "audit_row": 29,
+        "path": "sdk/src/vcs/__tests__/jj-commit.test.ts",
+        "line": 94,
+        "surface": "hash_field_access",
+        "callerUse": "expect(r.hash).toBeTruthy();"
+      },
+      {
+        "audit_row": 30,
+        "path": "sdk/src/vcs/__tests__/jj-commit.test.ts",
+        "line": 130,
+        "surface": "hash_field_access",
+        "callerUse": "expect(r.hash).toBeTruthy();"
+      },
+      {
+        "audit_row": 32,
+        "path": "sdk/src/vcs/__tests__/jj-commit.test.ts",
+        "line": 146,
+        "surface": "hash_field_access",
+        "callerUse": "expect(target).toBe(r.hash);"
+      },
+      {
+        "audit_row": 34,
+        "path": "sdk/src/vcs/__tests__/jj-commit.test.ts",
+        "line": 161,
+        "surface": "hash_field_access",
+        "callerUse": "expect(target).toBe(r.hash);"
+      },
+      {
+        "audit_row": 35,
+        "path": "sdk/src/vcs/__tests__/jj-hooks.test.ts",
+        "line": 140,
+        "surface": "hash_field_access",
+        "callerUse": "expect(r.hash).toBeTruthy();"
+      },
+      {
+        "audit_row": 37,
+        "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
+        "line": 49,
+        "surface": "hash_field_access",
+        "callerUse": "expect(first.hash).toBe('2f5d3b9b1c0d4e5f6a7b8c9d0e1f2a3b4c5d6e7f');"
+      },
+      {
+        "audit_row": 39,
+        "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
+        "line": 78,
+        "surface": "hash_field_access",
+        "callerUse": "expect(entries[0]!.hash).toBe('deadbeef00000000000000000000000000000000');"
+      },
+      {
+        "audit_row": 57,
+        "path": "sdk/src/vcs/__tests__/jj-status-log-diff.test.ts",
+        "line": 64,
+        "surface": "hash_field_access",
+        "callerUse": "expect(entries[0].hash).toMatch(/^[a-f0-9]{40}$/);"
+      },
+      {
+        "audit_row": 58,
+        "path": "sdk/src/vcs/__tests__/jj-workspace.test.ts",
+        "line": 417,
+        "surface": "hex_regex",
+        "callerUse": "expect(mainEntry?.rev).toMatch(/^[0-9a-f]{40}$/);  // commit_id form"
+      },
+      {
+        "audit_row": 69,
+        "path": "sdk/src/vcs/format-migration/run.ts",
+        "line": 152,
+        "surface": "hash_field_access",
+        "callerUse": "commitHash: markerHit.hash ?? '',"
+      },
+      {
+        "audit_row": 70,
+        "path": "sdk/src/vcs/format-migration/run.ts",
+        "line": 335,
+        "surface": "hash_field_access",
+        "callerUse": "commitHash: commitResult.hash ?? '',"
+      },
+      {
+        "audit_row": 88,
+        "path": "get-shit-done/workflows/code-review.md",
+        "line": 231,
+        "surface": "hash_field_access",
+        "callerUse": "| jq -r \".entries[] | select(.subject | test(\\\"\\\\\\(${PADDED_PHASE}\\\\\\)|\\\\\\(${PADDED_PHASE}-\\\")) | .hash\" 2>/dev/null)"
+      },
+      {
+        "audit_row": 89,
+        "path": "get-shit-done/workflows/code-review.md",
+        "line": 424,
+        "surface": "hash_field_access",
+        "callerUse": "| jq -r \".entries[] | select(.subject | test(\\\"\\\\\\(${PADDED_PHASE}\\\\\\)|\\\\\\(${PADDED_PHASE}-\\\")) | .hash\" 2>/dev/null)"
+      },
+      {
+        "audit_row": 90,
+        "path": "get-shit-done/workflows/complete-milestone.md",
+        "line": 175,
+        "surface": "hash_field_access",
+        "callerUse": "| jq -r '.entries[] | (.hash[0:7] + \" \" + .subject)' \\"
+      },
+      {
+        "audit_row": 91,
+        "path": "get-shit-done/workflows/execute-phase.md",
+        "line": 182,
+        "surface": "hash_field_access",
+        "callerUse": "| jq -r --arg prefix \"test(${PHASE_NUMBER}-${PLAN_ID}):\" '.[] | select(.subject | startswith($prefix)) | (.hash[0:7] + \" \" + .subject)' \\"
+      },
+      {
+        "audit_row": 92,
+        "path": "get-shit-done/workflows/execute-phase.md",
+        "line": 703,
+        "surface": "hash_field_access",
+        "callerUse": "| jq -r --arg sub \"{phase_number}-{plan_padded}\" '.[] | select(.subject | contains($sub)) | (.hash[0:7] + \" \" + .subject)' \\"
+      },
+      {
+        "audit_row": 93,
+        "path": "get-shit-done/workflows/execute-phase.md",
+        "line": 708,
+        "surface": "hash_field_access",
+        "callerUse": "| jq -r --arg ts \"${DISPATCH_TS}\" '.[] | select(.date >= $ts) | (.hash[0:7] + \" \" + .subject)' \\"
+      },
+      {
+        "audit_row": 94,
+        "path": "get-shit-done/workflows/quick.md",
+        "line": 817,
+        "surface": "hash_field_access",
+        "callerUse": "| jq -r --arg sub \"${quick_id}\" '.[] | select(.subject | contains($sub)) | .hash')"
+      },
+      {
+        "audit_row": 95,
+        "path": "get-shit-done/workflows/undo.md",
+        "line": 54,
+        "surface": "hash_field_access",
+        "callerUse": "| jq -r '.entries[] | (.hash[0:7] + \" \" + .subject)'"
+      },
+      {
+        "audit_row": 96,
+        "path": "get-shit-done/workflows/undo.md",
+        "line": 57,
+        "surface": "hash_field_access",
+        "callerUse": "The verb's LogOpts shape (Phase 2 CR-02) does not yet expose `--no-merges` / `--grep` — those flags are parsed-but-unused. Reconstruct the \"oneline\" form client-side from `.hash[0:7] + \" \" + .subject`"
+      },
+      {
+        "audit_row": 97,
+        "path": "get-shit-done/workflows/undo.md",
+        "line": 91,
+        "surface": "hash_field_access",
+        "callerUse": "| jq -r '.entries[] | (.hash[0:7] + \" \" + .subject)' \\"
+      },
+      {
+        "audit_row": 98,
+        "path": "get-shit-done/workflows/undo.md",
+        "line": 104,
+        "surface": "hash_field_access",
+        "callerUse": "| jq -r '.entries[] | (.hash[0:7] + \" \" + .subject)' \\"
+      },
+      {
+        "audit_row": 99,
+        "path": "agents/gsd-executor.md",
+        "line": 354,
+        "surface": "hash_field_access",
+        "callerUse": "1. Verify previous commits exist: `gsd-sdk query log --max-count 5 | jq -r '.entries[] | (.hash[0:7] + \" \" + .subject)'`"
+      },
+      {
+        "audit_row": 100,
+        "path": "agents/gsd-executor.md",
+        "line": 525,
+        "surface": "hash_field_access",
+        "callerUse": "- **Multi-repo (sub_repos):** Extract hashes from `commit-to-subrepo` JSON output (`repos.{name}.hash`). Record all hashes for SUMMARY (e.g., `backend@abc1234, frontend@def5678`)."
+      },
+      {
+        "audit_row": 101,
+        "path": "agents/gsd-executor.md",
+        "line": 641,
+        "surface": "hash_field_access",
+        "callerUse": "| jq -r '.entries[].hash[0:7]' \\"
+      }
+    ],
+    "needs-resolveShort": [
+      {
+        "audit_row": 6,
+        "path": "sdk/src/query/verify.ts",
+        "line": 683,
+        "surface": "hash_field_access",
+        "callerUse": ".map((e) => `${(e.hash || '').slice(0, 7)} ${e.subject || ''}`)"
+      },
+      {
+        "audit_row": 12,
+        "path": "sdk/src/vcs/__tests__/baseline-parity.test.ts",
+        "line": 508,
+        "surface": "hash_field_access",
+        "callerUse": ".map((e) => `${(e.hash || '').slice(0, 7)} ${e.subject || ''}`)"
+      },
+      {
+        "audit_row": 71,
+        "path": "sdk/src/vcs/jj/reap.ts",
+        "line": 185,
+        "surface": "short_slice",
+        "callerUse": "changeIdShort: entry.headChange.slice(0, 8),"
+      },
+      {
+        "audit_row": 79,
+        "path": "get-shit-done/bin/lib/graphify.cjs",
+        "line": 366,
+        "surface": "short_slice",
+        "callerUse": "* The two consumers in graphifyStatus() either (a) `.slice(0, 7)` it for"
+      },
+      {
+        "audit_row": 80,
+        "path": "get-shit-done/bin/lib/graphify.cjs",
+        "line": 460,
+        "surface": "short_slice",
+        "callerUse": "built_at_commit: builtAt ? builtAt.slice(0, 7) : null,"
+      },
+      {
+        "audit_row": 81,
+        "path": "get-shit-done/bin/lib/graphify.cjs",
+        "line": 461,
+        "surface": "short_slice",
+        "callerUse": "current_commit: head ? head.slice(0, 7) : null,"
+      },
+      {
+        "audit_row": 82,
+        "path": "get-shit-done/bin/lib/verify.cjs",
+        "line": 1296,
+        "surface": "hash_field_access",
+        "callerUse": ".map((e) => `${(e.hash || '').slice(0, 7)} ${e.subject || ''}`)"
+      }
+    ],
+    "boundary-io": [
+      {
+        "audit_row": 72,
+        "path": "sdk/src/vcs/parse/jj-id.ts",
+        "line": 5,
+        "surface": "hash_field_access",
+        "callerUse": "* `LogEntry.hash = commit_id` per PITFALL 1 in 03-RESEARCH.md. The reverse"
+      },
+      {
+        "audit_row": 73,
+        "path": "sdk/src/vcs/parse/jj-id.ts",
+        "line": 34,
+        "surface": "literal_commit_id",
+        "callerUse": "const args = jjIdArgv(cwd, 'log', '-r', changeId, '-T', 'commit_id', '--no-graph', '-n', '1');"
+      }
+    ],
+    "historical-prose": [
+      {
+        "audit_row": 3,
+        "path": "sdk/src/query/log.ts",
+        "line": 7,
+        "surface": "short_slice",
+        "callerUse": "* from `hash.slice(0,7) + ' ' + subject` per the Phase 2 CR-02 narrowing."
+      },
+      {
+        "audit_row": 36,
+        "path": "sdk/src/vcs/__tests__/jj-id-alphabet-probe.test.ts",
+        "line": 6,
+        "surface": "hex_regex",
+        "callerUse": "* disjointness of git-SHA regex /[0-9a-f]{7,40}/ vs jj-change-id regex"
+      },
+      {
+        "audit_row": 49,
+        "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
+        "line": 222,
+        "surface": "field_access",
+        "callerUse": "it('maps {name, target.commit_id} → WorkspaceInfo for default workspace', () => {"
+      },
+      {
+        "audit_row": 60,
+        "path": "sdk/src/vcs/backends/jj.ts",
+        "line": 141,
+        "surface": "hash_field_access",
+        "callerUse": "* - SQUASH-06: conflicted-state commits surface via CommitResult.hash; the"
+      },
+      {
+        "audit_row": 62,
+        "path": "sdk/src/vcs/backends/jj.ts",
+        "line": 327,
+        "surface": "literal_commit_id",
+        "callerUse": "* PITFALL 1: `LogEntry.hash` is `commit_id` (40-char hex), NEVER"
+      },
+      {
+        "audit_row": 74,
+        "path": "sdk/src/vcs/parse/jj-log.ts",
+        "line": 13,
+        "surface": "literal_commit_id",
+        "callerUse": "* PITFALL 1 (03-RESEARCH.md): `LogEntry.hash` = `commit_id` (NEVER"
+      }
+    ],
+    "unclear": []
+  }
+}
