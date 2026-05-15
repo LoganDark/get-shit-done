@@ -25,7 +25,7 @@ Adapter interface + sidecar files. Mechanical wiring once the verb contracts in 
 
 - [x] **VCS-16**: New `VcsWorkspaceParallel` interface in `sdk/src/vcs/types.ts` exposing `dispatch` + `fanIn` + result types. Lives under `VcsWorkspace.parallel` (sub-sub-namespace).
 - [x] **VCS-17**: New `sdk/src/vcs/jj/parallel.ts` composition layer. Imports `octopus.ts` + `reap.ts` + `workspace.merge`. Consumed by `backends/jj.ts`. Sidecar discipline (UPSTREAM-02): does NOT import from `backends/jj.ts`; inline `jjArgvFlags` per `octopus.ts:45` template.
-- [ ] **VCS-18**: New `sdk/src/vcs/git/parallel.ts` (new dir + file). Lifts ~100 LOC `executeWorktreeWaveCleanupPlan` body into TS plus the worktree-dispatch loop currently in `execute-phase.md:521-810`. Consumed by `backends/git.ts`. Joins `lint-vcs-no-raw-git.allow.json` as a single adapter-internal entry with reason "git backend `parallel.*` verb body — adapter-internal substrate, not workflow-facing".
+- [x] **VCS-18**: New `sdk/src/vcs/git/parallel.ts` (new dir + file). Lifts ~100 LOC `executeWorktreeWaveCleanupPlan` body into TS plus the worktree-dispatch loop currently in `execute-phase.md:521-810`. Consumed by `backends/git.ts`. Joins `lint-vcs-no-raw-git.allow.json` as a single adapter-internal entry with reason "git backend `parallel.*` verb body — adapter-internal substrate, not workflow-facing".
 - [x] **VCS-19**: `WAVE_WORKTREE_MANIFEST` schema extension — adds `plan_id`, `agent_id`, `backend` fields. Backwards-compatible (existing consumers ignore new fields; reader tolerates absence).
 - [ ] **VCS-20**: `gsd-sdk query workspace.assert-dispatched-cwd` SDK verb — backend-opaque sanity check that the calling process is running inside a dispatched workspace. Consumed by the rewritten subagent prompts (PROMPT-06).
 
@@ -114,7 +114,7 @@ Mapped during roadmap creation 2026-05-15. Updated 2026-05-15 after Phase 9 disc
 | PARALLEL-06 | Phase 11 | Pending |
 | VCS-16 | Phase 9 | Complete |
 | VCS-17 | Phase 9 | Complete |
-| VCS-18 | Phase 10 | Pending |
+| VCS-18 | Phase 10 | Complete |
 | VCS-19 | Phase 9 | Complete |
 | VCS-20 | Phase 11 | Pending |
 | PROMPT-06 | Phase 11 | Pending |
