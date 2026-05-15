@@ -170,3 +170,29 @@ node scripts/lint-vcs-no-commit-id.cjs                                         #
 If a future PR proposes building `sdk/src/vcs/backends/jj-internal.ts`, this section is the reference: the original Phase 8 audit returned 2 boundary-io consumers (both in jj-id.ts, the existing accessor), well below the 5-row threshold; any new consumer must be re-litigated with explicit rationale per Pitfall 4 (boundary-I/O accessor sprawl).
 
 Audit script + lint script + seeder script self-references and post-audit-discovery paths (paths outside the audit scan roots — `sdk/src/types.ts`, `sdk/src/vcs/types.ts`, `sdk/src/query/commit.ts`, `sdk/src/vcs/format-migration/types.ts`, `sdk/src/vcs/__tests__/jj-refs.test.ts`, several `tests/*.cjs` test-fixture files) are recorded in `scripts/lint-vcs-no-commit-id.allow.json` with explicit per-entry reason and owner. None are boundary-io.
+
+
+## PROMPT-05 outcome
+
+AUDIT-04 grep at Plan 3 execution time:
+
+```bash
+grep -rn "vcs\.kind === 'jj'" get-shit-done/bin/lib/ get-shit-done/workflows/ commands/ agents/  # returns 0
+grep -rn "vcs\.kind === 'git'" get-shit-done/bin/lib/ get-shit-done/workflows/ commands/ agents/ # returns 4
+```
+
+- `vcs.kind === 'jj'` id-reason branches found: **0**
+- `vcs.kind === 'git'` branches found: **4** (all KEEP — gitOnly.* capability narrowing)
+
+Discriminator applied per RESEARCH §Workflow `vcs.kind`-branch decision pattern:
+
+- **DELETED (id reasons):** none
+- **KEPT (non-id reasons):**
+  - `get-shit-done/bin/lib/init.cjs:1547` — `gitOnly.version()` access (Phase 2.1 D-18 capability narrowing)
+  - `get-shit-done/bin/lib/worktree-safety.cjs:71` — comment-only reference to the `vcs.kind === 'git'` consumer pattern (documenting the D-18 narrowing pattern)
+  - `get-shit-done/bin/lib/worktree-safety.cjs:107` — comment-only reference (same D-18 documentation)
+  - `get-shit-done/bin/lib/worktree-safety.cjs:109` — actual `if (vcs.kind === 'git')` narrow for `gitOnly.gitDir()` / `gitOnly.gitCommonDir()` access (Phase 2.1 D-18 capability narrowing)
+
+Each KEEP site now carries an inline `// PROMPT-05 KEEP:` annotation citing the gitOnly.* capability rationale + Phase 8 CONTEXT `<out-of-scope>`.
+
+**Expected outcome confirmed:** zero deletes (per pre-Plan-3 grep + Plan 1 audit findings). **PROMPT-05 closes by invariant verification.**

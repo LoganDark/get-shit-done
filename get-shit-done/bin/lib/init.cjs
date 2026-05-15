@@ -1544,6 +1544,10 @@ function cmdInitNewWorkspace(cwd, raw) {
   let worktreeAvailable = false;
   try {
     const vcs = createVcsAdapter(cwd, { kind: 'git' });
+    // PROMPT-05 KEEP: vcs.kind === 'git' narrow is for gitOnly.* capability
+    // access (Phase 2.1 D-18 — version() lives on GitOnlyOps, not the
+    // cross-backend surface), NOT for id-shape reasons. Per Phase 8 CONTEXT
+    // <out-of-scope> "vcs.kind branching for non-id reasons remains valid".
     if (vcs.kind === 'git') {
       vcs.gitOnly.version();
       worktreeAvailable = true;

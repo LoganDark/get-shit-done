@@ -74,6 +74,8 @@ function resolveWorktreeContext(cwd, deps = {}) {
   // deps.execGit. The narrow always succeeds at runtime because
   // createVcsAdapter is pinned to kind:'git'; it exists for static
   // type-checking against the VcsAdapter discriminated union.
+  // PROMPT-05 KEEP: this whole narrow is gitOnly.* capability access — NOT
+  // an id-shape decision; per Phase 8 CONTEXT <out-of-scope>.
   const vcs = deps.vcs || createVcsAdapter(cwd, { kind: 'git' });
   const existsSync = deps.existsSync || fs.existsSync;
 
@@ -106,6 +108,9 @@ function resolveWorktreeContext(cwd, deps = {}) {
   // 2.1 D-18: WorkspaceContext.{gitDir,gitCommonDir} moved to GitOnlyOps;
   // narrow on vcs.kind === 'git' to access. The narrow is statically required
   // and always succeeds at runtime (createVcsAdapter pinned to kind:'git').
+  // PROMPT-05 KEEP: gitOnly.* capability narrowing (not an id-shape branch);
+  // per Phase 8 CONTEXT <out-of-scope> "vcs.kind branching for non-id reasons
+  // remains valid".
   if (vcs.kind === 'git') {
     const gitDir = vcs.gitOnly.gitDir();
     const gitCommonDir = vcs.gitOnly.gitCommonDir();
