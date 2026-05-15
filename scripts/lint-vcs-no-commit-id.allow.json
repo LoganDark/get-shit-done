@@ -1,0 +1,8 @@
+{
+	"$schema_version": 2,
+	"$migration_note": "Phase 8 Plan 1 D-01 + D-03 + D-04: seeded from .planning/intel/id-namespace-audit.json verdicts['boundary-io']. Per-entry schema; expires field NOT required (solo-dev context override of REQUIREMENTS-LINT-02).",
+	"$initial_state_note": "Audit identified 2 boundary-io rows, both in sdk/src/vcs/parse/jj-id.ts (the jj-internal reverse-resolve helper that intentionally derives commit_id from change_id at the boundary). Entries below seed the allowlist with audit-row-N traceability per D-01. Plan 3 will activate this lint in CI after Plan 2 completes the FLIP.",
+	"entries": [
+		{ "path": "sdk/src/vcs/parse/jj-id.ts", "reason": "audit-rows-72-73 boundary-io: jj-internal reverse-resolve helper (commitIdOf(changeId)) that intentionally derives commit_id from change_id at the jj-internal boundary per Phase 2.1 D-14.", "owner": "@LoganDark" }
+	]
+}
