@@ -1,8 +1,11 @@
 /**
  * change_id <-> commit_id translator for the jj backend.
  *
- * Phase 3 only needs the forward direction (commit_id <- change_id) because
- * `LogEntry.hash = commit_id` per PITFALL 1 in 03-RESEARCH.md. The reverse
+ * Phase 3 needed the forward direction (commit_id <- change_id) because
+ * pre-Phase-8 `LogEntry.hash = commit_id`. After Phase 8 D-05 (FLIP-02),
+ * `LogEntry.id` is the active backend's canonical revision identifier
+ * (`change_id` on jj); this helper survives as the legitimate boundary-io
+ * reverse-resolve (audit verdict: `boundary-io`). The reverse
  * (change_id <- commit_id) lands here as a public symbol for any future
  * `vcs.jjOnly.commitIdOf` helper (Phase 2.1 D-14 deferred placement).
  *

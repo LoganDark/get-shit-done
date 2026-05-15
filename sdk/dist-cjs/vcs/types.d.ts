@@ -79,7 +79,13 @@ export interface CommitResult {
     exitCode: number;
     stdout: string;
     stderr: string;
-    hash: string | null;
+    /**
+     * The active backend's canonical revision identifier for the newly-created commit.
+     * - On git: `commit_id` (40-char hex). Snapshot-stable.
+     * - On jj: `change_id` (12-char [k-z] reverse-base32). Rebase-stable.
+     * Null when the commit failed.
+     */
+    id: string | null;
 }
 export interface LogOpts {
     rev?: RevisionExpr;
@@ -88,7 +94,14 @@ export interface LogOpts {
     allRefs?: boolean;
 }
 export interface LogEntry {
-    hash: string;
+    /**
+     * The active backend's canonical revision identifier.
+     * - On git: `commit_id` (40-char hex). Snapshot-stable.
+     * - On jj: `change_id` (12-char [k-z] reverse-base32). Rebase-stable.
+     * Do NOT assume hex form. For short display, use `vcs.refs.resolveShort(expr.rev(id))`
+     * (backend-aware short-prefix); never `.slice(0, 7)`.
+     */
+    id: string;
     parents: string[];
     author: string;
     date: string;

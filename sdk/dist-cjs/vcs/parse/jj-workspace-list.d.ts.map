@@ -1,1 +1,1 @@
-{"version":3,"file":"jj-workspace-list.d.ts","sourceRoot":"","sources":["../../../src/vcs/parse/jj-workspace-list.ts"],"names":[],"mappings":"AAAA;;;;;;;;;;;;;;;;;;;;;GAqBG;AAEH,OAAO,KAAK,EAAE,aAAa,EAAE,MAAM,aAAa,CAAC;AAOjD,wBAAgB,oBAAoB,CAAC,GAAG,EAAE,MAAM,GAAG,aAAa,EAAE,CAoBjE"}
+{"version":3,"file":"jj-workspace-list.d.ts","sourceRoot":"","sources":["../../../src/vcs/parse/jj-workspace-list.ts"],"names":[],"mappings":"AAAA;;;;;;;;;;;;;;;;;;;;;;;;;;GA0BG;AAEH,OAAO,KAAK,EAAE,aAAa,EAAE,MAAM,aAAa,CAAC;AAOjD,wBAAgB,oBAAoB,CAAC,GAAG,EAAE,MAAM,GAAG,aAAa,EAAE,CAoBjE"}

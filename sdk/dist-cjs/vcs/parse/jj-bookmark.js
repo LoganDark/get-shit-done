@@ -17,9 +17,15 @@
  * `parse/jj-op-log.ts` / `parse/jj-workspace-list.ts`.
  *
  * Pinned NDJSON shape (jj 0.41.0, per `tests/fixtures/jj-ndjson/jj-bookmark-list-divergent.ndjson`):
- *   {"name":"gsd/phase-3","target":["<commit_id>"]}
+ *   {"name":"gsd/phase-3","target":["<change_id>"]}
  *   {"name":"gsd/divergent","target":["<a>","<b>"]}   // divergent
- *   {"name":"main","target":["<commit_id>"]}         // raw / no-prefix bookmark
+ *   {"name":"main","target":["<change_id>"]}         // raw / no-prefix bookmark
+ *
+ * Phase 8 D-05 unified contract: `Bookmark.rev` carries the active backend's
+ * canonical revision identifier — `change_id` on jj. The parser accepts
+ * string ids transparently, so the FLIP work is in the template-emission
+ * caller (jj.ts `bookmark list` invocation) — verified to emit change_id
+ * via the standard `json(self)` template per .planning/intel/jj-041-ndjson-probe.md.
  *
  * (RESEARCH §"jj bookmark list" — the `target` field is always an array;
  * length-1 is the steady-state, length>1 is the D-02 divergence signal.)
@@ -57,15 +63,25 @@ function parseJjBookmarkRecord(line, stripPrefix) {
         throw new Error(`parseJjBookmarkRecord: contract drift — record.name is not a string (got ${typeof record.name}): ${preview}`);
     }
     const recordName = record.name;
-    if (Array.isArray(record.target) && record.target.length > 1) {
+    // IN-03 (REVIEW.md): mirror the record.name contract-drift check above —
+    // if record.target is not an array (string, null, number, object, etc.)
+    // throw loudly rather than silently collapsing to rev: ''. The pinned
+    // NDJSON shape (jj 0.41.0) ALWAYS emits target as an array; a non-array
+    // value indicates either a tampered fixture or a future jj-version
+    // template change, and either case should surface as a typed error at
+    // the parser boundary instead of poisoning callers with empty-string
+    // revs.
+    if (!Array.isArray(record.target)) {
+        const preview = line.length > 80 ? line.slice(0, 80) + '...' : line;
+        throw new Error(`parseJjBookmarkRecord: contract drift — record.target is not an array (got ${typeof record.target}): ${preview}`);
+    }
+    if (record.target.length > 1) {
         throw new types_js_1.VcsBookmarkDivergentError({
             bookmarkName: recordName,
             divergentTargets: record.target,
         });
     }
-    const firstTarget = Array.isArray(record.target) && record.target.length > 0
-        ? record.target[0]
-        : '';
+    const firstTarget = record.target.length > 0 ? record.target[0] : '';
     return { name: stripPrefix(recordName), rev: firstTarget };
 }
 //# sourceMappingURL=jj-bookmark.js.map

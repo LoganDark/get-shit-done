@@ -118,7 +118,7 @@ function createGitAdapter(cwd) {
                     exitCode: resetRes.exitCode,
                     stdout: resetRes.stdout,
                     stderr: resetRes.stderr,
-                    hash: null,
+                    id: null,
                 };
             }
             // Phase 2.1 D-04: WC-state-capture — `git add -A -- <paths>` records
@@ -134,7 +134,7 @@ function createGitAdapter(cwd) {
                     exitCode: addRes.exitCode,
                     stdout: addRes.stdout,
                     stderr: addRes.stderr,
-                    hash: null,
+                    id: null,
                 };
             }
         }
@@ -169,15 +169,15 @@ function createGitAdapter(cwd) {
                 exitCode: commitRes.exitCode,
                 stdout: commitRes.stdout,
                 stderr: commitRes.stderr,
-                hash: null,
+                id: null,
             };
         }
-        const hashRes = (0, exec_js_1.execGit)(cwd, ['rev-parse', 'HEAD']);
+        const idRes = (0, exec_js_1.execGit)(cwd, ['rev-parse', 'HEAD']);
         return {
             exitCode: commitRes.exitCode,
             stdout: commitRes.stdout,
             stderr: commitRes.stderr,
-            hash: hashRes.exitCode === 0 ? hashRes.stdout : null,
+            id: idRes.exitCode === 0 ? idRes.stdout : null,
         };
     };
     // ─── log ─────────────────────────────────────────────────────────────────
@@ -214,9 +214,9 @@ function createGitAdapter(cwd) {
             const head = nlIdx === -1 ? record : record.slice(0, nlIdx);
             const body = nlIdx === -1 ? '' : record.slice(nlIdx + 1);
             const parts = head.split('\t');
-            const [hash, parents, author, date, ...subjectParts] = parts;
+            const [id, parents, author, date, ...subjectParts] = parts;
             const entry = {
-                hash: hash ?? '',
+                id: id ?? '',
                 parents: parents ? parents.split(' ').filter(Boolean) : [],
                 author: author ?? '',
                 date: date ?? '',
@@ -291,7 +291,12 @@ function createGitAdapter(cwd) {
         const args = ['diff'];
         if (opts.staged)
             args.push('--cached');
-        if (opts.nameOnly)
+        // WR-05: --name-only and --name-status are mutually exclusive at the git
+        // CLI level (last one wins). If a caller passes BOTH, do NOT also append
+        // --name-only — its output would be replaced by --name-status anyway, and
+        // populating result.nameOnly from that stdout below would yield rows of
+        // "M\tpath" garbage. nameStatus takes precedence; nameOnly silently no-ops.
+        if (opts.nameOnly && !opts.nameStatus)
             args.push('--name-only');
         // Plan 02-03 Task 2 gap-fill: --name-status emits one line per changed
         // path prefixed by a single status letter (A/M/D/R/C/T/U/X/B). Mirrors
@@ -311,7 +316,11 @@ function createGitAdapter(cwd) {
         const r = (0, exec_js_1.execGit)(cwd, args);
         const result = {
             raw: r.stdout,
-            nameOnly: opts.nameOnly ? r.stdout.split('\n').filter(Boolean) : [],
+            // WR-05: only populate nameOnly when --name-only was actually appended
+            // above (i.e. nameOnly was set AND nameStatus was not). If both were
+            // passed, --name-status won at the CLI level and stdout is "STATUS\tpath"
+            // — splitting that into nameOnly would yield contaminated entries.
+            nameOnly: opts.nameOnly && !opts.nameStatus ? r.stdout.split('\n').filter(Boolean) : [],
         };
         if (opts.nameStatus) {
             // Format: "<STATUS>\t<path>" per line; rename/copy entries use

@@ -10,10 +10,13 @@
  * record; the trim removes it. Use `.split('\n').filter(Boolean)`
  * (mirrors git.ts:196-198).
  *
- * PITFALL 1 (03-RESEARCH.md): `LogEntry.hash` = `commit_id` (NEVER
- * `change_id`). Change-ID alphabet is `k-z` reversed-base32 — easy to
- * detect mis-mapping. The translator helpers in `parse/jj-id.ts` handle
- * the reverse direction when callers need change_id externally.
+ * UNIFIED REVISION CONTRACT (Phase 8 D-05): `LogEntry.id` is the active
+ * backend's canonical revision identifier — on the jj backend, this is
+ * `change_id` (k-z reversed-base32 alphabet). The parser reads
+ * `record.change_id` from the `json(self)` template emission (verified
+ * green in .planning/intel/jj-041-ndjson-probe.md). The translator helpers
+ * in `parse/jj-id.ts` handle the reverse direction when callers need
+ * commit_id externally.
  *
  * Tampering threat (T-03.02-01): malformed NDJSON lines must NOT be
  * silently skipped — drift from jj 0.41 contract surfaces as a typed

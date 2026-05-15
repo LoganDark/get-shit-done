@@ -97,7 +97,7 @@ function createJjAdapter(cwd) {
      * - SQUASH-03: paths with no WC changes are accepted (jj is path-agnostic).
      * - SQUASH-04: `@` description is preserved (jj-native behavior).
      * - SQUASH-05: `jj commit` is NEVER invoked — squash is the sole primitive.
-     * - SQUASH-06: conflicted-state commits surface via CommitResult.hash; the
+     * - SQUASH-06: conflicted-state commits surface via CommitResult.id; the
      *   adapter does NOT auto-resolve. Phase 3 plan 05 wires findConflicts.
      * - SQUASH-07: code paths + `.planning/*` paths squashable in a single call.
      * - REFS-05 + D-01: `input.bookmark` triggers `jj bookmark set gsd/<name>
@@ -162,29 +162,31 @@ function createJjAdapter(cwd) {
                 exitCode: squashRes.exitCode,
                 stdout: squashRes.stdout,
                 stderr: squashRes.stderr,
-                hash: null,
+                id: null,
             };
         }
-        // Hash resolution: after `jj squash -B @ -k`, the new commit sits at @-
-        // (the orchestrator's tracked WC `@` change-id is unchanged thanks to
-        // `-k`, but its parent is now the newly-created squash commit).
+        // Identity resolution: after `jj squash -B @ -k`, the new commit sits at @-.
+        // Per Phase 8 D-05 unified revision contract, we probe for `change_id`
+        // (jj's canonical revision identifier) — not `commit_id`. The `change_id`
+        // is rebase-stable on jj (PITFALLS Pitfall 1) and the canonical id the
+        // cross-backend `CommitResult.id` field carries on the jj backend.
         // Parsing the `Created new commit ...` stdout text is fragile across
-        // jj versions; a second `jj log -r @- -T commit_id -n 1` call is the
+        // jj versions; a second `jj log -r @- -T change_id -n 1` call is the
         // deterministic form per RESEARCH §commit().
-        const hashArgs = jjArgv('log', '-r', '@-', '-T', 'commit_id', '--no-graph', '-n', '1');
-        const hashRes = (0, exec_js_1.vcsExec)(cwd, 'jj', hashArgs);
-        let hash = null;
-        // WR-03: when the deterministic hash probe fails after a successful
+        const idArgs = jjArgv('log', '-r', '@-', '-T', 'change_id', '--no-graph', '-n', '1');
+        const idRes = (0, exec_js_1.vcsExec)(cwd, 'jj', idArgs);
+        let id = null;
+        // WR-03: when the deterministic id probe fails after a successful
         // squash, surface the failure on stderr so callers can debug
-        // `{hash: null}` (instead of guessing whether the commit even
+        // `{id: null}` (instead of guessing whether the commit even
         // landed). The squash itself succeeded, so we still proceed to the
         // bookmark-advance step below.
         let mergedStderr = squashRes.stderr;
-        if (hashRes.exitCode === 0) {
-            hash = hashRes.stdout.trim();
+        if (idRes.exitCode === 0) {
+            id = idRes.stdout.trim();
         }
         else {
-            mergedStderr = `${squashRes.stderr}\n[hash-probe failed]: ${hashRes.stderr || hashRes.stdout}`;
+            mergedStderr = `${squashRes.stderr}\n[id-probe failed]: ${idRes.stderr || idRes.stdout}`;
         }
         // HOOK-02 / HOOK-03 / D-32 (Phase 5 plan 05-01): pre-commit fires AFTER
         // squash success, BEFORE bookmark advance, UNCONDITIONALLY (modulo the
@@ -245,7 +247,7 @@ function createJjAdapter(cwd) {
                     exitCode: squashRes.exitCode,
                     stdout: squashRes.stdout,
                     stderr: `${mergedStderr}\n[bookmark advance failed]: ${advRes.stderr || advRes.stdout}`,
-                    hash,
+                    id,
                 };
             }
         }
@@ -253,7 +255,7 @@ function createJjAdapter(cwd) {
             exitCode: squashRes.exitCode,
             stdout: squashRes.stdout,
             stderr: mergedStderr,
-            hash,
+            id,
         };
     };
     // ─── log / status / diff / findConflicts (plan 03-05) ───────────────────
@@ -268,8 +270,8 @@ function createJjAdapter(cwd) {
      *    `--` end-of-options separator (WR-01: verified working on jj 0.41;
      *    neutralizes leading-`-` paths that would otherwise be parsed as
      *    flags by jj's CLI — same defense the git backend uses at git.ts:202).
-     * PITFALL 1: `LogEntry.hash` is `commit_id` (40-char hex), NEVER
-     * `change_id` — pinned by `parseJjLog`.
+     * `LogEntry.id` is the active backend's canonical revision identifier —
+     * `commit_id` on git, `change_id` on jj. Pinned by `parseJjLog`.
      */
     const log = (opts = {}) => {
         const args = ['log', '-T', 'json(self) ++ "\\n"', '--no-graph'];
@@ -538,8 +540,8 @@ function createJjAdapter(cwd) {
             return [];
         const results = [];
         for (const entry of entries) {
-            const paths = enumerateConflictedPaths(entry.hash);
-            results.push({ rev: entry.hash, paths, scope: opts.scope });
+            const paths = enumerateConflictedPaths(entry.id);
+            results.push({ rev: entry.id, paths, scope: opts.scope });
         }
         return results;
     };
@@ -637,7 +639,13 @@ function createJjAdapter(cwd) {
     // via `parseJjBookmarkRecord` when the `target` array reports >1 entry.
     const bookmarks = Object.freeze({
         list: () => {
-            const args = jjArgv('bookmark', 'list', '-T', 'json(self) ++ "\\n"');
+            // Phase 8 FLIP-01: the default `json(self)` template emits
+            // `target: [<commit_id>]`; we need `change_id` per the unified revision
+            // contract (D-05). Custom template emits identical JSON shape (the
+            // parser is transparent over the rev-string alphabet) but reads
+            // `change_id` from each target Commit. Probed live during Plan 2
+            // execution; pinned by tests/fixtures/jj-ndjson/jj-bookmark-list-divergent.ndjson.
+            const args = jjArgv('bookmark', 'list', '-T', '"{\\"name\\":" ++ json(self.name()) ++ ",\\"target\\":[" ++ self.added_targets().map(|c| json(c.change_id())).join(",") ++ "]}\\n"');
             const r = (0, exec_js_1.vcsExec)(cwd, 'jj', args);
             if (r.exitCode !== 0) {
                 throw new exec_js_1.VcsExecError(`refs.bookmarks.list failed: ${r.stderr || r.stdout}`, {
@@ -844,7 +852,7 @@ function createJjAdapter(cwd) {
             return r.stdout;
         },
         resolveShort: (rev) => {
-            const args = jjArgv('log', '-r', (0, jj_rev_js_1.toJjRev)(rev), '-T', 'commit_id.short()', '--no-graph', '-n', '1');
+            const args = jjArgv('log', '-r', (0, jj_rev_js_1.toJjRev)(rev), '-T', 'change_id.shortest()', '--no-graph', '-n', '1');
             const r = (0, exec_js_1.vcsExec)(cwd, 'jj', args);
             if (r.exitCode !== 0) {
                 throw new Error(`refs.resolveShort failed: ${r.stderr || r.stdout}`);
@@ -858,7 +866,7 @@ function createJjAdapter(cwd) {
             // empty stdout after trim and miscount as zero). `.split('\n')` +
             // `.filter(Boolean)` is the same idiom used by every other parser in
             // this file.
-            const args = jjArgv('log', '-r', target, '-T', 'commit_id ++ "\\n"', '--no-graph');
+            const args = jjArgv('log', '-r', target, '-T', 'change_id ++ "\\n"', '--no-graph');
             const r = (0, exec_js_1.vcsExec)(cwd, 'jj', args);
             if (r.exitCode !== 0)
                 return 0;
@@ -866,7 +874,7 @@ function createJjAdapter(cwd) {
         },
         rootCommits: ({ rev }) => {
             const target = rev ? (0, jj_rev_js_1.toJjRev)(rev) : '@';
-            const args = jjArgv('log', '-r', `root() & ::${target}`, '-T', 'commit_id ++ "\\n"', '--no-graph');
+            const args = jjArgv('log', '-r', `root() & ::${target}`, '-T', 'change_id ++ "\\n"', '--no-graph');
             const r = (0, exec_js_1.vcsExec)(cwd, 'jj', args);
             if (r.exitCode !== 0)
                 return [];
@@ -956,7 +964,9 @@ function createJjAdapter(cwd) {
          * "\n"'` NDJSON via `parseJjWorkspaceList` (production from plan 03-02).
          *
          * On a fresh single-workspace colocated repo this returns a one-element
-         * array `[{path: 'default', rev: <40-char-commit_id>, locked: false}]`.
+         * array `[{path: 'default', rev: <12+-char change_id>, locked: false}]`
+         * (Phase 8 FLIP-01: `WorkspaceInfo.rev` carries the active backend's
+         * canonical revision identifier — `change_id` on jj per D-05).
          * `locked` is always false (jj has no lock primitive — PITFALL 4).
          *
          * Phase 4 reshapes when multi-workspace flows land. Phase 3 just needs

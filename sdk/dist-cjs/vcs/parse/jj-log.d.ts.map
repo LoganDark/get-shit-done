@@ -1,1 +1,1 @@
-{"version":3,"file":"jj-log.d.ts","sourceRoot":"","sources":["../../../src/vcs/parse/jj-log.ts"],"names":[],"mappings":"AAAA;;;;;;;;;;;;;;;;;;;;GAoBG;AAEH,OAAO,KAAK,EAAE,QAAQ,EAAE,MAAM,aAAa,CAAC;AAW5C,wBAAgB,UAAU,CAAC,GAAG,EAAE,MAAM,GAAG,QAAQ,EAAE,CAgClD"}
+{"version":3,"file":"jj-log.d.ts","sourceRoot":"","sources":["../../../src/vcs/parse/jj-log.ts"],"names":[],"mappings":"AAAA;;;;;;;;;;;;;;;;;;;;;;;GAuBG;AAEH,OAAO,KAAK,EAAE,QAAQ,EAAE,MAAM,aAAa,CAAC;AAU5C,wBAAgB,UAAU,CAAC,GAAG,EAAE,MAAM,GAAG,QAAQ,EAAE,CAgClD"}
