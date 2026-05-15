@@ -10,21 +10,22 @@ A hard fork of [`gsd-build/get-shit-done`](https://github.com/gsd-build/get-shit
 
 ## Current State
 
-**v1.2 shipped 2026-05-15.** v1.0 MVP shipped 2026-05-14 (8/8 phases). v1.1 first upstream sync shipped 2026-05-14 (1 phase, 5 plans). v1.2 (jujutsu is change-only — never commit id anywhere) closed 2026-05-15 (1 phase, 3 plans, 14 reqs): unified revision model on the cross-backend `VcsAdapter` is architecturally enforced — `scripts/lint-vcs-no-commit-id.cjs` is CI-blocking green at 1032 files / 0 violations. `commit_id` leakage from jj is now a hard CI failure, not a defect we audit toward zero.
+**v1.3 in planning (started 2026-05-15).** v1.0 MVP shipped 2026-05-14 (8/8 phases). v1.1 first upstream sync shipped 2026-05-14 (1 phase, 5 plans). v1.2 (jujutsu is change-only — never commit id anywhere) shipped 2026-05-15 (1 phase, 3 plans, 14 reqs): `scripts/lint-vcs-no-commit-id.cjs` is the CI-blocking enforcer at 1032 files / 0 violations. v1.3 (jj octopus merge for subagents fully functional) routes all subagent dispatch through new cross-backend `vcs.parallel.*` adapter verbs, flips `parallelization: true` for both backends, and closes the A3 colocated pre-commit gap inherited from v1.0.
 
-## Current Milestone: v1.2 jujutsu is change-only — never commit id anywhere
+## Current Milestone: v1.3 jj octopus merge for subagents fully functional
 
-**Goal:** The cross-backend `VcsAdapter` exposes ONE concept of "a revision." Workflows always work with revisions and never know or care what shape the revision has under the hood — on git that's `commit_id`, on jj that's `change_id`. The fact that jj also has `commit_id`s is a backend-internal detail that NEVER crosses the adapter boundary. The jj backend never volunteers a `commit_id` from any cross-backend verb.
+**Goal:** All subagent dispatch machinery routes through the `VcsAdapter` via new high-level `vcs.parallel.*` verbs. Git backend implements them via raw-git worktree+merge under the hood (the single remaining acknowledged raw-git exception collapses to zero). jj backend implements them via the already-shipped `octopus.ts` + `reap.ts` helpers, promoted from jj-namespaced to backend `parallel.*` verb bodies. `parallelization: true` flips on by default for both backends. Workflows never branch on `vcs.kind` for parallel-dispatch reasons.
 
 **Target features:**
-- Aggressive audit (eliminate-first stance) — every `commit_id` reference reachable on jj-routed code paths is presumed wrong; the audit's verdict is "convert to revision" by default. Output: `.planning/intel/id-namespace-audit.md`.
-- Cross-backend surface flip — `LogEntry.hash`, `refs.resolveShort()`, `refs.bookmarks.list().rev`, `workspace.list().rev`, `refs.parent`/`refs.head`, `refs.exists`/`countCommits`/`rootCommits` template scans return change_id on jj. `LogEntry.hash` semantics (and possibly name) flip to "the active backend's canonical revision identifier; never assume hex form."
-- No `vcs.jjOnly.commitIdOf` escape hatch on the cross-backend surface. SEED-001's escape-hatch idea inverted — workflows must not branch on `vcs.kind` for id reasons.
-- `expr.commit(sha)` deprecated in favor of `expr.rev(id)` (canonical factory).
-- Boundary I/O exception (audit-justified only): code that emits external git-flavored links (e.g. `github.com/owner/repo/commit/<sha>`) may use a jj-backend-PRIVATE accessor that is never imported by workflow code; prefer tag/release URLs to skip the problem.
-- Lint guard parallel to `lint-vcs-no-raw-git`: jj-routed code paths cannot reference `commit_id` template strings, hex-form id assumptions, or `.commit_id` field accesses without an annotated allowlist entry.
-- `.planning/` format pass — extends Phase 6 B-07 SHA→change_id intent; any remaining commit_id-encoded format gets rewritten.
-- Refactor every workflow that branches on `vcs.kind` for id reasons (delete the branch, use the unified return value).
+
+- **New cross-backend high-level verbs on `VcsAdapter`** — `vcs.parallel.dispatch(plan)` / `vcs.parallel.fanIn(branches)` (final names TBD by planner). Both backends implement; workflows call the high-level form only.
+- **jj backend implementation** — promote `sdk/src/vcs/jj/octopus.ts` + `reap.ts` from jj-namespaced helpers to the backend's `parallel.*` verb bodies. Cover edge cases: conflict during fan-in, partial-wave failure recovery, agent-bookmark cleanup races.
+- **Git backend implementation** — new `parallel.*` verb bodies wrap the existing raw-git `worktree add` / `merge --no-ff` / `worktree remove` flow inside the adapter (not in workflow markdown). The single acknowledged raw-git exception in PROJECT.md collapses to zero.
+- **Orchestrator rewire** — `execute-phase.md`, `quick.md`, and any other workflow doing parallel agent dispatch call the new `vcs.parallel.*` verbs. The ~lines 714+ raw-git block in `execute-phase.md` is deleted. `parallelization` config knob flips on by default.
+- **Subagent prompt updates** — agent prompts that reference worktrees/workspaces (e.g., gsd-executor, gsd-debugger) are rewritten to use adapter terminology; jj-workspace semantics no longer leak through prompts.
+- **A3 colocated pre-commit fix** — pick one of the three documented fix paths from Phase 4 LEARNINGS Open Q1; ship it. jj 0.41 colocated `jj squash` fires `.git/hooks/pre-commit` reliably.
+- **CI parallel-path lane** — new CI matrix lane runs a parallel phase end-to-end on both backends; required-blocking on jj-colocated.
+- **Dogfood phase (separate, final)** — last phase of v1.3 spins up 2-3 synthetic plans on this very repo, runs them in parallel via the new dispatcher, validates clean fan-in + reap + agent-bookmark cleanup, records metrics in `.planning/intel/`.
 
 ## Requirements
 
@@ -79,15 +80,16 @@ A hard fork of [`gsd-build/get-shit-done`](https://github.com/gsd-build/get-shit
 - ✓ **TEST-12** Vitest `toBeIdOf(kind)` custom matcher at `tests/__tools__/vitest-matchers.ts` (D-02 `expect.extend` form, NOT free function `expectIdShape`); module augmentation in `vitest.d.ts`; registered via `setupFiles` (D-02a); REQUIREMENTS-12 text updated to reflect actual API (D-02b); golden-parity baselines re-recorded — v1.2
 - ✓ **MIGR-06** Close-gate `.planning/` rewriter pass at `scripts/migr-06-close-gate.cjs`: single B-07-style rewrite scoped to Phase 8 dir only; idempotent; one-time prose hex grep recorded with 10 grandfathered hits — v1.2
 
-### Active
+### Active (v1.3 — scheduled, requirements TBD)
 
-(No active milestone — v1.2 closed. Next milestone TBD.)
+The two carry-forwards from v1.0/v1.1/v1.2 are now in-scope for v1.3:
 
-**Deferred to a future milestone (carried past v1.2):**
+- **Orchestrator parallelization rewrite** — `get-shit-done/workflows/execute-phase.md` worktree dispatch + cleanup loop (~lines 714+) currently uses raw-git `worktree add` / `merge --no-ff` / `worktree remove`. v1.3 lifts this into new cross-backend `vcs.parallel.*` adapter verbs (jj uses `octopus.ts` + `reap.ts`; git wraps raw-git worktree+merge inside the backend). `parallelization` config knob flips on by default once v1.3 closes. Tracked in `project_no_parallelization_yet` memory.
+- **A3 colocated pre-commit gap** — jj 0.41 doesn't auto-fire `.git/hooks/pre-commit` after `jj squash` in colocated mode. Three fix paths documented in Phase 4 LEARNINGS Open Q1. Bundled with v1.3 per user decision.
 
-- **Orchestrator parallelization rewrite** — `get-shit-done/workflows/execute-phase.md` worktree dispatch + cleanup loop (~lines 714+) uses raw-git `worktree add` / `merge --no-ff` / `worktree remove`. Phase 7 CONTEXT D-12 described the future-intended fan-in via `sdk/src/vcs/jj/octopus.ts` + `reap.ts` but the orchestrator hasn't been rewired. `parallelization` config knob stays `false` until this lands. Tracked in `project_no_parallelization_yet` memory.
-- **A3 colocated pre-commit gap** — jj 0.41 doesn't auto-fire `.git/hooks/pre-commit` after `jj squash` in colocated mode. Three fix paths documented in Phase 4 LEARNINGS Open Q1. Inherited from v1.0 → v1.1 → carries past v1.2.
-- **SEED-001 (subsumed and inverted by v1.2)** — original seed proposed an escape hatch (`vcs.jjOnly.commitIdOf`); v1.2 inverts that to "no escape hatch on cross-backend surface; commit_id leakage from jj is a defect." Seed is now historical context, not a future candidate.
+**Historical seeds (not future candidates):**
+
+- **SEED-001 (subsumed and inverted by v1.2)** — original seed proposed an escape hatch (`vcs.jjOnly.commitIdOf`); v1.2 inverts that to "no escape hatch on cross-backend surface; commit_id leakage from jj is a defect." Seed is now historical context.
 
 ### Out of Scope
 
@@ -162,4 +164,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-15 at v1.2 milestone close. v1.0 + v1.1 + v1.2 under Validated. v1.2 (unified revision model on cross-backend adapter) shipped 1 phase / 3 plans / 14 reqs — `scripts/lint-vcs-no-commit-id.cjs` is the permanent architectural enforcer at 1032 files / 0 violations. Parallelization-rewrite + A3 colocated pre-commit gap remain deferred past v1.2.*
+*Last updated: 2026-05-15 at v1.3 milestone open. v1.0 + v1.1 + v1.2 under Validated. v1.3 (jj octopus merge for subagents fully functional) opened — scope: lift parallel-dispatch into cross-backend `vcs.parallel.*` adapter verbs (both backends); flip `parallelization: true` by default; close A3 colocated pre-commit gap; CI parallel-path lane; separate dogfood phase. Requirements + phase breakdown TBD by roadmapper.*

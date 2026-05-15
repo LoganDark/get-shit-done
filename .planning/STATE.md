@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: jujutsu is change-only — never commit id anywhere
-status: Awaiting next milestone
-stopped_at: Phase 8 context gathered
-last_updated: "2026-05-15T08:54:34.642Z"
-last_activity: 2026-05-15 — Milestone v1.2 completed and archived
+milestone: v1.3
+milestone_name: jj octopus merge for subagents fully functional
+status: planning
+last_updated: "2026-05-15T09:44:57.846Z"
+last_activity: 2026-05-15
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 
 ## Current Position
 
-Phase: Milestone v1.2 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-05-15 — Milestone v1.2 completed and archived
+Status: Defining requirements
+Last activity: 2026-05-15 — Milestone v1.3 started
 
 ## Performance Metrics
 
