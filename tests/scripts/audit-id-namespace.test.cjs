@@ -98,3 +98,47 @@ test('--json output: findings without verdict bucketed under unclear', () => {
 	assert.equal(json.verdicts.unclear.length, 1);
 	assert.equal(json.verdicts.unclear[0].path, 'x.ts');
 });
+
+// WR-03: hex_regex pattern matches BOTH JS regex literal form (/[0-9a-f]{N}/)
+// AND string form passed to new RegExp(...) or .test() ('[0-9a-f]{N}').
+test('classifier emits row for hex_regex in JS regex-literal form', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'audit-test-hex-re-'));
+	try {
+		fs.mkdirSync(path.join(tmp, 'sdk/src'), { recursive: true });
+		fs.writeFileSync(path.join(tmp, 'sdk/src/x.ts'), `const re = /^[0-9a-f]{40}$/;\n`);
+		const result = auditIdNamespace({ scanRoots: ['sdk/src'], repoRoot: tmp });
+		assert.ok(result.findings.some(f => f.surface === 'hex_regex'));
+	} finally {
+		fs.rmSync(tmp, { recursive: true });
+	}
+});
+
+test('classifier emits row for hex_regex in single-quoted string form', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'audit-test-hex-str-'));
+	try {
+		fs.mkdirSync(path.join(tmp, 'sdk/src'), { recursive: true });
+		fs.writeFileSync(path.join(tmp, 'sdk/src/x.ts'), `const re = new RegExp('^[0-9a-f]{12}$');\n`);
+		const result = auditIdNamespace({ scanRoots: ['sdk/src'], repoRoot: tmp });
+		assert.ok(
+			result.findings.some(f => f.surface === 'hex_regex'),
+			'string-form [0-9a-f]{N} must be matched by hex_regex pattern',
+		);
+	} finally {
+		fs.rmSync(tmp, { recursive: true });
+	}
+});
+
+test('classifier emits row for hex_regex in double-quoted string form', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'audit-test-hex-dstr-'));
+	try {
+		fs.mkdirSync(path.join(tmp, 'sdk/src'), { recursive: true });
+		fs.writeFileSync(path.join(tmp, 'sdk/src/x.ts'), `const ok = "[0-9a-f]{8}".match(s);\n`);
+		const result = auditIdNamespace({ scanRoots: ['sdk/src'], repoRoot: tmp });
+		assert.ok(
+			result.findings.some(f => f.surface === 'hex_regex'),
+			'double-quoted [0-9a-f]{N} must be matched by hex_regex pattern',
+		);
+	} finally {
+		fs.rmSync(tmp, { recursive: true });
+	}
+});

@@ -57,7 +57,11 @@ const COMMIT_ID_PATTERNS = [
   { re: /['"`]commit_id['"`]/, label: "literal 'commit_id' string" },
   { re: /['"`]commit_id\.short(?:est)?\(\)['"`]/, label: "literal 'commit_id.short()' / '.shortest()' template" },
   { re: /\.commit_id\b/, label: ".commit_id field access" },
-  { re: /\/\^?\[0-9a-f\]\{[0-9]+(?:,[0-9]+)?\}/, label: "hex-shape regex literal" },
+  // WR-03: Match hex-shape regex in BOTH forms:
+  //   - JS regex literal:    /^[0-9a-f]{40}/
+  //   - String passed to new RegExp(...) or .test(): '[0-9a-f]{40}' or "[0-9a-f]{40}"
+  // The character class [`'"\/] covers all three opening delimiters.
+  { re: /[`'"\/]\^?\[0-9a-f\]\{[0-9]+(?:,[0-9]+)?\}/, label: "hex-shape regex literal or string" },
   { re: /['"][0-9a-f]{40}['"]/, label: "40-char hex string literal" },
 ];
 
@@ -79,6 +83,11 @@ function isAllowed(rel) {
 }
 
 function checkFile(filepath) {
+  // WR-01: when SCAN_ROOT is the repo root (production CI run), relative paths
+  // match the allowlist. When SCAN_ROOT is an isolated tmp directory (fixture
+  // test), the scanner's allowlist would normally not match — which is exactly
+  // the intended behavior: the fixture file MUST be reported as a violation.
+  // Mirrors the documented convention in scripts/lint-vcs-no-raw-git.cjs:115-118.
   const rel = path.relative(SCAN_ROOT, filepath).split(path.sep).join('/');
   if (isAllowed(rel)) return null;
   const content = fs.readFileSync(filepath, 'utf-8');

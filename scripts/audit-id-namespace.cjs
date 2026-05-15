@@ -33,7 +33,10 @@ const PATTERNS = Object.freeze([
 	{ re: /['"]LogEntry\['?["]hash["']?\]?\b/, kind: 'log_entry_hash' },
 	{ re: /['"]CommitResult\['?["]hash["']?\]?\b/, kind: 'commit_result_hash' },
 	{ re: /\.hash\b/, kind: 'hash_field_access' },
-	{ re: /\/\^?\[0-9a-f\]\{[0-9]+(?:,[0-9]+)?\}/, kind: 'hex_regex' },
+	// WR-03: match hex-shape regex in BOTH forms — JS regex literal (/[0-9a-f]{N}/)
+	// AND string form used with new RegExp(...) or .test() ('[0-9a-f]{N}'). The
+	// character class [`'"\/] covers all three opening delimiters.
+	{ re: /[`'"\/]\^?\[0-9a-f\]\{[0-9]+(?:,[0-9]+)?\}/, kind: 'hex_regex' },
 	{ re: /['"][0-9a-f]{40}['"]/, kind: '40_char_hex_literal' },
 	{ re: /\.slice\(\s*0\s*,\s*(?:7|8|12)\s*\)/, kind: 'short_slice' },
 ]);
