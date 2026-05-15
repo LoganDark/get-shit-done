@@ -149,3 +149,24 @@ RESEARCH thresholds:
 **Plan split NOT recommended for Plan 2** — the 73 actionable code rewrites (flip-clean + needs-rename + needs-resolveShort) compile-driven and atomic.
 **Plan split RECOMMENDED for Plan 3** — 14 workflow/agent .md sites
 
+
+
+## LINT-03 outcome
+
+Boundary-io verdict count: 2 (from `.planning/intel/id-namespace-audit.json` `verdicts['boundary-io']`).
+
+Per CONTEXT D-05 + LINT-03 conditional decision tree: the 2 boundary-io rows are both in `sdk/src/vcs/parse/jj-id.ts` reverse-resolve helper. This count is below the 5-row threshold for firing the `jj-internal.ts` build path; **LINT-03 closes as verified end state.** The two rows are recorded in `scripts/lint-vcs-no-commit-id.allow.json` as the legitimate jj-internal accessor.
+
+The inversion of SEED-001 holds: every cross-backend verb on the jj backend emits `change_id`, never `commit_id`; no legitimate consumer exists that requires backend-private `commit_id` access via the cross-backend `vcs.*` namespace; the LINT-03 rule has no surface to enforce beyond the existing `jj-id.ts` accessor.
+
+Verification commands (re-runnable):
+
+```bash
+jq '.verdicts."boundary-io" | length' .planning/intel/id-namespace-audit.json  # returns 2
+test ! -f sdk/src/vcs/backends/jj-internal.ts                                  # file does NOT exist
+node scripts/lint-vcs-no-commit-id.cjs                                         # exits 0 (first green run = FLIP completeness proof)
+```
+
+If a future PR proposes building `sdk/src/vcs/backends/jj-internal.ts`, this section is the reference: the original Phase 8 audit returned 2 boundary-io consumers (both in jj-id.ts, the existing accessor), well below the 5-row threshold; any new consumer must be re-litigated with explicit rationale per Pitfall 4 (boundary-I/O accessor sprawl).
+
+Audit script + lint script + seeder script self-references and post-audit-discovery paths (paths outside the audit scan roots — `sdk/src/types.ts`, `sdk/src/vcs/types.ts`, `sdk/src/query/commit.ts`, `sdk/src/vcs/format-migration/types.ts`, `sdk/src/vcs/__tests__/jj-refs.test.ts`, several `tests/*.cjs` test-fixture files) are recorded in `scripts/lint-vcs-no-commit-id.allow.json` with explicit per-entry reason and owner. None are boundary-io.
