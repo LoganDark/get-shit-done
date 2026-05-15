@@ -20,6 +20,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { parseAllowlist } = require('./lib/allowlist-parser.cjs');
 
 // W-4: SCAN_ROOT defaults to the repo root (1 level up from scripts/).
 // Pass --scan-root <dir> to scan an isolated tree (used by the fixture test in
@@ -39,9 +40,14 @@ const ARGV = parseArgv(process.argv);
 const REPO_ROOT = path.resolve(__dirname, '..');
 const SCAN_ROOT = ARGV.scanRoot ? path.resolve(ARGV.scanRoot) : REPO_ROOT;
 
-const ALLOW = require('./lint-vcs-no-raw-git.allow.json');
-const ALLOW_FILES = new Set(ALLOW.files || []);
-const ALLOW_GLOBS = ALLOW.globs || [];
+// Phase 8 Plan 1 D-03: consume shared per-entry allowlist parser. The parser
+// throws on schema violations (missing reason/owner; both path+glob; neither).
+const ALLOW = parseAllowlist(
+  require('./lint-vcs-no-raw-git.allow.json'),
+  'lint-vcs-no-raw-git',
+);
+const ALLOW_FILES = ALLOW.files;
+const ALLOW_GLOB_REGEXES = ALLOW.globRegexes;
 // WR-11: support both JS-style (`//`) and shell-style (`#`) line annotations
 // so shell scripts can opt out of the new shell-mode scan with the same
 // `vcs-lint:allow-git-here <reason>` escape hatch.
@@ -84,53 +90,9 @@ const SHELL_GIT_PATTERNS = [
 ];
 const SHELL_EXT = /\.(sh|bash)$/;
 
-function globToRegExp(glob) {
-  // Translate a simple glob (* and **) to a RegExp anchored at start and end.
-  //
-  // WR-10:
-  //   - `**/` (intermediate)  → `(?:[^/]+/)*` — zero or more full path components.
-  //     This matches the gitignore(5) semantic: `**/foo` matches `foo`,
-  //     `a/foo`, and `a/b/foo`.
-  //   - `**` at end-of-pattern → `.+` (require at least one char). Without
-  //     the `+`, the allowlist entry `sdk/**` would also match a top-level
-  //     file literally named `sdk` (since the trailing `**` would match the
-  //     empty suffix and consume the trailing `/` as well — but with our
-  //     handling the prefix already includes the literal `/`, so the body
-  //     would still need to match SOMETHING after that slash).
-  //   - Defensively escape `-`. The escape set already covers `[]`, so an
-  //     embedded glob char class like `[a-z]` survives as literal `\[a\-z\]`
-  //     in the regex output (a no-op match for the literal bracket text).
-  let re = '';
-  let i = 0;
-  while (i < glob.length) {
-    const c = glob[i];
-    if (c === '*') {
-      if (glob[i + 1] === '*') {
-        if (glob[i + 2] === '/') {
-          // `**/` — zero or more full path components followed by `/`.
-          re += '(?:[^/]+/)*';
-          i += 3;
-        } else {
-          // Trailing `**` — require at least one character so that
-          // `prefix/**` does not match `prefix` (zero suffix).
-          re += '.+';
-          i += 2;
-        }
-      } else {
-        re += '[^/]*';
-        i += 1;
-      }
-    } else if ('.+?^${}()|[]\\-'.includes(c)) {
-      re += '\\' + c;
-      i += 1;
-    } else {
-      re += c;
-      i += 1;
-    }
-  }
-  return new RegExp('^' + re + '$');
-}
-const ALLOW_GLOB_REGEXES = ALLOW_GLOBS.map(globToRegExp);
+// Phase 8 Plan 1 D-03: globToRegExp extracted to scripts/lib/glob-to-regex.cjs
+// and consumed transitively via the shared allowlist parser. ALLOW_GLOB_REGEXES
+// is computed by parseAllowlist() above; no inline glob compilation needed here.
 
 function isAllowed(rel) {
   if (ALLOW_FILES.has(rel)) return true;
