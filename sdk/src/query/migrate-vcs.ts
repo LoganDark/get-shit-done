@@ -37,13 +37,26 @@ export const migrateVcsQuery: QueryHandler = async (args, projectDir) => {
   let workstream: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--cwd' && args[i + 1]) {
+    // WR-04: distinguish "flag requires value" from "unknown flag" for the
+    // two-arg flags --cwd / --target / --workstream. The earlier shape combined
+    // the flag-name check with `&& args[i + 1]` so that a missing value fell
+    // through to the catch-all and reported a misleading "unknown flag".
+    if (args[i] === '--cwd') {
+      if (!args[i + 1]) {
+        return { data: { ok: false, error: `migrate-vcs: --cwd requires a path argument` } };
+      }
       cwd = args[i + 1];
       i++;
-    } else if (args[i] === '--target' && args[i + 1]) {
+    } else if (args[i] === '--target') {
+      if (!args[i + 1]) {
+        return { data: { ok: false, error: `migrate-vcs: --target requires a value (git|jj)` } };
+      }
       target = args[i + 1];
       i++;
-    } else if (args[i] === '--workstream' && args[i + 1]) {
+    } else if (args[i] === '--workstream') {
+      if (!args[i + 1]) {
+        return { data: { ok: false, error: `migrate-vcs: --workstream requires a name argument` } };
+      }
       workstream = args[i + 1];
       i++;
     } else if (args[i] === '--native') {
