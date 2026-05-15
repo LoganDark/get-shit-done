@@ -31,6 +31,7 @@ import { validateRefname } from '../refs-validator.js';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { acquireJjWriteLock } from '../jj/lock.js';
 import { performJjReap } from '../jj/reap.js';
+import { performJjParallelDispatch, performJjParallelFanIn } from '../jj/parallel.js';
 import { readIncomplete } from '../jj/incomplete-work.js';
 import { enumerateConflictedPaths as _enumerateConflictedPaths } from '../jj/conflict-paths.js';
 import { fireHook } from '../hook-bridge.js';
@@ -69,6 +70,10 @@ import type {
   WorkspaceInfo,
   WorkspaceMergeOpts,
   WorkspaceMergeResult,
+  ParallelDispatchOpts,
+  ParallelDispatchHandle,
+  ParallelAgentResult,
+  FanInResult,
 } from '../types.js';
 
 export function createJjAdapter(cwd: string): JjVcsAdapter {
@@ -1247,6 +1252,16 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       //    basename of the input string.
       rmSync(onDiskPath, { recursive: true, force: true });
     },
+    // Phase 9 (VCS-16, PARALLEL-01/02): cross-backend parallel namespace.
+    // Delegates to UPSTREAM-02 sidecar in sdk/src/vcs/jj/parallel.ts.
+    parallel: Object.freeze({
+      dispatch: (opts: ParallelDispatchOpts): ParallelDispatchHandle =>
+        performJjParallelDispatch({ mainRepoRoot: cwd, vcs: { workspace }, ...opts }),
+      fanIn: (
+        handle: ParallelDispatchHandle,
+        results: readonly ParallelAgentResult[],
+      ): FanInResult => performJjParallelFanIn(cwd, handle, results),
+    }),
   });
 
   /**
