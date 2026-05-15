@@ -107,7 +107,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 10-04-PLAN.md — Author cmd-parallel-git.test.ts contract tests (TEST-13 N=2/3/4 + conflict + crash + idempotency re-call)
+- [x] 10-04-PLAN.md — Author cmd-parallel-git.test.ts contract tests (TEST-13 N=2/3/4 + conflict + crash + idempotency re-call)
 
 ### Phase 11: Orchestrator + agent rewire + workspace.assert-dispatched-cwd
 
@@ -186,7 +186,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 9. jj-side parallel verbs | 5/5 | Complete   | 2026-05-15 |
-| 10. git-side parallel verbs + classifier extension | 3/4 | In Progress|  |
+| 10. git-side parallel verbs + classifier extension | 4/4 | Complete   | 2026-05-15 |
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 0/0 | Not started | - |
 | 12. A3 colocated pre-commit fix (parallel track) | 0/0 | Not started | - |
 | 13. CI parallel-path lane + lint close-gate | 0/0 | Not started | - |
