@@ -90,7 +90,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 
   1. `sdk/src/vcs/git/parallel.ts` exists as a single adapter-internal sidecar; `backends/git.ts` wires it via `workspace = Object.freeze({...parallel: …})`; internal `git worktree add` serialization prevents `.git/config.lock` race on N=8 dispatch (manifest length == 8 in 20 sequential runs).
   2. Cross-backend `FanInResult` shape `{merged, conflicted, conflictedPaths, incompleteQueued, failedReaped, surplusBookmarks}` is identical on both backends; `conflicted: boolean` distinguishes in-tree-conflict-success from crash.
-  3. `git merge --no-ff <p1> <p2> <p3>` octopus form for N≥3 verified on test-fixture across CI git versions; `git worktree remove --force` is forbidden in the cross-backend path (non-force only).
+  3. Per-branch 2-parent `git merge --no-ff <agentBookmark>` loop verified on test-fixture across CI git versions; halt-on-conflict + re-call via `merge-base --is-ancestor` skip; `git worktree remove --force` is forbidden in the cross-backend path (non-force only).
   4. `IncompleteWorkEntry.reason` enum (widened to 2 values in Phase 9) gets its git-side producer landed here: `git merge` exit code + `git diff --name-only --diff-filter=U` populates `'merge-in-tree-conflict'` correctly. (`'partial-wave-live-workspace'` is NOT added — PARALLEL-03 dropped at Phase 9 discuss.)
   5. New `parallel-*` test files use Pattern B random-prefix `mkdtemp`; vitest skip-count baseline unchanged (`scripts/check-skip-count.cjs` green); no `retry: N` added to vitest config.
 
