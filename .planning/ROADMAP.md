@@ -98,7 +98,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 Plans:
 **Wave 1**
 
-- [ ] 10-01-PLAN.md — Cascade-amendment doc edits (ROADMAP SC3 + REQUIREMENTS PARALLEL-02 + TEST-15) per CONTEXT D-09/D-10/D-11
+- [x] 10-01-PLAN.md — Cascade-amendment doc edits (ROADMAP SC3 + REQUIREMENTS PARALLEL-02 + TEST-15) per CONTEXT D-09/D-10/D-11
 - [ ] 10-02-PLAN.md — Ship sdk/src/vcs/git/parallel.ts sidecar (performGitParallelDispatch + performGitParallelFanIn with halt-on-conflict + re-callable loop + crash classifier)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -186,7 +186,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 9. jj-side parallel verbs | 5/5 | Complete   | 2026-05-15 |
-| 10. git-side parallel verbs + classifier extension | 0/4 | Not started | - |
+| 10. git-side parallel verbs + classifier extension | 1/4 | In Progress|  |
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 0/0 | Not started | - |
 | 12. A3 colocated pre-commit fix (parallel track) | 0/0 | Not started | - |
 | 13. CI parallel-path lane + lint close-gate | 0/0 | Not started | - |
