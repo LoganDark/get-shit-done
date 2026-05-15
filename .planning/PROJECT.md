@@ -10,7 +10,7 @@ A hard fork of [`gsd-build/get-shit-done`](https://github.com/gsd-build/get-shit
 
 ## Current State
 
-**v1.2 in flight.** v1.0 MVP shipped 2026-05-14 (8/8 phases). v1.1 first upstream sync shipped 2026-05-14 (1 phase, 5 plans). v1.2 (jujutsu is change-only — never commit id anywhere) opened 2026-05-14: unified revision model on the cross-backend `VcsAdapter`; `commit_id` leakage from jj is treated as a defect and audited toward zero.
+**v1.2 shipped 2026-05-15.** v1.0 MVP shipped 2026-05-14 (8/8 phases). v1.1 first upstream sync shipped 2026-05-14 (1 phase, 5 plans). v1.2 (jujutsu is change-only — never commit id anywhere) closed 2026-05-15 (1 phase, 3 plans, 14 reqs): unified revision model on the cross-backend `VcsAdapter` is architecturally enforced — `scripts/lint-vcs-no-commit-id.cjs` is CI-blocking green at 1032 files / 0 violations. `commit_id` leakage from jj is now a hard CI failure, not a defect we audit toward zero.
 
 ## Current Milestone: v1.2 jujutsu is change-only — never commit id anywhere
 
@@ -69,13 +69,21 @@ A hard fork of [`gsd-build/get-shit-done`](https://github.com/gsd-build/get-shit
 - ✓ **MIGR-05** `scripts/changeset/github-release-notes.cjs` migrated to cross-backend adapter — v1.1
 - ✓ **TEST-09..11** Upstream test surfaces (installer-migrations, shell-command-projection, query-raw-output-projection) strict-green on both backends — v1.1
 
+**v1.2 — unified revision model on cross-backend adapter (Phase 8):**
+
+- ✓ **AUDIT-01..04** Whole-repo `commit_id`-namespace audit: 101 sites classified via closed verdict enum (safe/flip-clean/needs-rename/needs-resolveShort/boundary-io/historical-prose/unclear); jj 0.41 NDJSON `change_id` schema probe (Risk 4) recorded green — v1.2
+- ✓ **FLIP-01..04** Cross-backend surface flip: 7 jj.ts template flips + 3 NDJSON parser flips + `LogEntry.hash`/`CommitResult.hash` hard-renamed to `.id` (no aliases; ~14 production + ~25 test consumers swept); PITFALL 1 doc inverted to positive-contract; JSDoc updated — v1.2
+- ✓ **LINT-01..02** `scripts/lint-vcs-no-commit-id.cjs` ships with default-deny patterns + per-entry `{path|glob, reason, owner}` allowlist; shared `scripts/lib/allowlist-parser.cjs` consumed by both lints; pre-existing `lint-vcs-no-raw-git.allow.json` migrated to per-entry schema (D-03); `expires` field dropped repo-wide (D-04 spec delta); CI-blocking on jj-colocated lane — v1.2
+- ✓ **LINT-03** Conditional resolved as verified end state — Plan 1 audit found 2 boundary-io sites in `jj-id.ts` reverse-resolve helper, below 5-site threshold; `jj-internal.ts` NOT created; SEED-001 "no escape hatch" inversion holds — v1.2
+- ✓ **PROMPT-05** Workflow `vcs.kind === 'jj'` id-reason branches: zero deletions (set was empty per audit, as predicted); 4 KEEP sites annotated with discriminator citations (capability/allowlist non-id reasons) — v1.2
+- ✓ **TEST-12** Vitest `toBeIdOf(kind)` custom matcher at `tests/__tools__/vitest-matchers.ts` (D-02 `expect.extend` form, NOT free function `expectIdShape`); module augmentation in `vitest.d.ts`; registered via `setupFiles` (D-02a); REQUIREMENTS-12 text updated to reflect actual API (D-02b); golden-parity baselines re-recorded — v1.2
+- ✓ **MIGR-06** Close-gate `.planning/` rewriter pass at `scripts/migr-06-close-gate.cjs`: single B-07-style rewrite scoped to Phase 8 dir only; idempotent; one-time prose hex grep recorded with 10 grandfathered hits — v1.2
+
 ### Active
 
-**v1.2 — unified revision model on cross-backend adapter:**
+(No active milestone — v1.2 closed. Next milestone TBD.)
 
-- v1.2 requirements pending — see `REQUIREMENTS.md` once written by the new-milestone workflow.
-
-**Deferred to a future milestone (NOT in v1.2 scope):**
+**Deferred to a future milestone (carried past v1.2):**
 
 - **Orchestrator parallelization rewrite** — `get-shit-done/workflows/execute-phase.md` worktree dispatch + cleanup loop (~lines 714+) uses raw-git `worktree add` / `merge --no-ff` / `worktree remove`. Phase 7 CONTEXT D-12 described the future-intended fan-in via `sdk/src/vcs/jj/octopus.ts` + `reap.ts` but the orchestrator hasn't been rewired. `parallelization` config knob stays `false` until this lands. Tracked in `project_no_parallelization_yet` memory.
 - **A3 colocated pre-commit gap** — jj 0.41 doesn't auto-fire `.git/hooks/pre-commit` after `jj squash` in colocated mode. Three fix paths documented in Phase 4 LEARNINGS Open Q1. Inherited from v1.0 → v1.1 → carries past v1.2.
@@ -131,8 +139,8 @@ A hard fork of [`gsd-build/get-shit-done`](https://github.com/gsd-build/get-shit
 | Upstream tracking via jj live rebase | Native; minimizes conflict surface | ✓ Good — first weekly upstream sync completed in v1.1 |
 | Brownfield priority within full-parity scope | Dogfood on this very repo | ✓ Good — v1.0 BROWN-* validated; v1.1 sustained brownfield posture |
 | Squash as sole jj commit primitive | jj's working-copy-aware semantics; `--ignore-working-copy` never used | ✓ Good — held through v1.0 + v1.1 |
-| change_id canonical for tracked identity; commit_id for immutable snapshots | jj-idiomatic; aligned with `.planning/` migration intent | ⚠️ Revisit — dual surface is inconsistent across verbs (SEED-001) |
-| Unified revision model — cross-backend adapter exposes ONE revision concept (commit_id on git, change_id on jj); jj backend never volunteers commit_id from any cross-backend verb (v1.2) | Workflows must not branch on `vcs.kind` for id reasons; SEED-001's escape-hatch idea inverts to "leakage is a defect" | ◇ In progress — v1.2 scope |
+| change_id canonical for tracked identity; commit_id for immutable snapshots | jj-idiomatic; aligned with `.planning/` migration intent | ✓ Superseded by v1.2 — cross-backend surface unified on `.id` (change_id on jj, commit_id on git); SEED-001 inverted |
+| Unified revision model — cross-backend adapter exposes ONE revision concept (commit_id on git, change_id on jj); jj backend never volunteers commit_id from any cross-backend verb (v1.2) | Workflows must not branch on `vcs.kind` for id reasons; SEED-001's escape-hatch idea inverts to "leakage is a defect" | ✓ Shipped v1.2 — `scripts/lint-vcs-no-commit-id.cjs` CI-blocking; lint at 1032 files / 0 violations is the architectural enforcer |
 | Sticky `vcs.adapter` resolution at write time (B-09 v1.0) | No `auto` ambiguity at write time | ✓ Good |
 | No raw git anywhere (whole-repo lint guard) | Architectural invariant | ✓ Good — single acknowledged exception (orchestrator worktree dispatch), tracked for rewrite |
 
@@ -154,4 +162,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-14 at v1.2 milestone open. v1.0 + v1.1 under Validated. v1.2 (unified revision model) opened — SEED-001 is subsumed and inverted into v1.2's premise; parallelization-rewrite + A3 colocated pre-commit gap deferred past v1.2.*
+*Last updated: 2026-05-15 at v1.2 milestone close. v1.0 + v1.1 + v1.2 under Validated. v1.2 (unified revision model on cross-backend adapter) shipped 1 phase / 3 plans / 14 reqs — `scripts/lint-vcs-no-commit-id.cjs` is the permanent architectural enforcer at 1032 files / 0 violations. Parallelization-rewrite + A3 colocated pre-commit gap remain deferred past v1.2.*
