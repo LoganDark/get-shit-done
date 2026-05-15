@@ -42,6 +42,16 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 const PHASE_DIR = path.resolve(REPO_ROOT, '.planning/phases/08-unified-revision-model-audit-test-prep-flip-lint-guard-close');
 
 // Containment guard — the rewriter MUST NOT touch files outside PHASE_DIR.
+//
+// IN-01 (REVIEW.md): this is defense-in-depth against symlink escape from
+// inside PHASE_DIR pointing OUT. `walkMd` is rooted at PHASE_DIR and joins
+// names from readdirSync (which does NOT follow symlinks for entry
+// classification by default), BUT `entry.isDirectory()` returns true for a
+// symlinked directory inside PHASE_DIR, so recursion would follow the link
+// and produce absolute paths outside PHASE_DIR. This guard catches that
+// case and aborts. Do NOT strip as "dead code" — it is the only line of
+// defense between this rewriter and the rest of the repo if a stray
+// symlink ever lands inside PHASE_DIR (e.g. from an artifact copy-in).
 function assertInsidePhaseDir(absPath) {
 	const normalized = path.resolve(absPath);
 	if (normalized !== PHASE_DIR && !normalized.startsWith(PHASE_DIR + path.sep)) {
