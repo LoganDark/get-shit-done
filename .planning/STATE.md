@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: jujutsu is change-only — never commit id anywhere
-status: milestone_complete
+status: Awaiting next milestone
 stopped_at: Phase 8 context gathered
-last_updated: "2026-05-15T05:27:29.338Z"
-last_activity: 2026-05-15 -- Phase 08 execution started
+last_updated: "2026-05-15T08:54:34.642Z"
+last_activity: 2026-05-15 — Milestone v1.2 completed and archived
 progress:
   total_phases: 1
   completed_phases: 1
   total_plans: 3
-  completed_plans: 0
+  completed_plans: 3
   percent: 100
 ---
 
@@ -25,12 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 
 ## Current Position
 
-Phase: 08
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-05-15
-
-Progress: [░░░░░░░░░░] 0%
+Phase: Milestone v1.2 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-05-15 — Milestone v1.2 completed and archived
 
 ## Performance Metrics
 
@@ -103,4 +101,4 @@ Resume file: .planning/phases/08-unified-revision-model-audit-test-prep-flip-lin
 
 ## Operator Next Steps
 
-- `/gsd-plan-phase 8` to decompose Phase 8 into executable plans (research recommends ~3 sequential plans).
+- Start the next milestone with /gsd-new-milestone

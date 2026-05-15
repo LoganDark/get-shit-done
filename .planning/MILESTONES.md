@@ -1,5 +1,17 @@
 # Milestones
 
+## v1.2 jujutsu is change-only — never commit id anywhere (Shipped: 2026-05-15)
+
+**Phases completed:** 1 phases, 3 plans, 18 tasks
+
+**Key accomplishments:**
+
+- Audit script emits .md + JSON sidecar (D-01 single-source-of-truth) classifying 101 commit_id-reachable sites into 7 closed verdict buckets, plus the lint-vcs-no-commit-id scanner with shared per-entry allowlist parser (D-03/D-04 — expires dropped) — all gated for Plan 2's FLIP
+- Unified revision contract delivered: every cross-backend VcsAdapter verb on the jj backend now emits change_id (k-z alphabet) per the FLIP-01..04 surface flip; LogEntry.id + CommitResult.id hard-renamed with NO alias; custom toBeIdOf vitest matcher landed for cross-backend test ergonomics (D-02); golden-parity baselines re-recorded confirm git backend is unaffected.
+- v1.2 milestone closed: the cross-backend VcsAdapter exposes ONE revision concept (commit_id on git, change_id on jj); jj backend never volunteers commit_id from any cross-backend verb; architectural enforcement via lint guard now active in CI + pretest, with first green run validating Plan 2's FLIP completed cleanly.
+
+---
+
 Record of shipped milestones for the GSD jj-port fork.
 
 ---
