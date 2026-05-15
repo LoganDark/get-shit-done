@@ -103,7 +103,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 10-03-PLAN.md — Wire backends/git.ts to the sidecar (replace Phase 9 throwing stub) + single +1 allowlist entry
+- [x] 10-03-PLAN.md — Wire backends/git.ts to the sidecar (replace Phase 9 throwing stub) + single +1 allowlist entry
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -186,7 +186,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 9. jj-side parallel verbs | 5/5 | Complete   | 2026-05-15 |
-| 10. git-side parallel verbs + classifier extension | 2/4 | In Progress|  |
+| 10. git-side parallel verbs + classifier extension | 3/4 | In Progress|  |
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 0/0 | Not started | - |
 | 12. A3 colocated pre-commit fix (parallel track) | 0/0 | Not started | - |
 | 13. CI parallel-path lane + lint close-gate | 0/0 | Not started | - |
