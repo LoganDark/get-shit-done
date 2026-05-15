@@ -10,7 +10,7 @@ A hard fork of [`gsd-build/get-shit-done`](https://github.com/gsd-build/get-shit
 
 ## Current State
 
-**v1.3 in planning (started 2026-05-15).** v1.0 MVP shipped 2026-05-14 (8/8 phases). v1.1 first upstream sync shipped 2026-05-14 (1 phase, 5 plans). v1.2 (jujutsu is change-only — never commit id anywhere) shipped 2026-05-15 (1 phase, 3 plans, 14 reqs): `scripts/lint-vcs-no-commit-id.cjs` is the CI-blocking enforcer at 1032 files / 0 violations. v1.3 (jj octopus merge for subagents fully functional) routes all subagent dispatch through new cross-backend `vcs.parallel.*` adapter verbs, flips `parallelization: true` for both backends, and closes the A3 colocated pre-commit gap inherited from v1.0.
+**v1.3 in progress (started 2026-05-15).** v1.0 MVP shipped 2026-05-14 (8/8 phases). v1.1 first upstream sync shipped 2026-05-14 (1 phase, 5 plans). v1.2 (jujutsu is change-only — never commit id anywhere) shipped 2026-05-15 (1 phase, 3 plans, 14 reqs): `scripts/lint-vcs-no-commit-id.cjs` is the CI-blocking enforcer at 1036 files / 0 violations. v1.3 Phase 9 complete (2026-05-15, 5/5 plans): jj backend exposes `vcs.workspace.parallel.{dispatch,fanIn}` (composed over `octopus.ts` + `reap.ts`); reap classifier extended to `'merge-in-tree-conflict'` via the `conflicts()` revset; git-side stub throws `VcsNotImplementedError` pending Phase 10. Phase 10 (git-side body + cross-backend `FanInResult` shape coupling) is the next gate.
 
 ## Current Milestone: v1.3 jj octopus merge for subagents fully functional
 
@@ -165,4 +165,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-15 at v1.3 milestone open. v1.0 + v1.1 + v1.2 under Validated. v1.3 (jj octopus merge for subagents fully functional) opened — scope: lift parallel-dispatch into cross-backend `vcs.parallel.*` adapter verbs (both backends); flip `parallelization: true` by default; close A3 colocated pre-commit gap; CI parallel-path lane; separate dogfood phase. Requirements + phase breakdown TBD by roadmapper.*
+*Last updated: 2026-05-15 after v1.3 Phase 9 (jj-side parallel verbs) complete — `vcs.workspace.parallel.{dispatch,fanIn}` lives on the jj backend; reap classifier extended with `'merge-in-tree-conflict'`; git-side throwing stub awaits Phase 10. PARALLEL-03 (liveness) + PARALLEL-04 (repo-scoped lock) dropped at Phase 9 discuss per 09-CONTEXT.md D-01/D-02.*
