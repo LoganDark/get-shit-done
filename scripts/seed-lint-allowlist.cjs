@@ -173,8 +173,18 @@ const allow = {
 	entries: allEntries,
 };
 
-fs.writeFileSync(ALLOW_PATH, JSON.stringify(allow, null, 2) + '\n');
-console.log(`seed-lint-allowlist: wrote ${allEntries.length} entries to ${path.relative(REPO_ROOT, ALLOW_PATH)}`);
+// IN-04 (REVIEW.md): preserve byte-identical idempotency that the file JSDoc
+// claims. Skip the write entirely when the existing file already matches —
+// this keeps mtime stable so downstream mtime-based caches (make, tup) do
+// not re-execute on a no-op re-run.
+const newContent = JSON.stringify(allow, null, 2) + '\n';
+const existing = fs.existsSync(ALLOW_PATH) ? fs.readFileSync(ALLOW_PATH, 'utf8') : '';
+if (existing === newContent) {
+	console.log(`seed-lint-allowlist: no changes (${path.relative(REPO_ROOT, ALLOW_PATH)} already up to date, ${allEntries.length} entries)`);
+} else {
+	fs.writeFileSync(ALLOW_PATH, newContent);
+	console.log(`seed-lint-allowlist: wrote ${allEntries.length} entries to ${path.relative(REPO_ROOT, ALLOW_PATH)}`);
+}
 
 const boundaryIoCount = (audit.verdicts && audit.verdicts['boundary-io'] || []).length;
 if (boundaryIoCount === 0) {
