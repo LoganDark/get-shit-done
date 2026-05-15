@@ -152,12 +152,17 @@ describe.skipIf(!jjAvailable)(
 
 		it('D-14: vcs.commit({phaseMergeFor}) throws VcsIncompleteSubagentsError when queue non-empty', () => {
 			// Seed the queue with a synthetic entry — the gate must trip BEFORE
-			// any squash is attempted.
+			// any squash is attempted. Phase 9 plan 02 task 3: reason MUST be one
+			// of the closed-union values (parse-time validator at
+			// incomplete-work.ts now rejects unknowns BEFORE the D-14 gate fires).
+			// Using 'crashed-with-uncommitted-work' here exercises the same code
+			// path; the test invariant is "gate trips on any non-empty queue",
+			// not "gate trips on a specific reason value".
 			appendIncomplete(phaseDir, {
 				subagentName: 'phase-04-subagent-99',
 				changeIdShort: 'abcd1234',
 				workspacePath: '/tmp/fake',
-				reason: 'test-d-14-gate',
+				reason: 'crashed-with-uncommitted-work',
 			});
 			expect(() =>
 				vcs.commit({
