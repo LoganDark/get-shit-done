@@ -26,8 +26,8 @@
  * malformed lines surface via typed error rather than silent skip.
  */
 
-import { appendFileSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import type { IncompleteWorkEntry } from '../types.js';
 
 const QUEUE_FILENAME = 'incomplete-work.md';
@@ -60,6 +60,13 @@ function queuePath(phaseDir: string): string {
  * absent (appendFileSync creates with mode 0o666 modulo umask). Callers may
  * dedup by reading the file first; this function does not check for
  * duplicates.
+ *
+ * Phase 9 CR-02 fix: `mkdirSync(dirname(p), { recursive: true })` runs BEFORE
+ * `appendFileSync` so callers (notably `performJjParallelFanIn`'s W3 (a)
+ * producer at `parallel.ts:424`) cannot crash with `ENOENT` when
+ * `derivePhaseRoot` returns the padded-numeric fallback dir for a phase that
+ * has not yet been materialized on disk. Idempotent; covers `reap.ts:230`
+ * at the same boundary.
  */
 export function appendIncomplete(phaseDir: string, entry: IncompleteWorkEntry): void {
 	// Phase 9 CR-01 fix: JSONL writer. JSON.stringify escapes embedded `,` /
@@ -72,7 +79,9 @@ export function appendIncomplete(phaseDir: string, entry: IncompleteWorkEntry): 
 		workspacePath: entry.workspacePath,
 		reason: entry.reason,
 	}) + '\n';
-	appendFileSync(queuePath(phaseDir), line);
+	const p = queuePath(phaseDir);
+	mkdirSync(dirname(p), { recursive: true });
+	appendFileSync(p, line);
 }
 
 /**
