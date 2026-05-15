@@ -63,8 +63,8 @@ Validates the verbs in real CI before flipping the default. REQ-IDs continue fro
 
 Continues v1.1's TEST-11 strict-green + v1.2's TEST-12 matcher. REQ-IDs continue from v1.2's TEST-12.
 
-- [ ] **TEST-13**: Cross-backend contract tests for PARALLEL-01 + PARALLEL-02 at `sdk/src/vcs/__tests__/cmd-parallel-{git,jj}.test.ts`. Vitest Pattern A (`describe.sequential.skipIf(!available)`). Both backends run the same scenarios: N=2/3/4 dispatch, clean fan-in, fan-in with one in-tree-conflict, fan-in with one crashed worker.
-- [ ] **TEST-14**: Topology assertion. Post-fan-in `jj log -r 'divergent()' --no-graph` MUST be empty on jj backend — proves the octopus structure (`createPhaseStructure` + N `createSubagentSlot` + N-parent `jj new`) produces non-divergent change_ids. Originally specified as a lock-effectiveness test; reframed per Phase 9 D-03 since PARALLEL-04 is dropped.
+- [x] **TEST-13**: Cross-backend contract tests for PARALLEL-01 + PARALLEL-02 at `sdk/src/vcs/__tests__/cmd-parallel-{git,jj}.test.ts`. Vitest Pattern A (`describe.sequential.skipIf(!available)`). Both backends run the same scenarios: N=2/3/4 dispatch, clean fan-in, fan-in with one in-tree-conflict, fan-in with one crashed worker.
+- [x] **TEST-14**: Topology assertion. Post-fan-in `jj log -r 'divergent()' --no-graph` MUST be empty on jj backend — proves the octopus structure (`createPhaseStructure` + N `createSubagentSlot` + N-parent `jj new`) produces non-divergent change_ids. Originally specified as a lock-effectiveness test; reframed per Phase 9 D-03 since PARALLEL-04 is dropped.
 - [ ] **TEST-15**: git N-parent octopus fixture. `git merge --no-ff <p1> <p2> <p3>` octopus form for N≥3 verified cross-version (ARCHITECTURE-researcher's open question).
 - [ ] **TEST-16**: Test-flake budget. New `parallel-*` test files use Pattern B random-prefix `mkdtemp` (per Pitfall 9). NEVER `retry: N`; NEVER `describe.skip`. Test counts on both backends MUST match baseline post-v1.3 (no skip-count regressions).
 
@@ -127,8 +127,8 @@ Mapped during roadmap creation 2026-05-15. Updated 2026-05-15 after Phase 9 disc
 | HOOK-07 | Phase 12 | Pending |
 | CI-05 | Phase 13 | Pending |
 | CI-06 | Phase 13 | Pending |
-| TEST-13 | Phase 9 (jj contract tests) + Phase 10 (git contract tests) | Pending |
-| TEST-14 | Phase 9 | Pending |
+| TEST-13 | Phase 9 (jj contract tests) + Phase 10 (git contract tests) | Complete |
+| TEST-14 | Phase 9 | Complete |
 | TEST-15 | Phase 10 | Pending |
 | TEST-16 | Phase 10 | Pending |
 | CONFIG-01 | Phase 14 | Pending |

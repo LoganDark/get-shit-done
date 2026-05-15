@@ -75,7 +75,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
   - [x] 09.02-PLAN.md — Reap classifier extension + conflict-paths sidecar extraction + incomplete-work parse-time validation [Wave 1]
   - [x] 09.03-PLAN.md — sdk/src/vcs/jj/parallel.ts composition layer (performJjParallelDispatch + performJjParallelFanIn) + JjVcsAdapter wire-in [Wave 2]
   - [x] 09.04-PLAN.md — GitVcsAdapter throwing stub (workspace.parallel.{dispatch,fanIn} throw VcsNotImplementedError until Phase 10) [Wave 2]
-  - [ ] 09.05-PLAN.md — Contract tests cmd-parallel-jj.test.ts (TEST-13 N=2/3/4 scenarios + TEST-14 divergent() topology assertion) [Wave 3]
+  - [x] 09.05-PLAN.md — Contract tests cmd-parallel-jj.test.ts (TEST-13 N=2/3/4 scenarios + TEST-14 divergent() topology assertion) [Wave 3]
 
 ### Phase 10: git-side parallel verbs + classifier extension
 **Goal**: git backend exposes the same `vcs.workspace.parallel.*` verb surface; the cross-backend `FanInResult` shape ships uniform on both backends; the raw-git worktree dispatch+merge+cleanup body lives in a single adapter-internal TS file.
@@ -153,7 +153,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 9. jj-side parallel verbs | 4/5 | In Progress|  |
+| 9. jj-side parallel verbs | 5/5 | Complete   | 2026-05-15 |
 | 10. git-side parallel verbs + classifier extension | 0/0 | Not started | - |
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 0/0 | Not started | - |
 | 12. A3 colocated pre-commit fix (parallel track) | 0/0 | Not started | - |
