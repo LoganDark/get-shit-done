@@ -151,7 +151,7 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
           exitCode: resetRes.exitCode,
           stdout: resetRes.stdout,
           stderr: resetRes.stderr,
-          hash: null,
+          id: null,
         };
       }
       // Phase 2.1 D-04: WC-state-capture — `git add -A -- <paths>` records
@@ -167,7 +167,7 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
           exitCode: addRes.exitCode,
           stdout: addRes.stdout,
           stderr: addRes.stderr,
-          hash: null,
+          id: null,
         };
       }
     }
@@ -198,15 +198,15 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         exitCode: commitRes.exitCode,
         stdout: commitRes.stdout,
         stderr: commitRes.stderr,
-        hash: null,
+        id: null,
       };
     }
-    const hashRes = execGit(cwd, ['rev-parse', 'HEAD']);
+    const idRes = execGit(cwd, ['rev-parse', 'HEAD']);
     return {
       exitCode: commitRes.exitCode,
       stdout: commitRes.stdout,
       stderr: commitRes.stderr,
-      hash: hashRes.exitCode === 0 ? hashRes.stdout : null,
+      id: idRes.exitCode === 0 ? idRes.stdout : null,
     };
   };
 
@@ -239,9 +239,9 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         const head = nlIdx === -1 ? record : record.slice(0, nlIdx);
         const body = nlIdx === -1 ? '' : record.slice(nlIdx + 1);
         const parts = head.split('\t');
-        const [hash, parents, author, date, ...subjectParts] = parts;
+        const [id, parents, author, date, ...subjectParts] = parts;
         const entry: LogEntry = {
-          hash: hash ?? '',
+          id: id ?? '',
           parents: parents ? parents.split(' ').filter(Boolean) : [],
           author: author ?? '',
           date: date ?? '',

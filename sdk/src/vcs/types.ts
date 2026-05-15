@@ -88,7 +88,13 @@ export interface CommitResult {
   exitCode: number;
   stdout: string;
   stderr: string;
-  hash: string | null;
+  /**
+   * The active backend's canonical revision identifier for the newly-created commit.
+   * - On git: `commit_id` (40-char hex). Snapshot-stable.
+   * - On jj: `change_id` (12-char [k-z] reverse-base32). Rebase-stable.
+   * Null when the commit failed.
+   */
+  id: string | null;
 }
 
 export interface LogOpts {

@@ -138,7 +138,7 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
    * - SQUASH-03: paths with no WC changes are accepted (jj is path-agnostic).
    * - SQUASH-04: `@` description is preserved (jj-native behavior).
    * - SQUASH-05: `jj commit` is NEVER invoked — squash is the sole primitive.
-   * - SQUASH-06: conflicted-state commits surface via CommitResult.hash; the
+   * - SQUASH-06: conflicted-state commits surface via CommitResult.id; the
    *   adapter does NOT auto-resolve. Phase 3 plan 05 wires findConflicts.
    * - SQUASH-07: code paths + `.planning/*` paths squashable in a single call.
    * - REFS-05 + D-01: `input.bookmark` triggers `jj bookmark set gsd/<name>
@@ -211,31 +211,33 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
         exitCode: squashRes.exitCode,
         stdout: squashRes.stdout,
         stderr: squashRes.stderr,
-        hash: null,
+        id: null,
       };
     }
 
-    // Hash resolution: after `jj squash -B @ -k`, the new commit sits at @-
-    // (the orchestrator's tracked WC `@` change-id is unchanged thanks to
-    // `-k`, but its parent is now the newly-created squash commit).
+    // Identity resolution: after `jj squash -B @ -k`, the new commit sits at @-.
+    // Per Phase 8 D-05 unified revision contract, we probe for `change_id`
+    // (jj's canonical revision identifier) — not `commit_id`. The `change_id`
+    // is rebase-stable on jj (PITFALLS Pitfall 1) and the canonical id the
+    // cross-backend `CommitResult.id` field carries on the jj backend.
     // Parsing the `Created new commit ...` stdout text is fragile across
-    // jj versions; a second `jj log -r @- -T commit_id -n 1` call is the
+    // jj versions; a second `jj log -r @- -T change_id -n 1` call is the
     // deterministic form per RESEARCH §commit().
-    const hashArgs = jjArgv(
-      'log', '-r', '@-', '-T', 'commit_id', '--no-graph', '-n', '1',
+    const idArgs = jjArgv(
+      'log', '-r', '@-', '-T', 'change_id', '--no-graph', '-n', '1',
     );
-    const hashRes = vcsExec(cwd, 'jj', hashArgs);
-    let hash: string | null = null;
-    // WR-03: when the deterministic hash probe fails after a successful
+    const idRes = vcsExec(cwd, 'jj', idArgs);
+    let id: string | null = null;
+    // WR-03: when the deterministic id probe fails after a successful
     // squash, surface the failure on stderr so callers can debug
-    // `{hash: null}` (instead of guessing whether the commit even
+    // `{id: null}` (instead of guessing whether the commit even
     // landed). The squash itself succeeded, so we still proceed to the
     // bookmark-advance step below.
     let mergedStderr = squashRes.stderr;
-    if (hashRes.exitCode === 0) {
-      hash = hashRes.stdout.trim();
+    if (idRes.exitCode === 0) {
+      id = idRes.stdout.trim();
     } else {
-      mergedStderr = `${squashRes.stderr}\n[hash-probe failed]: ${hashRes.stderr || hashRes.stdout}`;
+      mergedStderr = `${squashRes.stderr}\n[id-probe failed]: ${idRes.stderr || idRes.stdout}`;
     }
 
     // HOOK-02 / HOOK-03 / D-32 (Phase 5 plan 05-01): pre-commit fires AFTER
@@ -298,7 +300,7 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
           exitCode: squashRes.exitCode,
           stdout: squashRes.stdout,
           stderr: `${mergedStderr}\n[bookmark advance failed]: ${advRes.stderr || advRes.stdout}`,
-          hash,
+          id,
         };
       }
     }
@@ -307,7 +309,7 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       exitCode: squashRes.exitCode,
       stdout: squashRes.stdout,
       stderr: mergedStderr,
-      hash,
+      id,
     };
   };
 
