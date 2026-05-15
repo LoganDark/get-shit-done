@@ -141,7 +141,7 @@ function validateMainBookmark(name: string): void {
  * `appendIncomplete` create the queue file lazily; `mkdir -p` is the
  * caller's responsibility if the parent doesn't exist).
  */
-function derivePhaseRoot(mainRepoRoot: string, phaseNumber: number): string {
+export function derivePhaseRoot(mainRepoRoot: string, phaseNumber: number): string {
 	const padded = String(phaseNumber).padStart(2, '0');
 	const phasesParent = join(mainRepoRoot, '.planning', 'phases');
 	if (existsSync(phasesParent)) {
