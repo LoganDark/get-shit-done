@@ -1,9 +1,7 @@
-# Phase 9: jj-side parallel verbs + repo-scoped lock - Context
+# Phase 9: jj-side parallel verbs - Context
 
 **Gathered:** 2026-05-15
-**Status:** Ready for planning
-
-> **Phase name note:** the ROADMAP name still reads "+ repo-scoped lock" but D-02 below drops `acquireJjRepoLock`. The lock clause in the phase name is now stale; a follow-up edit to `.planning/ROADMAP.md` should rename to **"jj-side parallel verbs"** (or **"jj-side parallel verbs + reap classifier extension"**). Planner should treat the lock as out-of-scope regardless of phase-name wording.
+**Status:** Ready for planning (REQUIREMENTS + ROADMAP amended 2026-05-15 to reflect D-01 / D-02; phase renamed from "+ repo-scoped lock")
 
 <domain>
 ## Phase Boundary
@@ -139,7 +137,7 @@ Phase 10 ships the matching git-side bodies + finalizes `FanInResult` cross-back
 - **TEST-14 reframed (D-03):** `jj log -r 'divergent()' --no-graph` post-fanIn must be empty — this is a **topology assertion**, not a lock-effectiveness assertion. It proves the octopus structure (`createPhaseStructure` + N `createSubagentSlot` + N-parent `jj new`) produces non-divergent change_ids. If it ever fails in CI, the response is to investigate the topology, not to add a lock.
 - **Naming follows existing convention:** workspace names are `phase-{NN}-subagent-{idx}` (zero-padded per `octopus.ts:30`, D-04 invariant). Agent bookmarks are `gsd/phase-{NN}-subagent-{idx}`.
 - **Pre-emptive correction (from ARCHITECTURE.md):** Phase 9 does NOT touch `lint-vcs-no-raw-git.allow.json`. The 23 production entries stay; no entries are added (parallel.ts is TS-only). Phase 10 may add ONE entry for `sdk/src/vcs/git/parallel.ts` (its own decision, not Phase 9's).
-- **REQUIREMENTS.md needs amending** before planner reads it as authoritative: drop PARALLEL-03 + PARALLEL-04; amend PARALLEL-02 enum count from "1 → 3" to "1 → 2"; rename "+ repo-scoped lock" out of Phase 9 title. Recommend doing this as a small `docs(09)` commit immediately after this CONTEXT.md lands and BEFORE `/gsd-plan-phase 9` runs.
+- **REQUIREMENTS.md + ROADMAP.md amended in same commit** (2026-05-15, immediately after CONTEXT.md landed): PARALLEL-03 + PARALLEL-04 dropped; Phase 10 enum SC reframed (1→2); Phase 9 title renamed; coverage 27/27. STATE.md Pitfall 1 + Pitfall 3 marked SUPERSEDED. Planner can read REQUIREMENTS.md + ROADMAP.md as authoritative.
 
 </specifics>
 

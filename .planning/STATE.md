@@ -5,7 +5,7 @@ milestone_name: jj octopus merge for subagents fully functional
 status: completed
 stopped_at: Phase 9 context gathered
 last_updated: "2026-05-15T11:45:01.199Z"
-last_activity: 2026-05-15 — Milestone v1.3 roadmap recorded (6 phases, 29 requirements mapped)
+last_activity: 2026-05-15 — Phase 9 context gathered; PARALLEL-03 + PARALLEL-04 dropped at discuss-phase (6 phases, 27 requirements mapped)
 progress:
   total_phases: 1
   completed_phases: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-15 at v1.3 open)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** v1.3 — Phase 9 ready for planning (jj-side parallel verbs + repo-scoped lock)
+**Current focus:** v1.3 — Phase 9 ready for planning (jj-side parallel verbs)
 
 ## Current Position
 
-Phase: 9 — jj-side parallel verbs + repo-scoped lock (not yet planned)
+Phase: 9 — jj-side parallel verbs (context captured; not yet planned)
 Plan: —
-Status: Roadmap complete; awaiting `/gsd-plan-phase 9`
-Last activity: 2026-05-15 — Milestone v1.3 roadmap recorded (6 phases, 29 requirements mapped)
+Status: Context gathered (`09-CONTEXT.md`); REQUIREMENTS + ROADMAP amended (PARALLEL-03/04 dropped); awaiting `/gsd-plan-phase 9`
+Last activity: 2026-05-15 — Phase 9 context gathered; PARALLEL-03 + PARALLEL-04 dropped at premise level
 
 ## Performance Metrics
 
@@ -53,7 +53,8 @@ Last activity: 2026-05-15 — Milestone v1.3 roadmap recorded (6 phases, 29 requ
 
 ### Roadmap Evolution
 
-- **v1.3 opened 2026-05-15:** 6-phase shape derived from 29 requirements; verb namespace locked at `vcs.workspace.parallel.*` (Tension 1 resolved); A3 fix path deferred to Phase 12 discuss-phase decision (Tension 3 NOT pre-decided); no migration command for default-flip (subagent workspaces ephemeral); lint allowlist framing locked at +0/+1 (production entries stay); dogfood is LAST (Pitfall 10); CI parallel-path lane (Phase 13) ships BEFORE default-flip (Phase 14).
+- **Phase 9 discuss 2026-05-15:** PARALLEL-03 (liveness probe) and PARALLEL-04 (repo-scoped lock) dropped at premise level. Orchestrator awaits `Agent()` completion before fanIn → no production scenario where a workspace is mid-write. In `octopus.ts` topology each subagent owns a distinct change at distinct change_id → agents never squash into shared ancestors → no inter-process contention. fanIn signature locked at two-arg `fanIn(handle, results)` with frozen-JSON Handle per SDK pure-data convention. Reap classifier widens 1→2 in `reap.ts` during Phase 9; Phase 10 adds git-side producer. See `09-CONTEXT.md`.
+- **v1.3 opened 2026-05-15:** 6-phase shape derived from (originally 29, now 27) requirements; verb namespace locked at `vcs.workspace.parallel.*` (Tension 1 resolved); A3 fix path deferred to Phase 12 discuss-phase decision (Tension 3 NOT pre-decided); no migration command for default-flip (subagent workspaces ephemeral); lint allowlist framing locked at +0/+1 (production entries stay); dogfood is LAST (Pitfall 10); CI parallel-path lane (Phase 13) ships BEFORE default-flip (Phase 14).
 - v1.2 closed 2026-05-15: Phase 8 (3/3 plans) — SEED-001 inverted, `lint-vcs-no-commit-id.cjs` enforcing 1032 files / 0 violations.
 - v1.1 closed 2026-05-14: Phase 7 (5/5 plans) — 8 new VcsAdapter verbs, wave-cleanup wired, raw-git fallbacks deleted.
 - v1.0 closed 2026-05-14: 8 phases (53/56 plans) — dual-backend foundation complete.
@@ -76,9 +77,9 @@ None yet for v1.3. Phase 9 discuss/plan steps will surface plan-level todos.
 
 ### Blockers/Concerns
 
-- **Pitfall 1 (Phase 9 critical):** Concurrent `jj squash` from N workspaces against shared ancestor diverges silently. Phase 4 `acquireJjWriteLock` is per-workspace, not per-repo. Phase 9 MUST ship `acquireJjRepoLock` at `.jj/repo/gsd-parallel-lock` with distinct sentinel + contract (held across full dispatch→fanIn window). Cross-workspace contract test required (TEST-14: `divergent()` revset empty post-fan-in).
-- **Pitfall 2 (Phase 9+10 same-PR coupling):** In-tree conflicts on octopus merge get classified as crashes by reap unless `FanInResult.conflicted: boolean` ships. `IncompleteWorkEntry.reason` enum extends from 1 → 3 values. Same-PR coupling between jj-side + git-side per v1.2 retro pattern.
-- **Pitfall 3 (Phase 9+10):** Partial-wave failure with one agent still running needs a liveness probe before reap. `git worktree remove --force` forbidden in cross-backend path; non-force only. Returns `{partial: true, liveWorkspaces: [...]}` if any workspace is mid-write.
+- **~~Pitfall 1~~ (SUPERSEDED 2026-05-15 by Phase 9 D-02):** Pitfall posited "concurrent `jj squash` from N workspaces against shared ancestor diverges silently." Phase 9 discuss rejected the premise: `octopus.ts` topology gives each subagent a distinct change at distinct change_id; agents only squash into their own `@-`. The orchestrator-only operations (`createPhaseStructure`, fanIn, bookmark advance) run in single processes. No inter-process contention exists. No `acquireJjRepoLock`. TEST-14 stays as a topology assertion (not lock-effectiveness).
+- **Pitfall 2 (Phase 9+10 same-PR coupling):** In-tree conflicts on octopus merge get classified as crashes by reap unless `FanInResult.conflicted: boolean` ships. `IncompleteWorkEntry.reason` enum extends from 1 → **2** values (`'crashed-with-uncommitted-work'` + `'merge-in-tree-conflict'`; `'partial-wave-live-workspace'` dropped because Pitfall 3 superseded). Phase 9 lands enum + jj producer in `reap.ts`; Phase 10 adds git producer.
+- **~~Pitfall 3~~ (SUPERSEDED 2026-05-15 by Phase 9 D-01):** Pitfall posited "partial-wave failure with one agent still running needs a liveness probe before reap." Phase 9 discuss rejected the premise: the orchestrator awaits `Agent()` completion before calling fanIn, so no production scenario has a workspace mid-write. No `PARALLEL-03`. `FanInResult` does NOT carry `liveWorkspaces` / `partial: true`. `git worktree remove --force` is still forbidden in the cross-backend path (non-force only) — that constraint survives independent of the dropped probe.
 - **Pitfall 5 (Phase 10):** `.git/config.lock` race on simultaneous `git worktree add`. Internal serialization in `sdk/src/vcs/git/parallel.ts` (not prompt-text rule).
 - **Pitfall 10 (Phase 14 last):** Dogfood blast-radius — pre-snapshot via `jj op log` + `.planning/` tarball, isolated bookmark only, synthetic plans, loud-fail rollback.
 - **Carry-forward (A3, Phase 12):** jj 0.41 doesn't auto-fire `.git/hooks/pre-commit` after `jj squash` colocated. Three fix paths in Phase 4 LEARNINGS Open Q1 (archived `51ee72a3`). Chosen at Phase 12 discuss-phase.
@@ -102,9 +103,9 @@ Items acknowledged and carried forward from previous milestone close (status upd
 
 Last session: 2026-05-15T11:45:01.193Z
 Stopped at: Phase 9 context gathered
-Resume file: .planning/phases/09-jj-side-parallel-verbs-repo-scoped-lock/09-CONTEXT.md
+Resume file: .planning/phases/09-jj-side-parallel-verbs/09-CONTEXT.md
 
 ## Operator Next Steps
 
-- Run `/gsd-plan-phase 9` to discuss + plan the first v1.3 phase (jj-side parallel verbs + repo-scoped lock).
+- Run `/gsd-plan-phase 9` to plan the first v1.3 phase (jj-side parallel verbs). REQUIREMENTS + ROADMAP already amended to reflect dropped PARALLEL-03/04.
 - Phase 12 (A3 fix) is an independent parallel track — may be planned/executed in parallel with Phases 9/10/11; joins at Phase 13 CI integration.

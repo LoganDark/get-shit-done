@@ -48,7 +48,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 <details open>
 <summary>🚧 v1.3 jj octopus merge for subagents fully functional (Phases 9, 10, 11, 12, 13, 14) — IN PROGRESS</summary>
 
-- [ ] **Phase 9: jj-side parallel verbs + repo-scoped lock** — One-line description: Ship the new repo-scoped `acquireJjRepoLock` primitive, define `VcsWorkspaceParallel` types, lift `octopus.ts` + `reap.ts` behind the new `vcs.workspace.parallel.*` jj-side composition layer (`sdk/src/vcs/jj/parallel.ts`), wire into `backends/jj.ts`, and validate the cross-workspace race contract.
+- [ ] **Phase 9: jj-side parallel verbs** — One-line description: Define `VcsWorkspaceParallel` types, lift `octopus.ts` + `reap.ts` behind the new `vcs.workspace.parallel.*` jj-side composition layer (`sdk/src/vcs/jj/parallel.ts`), extend the reap classifier with `'merge-in-tree-conflict'`, wire into `backends/jj.ts`, and validate the octopus-topology non-divergence assertion. (PARALLEL-03 + PARALLEL-04 dropped at discuss-phase 2026-05-15 per `09-CONTEXT.md` D-01/D-02 — no liveness probe, no `acquireJjRepoLock`.)
 - [ ] **Phase 10: git-side parallel verbs + classifier extension** — Lift the workflow-markdown raw-git worktree dispatch+merge+cleanup body into a new `sdk/src/vcs/git/parallel.ts` adapter-internal sidecar; ship the cross-backend `FanInResult` contract (jj+git same-PR coupling), extend the manifest schema, validate git N-parent octopus.
 - [ ] **Phase 11: Orchestrator + agent rewire + workspace.assert-dispatched-cwd** — Delete the raw-git blocks in `execute-phase.md` and `quick.md`, ship the `workspace.assert-dispatched-cwd` SDK verb, collapse the worktree-aware blocks in `gsd-executor.md`, rename `worktree-path-safety.md` to `dispatch-cwd-safety.md`, wire `maxConcurrency` from workflow call sites.
 - [ ] **Phase 12: A3 colocated pre-commit fix (parallel track)** — Closes the gap inherited from v1.0 Phase 4. Picks ONE of three documented fix paths at discuss-phase by re-reading Phase 4 LEARNINGS Open Q1 (archived `51ee72a3`); ships fix + regression test on a colocated jj fixture.
@@ -59,27 +59,28 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 
 ## Phase Details
 
-### Phase 9: jj-side parallel verbs + repo-scoped lock
-**Goal**: jj backend exposes the new `vcs.workspace.parallel.*` verb surface, backed by a new repo-scoped lock that serializes shared-ancestor mutations across N workspaces; the cross-workspace squash race becomes detectable + bounded.
+### Phase 9: jj-side parallel verbs
+**Goal**: jj backend exposes the new `vcs.workspace.parallel.*` verb surface (composed from already-shipped `octopus.ts` + `reap.ts` + `workspace.merge` primitives) and the reap classifier extends to surface in-tree-conflicts. PARALLEL-03 (liveness) and PARALLEL-04 (repo-scoped lock) are dropped per `09-CONTEXT.md` D-01/D-02 — the orchestrator-awaits-`Agent()` invariant makes liveness moot in production, and octopus topology gives each subagent a distinct change so no shared-ancestor contention exists.
 **Depends on**: Phase 8 (v1.2 unified revision model)
-**Requirements**: PARALLEL-01 (jj-side), PARALLEL-02 (jj-side), PARALLEL-03 (jj-side liveness probe), PARALLEL-04, PARALLEL-05, VCS-16, VCS-17, VCS-19, TEST-13 (jj contract tests), TEST-14
+**Requirements**: PARALLEL-01 (jj-side), PARALLEL-02 (jj-side), PARALLEL-05, VCS-16, VCS-17, VCS-19, TEST-13 (jj contract tests), TEST-14
 **Success Criteria** (what must be TRUE):
-  1. `gsd-sdk query workspace.parallel.dispatch` on a jj fixture creates N workspaces under the repo-scoped lock; `jj log -r 'divergent()' --no-graph` returns empty after a forced concurrent-squash race fixture.
+  1. `gsd-sdk query workspace.parallel.dispatch` on a jj fixture creates N workspaces via `octopus.createPhaseStructure` + N× `createSubagentSlot`.
   2. `gsd-sdk query workspace.parallel.fan-in` on a jj fixture produces a single N-parent octopus merge + batched bookmark delete in one operation; `surplusBookmarks` is empty on both N=2 and N=4 contract scenarios.
-  3. `acquireJjRepoLock` sentinel `.jj/repo/gsd-parallel-lock` is held across the dispatch→fanIn window (verified by parallel-acquire contention test); lock is distinct from per-workspace `acquireJjWriteLock`.
-  4. New `VcsWorkspaceParallel` interface compiles + dist-cjs emits both new verbs; `ParallelDispatchHandle.workspaces[].baseRev` JSDoc states change_id stability semantics across `jj rebase`.
+  3. New `VcsWorkspaceParallel` interface compiles + dist-cjs emits both new verbs; `ParallelDispatchHandle.workspaces[].baseRev` JSDoc states change_id stability semantics across `jj rebase`. `ParallelDispatchHandle` is frozen pure JSON (no closures/methods/Symbols).
+  4. `IncompleteWorkEntry.reason` enum widens from 1 → 2 values in `sdk/src/vcs/jj/reap.ts` (`'crashed-with-uncommitted-work'` existing + `'merge-in-tree-conflict'` new); jj-side conflict probe via `vcs.refs.conflicts()` revset wired into `performJjReap`. (Phase 10 adds the git-side producer.)
   5. `WAVE_WORKTREE_MANIFEST` carries `plan_id`, `agent_id`, `backend` fields; existing v1.1 consumers (worktree-safety.cjs) read it without behavior change.
+  6. TEST-14 topology assertion: `jj log -r 'divergent()' --no-graph` empty post-fanIn for N ∈ {2, 3, 4} — proves the octopus structure produces non-divergent change_ids (reframed from lock-effectiveness test per D-03).
 **Plans**: TBD
 
 ### Phase 10: git-side parallel verbs + classifier extension
 **Goal**: git backend exposes the same `vcs.workspace.parallel.*` verb surface; the cross-backend `FanInResult` shape ships uniform on both backends; the raw-git worktree dispatch+merge+cleanup body lives in a single adapter-internal TS file.
 **Depends on**: Phase 9 (jj-side verb contracts + types must ship first; same-PR coupling on `FanInResult` shape per v1.2 retro precedent — git-side `parallel.fanIn` MUST land alongside the jj-side contract this phase finalizes)
-**Requirements**: PARALLEL-01 (git-side), PARALLEL-02 (git-side), PARALLEL-03 (git-side liveness probe), VCS-18, TEST-13 (git contract tests), TEST-15, TEST-16
+**Requirements**: PARALLEL-01 (git-side), PARALLEL-02 (git-side), VCS-18, TEST-13 (git contract tests), TEST-15, TEST-16
 **Success Criteria** (what must be TRUE):
   1. `sdk/src/vcs/git/parallel.ts` exists as a single adapter-internal sidecar; `backends/git.ts` wires it via `workspace = Object.freeze({...parallel: …})`; internal `git worktree add` serialization prevents `.git/config.lock` race on N=8 dispatch (manifest length == 8 in 20 sequential runs).
   2. Cross-backend `FanInResult` shape `{merged, conflicted, conflictedPaths, incompleteQueued, failedReaped, surplusBookmarks}` is identical on both backends; `conflicted: boolean` distinguishes in-tree-conflict-success from crash.
   3. `git merge --no-ff <p1> <p2> <p3>` octopus form for N≥3 verified on test-fixture across CI git versions; `git worktree remove --force` is forbidden in the cross-backend path (non-force only).
-  4. `IncompleteWorkEntry.reason` enum extended from 1 → 3 values (`'crashed-with-uncommitted-work'`, `'merge-in-tree-conflict'`, `'partial-wave-live-workspace'`); both backends populate correctly.
+  4. `IncompleteWorkEntry.reason` enum (widened to 2 values in Phase 9) gets its git-side producer landed here: `git merge` exit code + `git diff --name-only --diff-filter=U` populates `'merge-in-tree-conflict'` correctly. (`'partial-wave-live-workspace'` is NOT added — PARALLEL-03 dropped at Phase 9 discuss.)
   5. New `parallel-*` test files use Pattern B random-prefix `mkdtemp`; vitest skip-count baseline unchanged (`scripts/check-skip-count.cjs` green); no `retry: N` added to vitest config.
 **Plans**: TBD
 
@@ -128,7 +129,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
   2. `vcs.workspace.parallel.dispatch` pre-flight reads the `parallelization` config and refuses with a clear error message if explicitly `false` (no silent-no-op footgun).
   3. Dogfood run: 2-3 synthetic plans dispatched on an isolated bookmark (NOT main) via the new dispatcher; clean fan-in confirmed (`jj log -r 'divergent()' --no-graph` empty); agent bookmarks cleaned; manifest schema correct on both jj and git fixtures.
   4. Pre-snapshot via `jj op log -n 200 > pre.oplog` + `.planning/` tarball captured BEFORE the dogfood run; recovery procedure documented in the dogfood phase's CONTEXT.md.
-  5. Metrics recorded to `.planning/intel/v1.3-dogfood-metrics.md`: dispatch time, fan-in time, conflict rate, partial-wave incidence, lock-wait durations. Establishes baseline for v1.4+ regression comparison.
+  5. Metrics recorded to `.planning/intel/v1.3-dogfood-metrics.md`: dispatch time, fan-in time, conflict rate. (Partial-wave incidence and lock-wait durations dropped — PARALLEL-03/04 dropped at Phase 9 discuss.) Establishes baseline for v1.4+ regression comparison.
 **Plans**: TBD
 
 ## Progress
@@ -147,7 +148,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 9. jj-side parallel verbs + repo-scoped lock | 0/0 | Not started | - |
+| 9. jj-side parallel verbs | 0/0 | Not started | - |
 | 10. git-side parallel verbs + classifier extension | 0/0 | Not started | - |
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 0/0 | Not started | - |
 | 12. A3 colocated pre-commit fix (parallel track) | 0/0 | Not started | - |
@@ -159,4 +160,4 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 v1.3 opened 2026-05-15. Phase 9 ready for `/gsd-plan-phase 9`.
 
 ---
-*Last updated: 2026-05-15 — v1.3 milestone opened with 6 phases. v1.0 + v1.1 + v1.2 archived under collapsed `<details>`. All 29 v1.3 requirements mapped to phases (PARALLEL-01..06, VCS-16..20, PROMPT-06..09, LINT-04..05, HOOK-06..07, CI-05..06, TEST-13..16, CONFIG-01..02, DOGFOOD-01..02). Coverage: 29/29 ✓.*
+*Last updated: 2026-05-15 — Phase 9 discuss-phase dropped PARALLEL-03 (liveness probe) and PARALLEL-04 (acquireJjRepoLock) at the premise level; coverage now 27/27 (PARALLEL-01/02/05/06, VCS-16..20, PROMPT-06..09, LINT-04..05, HOOK-06..07, CI-05..06, TEST-13..16, CONFIG-01..02, DOGFOOD-01..02). Phase 9 renamed "+ repo-scoped lock" → "jj-side parallel verbs"; SC count 5→6 (TEST-14 split out as explicit SC6 topology assertion). Phase 10 enum SC reframed (1→2 not 1→3). v1.0 + v1.1 + v1.2 archived under collapsed `<details>`.*
