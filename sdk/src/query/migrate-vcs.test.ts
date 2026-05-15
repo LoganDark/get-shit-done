@@ -40,7 +40,7 @@ const SUCCESS_RESULT = {
 	},
 	previousAdapter: 'git' as const,
 	newAdapter: 'jj' as const,
-	commitHash: 'abc1234',
+	commitId: 'abc1234',
 };
 
 beforeEach(() => {

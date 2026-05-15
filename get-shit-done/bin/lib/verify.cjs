@@ -1293,7 +1293,7 @@ function cmdVerifySchemaDrift(cwd, phaseArg, skipFlag, raw) {
   }
   if (logEntries.length > 0) {
     const oneline = logEntries
-      .map((e) => `${(e.hash || '').slice(0, 7)} ${e.subject || ''}`)
+      .map((e) => `${(e.id || '').slice(0, 7)} ${e.subject || ''}`)
       .join('\n');
     executionLog += '\n' + oneline;
   }

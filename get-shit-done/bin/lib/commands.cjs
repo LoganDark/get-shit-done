@@ -504,7 +504,7 @@ function cmdCommitToSubrepo(cwd, message, files, raw) {
     repos,
     unmatched: unmatched.length > 0 ? unmatched : undefined,
   };
-  output(result, raw, Object.entries(repos).map(([r, v]) => `${r}:${v.hash || 'skip'}`).join(' '));
+  output(result, raw, Object.entries(repos).map(([r, v]) => `${r}:${v.id || 'skip'}`).join(' '));
 }
 
 function cmdSummaryExtract(cwd, summaryPath, fields, raw) {

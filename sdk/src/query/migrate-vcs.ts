@@ -125,7 +125,7 @@ export const migrateVcsQuery: QueryHandler = async (args, projectDir) => {
         orphans: result.orphans,
         previousAdapter: result.previousAdapter,
         newAdapter: result.newAdapter,
-        commitHash: result.commitHash,
+        commitId: result.commitId,
       },
     };
   } catch (e) {

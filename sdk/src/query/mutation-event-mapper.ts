@@ -65,7 +65,7 @@ export function buildMutationEvent(
       return {
         ...base,
         type: GSDEventType.GitCommit,
-        hash: (data?.hash as string) ?? null,
+        id: (data?.id as string) ?? null,
         committed: (data?.committed as boolean) ?? false,
         reason: (data?.reason as string) ?? '',
       } as GSDGitCommitEvent;

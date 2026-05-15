@@ -74,7 +74,7 @@ export async function resolveAncestor(
       maxCount: 1,
     });
     if (parents.length === 0) return null; // hit the source-VCS root
-    cursor = parents[0].hash;
+    cursor = parents[0].id;
 
     // Probe whether cursor resolves in the TARGET VCS.
     let targetId: string;
@@ -100,7 +100,7 @@ export async function resolveAncestor(
           rev: expr.children(expr.rev(targetId)),
           maxCount: 100,
         });
-        children = childEntries.map((c) => c.hash);
+        children = childEntries.map((c) => c.id);
       } catch {
         // Defensive: if the children lookup fails (e.g. transient jj error),
         // record the ancestor without children rather than failing the whole

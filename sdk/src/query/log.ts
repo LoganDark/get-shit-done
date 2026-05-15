@@ -69,7 +69,7 @@ function parseSingle(raw: string, vcs: VcsAdapter): RevisionExpr {
         `parseRangeArg: ${raw} exceeds repo depth (${entries.length} commits available)`,
       );
     }
-    return expr.rev(entries[n].hash);
+    return expr.rev(entries[n].id);
   }
   // Hex SHA or change_id alphabet → expr.rev validates internally.
   if (/^[0-9a-fA-F]{4,40}$/.test(raw) || /^[k-z]{4,40}$/.test(raw)) {

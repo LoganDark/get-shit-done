@@ -20,7 +20,7 @@ export function formatQueryRawOutput(registryCommand: string, data: unknown): st
     }
     const d = data as Record<string, unknown>;
     if (d.committed === true) {
-      return d.hash != null ? String(d.hash) : 'committed';
+      return d.id != null ? String(d.id) : 'committed';
     }
     if (d.committed === false) {
       const r = String(d.reason ?? '');

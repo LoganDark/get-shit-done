@@ -95,8 +95,8 @@ describe.skipIf(!JJ_AVAILABLE)('gsd-sdk binary — migrate-vcs envelope shape', 
 		expect(parsed.migrated).toBe(true);
 		expect(parsed.newAdapter).toBe('jj');
 		expect(parsed.previousAdapter).toBe('git');
-		expect(typeof parsed.commitHash).toBe('string');
-		expect(parsed.commitHash.length).toBeGreaterThan(0);
+		expect(typeof parsed.commitId).toBe('string');
+		expect(parsed.commitId.length).toBeGreaterThan(0);
 		// CR-01 invariant: the on-the-wire envelope must NOT have a `.data`
 		// wrapper. The QueryHandler return is `{data: ...}` but query-dispatch
 		// JSON.stringify's `result.data` directly.

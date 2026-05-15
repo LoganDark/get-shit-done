@@ -149,7 +149,7 @@ export async function runMigration(
           },
           previousAdapter: previousAdapter === 'absent' ? 'absent' : sourceKind,
           newAdapter: target,
-          commitHash: markerHit.hash ?? '',
+          commitId: markerHit.id ?? '',
         };
       }
     } catch {
@@ -332,7 +332,7 @@ export async function runMigration(
       },
       previousAdapter: previousAdapter === 'absent' ? 'absent' : sourceKind,
       newAdapter: target,
-      commitHash: commitResult.hash ?? '',
+      commitId: commitResult.id ?? '',
     };
   } finally {
     await releaseStateLock(lockPath);

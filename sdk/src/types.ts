@@ -741,7 +741,13 @@ export interface GSDFrontmatterMutationEvent extends GSDEventBase {
  */
 export interface GSDGitCommitEvent extends GSDEventBase {
   type: GSDEventType.GitCommit;
-  hash: string | null;
+  /**
+   * Phase 8 D-05 unified revision contract: the active backend's canonical
+   * revision identifier — `commit_id` on git, `change_id` on jj. Renamed from
+   * `hash` (FLIP-03 fold-in) to mirror `CommitResult.id` for consistency
+   * across the event surface. Null when no commit was produced.
+   */
+  id: string | null;
   committed: boolean;
   reason: string;
 }

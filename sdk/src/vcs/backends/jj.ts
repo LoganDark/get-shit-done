@@ -596,8 +596,8 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
 
     const results: ConflictResult[] = [];
     for (const entry of entries) {
-      const paths = enumerateConflictedPaths(entry.hash);
-      results.push({ rev: entry.hash, paths, scope: opts.scope });
+      const paths = enumerateConflictedPaths(entry.id);
+      results.push({ rev: entry.id, paths, scope: opts.scope });
     }
     return results;
   };

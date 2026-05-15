@@ -79,7 +79,13 @@ export interface MigrationResult {
   previousAdapter: 'git' | 'jj' | 'absent';
   /** Adapter recorded in config.json after the migration. */
   newAdapter: 'git' | 'jj';
-  commitHash: string;
+  /**
+   * Phase 8 RESEARCH `<deferred>` fold-in: renamed from `commitHash` to mirror
+   * the unified revision contract (LogEntry.id / CommitResult.id rename).
+   * Carries the active backend's canonical revision identifier for the
+   * migration commit — `commit_id` on git, `change_id` on jj.
+   */
+  commitId: string;
 }
 
 /**
