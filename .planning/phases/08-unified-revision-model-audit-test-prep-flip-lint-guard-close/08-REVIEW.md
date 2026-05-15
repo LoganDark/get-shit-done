@@ -37,9 +37,9 @@ files_reviewed_list:
   - tests/scripts/audit-id-namespace.test.cjs
 findings:
   critical: 1
-  warning: 5
+  warning: 7
   info: 4
-  total: 10
+  total: 12
 status: issues_found
 ---
 
@@ -161,6 +161,49 @@ if (opts.nameStatus) args.push('--name-status');
 // then later:
 nameOnly: opts.nameOnly && !opts.nameStatus ? r.stdout.split('\n').filter(Boolean) : [],
 ```
+
+### WR-06: SDK extracts commit_id-shape hex from text and passes it to jj backend
+
+**File:** `sdk/src/query/verify.ts:514-520` (twin in `get-shit-done/bin/lib/verify.cjs:85-91`)
+**Issue:** The verify-work / verify.cjs reachability check scans SUMMARY.md content for hex tokens and feeds each match through `vcs.refs.exists(expr.rev(hash))` on the active backend:
+
+```ts
+const commitHashPattern = /\b[0-9a-f]{7,40}\b/g;
+const hashes = content.match(commitHashPattern) || [];
+…
+exists = vcs.refs.exists(expr.rev(hash));
+```
+
+The regex is alphabet-narrow (`[0-9a-f]` only — the commit_id alphabet). On jj this routes commit_id-shape input into `jj log -r <commit_id>`. jj accepts commit_ids as input, so it technically works — but it violates the Phase 8 architectural invariant ("the SDK never constructs or passes commit_ids to jj; jj sees only change_ids"). Two failure modes in one site:
+
+1. **False-positive on jj:** legacy/pre-FLIP SUMMARY.md text still contains commit_ids (e.g., `54843ae7`-shaped tokens before the MIGR-06 rewriter touches a phase dir). The probe extracts those and asks jj about them — SDK-internal use of commit_id.
+2. **False-negative on jj:** post-FLIP SUMMARY.md text contains change_ids (`[k-z]{12}` shape). The regex doesn't match them at all → the probe silently checks zero hashes on jj. The verification report says "commitsExist: false" even when the SUMMARY's cited revisions are valid.
+
+This site is not in the audit (`scripts/audit-id-namespace.cjs` hex-regex pattern misses the `\b...\b` boundary form — a coverage gap parallel to the already-fixed WR-03). The lint guard (`scripts/lint-vcs-no-commit-id.cjs`) has the same gap and therefore doesn't catch this regression today.
+
+**Fix:** broaden the regex to accept either alphabet, then verify via `node scripts/lint-vcs-no-commit-id.cjs`:
+
+```ts
+const commitHashPattern = /\b(?:[0-9a-f]{7,40}|[k-z]{7,40})\b/g;
+```
+
+Apply identically to `sdk/src/query/verify.ts:514` and `get-shit-done/bin/lib/verify.cjs:85`. Rename the variable to `revIdPattern` so the name reflects the post-FLIP unified concept ("a revision id") instead of the pre-FLIP commit-only name. No semantic change beyond accepting the second alphabet — `vcs.refs.exists` already routes correctly on either backend.
+
+### WR-07: Audit + lint hex-regex coverage gap allowed WR-06 to slip past CI
+
+**File:** `scripts/audit-id-namespace.cjs` (patterns block — same gap WR-03 partially addressed in lint-vcs-no-commit-id) and `scripts/lint-vcs-no-commit-id.cjs` (post-WR-03 still misses the `\b...\b` form)
+**Issue:** The audit script's hex-shape regex and the lint guard's hex-shape regex both anchor on `/^[0-9a-f]{N}/` or `[0-9a-f]{N}$/` style sites and the WR-03 fix added the string-quoted `['"]\^?[0-9a-f]{N}` form. None of them match `/\b[0-9a-f]{N}\b/` — the non-anchored word-boundary form used by `verify.ts:514` and `verify.cjs:85`. Result: the audit (Plan 1) classified 101 sites but missed these two, and the lint guard (Plan 3) is green at 0 violations even though WR-06 is a live commit_id-leak path on jj.
+
+**Fix:** extend the hex-pattern matchers in both scripts to also catch `\b[0-9a-f]{N,M}\b` literal regex sources. One unified pattern works:
+
+```js
+// matches: /^[0-9a-f]{40}$/  '/^[0-9a-f]{40}'  "[0-9a-f]{40}"  /\b[0-9a-f]{7,40}\b/
+const HEX_REGEX_RE = /[\/'"]\\?b?\^?\[0-9a-f(?:A-F)?\]\{[0-9]+(?:,[0-9]+)?\}\\?b?\$?[\/'"]?/;
+```
+
+Add an audit-script unit-test (in `tests/scripts/audit-id-namespace.test.cjs`) covering all four forms above as fixtures. After the regex broadens, re-run `node scripts/audit-id-namespace.cjs --json` and confirm the two `verify.{ts,cjs}` sites now show up in the audit (verdict: `needs-rename` — they should adopt either-alphabet regex per WR-06's fix). Then `node scripts/lint-vcs-no-commit-id.cjs` post-WR-06 fix should remain at 0 violations (since WR-06 broadened the regex to accept both alphabets, the literal no longer matches the lint's `commit_id`-only pattern).
+
+This finding is the meta-lesson: a lint guard that is the architectural enforcer needs its own regex coverage audited. The first sweep (WR-03) caught the string-quoted form; this sweep catches the `\b`-bounded form. Adding the fixtures locks both forms in regression coverage.
 
 ## Info
 
