@@ -667,12 +667,15 @@ EXPECTED_BASE=$(gsd-sdk query head-ref --cwd . --pick head)
 DISPATCH_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 EXPECTED_BRANCH=$(gsd-sdk query current-branch --cwd . --pick branch)
 if [ "${USE_WORKTREES:-true}" != "false" ]; then
-  QUICK_PLAN_JSON=$(jq -nc --arg pid "${quick_id}" --arg pfile "${QUICK_DIR}/${quick_id}-PLAN.md" \
-    '{plans:[{id:$pid,planFile:$pfile}]}')
+  QUICK_PLAN_JSON=$(jq -nc --arg aid "${quick_id}" --arg pid "${quick_id}" \
+    '[{agentId:$aid,planId:$pid}]')
+  # Phase sentinel 0 for quick mode (no real phase number; the verb requires Number()-able input — see workspace-parallel-dispatch.ts:63-65).
   HANDLE_JSON=$(printf '%s' "$QUICK_PLAN_JSON" \
     | gsd-sdk query workspace.parallel.dispatch \
-        --phase "quick" --main-bookmark "$EXPECTED_BRANCH" --plan @-)
+        --phase 0 --main-bookmark "$EXPECTED_BRANCH" --plan @-)
   [ -z "$HANDLE_JSON" ] && { echo "FATAL: workspace.parallel.dispatch returned empty Handle JSON" >&2; exit 1; }
+  HANDLE_OK=$(echo "$HANDLE_JSON" | jq -r '.ok // "true"')
+  [ "$HANDLE_OK" = "false" ] && { echo "FATAL: workspace.parallel.dispatch failed: $HANDLE_JSON" >&2; exit 1; }
   RESULTS_ACCUM='[]'   # ParallelAgentResult[]; one appended per Agent() return
 fi
 ```
