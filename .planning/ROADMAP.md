@@ -141,7 +141,7 @@ Plans:
   - [x] 11-07-PLAN.md — Gap closure A: fix workspace-assert-dispatched-cwd.ts jj-side correctness (CR-01) + agent diagnostic dump (CR-04) + dispatch-cwd-safety.md doc cleanup (WR-03); flips VCS-20 + PROMPT-08 BLOCKED → SATISFIED [Wave 4]
   - [x] 11-08-PLAN.md — Gap closure B: fix quick.md dispatch shape + numeric --phase + HANDLE_OK guard (CR-02) + EXPECTED_BRANCH empty/HEAD pre-check in both quick.md and execute-phase.md (CR-03); flips PROMPT-07 BLOCKED → SATISFIED + PARALLEL-06 PARTIAL → SATISFIED [Wave 4]
   - [x] 11-09-PLAN.md — Gap closure C: retire orphaned WAVE_WORKTREE_MANIFEST write in jj/parallel.ts (WR-01) + fix worktree-safety.cjs ok-derivation (WR-02) + document workspace.* verbs in gsd-tools.cjs --help (IN-02) + uniformly deprecation-guard worktree case (WR-04); architectural completion of D-01 invariant [Wave 4]
-  - [ ] 11-10-PLAN.md — Gap closure D (run 2): execute-phase.md dispatch line — construct WAVE_WORKTREE_PLANS_JSON via jq pipeline (REVIEW CR-01) + replace literal --phase "{phase_number}" placeholder with bash variable ${PHASE_NUMBER} (REVIEW CR-02) + extend tests/quick-md-parallel-dispatch.test.cjs EXEC carry-over with plan-shape + numeric-phase assertions (REVIEW IN-01); flips PROMPT-06 BLOCKED → SATISFIED [Wave 5]
+  - [x] 11-10-PLAN.md — Gap closure D (run 2): execute-phase.md dispatch line — construct WAVE_WORKTREE_PLANS_JSON via jq pipeline (REVIEW CR-01) + replace literal --phase "{phase_number}" placeholder with bash variable ${PHASE_NUMBER} (REVIEW CR-02) + extend tests/quick-md-parallel-dispatch.test.cjs EXEC carry-over with plan-shape + numeric-phase assertions (REVIEW IN-01); flips PROMPT-06 BLOCKED → SATISFIED [Wave 5]
   - [ ] 11-11-PLAN.md — Gap closure E (run 2): retire raw git rev-parse from agents/gsd-executor.md:431 (REVIEW CR-03 — violates project_no_raw_git) by extending workspace.assert-dispatched-cwd envelope with primaryWorkspacePath + agent prompt reads via jq + new class-wide regression test tests/agent-prompts-no-raw-git.test.cjs; flips PROMPT-08 BLOCKED → SATISFIED [Wave 5]
 
 ### Phase 12: A3 colocated pre-commit fix (parallel track)
@@ -207,7 +207,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 |-------|----------------|--------|-----------|
 | 9. jj-side parallel verbs | 5/5 | Complete   | 2026-05-15 |
 | 10. git-side parallel verbs + classifier extension | 6/6 | Complete    | 2026-05-16 |
-| 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 9/9 | Complete   | 2026-05-16 |
+| 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 10/11 | In Progress|  |
 | 12. A3 colocated pre-commit fix (parallel track) | 0/0 | Not started | - |
 | 13. CI parallel-path lane + lint close-gate | 0/0 | Not started | - |
 | 14. Default flip + dogfood validation | 0/0 | Not started | - |
