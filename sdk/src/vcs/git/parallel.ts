@@ -412,8 +412,10 @@ export function performGitParallelFanIn(
 		} else {
 			// Worktree gone — try to delete the agent's branch. Failure
 			// (e.g. branch still checked out elsewhere) just means surplus;
-			// do NOT throw.
-			const delRes = vcsExec(mainRepoRoot, 'git', ['branch', '-D', agentBookmark]);
+			// do NOT throw. `--` end-of-options separator is defense-in-depth
+			// against a future loosening of `validateAgentId`'s character
+			// class (matches `backends/git.ts:712` precedent).
+			const delRes = vcsExec(mainRepoRoot, 'git', ['branch', '-D', '--', agentBookmark]);
 			if (delRes.exitCode !== 0) {
 				surplusBookmarks.push(agentBookmark);
 			}
