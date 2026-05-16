@@ -409,75 +409,21 @@ The verb owns the canonical predicate (tdd="true" frontmatter AND `<behavior>` b
 <task_commit_protocol>
 After each task completes (verification passed, done criteria met), commit immediately.
 
-**0a. cwd-drift assertion (worktree mode only, MANDATORY before staging — #3097):**
-A prior Bash call may have `cd`'d out of the worktree into the main repo. When that happens
-`[ -f .git ]` is false (main repo's `.git` is a directory), silently skipping all worktree guards.
-Capture the spawn-time toplevel via a sentinel on first commit, then verify on every subsequent commit.
-
-# TODO(05-05 sweep): `gsd-sdk query head-ref` does not yet expose `--git-dir` / `--show-toplevel`
-# / `--abbrev-ref HEAD` / `--symbolic-ref HEAD` flag pass-throughs. The Claude Code worktree
-# guards below are git-mode-only by construction (`.git` is a git-specific file in linked
-# worktree mode; `.git/worktrees/<name>` is the git layout; the `worktree-agent-*` branch
-# namespace is enforced by the parallel-executor harness which runs on the git backend).
-# Once the query verb gains those flag pass-throughs, route these probes through the SDK.
+**0. Dispatched-cwd assertion (MANDATORY before staging):**
+Verify the agent is in a dispatched subagent workspace (not the primary workspace, not a drifted cwd,
+not a workspace HEAD attached to a protected ref). The SDK verb resolves cwd against
+`vcs.workspace.list()` and returns the workspace match + `isPrimary` flag in one call — collapsing
+the former HEAD-on-protected-ref / cwd-drift / abs-path / namespace-regex guards into a single
+backend-opaque precondition check. See `@~/.claude/get-shit-done/references/dispatch-cwd-safety.md`.
 ```bash
-WT_GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
-case "$WT_GIT_DIR" in
-  *.git/worktrees/*)
-      SENTINEL="$WT_GIT_DIR/gsd-spawn-toplevel"
-      [ ! -f "$SENTINEL" ] && git rev-parse --show-toplevel > "$SENTINEL" 2>/dev/null
-      EXPECTED_TL=$(cat "$SENTINEL" 2>/dev/null)
-      ACTUAL_TL=$(git rev-parse --show-toplevel 2>/dev/null)
-      if [ -n "$EXPECTED_TL" ] && [ "$ACTUAL_TL" != "$EXPECTED_TL" ]; then
-        echo "FATAL: cwd drifted from spawn-time worktree root (#3097)" >&2
-        echo "  Spawn-time: $EXPECTED_TL" >&2
-        echo "  Current:    $ACTUAL_TL" >&2
-        echo "RECOVERY: cd \"$EXPECTED_TL\" before staging, then re-run this commit." >&2
-        exit 1
-      fi
-    ;;
-esac
-```
-
-**0b. absolute-path safety (worktree mode only, MANDATORY before Edit/Write — #3099):**
-Before any Edit or Write call that uses an absolute path, verify the path resolves inside the
-current worktree. Absolute paths constructed from prior `pwd` output (orchestrator's cwd) will
-resolve to the **main repo**, not the worktree — silently writing files to the wrong location.
-```bash
-# Obtain the canonical worktree root
-WT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-[ -z "$WT_ROOT" ] && { echo "FATAL: could not determine worktree root" >&2; exit 1; }
-# Verify absolute path containment with boundary safety (not glob prefix which allows siblings)
-if [[ "$ABS_PATH" != "$WT_ROOT" && "$ABS_PATH" != "$WT_ROOT/"* ]]; then
-  echo "FATAL: $ABS_PATH is outside the worktree ($WT_ROOT) — use a relative path or recompute from WT_ROOT" >&2
+DISPATCH_CHECK=$(gsd-sdk query workspace.assert-dispatched-cwd --cwd .)
+OK=$(echo "$DISPATCH_CHECK" | jq -r '.ok')
+if [ "$OK" != "true" ]; then
+  IS_PRIMARY=$(echo "$DISPATCH_CHECK" | jq -r '.isPrimary')
+  WS_NAME=$(echo "$DISPATCH_CHECK" | jq -r '.workspaceName // "<unknown>"')
+  echo "FATAL: cwd is not a dispatched subagent workspace (isPrimary=$IS_PRIMARY, workspaceName=$WS_NAME)." >&2
+  echo "RECOVERY: cd into the workspace path the orchestrator passed to this Agent() invocation." >&2
   exit 1
-fi
-```
-Prefer **relative paths** for all Edit/Write operations inside a worktree. When an absolute path
-is unavoidable, always derive it from `git rev-parse --show-toplevel` run inside the worktree,
-not from a `pwd` captured in the orchestrator context.
-
-**0. Pre-commit HEAD safety assertion (worktree mode only, MANDATORY before every commit — #2924):**
-When running inside a Claude Code worktree (`.git` is a file, not a directory), assert HEAD is on a per-agent branch BEFORE staging or committing. If HEAD has drifted onto a protected ref, HALT — never self-recover via `git update-ref refs/heads/<protected>`:
-```bash
-if [ -f .git ]; then  # worktree
-  HEAD_REF=$(git symbolic-ref --quiet HEAD || echo "DETACHED")
-  ACTUAL_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-  # Deny-list: never commit on a protected ref.
-  if [ "$HEAD_REF" = "DETACHED" ] || \
-     echo "$ACTUAL_BRANCH" | grep -Eq '^(main|master|develop|trunk|release/.*)$'; then
-    echo "FATAL: refusing to commit — worktree HEAD is on '$ACTUAL_BRANCH' (expected per-agent branch)." >&2
-    echo "DO NOT use 'git update-ref' to rewind the protected branch — surface as blocker (#2924)." >&2
-    exit 1
-  fi
-  # Positive allow-list: HEAD must be on the canonical Claude Code worktree-agent
-  # branch namespace (`worktree-agent-<id>`). This catches feature/* and any other
-  # arbitrary branch that the deny-list would silently allow (#2924).
-  if ! echo "$ACTUAL_BRANCH" | grep -Eq '^worktree-agent-[A-Za-z0-9._/-]+$'; then
-    echo "FATAL: refusing to commit — worktree HEAD '$ACTUAL_BRANCH' is not in the worktree-agent-* namespace." >&2
-    echo "Agent commits must live on per-agent branches; surface as blocker (#2924)." >&2
-    exit 1
-  fi
 fi
 ```
 
