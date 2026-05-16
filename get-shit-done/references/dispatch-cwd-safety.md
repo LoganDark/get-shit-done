@@ -24,10 +24,14 @@ backend that implements the `vcs.workspace.list()` contract.
 
 - `ok` is `true` iff `cwd` resolves to a workspace from `vcs.workspace.list()`
   AND that workspace is NOT the primary (`list()[0]` by convention).
-- `workspaceName` / `workspacePath` carry the matched workspace identity (on git
-  this is an fs path; on jj this is the workspace name — documented backend
-  asymmetry). Both are explicit `null` (not undefined) on the no-match branch so
-  the JSON envelope shape stays stable across `JSON.stringify`.
+- `workspaceName` / `workspacePath` carry the matched workspace identity. On
+  both backends `workspacePath` is an absolute fs path; `workspaceName` is the
+  backend's name-like identifier (git worktree label / jj workspace name). The
+  verb resolves jj workspace names to fs paths internally via
+  `jj workspace root --name <NAME>` (Plan 11-07 CR-01 closure) so the two
+  fields are semantically equivalent across backends. Both are explicit `null`
+  (not undefined) on the no-match branch so the JSON envelope shape stays
+  stable across `JSON.stringify`.
 - `isPrimary` is `true` if cwd matched `list()[0]`; `false` otherwise (including
   the no-match case).
 

@@ -421,6 +421,15 @@ OK=$(echo "$DISPATCH_CHECK" | jq -r '.ok')
 if [ "$OK" != "true" ]; then
   IS_PRIMARY=$(echo "$DISPATCH_CHECK" | jq -r '.isPrimary')
   WS_NAME=$(echo "$DISPATCH_CHECK" | jq -r '.workspaceName // "<unknown>"')
+  # Diagnostic dump (Plan 11-07 CR-04): on FATAL, surface enough state for the
+  # operator to triage in the field — the full verb payload, the agent's $PWD,
+  # and the actual repo root probe. Without these, a jj-side assert failure
+  # surfaces only as "isPrimary=false workspaceName=<unknown>" which is
+  # diagnostically opaque.
+  echo "DISPATCH_CHECK payload: $DISPATCH_CHECK" >&2
+  echo "PWD: $PWD" >&2
+  REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || jj workspace root 2>/dev/null || echo "<unresolvable>")
+  echo "REPO_ROOT: $REPO_ROOT" >&2
   echo "FATAL: cwd is not a dispatched subagent workspace (isPrimary=$IS_PRIMARY, workspaceName=$WS_NAME)." >&2
   echo "RECOVERY: cd into the workspace path the orchestrator passed to this Agent() invocation." >&2
   exit 1
