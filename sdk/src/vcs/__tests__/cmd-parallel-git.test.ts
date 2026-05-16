@@ -505,3 +505,197 @@ describe.sequential.skipIf(!gitAvailable)(
 		});
 	},
 );
+
+// ───────────────────────────────────────────────────────────────────────────
+// CR-01 regression scenario (Phase 10 plan 05 — closes SC2 gap from
+// 10-VERIFICATION.md): unlike the existing crashed-worker scenario at line
+// 313 which exercises an UNCOMMITTED dirty tree (branch tip == baseRev → the
+// `merge-base --is-ancestor` probe shortcut hides the defect), this scenario
+// COMMITS partial work in agent-2's workspace BEFORE the simulated crash.
+// agent-2's branch tip moves PAST baseRev, so the ancestor probe at
+// parallel.ts:335 would NOT skip it; without the crashedAgentIds gate
+// (parallel.ts STEP 1, line ~323), `git merge --no-ff worktree-agent-agent-2`
+// would silently merge the partial work into main. The new gate routes the
+// crashed agent exclusively through STEP 2's classifier — proven here by
+// asserting (a) merged.length === 1 (agent-1 only), (b) the queue carries a
+// 'crashed-with-uncommitted-work' entry for agent-2, (c) agent-2's branch
+// tip is NOT in main's ancestry.
+//
+// Joint-assertion lock-in (W3 (a) / Pitfall 7) — single `it` block.
+// changeIdShort assertion uses the `toBeIdOf` matcher (project preference per
+// `feedback_vitest_extend_over_free_fn` memory; also avoids deepening the
+// pre-existing lint-vcs-no-commit-id failure at line 355 that plan 10-06
+// closes).
+// ───────────────────────────────────────────────────────────────────────────
+
+describe.sequential.skipIf(!gitAvailable)(
+	'workspace.parallel — committed-then-crashed agent (CR-01 regression)',
+	() => {
+		let dir: string;
+		let vcs: ReturnType<typeof createGitAdapter>;
+
+		beforeAll(() => {
+			dir = setupGitRepo();
+			vcs = createGitAdapter(dir);
+		});
+
+		afterAll(() => {
+			if (dir) rmSync(dir, { recursive: true, force: true });
+		});
+
+		it('routes committed-then-crashed agent through STEP 2 classifier, not STEP 1 merge', { timeout: 30000 }, () => {
+			const handle = vcs.workspace.parallel.dispatch({
+				plan: [
+					{ agentId: 'agent-1', planId: 'plan-1' },
+					{ agentId: 'agent-2', planId: 'plan-2' },
+				],
+				phaseNumber: 10,
+				mainBookmark: 'main',
+			});
+
+			// agent-1: clean non-conflicting commit. The fan-in loop will merge
+			// this cleanly under the crashedAgentIds gate (exitCode 0 → not in
+			// the crashed set → loop processes normally).
+			writeFileSync(join(handle.workspaces[0].path, 'clean-a.txt'), 'clean a\n');
+			execSync('git add clean-a.txt', { cwd: handle.workspaces[0].path, stdio: 'pipe' });
+			execSync('git commit -qm "agent-1 clean"', { cwd: handle.workspaces[0].path, stdio: 'pipe' });
+
+			// agent-2: CRITICAL distinction vs the existing Scenario 5 at line
+			// 313 — we COMMIT the partial work before the simulated crash. This
+			// moves agent-2's branch tip PAST baseRev. Without the
+			// crashedAgentIds gate, `git merge-base --is-ancestor
+			// worktree-agent-agent-2 HEAD` would return non-zero (tip is NOT an
+			// ancestor of pre-merge HEAD), the probe would fall through, and
+			// `git merge --no-ff worktree-agent-agent-2` would silently absorb
+			// the partial work into main. The gate prevents this by skipping
+			// agent-2 in STEP 1 entirely.
+			writeFileSync(join(handle.workspaces[1].path, 'partial.txt'), 'partial work before crash\n');
+			execSync('git add partial.txt', { cwd: handle.workspaces[1].path, stdio: 'pipe' });
+			execSync('git commit -qm "agent-2 partial work before crash"', { cwd: handle.workspaces[1].path, stdio: 'pipe' });
+
+			// Capture agent-2's branch tip SHA for the ancestry assertion below.
+			// Run rev-parse from the MAIN repo root (the ref is reachable from
+			// the shared object DB regardless of which worktree checked it out).
+			const agent2Tip = execSync('git rev-parse worktree-agent-agent-2', { cwd: dir }).toString().trim();
+			const agent2WorkspaceName = handle.workspaces[1].name;
+
+			// fanIn with agent-2 reporting exitCode 1. The crashedAgentIds gate
+			// at STEP 1 (parallel.ts ~line 323) filters agent-2 out before the
+			// merge-base probe; STEP 2's classifier picks it up via the
+			// `result.exitCode !== 0` branch and writes the queue entry.
+			const result = vcs.workspace.parallel.fanIn(handle, [
+				{ agentId: 'agent-1', exitCode: 0 },
+				{ agentId: 'agent-2', exitCode: 1, stderr: 'simulated crash after partial commit' },
+			]);
+
+			// agent-1 merged cleanly; agent-2's partial commit was NOT absorbed.
+			expect(result.merged.length).toBe(1);
+			expect(result.incompleteQueued).toBeGreaterThanOrEqual(1);
+			expect(result.failedReaped).toContain(agent2WorkspaceName);
+
+			// STEP 2 classifier wrote a `crashed-with-uncommitted-work` entry
+			// for agent-2 (with the branch tip's short-SHA in changeIdShort).
+			const queue = readIncomplete(handle.phaseRoot);
+			const crashEntry = queue.find((e) => e.reason === 'crashed-with-uncommitted-work' && e.subagentName === agent2WorkspaceName);
+			expect(crashEntry).toBeDefined();
+			expect(crashEntry?.subagentName).toBe(agent2WorkspaceName);
+			expect(crashEntry?.changeIdShort).toBeIdOf({ kind: 'git', allowShort: true });
+			expect(crashEntry?.workspacePath).toBeTruthy();
+
+			// Branch-ancestry proof: agent-2's tip SHA must NOT be an ancestor
+			// of HEAD. This is what falsifies CR-01's pre-fix behavior — the
+			// gate bypasses STEP 1 for agent-2, so no merge commit was created
+			// absorbing its partial work. Use spawnSync (non-throwing) because
+			// non-zero exit is the EXPECTED success signal here.
+			expect(spawnSync('git', ['merge-base', '--is-ancestor', agent2Tip, 'HEAD'], { cwd: dir }).status).not.toBe(0);
+		});
+	},
+);
+
+// ───────────────────────────────────────────────────────────────────────────
+// CR-02 regression scenario (Phase 10 plan 05 — closes SC3 gap from
+// 10-VERIFICATION.md): pre-seed an unrelated `worktree-agent-foo` branch in
+// the test repo BEFORE creating the adapter or dispatching. Without the
+// expectedNames gate at STEP 3 (parallel.ts ~line 461), the repo-scoped
+// `for-each-ref refs/heads/worktree-agent-*` glob would enumerate the
+// pre-seeded branch and report it as surplus — polluting the cross-handle
+// contract field. The gate scopes the audit to handle.workspaces; the
+// pre-seeded branch is NOT in this handle's expected set and is correctly
+// skipped.
+//
+// Joint-assertion lock-in (W3 (a) / Pitfall 7) — single `it` block. We also
+// defensively assert the pre-seeded branch is STILL ALIVE in the repo after
+// fanIn returns (we never touched it; the audit just doesn't flag it).
+// ───────────────────────────────────────────────────────────────────────────
+
+describe.sequential.skipIf(!gitAvailable)(
+	'workspace.parallel — handle-scoped surplus audit (CR-02 regression)',
+	() => {
+		let dir: string;
+		let vcs: ReturnType<typeof createGitAdapter>;
+
+		beforeAll(() => {
+			dir = setupGitRepo();
+			// Pre-seed an unrelated `worktree-agent-foo` branch at HEAD BEFORE
+			// creating the adapter or dispatching. This simulates the
+			// real-world scenario where the repo already has other
+			// `worktree-agent-*` branches in flight (e.g., from a sibling
+			// handle that has not yet been cleaned up). The expectedNames gate
+			// at STEP 3 must skip this branch — it is not in THIS handle's
+			// workspace set.
+			execSync('git branch worktree-agent-foo HEAD', { cwd: dir, stdio: 'pipe' });
+			vcs = createGitAdapter(dir);
+		});
+
+		afterAll(() => {
+			if (dir) rmSync(dir, { recursive: true, force: true });
+		});
+
+		it('pre-seeded unrelated worktree-agent-foo branch is not flagged as surplus', { timeout: 30000 }, () => {
+			const handle = vcs.workspace.parallel.dispatch({
+				plan: [
+					{ agentId: 'agent-1', planId: 'plan-1' },
+					{ agentId: 'agent-2', planId: 'plan-2' },
+				],
+				phaseNumber: 10,
+				mainBookmark: 'main',
+			});
+
+			// Clean non-conflicting commits in each workspace — both agents
+			// will merge cleanly and per-success cleanup will remove their
+			// branches.
+			writeFileSync(join(handle.workspaces[0].path, 'agent-1.txt'), 'agent-1\n');
+			execSync('git add agent-1.txt', { cwd: handle.workspaces[0].path, stdio: 'pipe' });
+			execSync('git commit -qm "agent-1 clean"', { cwd: handle.workspaces[0].path, stdio: 'pipe' });
+
+			writeFileSync(join(handle.workspaces[1].path, 'agent-2.txt'), 'agent-2\n');
+			execSync('git add agent-2.txt', { cwd: handle.workspaces[1].path, stdio: 'pipe' });
+			execSync('git commit -qm "agent-2 clean"', { cwd: handle.workspaces[1].path, stdio: 'pipe' });
+
+			const result = vcs.workspace.parallel.fanIn(handle, [
+				{ agentId: 'agent-1', exitCode: 0 },
+				{ agentId: 'agent-2', exitCode: 0 },
+			]);
+
+			// Primary assertion: the pre-seeded foo branch is NOT in
+			// surplusBookmarks. With the expectedNames gate, STEP 3's audit
+			// only considers branches that match handle.workspaces' expected
+			// names.
+			expect(result.surplusBookmarks).not.toContain('worktree-agent-foo');
+
+			// Defensive sanity check: the pre-seeded branch is STILL ALIVE in
+			// the repo (we never touched it; the audit simply doesn't flag
+			// it).
+			// Use spawnSync with an argv array — `execSync` would route through
+			// `/bin/sh -c` which interprets `%(refname:short)`'s parens as a
+			// subshell, and the bare `*` as a glob. Argv form sidesteps both.
+			const aliveBranches = spawnSync('git', ['for-each-ref', '--format=%(refname:short)', 'refs/heads/worktree-agent-*'], { cwd: dir }).stdout.toString().trim().split('\n').filter((s) => s.length > 0);
+			expect(aliveBranches).toContain('worktree-agent-foo');
+
+			// Clean fan-in invariant: handle.workspaces' agent branches were
+			// cleaned up by per-success cleanup; pre-seeded foo is excluded by
+			// the expectedNames filter; total surplus is 0.
+			expect(result.surplusBookmarks.length).toBe(0);
+		});
+	},
+);
