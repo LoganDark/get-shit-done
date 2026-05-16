@@ -1,49 +1,29 @@
 ---
 phase: 10-git-side-parallel-verbs-classifier-extension
-verified: 2026-05-15T13:25:00Z
-status: gaps_found
-score: 2/5 must-haves verified
+verified: 2026-05-15T23:45:00Z
+status: passed
+score: 5/5 must-haves verified
 overrides_applied: 0
-gaps:
-  - truth: "SC2 — Cross-backend FanInResult shape `{merged, conflicted, conflictedPaths, incompleteQueued, failedReaped, surplusBookmarks}` is identical on both backends; `conflicted: boolean` distinguishes in-tree-conflict-success from crash."
-    status: partial
-    reason: "Type shape uniformity holds (single FanInResult interface in sdk/src/vcs/types.ts:533-541 used by both backends). However the second clause — that `conflicted` boolean correctly distinguishes in-tree-conflict-success from crash — is FALSIFIED by CR-01. STEP 1 of performGitParallelFanIn at sdk/src/vcs/git/parallel.ts:323 iterates handle.workspaces UNCONDITIONALLY without consulting results[].exitCode. A crashed agent that committed N partial commits before crashing has its branch tip != baseRev, so the ancestor probe at line 335 does NOT skip it; the merge at line 347 then proceeds and the partial work is silently merged into main. STEP 2's reap classifier never runs for that workspace (it was already merged in STEP 1). The orchestrator gets `conflicted: false` and never learns the crash happened. The very distinction the SC requires (conflict-vs-crash) is not enforced."
-    artifacts:
-      - path: "sdk/src/vcs/git/parallel.ts"
-        issue: "STEP 1 fan-in loop at line 323 lacks a `crashedAgents.has(ws.agentId) → continue` filter. Result: crashed agents with committed work get silently merged + 'reaped' with no queue entry. CR-01 in 10-REVIEW.md."
-    missing:
-      - "Filter crashed agents (results[].exitCode !== 0) OUT of STEP 1's merge loop before the merge-base probe; route them exclusively through STEP 2's classifier so the crashed-with-uncommitted-work queue entry is the only side effect."
-      - "Regression test scenario: dispatch N=2, agent-1 commits cleanly + exits 0, agent-2 commits a partial change + exits 1; assert merged.length===1 (agent-1 only), incompleteQueued>=1, queue entry subagentName matches agent-2, agent-2's branch is NOT in main's ancestry."
-  - truth: "SC3 — Per-branch 2-parent merge loop verified on test-fixture; halt-on-conflict + re-call via merge-base --is-ancestor skip; `git worktree remove --force` is forbidden in the cross-backend path (non-force only)."
-    status: partial
-    reason: "Per-branch loop, halt-on-conflict, and ancestor-probe re-call ARE structurally present and tested (Scenarios 4 and 6 both pass). Non-force `worktree remove` is honored at parallel.ts:391 and parallel.ts:452 (no `--force` flag in either call). HOWEVER — surplus-bookmark cleanup pollutes cross-handle: STEP 3 audit at parallel.ts:461 enumerates EVERY `worktree-agent-*` branch in the repo, not just THIS handle's. CR-02 documents three real failure modes including in-flight conflict branches falsely reported as surplus. The contract field `surplusBookmarks` semantically means 'branches that outlived a fan-in cleanup' but currently means 'any alive worktree-agent-* in the repo'. Phase 10's contract is mis-shapen on this field."
-    artifacts:
-      - path: "sdk/src/vcs/git/parallel.ts"
-        issue: "Lines 461-469 use repo-scoped `for-each-ref refs/heads/worktree-agent-*` instead of handle-scoped. CR-02 in 10-REVIEW.md."
-    missing:
-      - "Scope STEP 3 sweep to expectedNames = new Set(handle.workspaces.map(ws => `worktree-agent-${ws.agentId}`)); skip alive branches not in this set."
-      - "Test scenario: pre-seed an unrelated `worktree-agent-foo` branch in the repo before dispatch; assert it does NOT appear in surplusBookmarks after fanIn."
-  - truth: "SC5 — vitest skip-count baseline unchanged; no retry config added; CI lint guards remain green."
-    status: failed
-    reason: "Skip-count gate IS green (`check-skip-count: current=18 baseline(origin/main)=18`). No `retry: N` config in vitest.config.ts. BUT — the new test file at sdk/src/vcs/__tests__/cmd-parallel-git.test.ts:355 introduces `expect(crashEntry?.changeIdShort).toMatch(/^[0-9a-f]{12}$/)` which trips `scripts/lint-vcs-no-commit-id.cjs` with exit code 1. That script runs in `pretest` (package.json:65) AND in CI (.github/workflows/test.yml:73). Plan 10.03 SUMMARY claimed 'lint-vcs-no-commit-id exits 0' but that was BEFORE Plan 10.04 added the test file containing the regex. Plan 10.04 SUMMARY did not re-verify this lint after adding the regex. CI is blocked for Phase 10."
-    artifacts:
-      - path: "sdk/src/vcs/__tests__/cmd-parallel-git.test.ts"
-        issue: "Line 355: hex-shape regex `/^[0-9a-f]{12}$/` against changeIdShort field violates lint-vcs-no-commit-id.cjs."
-      - path: "scripts/lint-vcs-no-commit-id.allow.json"
-        issue: "Missing entry for `sdk/src/vcs/__tests__/cmd-parallel-git.test.ts` (peer test files like cmd-parallel-jj.test.ts may need similar review)."
-    missing:
-      - "Either: (a) add `// vcs-lint:allow-commit-id-here <reason>` annotation on the offending line; (b) add the test path to scripts/lint-vcs-no-commit-id.allow.json with reason+owner; or (c) replace the regex assertion with the documented `expect(value).toBeIdOf(kind)` custom matcher."
-      - "After fix: confirm `node scripts/lint-vcs-no-commit-id.cjs` exits 0."
+re_verification:
+  previous_status: gaps_found
+  previous_score: 2/5
+  gaps_closed:
+    - "SC2 — Cross-backend `FanInResult` shape; `conflicted: boolean` distinguishes in-tree-conflict-success from crash (closed by 10-05 STEP 1 crashedAgentIds gate + Scenario A regression)"
+    - "SC3 — Per-branch 2-parent merge loop; halt-on-conflict + ancestor-probe re-call; non-force worktree remove + handle-scoped surplus audit (closed by 10-05 STEP 3 expectedNames filter + Scenario B regression)"
+    - "SC5 — vitest skip-count baseline unchanged; CI lint guards remain green (closed by 10-06 toBeIdOf matcher swap at line 355)"
+  gaps_remaining: []
+  regressions: []
 deferred: []
 ---
 
-# Phase 10: git-side parallel verbs + classifier extension Verification Report
+# Phase 10: git-side parallel verbs + classifier extension — Re-Verification Report
 
 **Phase Goal:** git backend exposes the same `vcs.workspace.parallel.*` verb surface; the cross-backend `FanInResult` shape ships uniform on both backends; the raw-git worktree dispatch+merge+cleanup body lives in a single adapter-internal TS file.
 
-**Verified:** 2026-05-15T13:25:00Z
-**Status:** gaps_found
-**Re-verification:** No — initial verification
+**Verified:** 2026-05-15T23:45:00Z
+**Status:** passed
+**Re-verification:** Yes — after gap closure (Wave 4 plan 10-05 + Wave 5 plan 10-06).
+**Previous status (2026-05-15T13:25:00Z):** gaps_found, score 2/5.
 
 ## Goal Achievement
 
@@ -51,104 +31,108 @@ deferred: []
 
 | # | Truth (verbatim from ROADMAP SC) | Status | Evidence |
 |---|----------------------------------|--------|----------|
-| 1 | `sdk/src/vcs/git/parallel.ts` exists as single adapter-internal sidecar; `backends/git.ts` wires it via `workspace = Object.freeze({...parallel: …})`; internal `git worktree add` serialization prevents `.git/config.lock` race on N=8 dispatch | VERIFIED (with note) | File exists (480 lines). backends/git.ts:33 imports performGitParallelDispatch + performGitParallelFanIn from '../git/parallel.js'. backends/git.ts:736-745 wires `parallel: Object.freeze({ dispatch, fanIn })` inside the `workspace = Object.freeze(...)` block. Plain sync `for` loop with sync vcsExec at parallel.ts:180-223 IS the structural protection (D-05 inline comment block at lines 163-179 cites Pitfall 5 + spawnSync). NOTE: the SC's specific empirical bound "manifest length == 8 in 20 sequential runs" is not a written test scenario — the structural protection is in place but the empirical proof bound is not exercised. Treated as satisfied because the structural mechanism is the contract; the bound is restating it. |
-| 2 | Cross-backend `FanInResult` shape is identical on both backends; `conflicted: boolean` distinguishes in-tree-conflict-success from crash | FAILED | Type shape: VERIFIED — single `interface FanInResult` in sdk/src/vcs/types.ts:533-541 used unchanged by both backends; six fields match across backends. Crash-vs-conflict distinction: FAILED — see CR-01. STEP 1 at parallel.ts:323 does not consult `results[].exitCode`; crashed agents with committed work merge silently into main and `conflicted` returns `false` despite a real crash having occurred. The boolean does NOT distinguish what the SC says it must distinguish. |
-| 3 | Per-branch 2-parent merge loop verified; halt-on-conflict + re-call via merge-base --is-ancestor; non-force `worktree remove` only | PARTIAL | Loop, halt-on-conflict, ancestor-probe re-call: VERIFIED (parallel.ts:323-403; tests Scenarios 4 + 6 pass). Non-force discipline: VERIFIED (parallel.ts:391, parallel.ts:452 use `worktree remove` without `--force`). BUT surplusBookmarks contract field is mis-implemented — see CR-02. Repo-scoped `for-each-ref` at parallel.ts:461 conflates handles. The "field semantics" half of the cross-backend contract is broken. |
-| 4 | `IncompleteWorkEntry.reason` git-side producer for `'merge-in-tree-conflict'` lands here via `git merge` exit code + `git diff --name-only --diff-filter=U` | VERIFIED | Producer fires inside fanIn loop at parallel.ts:351-378. Exit-code + regex check at line 348-349. `diff --name-only --diff-filter=U` at line 361. `appendIncomplete(handle.phaseRoot, entry)` with `reason: 'merge-in-tree-conflict'` at line 374-376. `'partial-wave-live-workspace'` is NOT added to the enum (verified absent). Test Scenario 4 asserts the queue entry is written. |
-| 5 | New parallel-* test files use Pattern B mkdtemp; skip-count baseline unchanged; no `retry: N` in vitest config | FAILED | mkdtemp Pattern B: VERIFIED (mkdtempSync with random suffix at test setup). Skip-count: VERIFIED (`check-skip-count: current=18 baseline=18`). retry: NONE in vitest.config.ts (only a comment in the test file mentioning the rule). HOWEVER — the test file added in Plan 10.04 introduces a hex-shape regex at line 355 that violates `lint-vcs-no-commit-id.cjs` (CI gate at .github/workflows/test.yml:73 + pretest hook in package.json:65). Lint exits 1 — CI is broken. Plan 10.03 SUMMARY's "lint exit 0" claim was true at Plan 10.03 close but Plan 10.04 introduced the regression and did not re-verify. |
+| 1 | `sdk/src/vcs/git/parallel.ts` exists as single adapter-internal sidecar; `backends/git.ts` wires it via `workspace = Object.freeze({...parallel: …})`; internal `git worktree add` serialization prevents `.git/config.lock` race on N=8 dispatch | VERIFIED (regression check) | Already-verified in initial run. Sidecar exists at 706 LOC (was 480; +226 from regression-test additions are in test file, sidecar grew via gate-closure comments + Set-construction). `backends/git.ts` Object.freeze wire-in at lines 736-745 unchanged. Sync for-loop serialization at parallel.ts:180-223 unchanged. |
+| 2 | Cross-backend `FanInResult` shape `{merged, conflicted, conflictedPaths, incompleteQueued, failedReaped, surplusBookmarks}` is identical on both backends; `conflicted: boolean` distinguishes in-tree-conflict-success from crash | VERIFIED (gap closed) | **Shape uniformity:** unchanged — single `interface FanInResult` in sdk/src/vcs/types.ts:533-541 used by both backends. **Crash-vs-conflict distinction (the previously-failing half):** CLOSED. parallel.ts:336-338 constructs `crashedAgentIds = new Set<string>(results.filter((r) => r.exitCode !== 0).map((r) => r.agentId))` before the STEP 1 loop. parallel.ts:341 contains `if (crashedAgentIds.has(ws.agentId)) continue;` as the first statement inside the `for (const ws of handle.workspaces)` loop body. Comment block at lines 324-335 explicitly cites CR-01 / SC2 / T-10-05-01. **Regression test:** Scenario A at line 532 `'workspace.parallel — committed-then-crashed agent (CR-01 regression)'` / `'routes committed-then-crashed agent through STEP 2 classifier, not STEP 1 merge'` exercises the precise failure mode (agent-2 commits partial work then exits 1) and asserts `result.merged.length === 1`, the classifier queue entry exists, and `git merge-base --is-ancestor agent2Tip HEAD` returns non-0 (the partial work is NOT in main's ancestry). Test passes (370ms). |
+| 3 | Per-branch 2-parent `git merge --no-ff <agentBookmark>` loop verified on test-fixture; halt-on-conflict + re-call via `merge-base --is-ancestor` skip; `git worktree remove --force` is forbidden in the cross-backend path (non-force only) | VERIFIED (gap closed) | **Loop, halt, ancestor-probe re-call, non-force discipline:** unchanged from initial verification (parallel.ts:340-421, two `worktree remove` calls at lines 409 and 470 both lack `--force`). **SurplusBookmarks contract (the previously-failing half):** CLOSED. parallel.ts:493-495 constructs `expectedNames = new Set<string>(handle.workspaces.map((ws) => \`worktree-agent-${ws.agentId}\`))` inside the `if (listResult.exitCode === 0)` block. parallel.ts:498 contains `if (!expectedNames.has(bm)) continue;` BEFORE the existing `surplusBookmarks.includes(bm)` dedup. Comment block at lines 480-490 explicitly cites CR-02 / SC3 and the field-semantics contract ("surplusBookmarks is BY DEFINITION a subset of this handle's expected agent bookmarks"). **Regression test:** Scenario B at line 632 `'workspace.parallel — handle-scoped surplus audit (CR-02 regression)'` / `'pre-seeded unrelated worktree-agent-foo branch is not flagged as surplus'` pre-seeds an unrelated `worktree-agent-foo` branch BEFORE dispatch and asserts `result.surplusBookmarks` does NOT contain it AND `result.surplusBookmarks.length === 0`. Test passes (377ms). |
+| 4 | `IncompleteWorkEntry.reason` git-side producer for `'merge-in-tree-conflict'` lands here via `git merge` exit code + `git diff --name-only --diff-filter=U` | VERIFIED (regression check) | Already-verified in initial run. Producer at parallel.ts:369-396 (line numbers shifted by +18 from the comment-block addition; `appendIncomplete(handle.phaseRoot, entry)` with `reason: 'merge-in-tree-conflict'` at line 394). Scenario 4 in-tree-conflict joint assertion still passes (342ms). |
+| 5 | New `parallel-*` test files use Pattern B `mkdtemp`; skip-count baseline unchanged; no `retry: N` in vitest config | VERIFIED (gap closed) | **Pattern B mkdtemp:** unchanged from initial (verified via `mkdtempSync` + random suffix in test setup). **Skip-count:** `node scripts/check-skip-count.cjs` exits 0 with `current=18 baseline(origin/main)=18`. **retry: N:** none in vitest.config.ts. **CI lint gates (the previously-failing half):** CLOSED. Line 355 of cmd-parallel-git.test.ts now reads `expect(crashEntry?.changeIdShort).toBeIdOf({ kind: 'git', allowShort: true });` (was `toMatch(/^[0-9a-f]{12}$/)`). `node scripts/lint-vcs-no-commit-id.cjs` exits 0 with `ok lint-vcs-no-commit-id: 1038 files scanned, 0 violations` (was exit 1). |
 
-**Score:** 2/5 truths verified (SC1 + SC4 only; SC2/SC3/SC5 have gaps).
+**Score:** 5/5 truths verified.
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `sdk/src/vcs/git/parallel.ts` | Adapter-internal sidecar with performGitParallelDispatch + performGitParallelFanIn | EXISTS, SUBSTANTIVE, WIRED | 480 lines. Both exports present; signatures verified (`performGitParallelFanIn(mainRepoRoot, handle, results)` mirrors jj-side at jj/parallel.ts:308-315). No imports from `../backends/`. No `import { spawnSync } from 'node:child_process'`. vcsExec is the sole subprocess primitive. Wired via backends/git.ts:33+736-745. |
-| `sdk/src/vcs/backends/git.ts` (wire-in) | Replaces Phase 9 throwing stub with real Object.freeze({dispatch, fanIn}) | EXISTS, SUBSTANTIVE, WIRED | Lines 736-745 contain real wire-in. Stub messages "is not yet implemented on the git backend" absent. Comment cites Phase 10 / VCS-18 / PARALLEL-01/02. Mirrors backends/jj.ts wire-in shape. |
-| `sdk/src/vcs/jj/parallel.ts` (export change) | derivePhaseRoot exported for cross-backend reuse | EXISTS | Verified — git-side parallel.ts:97 imports `derivePhaseRoot` from '../jj/parallel.js'. CJS dist exposes the function. |
-| `sdk/src/vcs/types.ts` (FanInResult) | Uniform shape for both backends | EXISTS, SUBSTANTIVE | Single `interface FanInResult` at lines 533-541; 6 fields match SC2 enumeration. |
-| `sdk/src/vcs/__tests__/cmd-parallel-git.test.ts` | TEST-13 git contract suite, 6 scenarios, all passing | EXISTS, SUBSTANTIVE, RUNS GREEN | 507 lines; 6 it() blocks (3 N-loop + 1 conflict + 1 crash + 1 idempotency). vitest run: 6 passed (6) in 3.5s. Pattern B mkdtemp present. |
-| `scripts/lint-vcs-no-raw-git.allow.json` | +1 entry for sidecar with {path, reason, owner} schema, no `expires` | EXISTS, SUBSTANTIVE | Pre: 23 entries, Post: 24 entries. New entry verified to have no `expires` field. lint-vcs-no-raw-git.cjs exits 0. |
+| `sdk/src/vcs/git/parallel.ts` | Sidecar with performGitParallelDispatch + performGitParallelFanIn + STEP 1 crashed-agent gate + STEP 3 handle-scoped sweep | EXISTS, SUBSTANTIVE, WIRED | 706 LOC. `crashedAgentIds` literal appears exactly 2× (construction at line 336; loop-body filter at line 341). `expectedNames` literal appears exactly 2× (construction at line 493; filter at line 498). Both anchor in the correct STEP regions per the planned ordering. |
+| `sdk/src/vcs/backends/git.ts` (wire-in) | `Object.freeze({dispatch, fanIn})` real wire-in | EXISTS, SUBSTANTIVE, WIRED | Unchanged from initial verification. Lines 736-745. |
+| `sdk/src/vcs/__tests__/cmd-parallel-git.test.ts` | 4 original `it()` + 2 new regression `it()` = 6 literal blocks; vitest reports 8 runtime tests | EXISTS, SUBSTANTIVE, RUNS GREEN | 701 LOC. `grep -c "^\s*it("` returns 6. Vitest verbose listing shows 8 named tests passing: N=2/N=3/N=4 (from describe.each-equivalent for-loop) + in-tree-conflict + crashed-worker (existing Scenario 5) + idempotency + CR-01 regression + CR-02 regression. Total `8 passed (8)` in 5.01s. |
+| `tests/__tools__/vitest-matchers.ts` (toBeIdOf signature) | Single union-typed `kindOrOpts: ToBeIdOfKind \| ToBeIdOfOpts` arg | EXISTS, SUBSTANTIVE | Lines 38-59. Signature confirms options-object form `{ kind: 'git', allowShort: true }` is the call shape that actually applies `allowShort=true` (the two-arg positional form mandated by 10-05/10-06 plans does NOT match the matcher's signature; executor documented Rule-1 deviation in both summaries). The form used at both line 355 and line 602 of the test file (`toBeIdOf({ kind: 'git', allowShort: true })`) matches the matcher's actual contract. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|----|----|--------|---------|
-| backends/git.ts (workspace.parallel.dispatch) | git/parallel.ts::performGitParallelDispatch | DI curry `{ mainRepoRoot: cwd, vcs: { workspace }, ...opts }` | WIRED | Line 740 |
-| backends/git.ts (workspace.parallel.fanIn) | git/parallel.ts::performGitParallelFanIn | direct call `(cwd, handle, results)` | WIRED | Line 744 |
-| git/parallel.ts (fanIn merge loop) | jj/incomplete-work.ts::appendIncomplete | `import { appendIncomplete } from '../jj/incomplete-work.js'` | WIRED | parallel.ts:96 import; parallel.ts:376 + 442 calls |
-| git/parallel.ts (dispatch) | jj/parallel.ts::derivePhaseRoot | `import { derivePhaseRoot } from '../jj/parallel.js'` | WIRED | parallel.ts:97; line 152 call |
-| Test scenarios | wired GitVcsAdapter | `createGitAdapter()` + `vcs.workspace.parallel.dispatch/.fanIn` | WIRED | Test runs prove end-to-end wiring |
+| `performGitParallelFanIn` STEP 1 loop body | `results[]` exitCode classifier | `crashedAgentIds.has(ws.agentId)` early-continue at line 341 | WIRED | Pattern match confirmed (`grep -q "crashedAgentIds\.has(ws\.agentId)"` true). Comment block at lines 324-335 cites CR-01/SC2/T-10-05-01. |
+| `performGitParallelFanIn` STEP 3 sweep | `handle.workspaces`-scoped audit | `expectedNames.has(bm)` filter at line 498 | WIRED | Pattern match confirmed (`grep -q "expectedNames\.has("` true). Filter is placed BEFORE the `surplusBookmarks.includes(bm)` dedup as planned. Comment block at lines 480-490 cites CR-02/SC3 and the field-semantics contract. |
+| Scenario A test | STEP 2 classifier | agent-2 commits real content + reports `exitCode: 1`; readIncomplete asserts queue entry exists with `reason: 'crashed-with-uncommitted-work'` | WIRED | Test passes; assertions include `result.merged.length === 1`, `incompleteQueued >= 1`, queue entry's `subagentName === agent2WorkspaceName`, and the branch-ancestry proof `spawnSync('git', ['merge-base', '--is-ancestor', agent2Tip, 'HEAD'], { cwd: dir }).status` not-toBe 0. |
+| Scenario B test | STEP 3 sweep | pre-seed `git branch worktree-agent-foo HEAD` before dispatch; assert it is absent from `result.surplusBookmarks` post-fanIn | WIRED | Test passes; assertions include `result.surplusBookmarks` does NOT contain `'worktree-agent-foo'`, the branch is STILL ALIVE in the repo (defensive sanity via `spawnSync('git', ['for-each-ref', ...], {cwd: dir})` argv form per executor Rule-3 deviation — `execSync` with shell parens fails on `%(refname:short)`), AND `result.surplusBookmarks.length === 0`. |
+| crashEntry?.changeIdShort assertion | `toBeIdOf` custom matcher | options-object form `{ kind: 'git', allowShort: true }` | WIRED | Line 355 of cmd-parallel-git.test.ts. Same form at line 602 (Scenario A). Matcher registered globally via `sdk/vitest.config.ts setupFiles`. |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
 | SDK builds | `pnpm -C sdk build` | exit 0 (tsc + tsc -p tsconfig.cjs.json) | PASS |
-| Contract tests pass | `pnpm vitest run src/vcs/__tests__/cmd-parallel-git.test.ts` (from sdk/) | 6 passed (6) in 3.5s | PASS |
-| Skip-count baseline preserved | `node scripts/check-skip-count.cjs` | exit 0; current=18, baseline(origin/main)=18 | PASS |
-| Raw-git lint allowlisted | `node scripts/lint-vcs-no-raw-git.cjs` | exit 0; 1076 files, 0 violations | PASS |
-| Commit-id lint clean | `node scripts/lint-vcs-no-commit-id.cjs` | **exit 1**; 1 violation at cmd-parallel-git.test.ts:355 (hex-shape regex `/^[0-9a-f]{12}$/`) | **FAIL** |
+| Contract tests pass | `pnpm vitest run src/vcs/__tests__/cmd-parallel-git.test.ts` (from sdk/) | exit 0; `Tests 8 passed (8)` in 5.01s; CR-01 + CR-02 regression scenarios both listed and green | PASS |
+| Skip-count baseline preserved | `node scripts/check-skip-count.cjs` | exit 0; `current=18 baseline(origin/main)=18` | PASS |
+| Raw-git lint allowlisted | `node scripts/lint-vcs-no-raw-git.cjs` | exit 0; 1076 files scanned, 0 violations | PASS |
+| **Commit-id lint clean (was the SC5 blocker)** | `node scripts/lint-vcs-no-commit-id.cjs` | **exit 0**; 1038 files scanned, 0 violations | **PASS (was FAIL in initial verification)** |
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Description (REQUIREMENTS.md) | Status | Evidence |
 |-------------|------------|------------------------------|--------|----------|
 | PARALLEL-01 | 10-02, 10-03 | `vcs.workspace.parallel.dispatch` ships on both backends; git wraps `git worktree add` with internal serialization | SATISFIED | parallel.ts performGitParallelDispatch exists; sync for-loop serialization in place; wire-in at backends/git.ts:738-740 |
-| PARALLEL-02 | 10-01, 10-02, 10-03 | `vcs.workspace.parallel.fanIn(handle, results): FanInResult` ships on both backends; git iterates per-branch 2-parent merge; halts on first conflict; idempotent under re-call | PARTIAL | Loop + halt + idempotency: SATISFIED. Crash-vs-conflict boolean discrimination: BLOCKED by CR-01. SurplusBookmarks contract: BLOCKED by CR-02. |
-| VCS-18 | 10-02, 10-03 | New sdk/src/vcs/git/parallel.ts adapter-internal sidecar; joined to lint-vcs-no-raw-git allowlist | SATISFIED | File exists, 480 LOC; allowlist entry present (24 total entries) |
-| TEST-13 | 10-04 | Cross-backend contract tests for PARALLEL-01 + PARALLEL-02 at cmd-parallel-{git,jj}.test.ts; N=2/3/4 + clean fan-in + in-tree-conflict + crashed-worker | SATISFIED (with caveat) | All 6 scenarios pass on host. NOTE: the crashed-worker scenario as-written (uncommitted dirty tree) does NOT exercise CR-01's failure mode (committed-work-then-crash); a regression test is needed to surface CR-01. |
-| TEST-15 | 10-01, 10-04 | git per-branch loop happy-path: N successful 2-parent merges produce N entries in merged[] for N ∈ {2, 3, 4} | SATISFIED | Scenarios 1/2/3 verify merged.length === N for each N. |
-| TEST-16 | 10-04 | Pattern B random-prefix mkdtemp; NEVER retry: N; NEVER describe.skip; skip-count baseline preserved | SATISFIED | mkdtempSync + random suffix verified; no retry, no .skip, no .only; skip-count green. |
+| PARALLEL-02 | 10-01, 10-02, 10-03, **10-05** | `vcs.workspace.parallel.fanIn(handle, results): FanInResult` ships on both backends; git iterates per-branch 2-parent merge; halts on first conflict; idempotent under re-call; `conflicted: boolean` distinguishes in-tree-conflict-success from crash | SATISFIED (gap closed) | Loop + halt + idempotency: unchanged. Crash-vs-conflict boolean discrimination: CLOSED by 10-05 (crashedAgentIds gate + Scenario A regression). SurplusBookmarks contract: CLOSED by 10-05 (expectedNames filter + Scenario B regression). |
+| VCS-18 | 10-02, 10-03 | New `sdk/src/vcs/git/parallel.ts` adapter-internal sidecar; joined to `lint-vcs-no-raw-git` allowlist | SATISFIED | File exists, 706 LOC; allowlist entry present; raw-git lint exits 0 (1076 files, 0 violations) |
+| TEST-13 | 10-04, **10-05** | Cross-backend contract tests for PARALLEL-01 + PARALLEL-02 at cmd-parallel-{git,jj}.test.ts; N=2/3/4 + clean fan-in + in-tree-conflict + crashed-worker | SATISFIED (gap closed) | 8 runtime tests pass on host. CR-01 + CR-02 regression scenarios exercise the failure modes the original crashed-worker scenario could not surface. |
+| TEST-15 | 10-01, 10-04 | git per-branch loop happy-path: N successful 2-parent merges produce N entries in `merged[]` for N ∈ {2, 3, 4} | SATISFIED | N=2/3/4 describe.each-equivalent for-loop scenarios verify `merged.length === N` for each N. |
+| TEST-16 | 10-04, **10-06** | Pattern B random-prefix mkdtemp; NEVER retry: N; NEVER describe.skip; skip-count baseline preserved; no hex-shape regex on id-bearing fields | SATISFIED (gap closed) | mkdtempSync + random suffix verified; no retry, no .skip, no .only; skip-count green; lint-vcs-no-commit-id green (was the SC5 blocker; closed by 10-06 matcher swap at line 355). |
 
-No orphaned requirements — all 6 IDs from REQUIREMENTS.md Phase 10 list (PARALLEL-01, PARALLEL-02, VCS-18, TEST-13, TEST-15, TEST-16) are claimed by at least one plan.
+All 6 Phase 10 requirement IDs from REQUIREMENTS.md are SATISFIED. No orphans.
 
-### Anti-Patterns Found
+### Anti-Patterns Found (re-verification)
 
-| File | Line | Pattern | Severity | Impact |
-|------|------|---------|----------|--------|
-| sdk/src/vcs/__tests__/cmd-parallel-git.test.ts | 355 | Hex-shape regex `/^[0-9a-f]{12}$/` against id-bearing field | BLOCKER | Trips lint-vcs-no-commit-id.cjs (exit 1); CI gate at .github/workflows/test.yml:73 will fail; pretest hook in package.json:65 will fail |
-| sdk/src/vcs/git/parallel.ts | 230 | `mkdtemp` for manifest dir is never cleaned up (per WR-06 in 10-REVIEW) | INFO | Cosmetic /tmp leak; not regressing existing behavior (jj-side has same pattern) |
-| sdk/src/vcs/git/parallel.ts | 398 | `git branch -D <name>` without `--` end-of-options separator (WR-01 in 10-REVIEW) | WARNING | Defense-in-depth gap; current validateAgentId regex blocks leading-dash exploits but in-file invariant is silent |
+| File | Line | Pattern | Severity | Impact | Disposition |
+|------|------|---------|----------|--------|-------------|
+| sdk/src/vcs/__tests__/cmd-parallel-git.test.ts | 355 (was) | Hex-shape regex `/^[0-9a-f]{12}$/` | BLOCKER (was) | Tripped `lint-vcs-no-commit-id.cjs` | **RESOLVED** by 10-06 matcher swap |
+| sdk/src/vcs/git/parallel.ts | 230 | `mkdtemp` for manifest dir is never cleaned up (WR-06 in 10-REVIEW) | INFO | Cosmetic /tmp leak; not a regression (jj-side has the same pattern) | Unchanged — not goal-blocking |
+| sdk/src/vcs/git/parallel.ts | 416 | `git branch -D <name>` without `--` end-of-options separator (WR-01 in 10-REVIEW) | WARNING | Defense-in-depth gap; current validateAgentId regex blocks leading-dash exploits | Unchanged — not goal-blocking; documented in 10-REVIEW.md |
 
-### Code-Review Cross-Reference
+No NEW anti-patterns introduced by 10-05 or 10-06. The previously-blocking anti-pattern at line 355 is fully resolved.
 
-10-REVIEW.md identified 2 BLOCKER + 6 WARNING + 4 INFO findings.
+### Plan-Executor Rule-1 Deviations (documented, accepted)
 
-**BLOCKER alignment with verification:**
+Both 10-05 and 10-06 plans MANDATED the literal two-arg matcher form `toBeIdOf('git', { allowShort: true })`. The matcher's actual signature in `tests/__tools__/vitest-matchers.ts:38-59` is a SINGLE union-typed `kindOrOpts` arg — the two-arg form silently drops the trailing object and defaults `allowShort` to false, rejecting the 12-char short SHA. Both executors documented this Rule-1 deviation in their respective SUMMARYs and used the options-object form `toBeIdOf({ kind: 'git', allowShort: true })` instead. This form is verified working (both tests pass; lint exits 0). The verifier accepts the deviation as semantically equivalent for SC2/SC5 closure — the intent (no hex regex; custom matcher in use; `allowShort` actually applied) is satisfied.
 
-- **CR-01 (crashed-agent partial-commit silently merged) — confirmed by code reading.** SC2's "conflicted boolean distinguishes in-tree-conflict-success from crash" requires a working classifier. Code at parallel.ts:323 does not gate on results[].exitCode before merging. The crashed-worker test scenario does not surface this because the simulated crash is uncommitted-only (branch tip == baseRev → ancestor probe skips it). The real failure mode (partial commits) is unexercised. → SC2 must-have: FAILED, BLOCKER.
+### Code-Review Cross-Reference (10-REVIEW.md)
 
-- **CR-02 (repo-scoped surplus-bookmark sweep) — confirmed by code reading.** SC3's "verified on test-fixture" loop semantics ship correctly, but the surplusBookmarks field of the cross-backend FanInResult is overpopulated (cross-handle pollution) and underspecified (in-flight conflict branches reported as "surplus"). The contract field is mis-implemented even though the merge loop is correct. → SC3 must-have: PARTIAL, BLOCKER on the field-semantics half.
+10-REVIEW.md identified 2 BLOCKER (CR-01, CR-02) + 6 WARNING (WR-01..WR-06) + 4 INFO (IN-01..IN-04) findings.
 
-**WARNING alignment:**
+**BLOCKER status:**
 
-- WR-01 (`branch -D` missing `--`): defense-in-depth issue, not goal-blocking. Surfaced as anti-pattern.
-- WR-02 (`merge-in-tree-conflict` queue entry uses agent branch tip vs jj's merge change): cross-backend semantic divergence on `changeIdShort`. Field is documented but undocumented divergence may surprise consumers. WARNING — not goal-blocking under SC2 strictly.
-- WR-03 (no MERGE_HEAD pre-flight in fanIn): future-defense; not blocking SC3 today.
+- **CR-01 (crashed-agent partial-commit silently merged):** **RESOLVED** by 10-05 STEP 1 `crashedAgentIds` gate at parallel.ts:341. Regression test Scenario A proves the fix exercises the committed-then-crashed failure mode.
+- **CR-02 (repo-scoped surplus-bookmark sweep):** **RESOLVED** by 10-05 STEP 3 `expectedNames` filter at parallel.ts:498. Regression test Scenario B proves the pre-seeded unrelated branch is excluded.
+
+**WARNING status (unchanged from initial verification — not goal-blocking):**
+
+- WR-01 (`branch -D` missing `--`): defense-in-depth issue, not blocking SC1-5.
+- WR-02 (`merge-in-tree-conflict` queue entry semantic mismatch across backends): documented divergence, not blocking SC2 strictly.
+- WR-03 (no MERGE_HEAD pre-flight): future-defense.
 - WR-04 (cleanup error context loss): observability gap.
-- WR-05 (test scenario 6 conflates first-call assertions): test-rigor gap.
-- WR-06 (manifest mkdtemp leak): pre-existing jj-side pattern; not a regression.
+- WR-05 (test scenario 6 first-call assertions): test-rigor gap.
+- WR-06 (manifest mkdtemp leak): pre-existing jj-side pattern.
 
 ### Human Verification Required
 
-None — all gaps in this verification are programmatically detectable (code inspection + lint script + test runs). The closure plan can be authored without human UAT.
+None. All gap closures were programmatically verifiable (code reading + lint scripts + test runs). The CR-01/CR-02 regression scenarios encode the previously-uncovered failure modes as automated tests; future regressions would surface in CI rather than requiring human inspection.
 
-### Gaps Summary
+### Re-Verification Summary
 
-Phase 10 ships substantial structural correctness — the sidecar exists, is wired, the test suite passes, the merge-loop semantics are correct, the FanInResult type shape is uniform. However three goal-relevant defects survive:
+The three BLOCKER gaps from the initial verification at 2026-05-15T13:25:00Z are all CLOSED:
 
-1. **SC2's crash-vs-conflict distinction is broken (BLOCKER).** STEP 1 of `performGitParallelFanIn` does not gate on `results[].exitCode` before merging an agent's branch. Crashed agents with committed partial work get silently merged into main and the orchestrator never learns. The test that should have caught this (Scenario 5 crashed-worker) instead exercises uncommitted dirty work where branch tip == baseRev so the ancestor probe shortcut hides the defect. CR-01 in 10-REVIEW.md.
+1. **SC2 (CR-01) — CLOSED.** `crashedAgentIds` gate filters crashed agents out of STEP 1's merge loop before the `merge-base --is-ancestor` probe. The previously-falsified second clause of SC2 ("conflicted boolean distinguishes in-tree-conflict-success from crash") is now enforced by code (gate at parallel.ts:341) and proven by test (Scenario A asserts `result.merged.length === 1` AND queue entry exists AND agent-2's tip is NOT in main's ancestry).
 
-2. **SC3's surplusBookmarks contract is mis-shapen (BLOCKER on field semantics).** STEP 3 audit at parallel.ts:461 is repo-scoped not handle-scoped; in-flight conflict branches AND any pre-existing `worktree-agent-*` branches in the repo are reported as surplus. The cross-backend contract field gives consumers no way to distinguish "branch escaped cleanup" from "branch is still alive intentionally." CR-02 in 10-REVIEW.md.
+2. **SC3 (CR-02) — CLOSED.** `expectedNames` filter scopes the STEP 3 surplus sweep to this handle's expected agent bookmarks. The previously-mis-shapen contract field is now correct (sweep at parallel.ts:498). Pre-seeded unrelated `worktree-agent-foo` branches are excluded, proven by Scenario B (`result.surplusBookmarks` is empty AND the branch is still alive in the repo, proving exclusion-by-filter rather than exclusion-by-deletion).
 
-3. **SC5's CI lint gate is failing (BLOCKER).** Plan 10.04 added `expect(crashEntry?.changeIdShort).toMatch(/^[0-9a-f]{12}$/)` at cmd-parallel-git.test.ts:355. This trips `lint-vcs-no-commit-id.cjs` which runs in `pretest` (package.json:65) and CI (test.yml:73). Plan 10.03's claim of "commit-id lint exits 0" was true AT Plan 10.03 close, but Plan 10.04 introduced the regex regression and did not re-verify. The fix is straightforward (allowlist entry, inline annotation, or matcher swap) but the gate is currently red.
+3. **SC5 — CLOSED.** Line 355 hex-shape regex replaced with `toBeIdOf({ kind: 'git', allowShort: true })` matcher call. `node scripts/lint-vcs-no-commit-id.cjs` exits 0 (was 1). No allowlist diff; no inline annotation; matcher swap is the architecturally-correct fix per the lint script's own diagnostic at scripts/lint-vcs-no-commit-id.cjs:135.
 
-The "structural" goal achievement (sidecar exists, contract surface ships, tests run green) holds. The "behavioral" goal achievement (the contract surface MEANS what the SC text says it means) is incomplete: the boolean field meaning is broken (SC2), the array field meaning is broken (SC3), and the CI gate that proves the change ships is currently failing (SC5).
+No regressions detected. SC1 and SC4 (already VERIFIED in initial run) remain green. Score: 5/5 truths verified — phase goal fully achieved.
 
-Recommended path: author a closure plan that (a) adds the crashed-agent gate to STEP 1 + a regression test that commits-then-crashes; (b) scopes STEP 3 to handle.workspaces; (c) chooses one of the three lint-fix paths for cmd-parallel-git.test.ts:355.
+All ROADMAP success criteria, REQUIREMENTS.md IDs, and PLAN must-haves verify against the actual codebase. Phase 10 may proceed to commit/PR.
 
 ---
 
-_Verified: 2026-05-15T13:25:00Z_
+_Re-verified: 2026-05-15T23:45:00Z_
 _Verifier: Claude (gsd-verifier)_
+_Previous: 2026-05-15T13:25:00Z (gaps_found, 2/5)_
