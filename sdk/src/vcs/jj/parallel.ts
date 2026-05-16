@@ -6,11 +6,16 @@
  * create a merge conflict on every upstream-rebase cycle).
  *
  * Pure functions; both return frozen JSON (D-05). dispatch composes
- * `octopus.createPhaseStructure` + N× `octopus.createSubagentSlot` and writes
- * the extended WAVE_WORKTREE_MANIFEST with `plan_id` + `backend` (VCS-19).
- * fanIn runs a single N-parent `jj new`, probes conflicts via the
- * UPSTREAM-02 conflict-paths sidecar, and on the clean path advances the
- * main bookmark (PARALLEL-02 jj-side).
+ * `octopus.createPhaseStructure` + N× `octopus.createSubagentSlot`. fanIn
+ * runs a single N-parent `jj new`, probes conflicts via the UPSTREAM-02
+ * conflict-paths sidecar, and on the clean path advances the main bookmark
+ * (PARALLEL-02 jj-side).
+ *
+ * Phase 11 D-01: no manifest sidecar on disk; `handle.manifest` is the empty
+ * string. The Handle is the orchestrator's full state — only persistent
+ * state is workspaces / bookmarks / HEADs themselves. Mirrors the parity
+ * target at `get-shit-done/bin/lib/worktree-safety.cjs::reconstructHandleFromLegacyPlan`
+ * which sets `manifest: ''` the same way.
  *
  * Phase 11 D-02 (cross-phase amendment): the eager per-subagent bookmark
  * create loop in dispatch and the matching batched bookmark delete + surplus
@@ -40,8 +45,7 @@
  * probes here are reads and don't need the flag.
  */
 
-import { writeFileSync, mkdtempSync, existsSync, readdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { vcsExec } from '../exec.js';
@@ -148,8 +152,11 @@ export function derivePhaseRoot(mainRepoRoot: string, phaseNumber: number): stri
 
 /**
  * Phase 9 (VCS-16, PARALLEL-01 jj-side): dispatch — materialize N subagent
- * slots in the phase octopus structure, eagerly create per-subagent
- * bookmarks, and write the WAVE_WORKTREE_MANIFEST.
+ * slots in the phase octopus structure.
+ *
+ * Phase 11 D-01/D-02: no manifest sidecar on disk; no per-subagent bookmark
+ * creation. The returned Handle is the orchestrator's full state — only
+ * persistent state is workspaces / bookmarks / HEADs themselves.
  *
  * The SDK-internal opts extend `ParallelDispatchOpts` with `mainRepoRoot`
  * (the main repo cwd) and `vcs` (a closure over the adapter's `workspace`
@@ -223,26 +230,13 @@ export function performJjParallelDispatch(
 	// goes; on git the `worktree-agent-*` branches stay (load-bearing backend
 	// asymmetry — git worktrees can't track anonymous heads ergonomically).
 
-	// WAVE_WORKTREE_MANIFEST writer (VCS-19). New fields: plan_id, backend.
-	// Allocated under a fresh `mkdtemp` to avoid collisions with concurrent
-	// orchestrator processes (and with the workflow-markdown writer that
-	// collapses in Phase 11). Every agentId already passed `validateAgentId`
-	// above, so the `worktree-agent-${agentId}` branch literal is guaranteed
-	// to satisfy the worktree-safety.cjs:334 regex.
-	const manifestDir = mkdtempSync(join(tmpdir(), 'gsd-wave-manifest-'));
-	const manifestPath = join(manifestDir, 'wave-worktree-manifest.json');
-	const manifestBody = {
-		worktrees: slots.map((slot) => ({
-			agent_id: slot.agentId,
-			plan_id: slot.planId,
-			backend: 'jj' as const,
-			worktree_path: slot.workspacePath,
-			branch: `worktree-agent-${slot.agentId}`,
-			expected_base: slot.headChange,
-			main_bookmark: mainBookmark,
-		})),
-	};
-	writeFileSync(manifestPath, JSON.stringify(manifestBody, null, 2), 'utf-8');
+	// Phase 11 D-01: no manifest sidecar on disk. The previous VCS-19 manifest
+	// writer is retired — only persistent state is workspaces / bookmarks /
+	// HEADs themselves. `handle.manifest` is the empty string to mirror
+	// `bin/lib/worktree-safety.cjs::reconstructHandleFromLegacyPlan` (which has
+	// always set it to the empty string). Fan-in discovers the workspace set
+	// from the Handle's frozen workspaces[] array — see `performJjParallelFanIn`
+	// below.
 
 	// 5. Frozen pure-JSON handle (D-05). Inner workspaces array + each entry
 	// are also frozen. `baselineOpId` is included as `undefined` per D-01/D-06
@@ -251,7 +245,7 @@ export function performJjParallelDispatch(
 		phaseRoot,
 		phaseNumber,
 		mainBookmark,
-		manifest: manifestPath,
+		manifest: '', // D-01: no orchestrator-managed sidecar state (parity with bin/lib/worktree-safety.cjs:reconstructHandleFromLegacyPlan)
 		workspaces: Object.freeze(
 			slots.map((s) =>
 				Object.freeze({

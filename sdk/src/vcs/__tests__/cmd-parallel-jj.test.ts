@@ -144,7 +144,10 @@ for (const N of [2, 3, 4] as const) {
 					expect(handle.workspaces[i].agentId).toBe(`agent-${i + 1}`);
 				}
 				expect(handle.phaseRoot).toContain('09-test');
-				expect(handle.manifest).toBeTruthy();
+				// Phase 11 D-01 (Plan 11-09 WR-01): no orchestrator-managed sidecar
+				// state; `handle.manifest` is the empty string by contract (mirrors
+				// `bin/lib/worktree-safety.cjs::reconstructHandleFromLegacyPlan`).
+				expect(handle.manifest).toBe('');
 
 				// Simulate clean work in each workspace: each agent edits a
 				// DISTINCT file (`agent-N.txt`) so the octopus merge has nothing
