@@ -130,7 +130,14 @@ Plans:
   4. `bin/lib/worktree-safety.cjs::executeWorktreeWaveCleanupPlan` body shrinks to a single delegation through the new cross-backend verb; ADR-0004 ownership preserved; public export signature unchanged.
   5. `dispatch({ plan, maxConcurrency })` input field honored end-to-end from workflow call sites (default `undefined` → runtime's natural cap).
 
-**Plans**: TBD
+**Plans**: 6 plans
+
+  - [ ] 11-01-PLAN.md — Retire jj-side bookmark plumbing per D-02 + flip cmd-parallel-jj.test.ts assertions [Wave 1]
+  - [ ] 11-02-PLAN.md — Ship workspace.assert-dispatched-cwd + workspace.parallel.dispatch + workspace.parallel.fan-in SDK CLI bridges (3 handlers + catalog/manifest registration) [Wave 2]
+  - [ ] 11-03-PLAN.md — Shrink worktree-safety.cjs::executeWorktreeWaveCleanupPlan to fanIn delegation; remove cmdWorktreeCleanupWave alias [Wave 2]
+  - [ ] 11-04-PLAN.md — Collapse gsd-executor.md worktree-aware guards to assert-dispatched-cwd call; rename worktree-path-safety.md → dispatch-cwd-safety.md [Wave 3]
+  - [ ] 11-05-PLAN.md — execute-phase.md raw-git delete + parallel-verb rewire (preserve sequential Agent() + orchestrator rule + stall surveillance) [Wave 3]
+  - [ ] 11-06-PLAN.md — quick.md raw-git delete + parallel-verb rewire (USE_WORKTREES gating, N=1 trivial) [Wave 3]
 
 ### Phase 12: A3 colocated pre-commit fix (parallel track)
 
@@ -195,7 +202,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 |-------|----------------|--------|-----------|
 | 9. jj-side parallel verbs | 5/5 | Complete   | 2026-05-15 |
 | 10. git-side parallel verbs + classifier extension | 6/6 | Complete    | 2026-05-16 |
-| 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 0/0 | Not started | - |
+| 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 0/6 | Planning | - |
 | 12. A3 colocated pre-commit fix (parallel track) | 0/0 | Not started | - |
 | 13. CI parallel-path lane + lint close-gate | 0/0 | Not started | - |
 | 14. Default flip + dogfood validation | 0/0 | Not started | - |
