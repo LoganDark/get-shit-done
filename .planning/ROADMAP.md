@@ -94,7 +94,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
   4. `IncompleteWorkEntry.reason` enum (widened to 2 values in Phase 9) gets its git-side producer landed here: `git merge` exit code + `git diff --name-only --diff-filter=U` populates `'merge-in-tree-conflict'` correctly. (`'partial-wave-live-workspace'` is NOT added — PARALLEL-03 dropped at Phase 9 discuss.)
   5. New `parallel-*` test files use Pattern B random-prefix `mkdtemp`; vitest skip-count baseline unchanged (`scripts/check-skip-count.cjs` green); no `retry: N` added to vitest config.
 
-**Plans**: 4 plans
+**Plans**: 6 plans (4 original + 2 gap-closure)
 Plans:
 **Wave 1**
 
@@ -108,6 +108,14 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 10-04-PLAN.md — Author cmd-parallel-git.test.ts contract tests (TEST-13 N=2/3/4 + conflict + crash + idempotency re-call)
+
+**Wave 4** *(gap closure — blocked on Wave 3 + initial verification)*
+
+- [ ] 10-05-PLAN.md — Close SC2 + SC3 gaps: STEP 1 crashed-agent gate (CR-01) + STEP 3 handle-scoped surplus sweep (CR-02) in sdk/src/vcs/git/parallel.ts; +2 regression tests in cmd-parallel-git.test.ts
+
+**Wave 5** *(gap closure — blocked on Wave 4 completion; same-file dep)*
+
+- [ ] 10-06-PLAN.md — Close SC5 lint gap: swap hex regex `/^[0-9a-f]{12}$/` at cmd-parallel-git.test.ts:355 for `toBeIdOf('git', { allowShort: true })` custom matcher; unblocks lint-vcs-no-commit-id CI gate
 
 ### Phase 11: Orchestrator + agent rewire + workspace.assert-dispatched-cwd
 
@@ -186,7 +194,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 9. jj-side parallel verbs | 5/5 | Complete   | 2026-05-15 |
-| 10. git-side parallel verbs + classifier extension | 4/4 | Complete   | 2026-05-15 |
+| 10. git-side parallel verbs + classifier extension | 4/6 | Gap closure planned (10-05 + 10-06) | 2026-05-15 |
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 0/0 | Not started | - |
 | 12. A3 colocated pre-commit fix (parallel track) | 0/0 | Not started | - |
 | 13. CI parallel-path lane + lint close-gate | 0/0 | Not started | - |
