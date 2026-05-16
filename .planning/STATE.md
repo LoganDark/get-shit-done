@@ -4,13 +4,13 @@ milestone: v1.3
 milestone_name: jj octopus merge for subagents fully functional
 status: executing
 stopped_at: Completed Phase 11 Plan 03
-last_updated: "2026-05-16T11:06:22.061Z"
+last_updated: "2026-05-16T11:14:37.224Z"
 last_activity: 2026-05-16
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 17
-  completed_plans: 14
+  completed_plans: 15
   percent: 67
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-15 at v1.3 open)
 ## Current Position
 
 Phase: 11 (orchestrator-agent-rewire-workspace-assert-dispatched-cwd) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-05-16
 
@@ -62,6 +62,7 @@ Last activity: 2026-05-16
 | Phase 11 P1 | 12min | 2 tasks | 2 files |
 | Phase 11 P02 | 10min | 4 tasks | 7 files |
 | Phase 11 P03 | 22min | 2 tasks | 4 files |
+| Phase 11 P04 | 17min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,8 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.3-specific decisions 
 - [Phase ?]: Phase 11 Plan 01: clean-branch workspace-count assertion deviated from plan's literal '=== 0' to '=== handle.workspaces.length' because Phase 9 fanIn does not abandon clean-agent workspaces (cleanup wiring is downstream Phase 11 work); will flip back to 0 when 11.04/11.05 wires clean-workspace cleanup
 - [Phase ?]: Phase 11 Plan 02: 3 SDK CLI bridges shipped (workspace.assert-dispatched-cwd + parallel.dispatch + parallel.fan-in); list()[0]===primary convention is load-bearing for the minimal predicate
 - [Phase ?]: Phase 11 Plan 02: emit null (not undefined) for absent optional JSON fields so envelope shape stays stable across JSON.stringify
+- [Phase ?]: Phase 11 Plan 04: collapsed 4 gsd-executor.md worktree-aware guards (#2924/#3097/#3099/namespace) into one workspace.assert-dispatched-cwd verb call; D-06 deletion check + destructive_git_prohibition byte-identical
+- [Phase ?]: Phase 11 Plan 04: renamed references/worktree-path-safety.md to dispatch-cwd-safety.md with backend-agnostic body documenting the verb shape; regression test flipped per A5 (file name preserved to retain bug-NNNN traceability)
 
 ### Pending Todos
 
@@ -134,7 +137,7 @@ Items acknowledged and carried forward from previous milestone close (status upd
 
 ## Session Continuity
 
-Last session: 2026-05-16T11:06:22.055Z
+Last session: 2026-05-16T11:14:37.218Z
 Stopped at: Completed Phase 11 Plan 03
 Resume file: 
 
