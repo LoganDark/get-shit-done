@@ -320,7 +320,25 @@ export function performGitParallelFanIn(
 	// workspace.merge / workspace.remove composition (mirrors jj-side
 	// fanIn's direct `vcsExec(... 'jj', ['new', '-r', ...])` at
 	// jj/parallel.ts:366; here the verb is `git merge --no-ff` instead).
+	//
+	// CR-01 / SC2 gate (Phase 10 plan 05 — closes VERIFICATION.md gap):
+	// crashed agents (`result.exitCode !== 0`) are filtered OUT of this
+	// loop before the `merge-base --is-ancestor` probe. Without this gate,
+	// an agent that committed N partial commits before crashing has its
+	// branch tip != baseRev, so the probe at line 335 does NOT skip it,
+	// and `git merge --no-ff` at line 347 silently merges the partial
+	// work into main — the orchestrator gets `conflicted: false` and
+	// never learns the crash happened. With this gate, crashed agents are
+	// routed EXCLUSIVELY through STEP 2's crashed-agent classifier so the
+	// `crashed-with-uncommitted-work` queue entry is the only side
+	// effect. The Set is local-scoped (never returned); no late-binding
+	// mutation possible (T-10-05-01 in threat register).
+	const crashedAgentIds = new Set<string>(
+		results.filter((r) => r.exitCode !== 0).map((r) => r.agentId),
+	);
+
 	for (const ws of handle.workspaces) {
+		if (crashedAgentIds.has(ws.agentId)) continue;
 		const agentBookmark = `worktree-agent-${ws.agentId}`;
 
 		// D-03 stateless re-call probe. Pass branch NAME (not SHA). Per
@@ -458,10 +476,26 @@ export function performGitParallelFanIn(
 	// final `for-each-ref` sweep. CONTEXT recommendation: incremental +
 	// final dedup so a re-call that finishes cleanly returns the full audit
 	// in one place.
+	//
+	// CR-02 / SC3 handle-scoped gate (Phase 10 plan 05 — closes
+	// VERIFICATION.md gap): `surplusBookmarks` is BY DEFINITION a subset of
+	// this handle's expected agent bookmarks ("branches that outlived THIS
+	// fan-in's cleanup"), NOT a repo-wide alive-branch enumeration. Without
+	// this gate, the `for-each-ref refs/heads/worktree-agent-*` glob
+	// enumerates EVERY agent-shaped branch in the repo — including
+	// pre-existing unrelated `worktree-agent-foo` branches AND in-flight
+	// conflict branches from sibling handles. Both cross-handle pollute the
+	// contract field. We narrow client-side via the `expectedNames` Set so
+	// the for-each-ref argv stays unchanged (broad glob is fine; the
+	// client-side filter is what enforces the contract semantics).
 	const listResult = vcsExec(mainRepoRoot, 'git', ['for-each-ref', '--format=%(refname:short)', 'refs/heads/worktree-agent-*']);
 	if (listResult.exitCode === 0) {
+		const expectedNames = new Set<string>(
+			handle.workspaces.map((ws) => `worktree-agent-${ws.agentId}`),
+		);
 		const alive = listResult.stdout.split('\n').map((s) => s.trim()).filter((s) => s.length > 0);
 		for (const bm of alive) {
+			if (!expectedNames.has(bm)) continue;
 			if (!surplusBookmarks.includes(bm)) {
 				surplusBookmarks.push(bm);
 			}
