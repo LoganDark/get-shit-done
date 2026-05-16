@@ -983,13 +983,12 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
     }
 
     case 'worktree': {
-      const subcommand = args[1];
-      const worktreeSafety = require('./lib/worktree-safety.cjs');
-      if (subcommand === 'cleanup-wave') {
-        worktreeSafety.cmdWorktreeCleanupWave(cwd, args.slice(2));
-      } else {
-        error('Unknown worktree subcommand. Available: cleanup-wave', ERROR_REASON.SDK_UNKNOWN_COMMAND);
-      }
+      // Phase 11 Plan 03 (D-05): the `worktree cleanup-wave` CJS alias is
+      // retired. Workflow markdown call sites are deleted by Plans 11.5/11.6;
+      // the SDK-side `worktree.cleanup-wave` route in
+      // `sdk/src/query/worktree.ts` is the surviving CLI front door until
+      // those plans rewrite it to `workspace.parallel.fan-in`.
+      error('worktree cleanup-wave is retired (Phase 11 D-05). Use `gsd-sdk query workspace.parallel.fan-in` instead.', ERROR_REASON.SDK_UNKNOWN_COMMAND);
       break;
     }
 

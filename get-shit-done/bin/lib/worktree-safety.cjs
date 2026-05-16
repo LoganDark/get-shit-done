@@ -14,10 +14,11 @@ const { readWorktreeList: readPorcelainFromSdk } = require('../../../sdk/dist-cj
 // migration). ADR-0004 worktree seam is preserved via the deps = {} parameter
 // on readWorktreeList and resolveWorktreeContext: tests inject a fake vcs via
 // deps.vcs the same way they previously injected deps.execGit.
-// Phase 7 WAVE-01 (Plan 07-02): `expr` is needed by executeWorktreeWaveCleanupPlan
-// to construct RevisionExpr arguments for the new wave-cleanup verbs landed in
-// Plan 07-01 (refs.mergeBase, diff{rev:range,diffFilter}, workspace.merge).
-const { createVcsAdapter, expr } = require('../../../sdk/dist-cjs/vcs/index.js');
+// Phase 11 Plan 03 (D-05): `expr` no longer needed — the wave-cleanup body
+// retired its inline RevisionExpr construction (mergeBase / diff / workspace.merge
+// guards moved into vcs.workspace.parallel.fanIn). createVcsAdapter remains
+// the canonical adapter entry point for workspace.context / workspace.prune.
+const { createVcsAdapter } = require('../../../sdk/dist-cjs/vcs/index.js');
 
 function parseWorktreePorcelain(porcelain) {
   return parseWorktreeEntries(porcelain).filter((entry) => entry.branch).map((entry) => ({
@@ -395,23 +396,49 @@ function planWorktreeWaveCleanup(repoRoot, manifest) {
   };
 }
 
-// Phase 7 WAVE-01 (Plan 07-02): orchestrates the 7 wave-cleanup verbs landed
-// in Plan 07-01. Canonical body shape: 07-RESEARCH.md §"Wave-cleanup executor
-// body shape". Order:
-//   1. refs.currentBookmarksIn(wt)   — confirm the worktree's branch matches the manifest
-//   2. refs.mergeBase(HEAD, branch)  — compute the fork point (change_id on jj, hash on git)
-//   3. diff({rev:range, diffFilter:'deleted', nameOnly:true}) — block on file deletions
-//   4. status({porcelain, cwd: wt})  — block on dirty worktree state
-//   5. workspace.merge({…, mainBookmark, agentBookmark}) — 2-parent merge + atomic
-//      main-advance + atomic agent-bookmark delete (D-03 — single verb, no separate
-//      bookmarks.delete needed for the agent ref).
-//   6. workspace.remove(wt, {force}) — composite forget+rm on jj; worktree remove --force on git
-//   7. bookmarks.delete{force} — safety-net delete (D-09). jj's workspace.merge
-//      atomically deletes the agent bookmark inside the merge verb, so this
-//      step is a no-op there. git's `branch -D` inside merge fails silently
-//      while the worktree is still checked out (merge surfaces the issue in
-//      stderr but r.ok stays true). After workspace.remove unregisters the
-//      worktree, this idempotent delete sweeps up the orphan branch.
+// Phase 11 Plan 03 (D-05): private helper — adapts a legacy plan-shape
+// (entries with worktree_path / branch / expected_base / main_bookmark) into
+// a frozen pure-JSON `ParallelDispatchHandle` per Phase 9 D-05 conventions.
+// `Object.freeze` on outer + inner mirrors `sdk/src/vcs/jj/parallel.ts:270-289`.
+// Not exported — internal to this module.
+function reconstructHandleFromLegacyPlan(plan) {
+  const entries = Array.isArray(plan?.entries) ? plan.entries : [];
+  return Object.freeze({
+    phaseRoot: plan.repoRoot,
+    phaseNumber: plan.phaseNumber ?? 0,
+    mainBookmark: entries[0]?.main_bookmark ?? '',
+    // Legacy callers had no manifest file path on disk; the fan-in body
+    // discovers workspaces from `handle.workspaces[]` directly.
+    manifest: '',
+    workspaces: Object.freeze(entries.map((e, i) => Object.freeze({
+      name: `legacy-${i + 1}`,
+      path: e.worktree_path,
+      baseRev: e.expected_base,
+      agentId: (e.branch || '').replace(/^worktree-agent-/, ''),
+      baselineOpId: undefined,
+    }))),
+  });
+}
+
+// Phase 11 Plan 03 (D-05): Body shrunk to a single `vcs.workspace.parallel.fanIn`
+// delegation. The seven pre-merge guards that previously lived in the per-entry
+// loop are retired — their work is now done inside the cross-backend
+// `parallel.fanIn` adapter primitive shipped in Phases 9/10/11.1. Legacy
+// callers (tests + back-compat code) keep the same public signature; their
+// plan shape is adapted into a frozen pure-JSON `ParallelDispatchHandle` via
+// `reconstructHandleFromLegacyPlan`.
+//
+// Reason taxonomy on the returned `pending[]` is now:
+//   - 'merge_conflict'      — fanIn surfaced in-tree conflicts (FanInResult.conflictedPaths)
+//   - 'crashed_agent'       — fanIn could not reap an agent workspace (FanInResult.failedReaped)
+//   - 'incomplete_queued'   — fanIn classified one or more agents as incomplete
+//   - 'unexpected_error'    — adapter threw (caught at the outer boundary)
+//
+// D-06 (load-bearing tradeoff): the orchestrator-side destructive-merge
+// pre-check that caught #3091-class issues is DROPPED here. The defense moves
+// to the agent's `<task_commit_protocol>` step 6 in `agents/gsd-executor.md`
+// (post-commit `gsd-sdk query diff --diff-filter D`).
+//
 // The _deps={} injection seam (ADR-0004) is preserved for test stubbing — tests
 // pass {vcs: …} to override the auto-detected adapter.
 function executeWorktreeWaveCleanupPlan(plan, _deps = {}) {
@@ -426,132 +453,47 @@ function executeWorktreeWaveCleanupPlan(plan, _deps = {}) {
     };
   }
   const vcs = _deps.vcs ?? createVcsAdapter(plan.repoRoot, {});
-  const processed = [];
   const pending = [];
-  for (const entry of entries) {
-    try {
-      // Verb 1: confirm branch at worktree matches expectation.
-      const branches = vcs.refs.currentBookmarksIn(entry.worktree_path);
-      if (!branches.includes(entry.branch)) {
-        pending.push({ ...entry, reason: 'branch_drift', detected: branches });
-        continue;
-      }
-      // Verbs 2 + 3: deletion guard. mergeBase returns change_id on jj, hash
-      // on git; expr.range translates recursively on both backends.
-      const base = vcs.refs.mergeBase(vcs.refs.head, expr.bookmark(entry.branch));
-      const dels = vcs.diff({
-        rev: expr.range(expr.rev(base), expr.bookmark(entry.branch)),
-        diffFilter: 'deleted',
-        nameOnly: true,
-      });
-      if (Array.isArray(dels.nameOnly) && dels.nameOnly.length > 0) {
-        pending.push({ ...entry, reason: 'deletions_detected', files: dels.nameOnly });
-        continue;
-      }
-      // Verb 4: dirty-WC guard at the worktree's own cwd.
-      const wtStatus = vcs.status({ porcelain: true, cwd: entry.worktree_path });
-      if (Array.isArray(wtStatus.entries) && wtStatus.entries.length > 0) {
-        pending.push({ ...entry, reason: 'worktree_dirty', entries: wtStatus.entries });
-        continue;
-      }
-      // D-03: workspace.merge REQUIRES a named main bookmark for its atomic
-      // main-advance step. Prefer the manifest entry's main_bookmark; fall
-      // back to the repo's current bookmark when callers haven't been updated
-      // to populate the field. If neither resolves, surface as pending —
-      // we cannot safely call workspace.merge without a target.
-      const mainBookmarkName = entry.main_bookmark
-        ?? (vcs.refs.currentBookmarksIn(plan.repoRoot)[0] ?? null);
-      if (!mainBookmarkName) {
-        pending.push({ ...entry, reason: 'no_main_bookmark', repoRoot: plan.repoRoot });
-        continue;
-      }
-      // Verb 5: 2-parent merge with atomic main-advance + atomic agent-bookmark
-      // cleanup (D-03). agentBookmark threads the agent ref through so the
-      // merge verb deletes it inside the same lock window as the main-advance.
-      const merge = vcs.workspace.merge({
-        branch: expr.bookmark(entry.branch),
-        message: `chore: merge executor worktree (${entry.branch})`,
-        ff: false,
-        mainBookmark: mainBookmarkName,
-        agentBookmark: entry.branch,
-      });
-      if (!merge.ok) {
-        pending.push({
-          ...entry,
-          reason: merge.conflicted ? 'merge_conflict' : 'merge_failed',
-          stderr: merge.stderr,
-        });
-        continue;
-      }
-      // Verb 6: composite worktree removal (jj: forget + rm -rf; git: worktree
-      // remove --force). On unhandled throw the per-entry catch below records
-      // the failure as 'unexpected_error'.
-      vcs.workspace.remove(entry.worktree_path, { force: true });
-      // Verb 7: bookmarks.delete{force} as a safety net. D-03 says
-      // workspace.merge deletes the agent bookmark atomically — and on jj it
-      // does — but on git, `git branch -D <agent>` inside merge fails silently
-      // when the agent worktree is still checked out (merge.stderr surfaces it,
-      // r.ok stays true). Now that workspace.remove has unregistered the
-      // worktree, branch-delete succeeds. This is exactly the D-09 use case
-      // for the standalone delete verb: branches the merge step couldn't
-      // reach. Idempotent on jj (bookmark already gone → no-op) and on git
-      // (branch already gone → exits with `branch '...' not found`, which
-      // we swallow because the desired post-state is "no such bookmark").
-      if (vcs.refs.bookmarks.exists(entry.branch, { raw: true })) {
-        try {
-          vcs.refs.bookmarks.delete(entry.branch, { raw: true, force: true });
-        } catch {
-          // Best-effort: the desired post-state is "bookmark gone". If the
-          // backend errors on a non-existent ref, surface as unexpected_error
-          // via the outer catch only when the bookmark genuinely still exists
-          // post-attempt — checked below.
-        }
-      }
-      processed.push({ ...entry, mergedAs: merge.changeId });
-    } catch (err) {
-      pending.push({ ...entry, reason: 'unexpected_error', error: err.message });
-    }
-  }
-  return { ok: pending.length === 0, action: plan.action, entries: processed, pending };
-}
-
-function cmdWorktreeCleanupWave(cwd, args = []) {
-  const manifestFlagIndex = args.indexOf('--manifest');
-  const manifestPath = manifestFlagIndex >= 0 ? args[manifestFlagIndex + 1] : '';
-  if (!manifestPath) {
-    process.stderr.write('Usage: worktree cleanup-wave --manifest <path>\n');
-    process.exitCode = 2;
-    return;
-  }
-
-  let manifest;
   try {
-    manifest = fs.readFileSync(path.resolve(cwd, manifestPath), 'utf8');
-  } catch (err) {
-    process.stdout.write(`${JSON.stringify({
-      ok: false,
-      reason: 'manifest_read_failed',
-      error: err.message,
-    }, null, 2)}\n`);
-    process.exitCode = 1;
-    return;
-  }
-
-  const plan = planWorktreeWaveCleanup(cwd, manifest);
-  const result = executeWorktreeWaveCleanupPlan(plan);
-  const response = {
-    ok: result.ok,
-    plan: {
+    const handle = reconstructHandleFromLegacyPlan(plan);
+    // Legacy callers don't carry per-agent exit codes; treat every entry as a
+    // successful exit so the only failure modes that surface are
+    // 'merge-in-tree-conflict' (fanIn.conflicted/conflictedPaths) and
+    // 'unexpected_error' (outer catch). Per Plan 11.03 Assumption A3.
+    const results = plan.entries.map((e) => ({
+      agentId: (e.branch || '').replace(/^worktree-agent-/, ''),
+      exitCode: 0,
+    }));
+    const fanIn = vcs.workspace.parallel.fanIn(handle, results);
+    for (const file of fanIn.conflictedPaths || []) {
+      pending.push({ reason: 'merge_conflict', file });
+    }
+    for (const subagentName of fanIn.failedReaped || []) {
+      pending.push({ reason: 'crashed_agent', subagentName });
+    }
+    if ((fanIn.incompleteQueued || 0) > 0) {
+      pending.push({ reason: 'incomplete_queued', count: fanIn.incompleteQueued });
+    }
+    const processedFromHandle = handle.workspaces.map((ws, i) => {
+      const src = plan.entries[i] || {};
+      return {
+        ...src,
+        worktree_path: ws.path,
+        branch: src.branch,
+        expected_base: ws.baseRev,
+        main_bookmark: src.main_bookmark ?? handle.mainBookmark,
+        ok: !fanIn.conflicted && (fanIn.failedReaped || []).length === 0,
+      };
+    });
+    return {
+      ok: fanIn.conflicted === false && (fanIn.failedReaped || []).length === 0,
       action: plan.action,
-      discovery: plan.discovery,
-      reason: plan.reason,
-      entries: plan.entries.length,
-    },
-    result,
-  };
-  process.stdout.write(`${JSON.stringify(response, null, 2)}\n`);
-  if (!result.ok) {
-    process.exitCode = 1;
+      entries: processedFromHandle,
+      pending,
+    };
+  } catch (err) {
+    pending.push({ reason: 'unexpected_error', message: err && err.message ? err.message : String(err) });
+    return { ok: false, action: plan.action, entries: [], pending };
   }
 }
 
@@ -565,13 +507,14 @@ module.exports = {
   snapshotWorktreeInventory,
   normalizeCleanupManifest,
   planWorktreeWaveCleanup,
-  // Phase 7 WAVE-01 (Plan 07-02): executeWorktreeWaveCleanupPlan orchestrates
-  // the 7 wave-cleanup verbs from Plan 07-01 (refs.currentBookmarksIn,
-  // refs.mergeBase, diff{diffFilter}, status{cwd}, workspace.merge,
-  // workspace.remove, refs.bookmarks.delete{force}). See the header comment
-  // on the function for the canonical orchestration order.
+  // Phase 11 Plan 03 (D-05): executeWorktreeWaveCleanupPlan delegates to
+  // `vcs.workspace.parallel.fanIn`. The CJS alias for the cleanup-wave CLI
+  // handler is retired (RESEARCH Open Question 1) — workflow markdown call
+  // sites are deleted by Plans 11.5/11.6, and the SDK-side
+  // `worktree.cleanup-wave` catalog entry (sdk/src/query/worktree.ts) remains
+  // the routing front door until the same plans rewrite to
+  // `workspace.parallel.fan-in`.
   executeWorktreeWaveCleanupPlan,
-  cmdWorktreeCleanupWave,
   // [Rule 3 — Plan 01-03]: exposed for VcsAdapter.workspace.list (RESEARCH Pitfall 5).
   // ADR-0004 names this module as the canonical owner of `git worktree` porcelain
   // parsing; the VCS adapter consumes via DI rather than duplicating the parser.
