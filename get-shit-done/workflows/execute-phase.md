@@ -538,6 +538,20 @@ increases monotonically across waves. `{status}` is `complete` (success),
    # intentionally unquoted here so word-splitting feeds each plan-id as a separate jq -R . input.
    # Adding quotes would put the entire space-joined list into a single jq line. The attack surface
    # for shell-meta injection is empty by construction; see Plan 11-10 D-04 / T-11-10-04.
+   #
+   # Zero-element guard (Plan 11 WR-N01): this construction is only correct when
+   # WAVE_WORKTREE_PLANS is non-empty. `printf '%s\n' ""` emits a single newline byte;
+   # jq reads it as one empty string, and the pipeline produces [{"agentId":"","planId":""}]
+   # — a phantom workspace dispatch. The entry into this dispatch block must therefore
+   # guarantee WAVE_WORKTREE_PLANS is non-empty (currently enforced by
+   # per-plan-worktree-gate.md appending plan_ids when USE_WORKTREES_FOR_PLAN != false,
+   # combined with the worktree-mode branch entry condition). The explicit guard below
+   # surfaces a clean FATAL if a future refactor flips the entry guard.
+   if [ -z "$WAVE_WORKTREE_PLANS" ]; then
+     echo "FATAL: worktree-mode dispatch entered with empty WAVE_WORKTREE_PLANS — refusing to dispatch a phantom wave." >&2
+     echo "RECOVERY: this indicates a per-plan-worktree-gate.md state-machine drift — every plan in this wave was gated to sequential mode but the orchestrator entered the worktree-mode dispatch branch anyway." >&2
+     exit 1
+   fi
    WAVE_WORKTREE_PLANS_JSON=$(printf '%s\n' $WAVE_WORKTREE_PLANS | jq -R . | jq -sc 'map({agentId: ., planId: .})')
    HANDLE_JSON=$(printf '%s' "$WAVE_WORKTREE_PLANS_JSON" \
      | gsd-sdk query workspace.parallel.dispatch \
