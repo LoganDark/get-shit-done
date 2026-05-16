@@ -517,6 +517,21 @@ export function performGitParallelFanIn(
 					`parallel.fanIn: STEP 2 worktree remove failed for ${agentBookmark} (exit ${removeResStep2.exitCode}): ${stderrFirstLine}\n`,
 				);
 			}
+		} else {
+			// WR-05: when STEP 2's worktree remove SUCCEEDS (clean-WC crashed
+			// agent — the agent committed its partial work before crashing,
+			// so the worktree is clean and non-force `worktree remove` does
+			// not refuse), the agent's branch must be deleted explicitly.
+			// STEP 3's audit (line 491-502) otherwise enumerates the
+			// orphaned `worktree-agent-<id>` ref against `expectedNames` and
+			// double-counts it into `surplusBookmarks` — the same crashed
+			// agent would end up in BOTH the incomplete-work queue
+			// (intentional, the inspection handle per Pitfall 3) AND
+			// `surplusBookmarks` (unintentional double-count). `--` matches
+			// the WR-01 fix in STEP 1; `-D` force-deletes because the branch
+			// is not merged into main (the work is preserved in the queue
+			// file's reference to its tip SHA).
+			vcsExec(mainRepoRoot, 'git', ['branch', '-D', '--', agentBookmark]);
 		}
 		failedReaped.push(ws.name);
 	}
