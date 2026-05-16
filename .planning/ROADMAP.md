@@ -115,7 +115,7 @@ Plans:
 
 **Wave 5** *(gap closure — blocked on Wave 4 completion; same-file dep)*
 
-- [ ] 10-06-PLAN.md — Close SC5 lint gap: swap hex regex `/^[0-9a-f]{12}$/` at cmd-parallel-git.test.ts:355 for `toBeIdOf('git', { allowShort: true })` custom matcher; unblocks lint-vcs-no-commit-id CI gate
+- [x] 10-06-PLAN.md — Close SC5 lint gap: swap hex regex `/^[0-9a-f]{12}$/` at cmd-parallel-git.test.ts:355 for `toBeIdOf('git', { allowShort: true })` custom matcher; unblocks lint-vcs-no-commit-id CI gate
 
 ### Phase 11: Orchestrator + agent rewire + workspace.assert-dispatched-cwd
 
@@ -194,7 +194,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 9. jj-side parallel verbs | 5/5 | Complete   | 2026-05-15 |
-| 10. git-side parallel verbs + classifier extension | 5/6 | In Progress|  |
+| 10. git-side parallel verbs + classifier extension | 6/6 | Complete   | 2026-05-16 |
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 0/0 | Not started | - |
 | 12. A3 colocated pre-commit fix (parallel track) | 0/0 | Not started | - |
 | 13. CI parallel-path lane + lint close-gate | 0/0 | Not started | - |
