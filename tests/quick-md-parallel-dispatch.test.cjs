@@ -18,6 +18,23 @@
 //
 // This test pins every invariant Plan 11-08 corrects so future edits cannot silently
 // re-open either blocker.
+//
+// Run-2 (Plan 11-10): the run-1 closure (Plan 11-08) hardened the GUARDS in
+//   execute-phase.md but left the dispatch line itself referencing an undefined
+//   $WAVE_WORKTREE_PLANS_JSON shell variable AND passing the literal template
+//   placeholder "{phase_number}" to --phase (which bash does NOT expand inside a
+//   fenced bash block). Both BLOCKERs fired simultaneously on every wave dispatch.
+//   Plan 11-10 lands the two one-line fixes (jq pipeline construction +
+//   ${PHASE_NUMBER} bash variable) AND extends the EXEC carry-over describe-block
+//   below with three new assertions so neither BLOCKER can silently regress:
+//     (1) plan-shape carry-over — pins WAVE_WORKTREE_PLANS_JSON construction +
+//         {agentId,planId} field names matching the SDK verb contract.
+//     (2) numeric --phase carry-over — pins bash-variable form ${PHASE_NUMBER}
+//         and forbids the literal {phase_number} placeholder in execute-phase.md.
+//     (3) accumulator-source pin — pins that WAVE_WORKTREE_PLANS_JSON is built
+//         from $WAVE_WORKTREE_PLANS (the per-plan-worktree-gate.md:94 accumulator).
+//   The regression net is now symmetric across QUICK and EXEC for all three
+//   CR-02 sub-invariants (plan-shape, numeric --phase, HANDLE_OK guard).
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -49,6 +66,21 @@ test.describe('CR-02 execute-phase.md carry-over', () => {
 	test.test('HANDLE_OK FATAL guard symmetric on execute-phase.md', () => {
 		assert.match(EXEC, /HANDLE_OK=\$\(echo "\$HANDLE_JSON" \| jq -r '\.ok \/\/ "true"'\)/, 'CR-02 carry-over: execute-phase.md must extract .ok with default "true"');
 		assert.match(EXEC, /\[ "\$HANDLE_OK" = "false" \]/, 'CR-02 carry-over: execute-phase.md must FATAL when HANDLE_OK == false');
+	});
+
+	test.test('plan-shape: WAVE_WORKTREE_PLANS_JSON is constructed with {agentId,planId} fields (Plan 11-10 run-2 carry-over)', () => {
+		assert.match(EXEC, /WAVE_WORKTREE_PLANS_JSON=\$\(/, 'CR-02 carry-over: execute-phase.md must CONSTRUCT WAVE_WORKTREE_PLANS_JSON, not just reference it (Plan 11-10 / PROMPT-06)');
+		assert.match(EXEC, /jq -sc '\s*map\(\{agentId:.*planId:.*\}\)/, 'CR-02 carry-over: execute-phase.md plan array must contain {agentId,planId} fields matching workspace-parallel-dispatch.ts:73 contract');
+		assert.doesNotMatch(EXEC, /\{plans:\[/, 'CR-02 carry-over: execute-phase.md must NOT wrap plan as {plans:[...]} (dispatch verb expects flat array)');
+	});
+
+	test.test('numeric --phase: bash variable ${PHASE_NUMBER}, never the literal {phase_number} placeholder (Plan 11-10 run-2 carry-over)', () => {
+		assert.match(EXEC, /--phase "\$\{PHASE_NUMBER\}"/, 'CR-02 carry-over: execute-phase.md must pass --phase via bash variable ${PHASE_NUMBER} (numeric at runtime)');
+		assert.doesNotMatch(EXEC, /--phase "\{phase_number\}"/, 'CR-02 carry-over: literal --phase "{phase_number}" is the workflow placeholder, NOT expanded in bash blocks (verb returns phase_number_required)');
+	});
+
+	test.test('accumulator-source: WAVE_WORKTREE_PLANS_JSON is built from the WAVE_WORKTREE_PLANS plan-id accumulator (Plan 11-10 run-2 carry-over)', () => {
+		assert.match(EXEC, /WAVE_WORKTREE_PLANS_JSON=\$\(printf '%s\\n' \$WAVE_WORKTREE_PLANS \|/, 'CR-02 carry-over: WAVE_WORKTREE_PLANS_JSON must be built from the WAVE_WORKTREE_PLANS plan-id accumulator (per-plan-worktree-gate.md:94)');
 	});
 });
 
