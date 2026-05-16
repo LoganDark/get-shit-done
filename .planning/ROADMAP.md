@@ -139,7 +139,7 @@ Plans:
   - [x] 11-05-PLAN.md — execute-phase.md raw-git delete + parallel-verb rewire (preserve sequential Agent() + orchestrator rule + stall surveillance) [Wave 3]
   - [x] 11-06-PLAN.md — quick.md raw-git delete + parallel-verb rewire (USE_WORKTREES gating, N=1 trivial) [Wave 3]
   - [x] 11-07-PLAN.md — Gap closure A: fix workspace-assert-dispatched-cwd.ts jj-side correctness (CR-01) + agent diagnostic dump (CR-04) + dispatch-cwd-safety.md doc cleanup (WR-03); flips VCS-20 + PROMPT-08 BLOCKED → SATISFIED [Wave 4]
-  - [ ] 11-08-PLAN.md — Gap closure B: fix quick.md dispatch shape + numeric --phase + HANDLE_OK guard (CR-02) + EXPECTED_BRANCH empty/HEAD pre-check in both quick.md and execute-phase.md (CR-03); flips PROMPT-07 BLOCKED → SATISFIED + PARALLEL-06 PARTIAL → SATISFIED [Wave 4]
+  - [x] 11-08-PLAN.md — Gap closure B: fix quick.md dispatch shape + numeric --phase + HANDLE_OK guard (CR-02) + EXPECTED_BRANCH empty/HEAD pre-check in both quick.md and execute-phase.md (CR-03); flips PROMPT-07 BLOCKED → SATISFIED + PARALLEL-06 PARTIAL → SATISFIED [Wave 4]
   - [x] 11-09-PLAN.md — Gap closure C: retire orphaned WAVE_WORKTREE_MANIFEST write in jj/parallel.ts (WR-01) + fix worktree-safety.cjs ok-derivation (WR-02) + document workspace.* verbs in gsd-tools.cjs --help (IN-02) + uniformly deprecation-guard worktree case (WR-04); architectural completion of D-01 invariant [Wave 4]
 
 ### Phase 12: A3 colocated pre-commit fix (parallel track)
@@ -205,7 +205,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 |-------|----------------|--------|-----------|
 | 9. jj-side parallel verbs | 5/5 | Complete   | 2026-05-15 |
 | 10. git-side parallel verbs + classifier extension | 6/6 | Complete    | 2026-05-16 |
-| 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 8/9 | In Progress|  |
+| 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 9/9 | Complete   | 2026-05-16 |
 | 12. A3 colocated pre-commit fix (parallel track) | 0/0 | Not started | - |
 | 13. CI parallel-path lane + lint close-gate | 0/0 | Not started | - |
 | 14. Default flip + dogfood validation | 0/0 | Not started | - |
