@@ -660,15 +660,24 @@ fi
 
 **Step 6: Spawn executor**
 
-Capture current HEAD before spawning (used for worktree branch check):
+Capture current HEAD + dispatch the quick task via the cross-backend parallel verb. Per Phase 11 D-01, no manifest file is written — the `ParallelDispatchHandle` JSON lives in `$HANDLE_JSON`. `maxConcurrency` is omitted (D-07). Quick mode typically dispatches N=1 (single executor); the parallel verb works trivially at N=1.
+
 ```bash
 EXPECTED_BASE=$(gsd-sdk query head-ref --cwd . --pick head)
+DISPATCH_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+EXPECTED_BRANCH=$(gsd-sdk query current-branch --cwd . --pick branch)
 if [ "${USE_WORKTREES:-true}" != "false" ]; then
-  QUICK_WORKTREE_MANIFEST=$(mktemp "${TMPDIR:-/tmp}/gsd-quick-worktree-XXXXXX.json")
-  printf '{"worktrees":[]}\n' > "$QUICK_WORKTREE_MANIFEST"
-  export QUICK_WORKTREE_MANIFEST
+  QUICK_PLAN_JSON=$(jq -nc --arg pid "${quick_id}" --arg pfile "${QUICK_DIR}/${quick_id}-PLAN.md" \
+    '{plans:[{id:$pid,planFile:$pfile}]}')
+  HANDLE_JSON=$(printf '%s' "$QUICK_PLAN_JSON" \
+    | gsd-sdk query workspace.parallel.dispatch \
+        --phase "quick" --main-bookmark "$EXPECTED_BRANCH" --plan @-)
+  [ -z "$HANDLE_JSON" ] && { echo "FATAL: workspace.parallel.dispatch returned empty Handle JSON" >&2; exit 1; }
+  RESULTS_ACCUM='[]'   # ParallelAgentResult[]; one appended per Agent() return
 fi
 ```
+
+Iterate `.workspaces[]` from `$HANDLE_JSON` (N=1 for quick mode — single iteration). Each entry is `{ name, path, baseRev, agentId, baselineOpId }`. `path` is the per-agent cwd; `agentId` keys the `ParallelAgentResult` accumulated for fan-in.
 
 Spawn gsd-executor with plan reference:
 
@@ -676,38 +685,6 @@ Spawn gsd-executor with plan reference:
 Agent(
   prompt="
 Execute quick task ${quick_id}.
-
-${USE_WORKTREES !== "false" ? `
-<worktree_branch_check>
-FIRST ACTION before any other work: verify this worktree's HEAD is bound to a per-agent
-branch and that the branch is based on the correct commit.
-
-Step 1 — HEAD attachment assertion (MANDATORY, runs before any reset/commit):
-  # TODO(05-05 sweep): the HEAD-attachment block is git-mode-only by construction — runs inside a Claude Code-spawned git worktree, the `worktree-agent-*` namespace is git-side, and `gsd-sdk query current-branch` returns the bookmarks-pointing-at-HEAD array (Phase 2.1 D-15) not the single-branch-name shape this block needs. Stays raw git until WS-01/WS-02 grows a jj-workspace equivalent prompt template; no D-33 backend conditional needed (git mode is the only path that reaches this prompt body).
-  HEAD_REF=$(git symbolic-ref --quiet HEAD || echo "DETACHED")
-  ACTUAL_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-  if [ "$HEAD_REF" = "DETACHED" ] || echo "$ACTUAL_BRANCH" | grep -Eq '^(main|master|develop|trunk|release/.*)$'; then
-    echo "FATAL: worktree HEAD is on '$ACTUAL_BRANCH' (expected per-agent branch like worktree-agent-*)." >&2
-    echo "Refusing to commit/reset on a protected ref. DO NOT self-recover via 'git update-ref refs/heads/$ACTUAL_BRANCH' — that destroys concurrent work (#2924)." >&2
-    echo "Aborting before any commits. Surface as a blocker for human review." >&2
-    exit 1
-  fi
-  if ! echo "$ACTUAL_BRANCH" | grep -Eq '^worktree-agent-[A-Za-z0-9._/-]+$'; then
-    echo "FATAL: worktree HEAD '$ACTUAL_BRANCH' is not in the worktree-agent-* namespace (Claude Code's per-agent worktree branch namespace)." >&2
-    echo "Refusing to commit; surface as blocker (#2924)." >&2
-    exit 1
-  fi
-
-Step 2 — Base correctness (only after Step 1 passes):
-  # TODO(05-05 sweep): no `gsd-sdk query merge-base` verb yet; the merge-base check stays raw git. The `git reset --hard` and HEAD-readback rewrite to the SDK forms below.
-  Run: git merge-base HEAD ${EXPECTED_BASE}
-  If the result differs from ${EXPECTED_BASE}, hard-reset to the correct base (safe — Step 1 confirmed HEAD is on a per-agent branch and the worktree is fresh):
-    gsd-sdk query reset --ref ${EXPECTED_BASE} --mode hard --cwd .
-  Then verify: if [ "$(gsd-sdk query head-ref --cwd . --pick head)" != "${EXPECTED_BASE}" ]; then echo "ERROR: Could not correct worktree base"; exit 1; fi
-
-This corrects a known issue where EnterWorktree creates branches from main instead of the feature branch HEAD (#2015) and prevents the destructive HEAD-on-master self-recovery path (#2924).
-</worktree_branch_check>
-` : ''}
 
 <files_to_read>
 - ${QUICK_DIR}/${quick_id}-PLAN.md (Plan)
@@ -770,23 +747,35 @@ SUMMARY.md and stop — the user must rerun with worktrees disabled.
 
 > **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
-If the executor ran with `isolation="worktree"`, append its returned `{agent_id, worktree_path, branch, expected_base}` metadata to `QUICK_WORKTREE_MANIFEST` before cleanup. If any field is unavailable, stop and ask for recovery; do not discover global worktrees.
+After each `Agent()` returns (N=1 in quick mode), append one `ParallelAgentResult` (`{ agentId, exitCode, lastChangeId?, stderr? }`) to `$RESULTS_ACCUM`. Probe the workspace head via `gsd-sdk query head-ref --cwd "$WS_PATH" --pick head`. `$HANDLE_JSON` is the source of truth for the workspace SET; do not re-discover via filesystem scans.
 
 After executor returns:
-1. **Worktree cleanup:** If the executor ran with `isolation="worktree"`, merge the worktree branch back and clean up:
+1. **Workspace fan-in:** If the executor ran with `isolation="worktree"`, merge the dispatched workspace back via `vcs.workspace.parallel.fanIn`. The adapter handles per-success cleanup (git) and atomic octopus merge + reap (jj). Per Phase 11 D-01, no manifest file is on disk — the Handle JSON in `$HANDLE_JSON` + the `$RESULTS_ACCUM` array are the full input.
    ```bash
-   QUICK_WORKTREE_MANIFEST=${QUICK_WORKTREE_MANIFEST:-$WAVE_WORKTREE_MANIFEST}
-   [ -n "${QUICK_WORKTREE_MANIFEST:-}" ] && [ -f "$QUICK_WORKTREE_MANIFEST" ] || {
-     echo "BLOCKED: missing QUICK_WORKTREE_MANIFEST; refusing broad worktree cleanup (#3384)." >&2
-     exit 1
-   }
+   if [ "${USE_WORKTREES:-true}" != "false" ] && [ -n "${HANDLE_JSON:-}" ]; then
+     # Branch-drift guard (#3174-class).
+     ORCH_BRANCH=$(gsd-sdk query current-branch --cwd . --pick branch 2>/dev/null)
+     [ -z "${EXPECTED_BRANCH:-}" ] || [ "$ORCH_BRANCH" = "$EXPECTED_BRANCH" ] || { echo "FATAL: orchestrator on '$ORCH_BRANCH' but expected '$EXPECTED_BRANCH' before fan-in (#3174-class drift)" >&2; exit 1; }
 
-   # Prefer the bounded cleanup helper. It verifies branch identity, expected
-   # base, deletion diffs, merge result, and worktree removal before branch
-   # deletion. If it blocks, resolve the reported manifest entry and rerun.
-   gsd-sdk query worktree.cleanup-wave --manifest "$QUICK_WORKTREE_MANIFEST" || exit 1
+     # Handle via tmpfile (CLI rejects both --handle @- and --results @- per Plan 11.2).
+     HANDLE_FILE=$(mktemp "${TMPDIR:-/tmp}/gsd-handle-XXXXXX.json")
+     printf '%s' "$HANDLE_JSON" > "$HANDLE_FILE"
+     FAN_RESULT=$(printf '%s' "$RESULTS_ACCUM" \
+       | gsd-sdk query workspace.parallel.fan-in --handle "@$HANDLE_FILE" --results @-)
+     rm -f "$HANDLE_FILE"
+
+     CONFLICTED=$(echo "$FAN_RESULT" | jq -r '.conflicted // false')
+     FAILED_REAPED=$(echo "$FAN_RESULT" | jq -r '.failedReaped // [] | length')
+     MERGED_COUNT=$(echo "$FAN_RESULT" | jq -r '.merged // [] | length')
+     if [ "$CONFLICTED" = "true" ] || [ "$FAILED_REAPED" -gt 0 ]; then
+       echo "⚠ Fan-in surfaced issues (conflicted=$CONFLICTED, failedReaped=$FAILED_REAPED)" >&2
+       echo "$FAN_RESULT" | jq .
+       exit 1
+     fi
+     echo "✓ Fan-in merged $MERGED_COUNT workspace(s) cleanly."
+   fi
    ```
-   If `workflow.use_worktrees` is `false`, skip this step.
+   If `workflow.use_worktrees` is `false` or `$HANDLE_JSON` is empty, skip this step.
 2. Verify summary exists at `${QUICK_DIR}/${quick_id}-SUMMARY.md`
 3. Extract commit hash from executor output
 4. Report completion status
