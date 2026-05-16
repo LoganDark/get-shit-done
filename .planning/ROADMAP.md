@@ -137,7 +137,7 @@ Plans:
   - [x] 11-03-PLAN.md — Shrink worktree-safety.cjs::executeWorktreeWaveCleanupPlan to fanIn delegation; remove cmdWorktreeCleanupWave alias [Wave 2]
   - [x] 11-04-PLAN.md — Collapse gsd-executor.md worktree-aware guards to assert-dispatched-cwd call; rename worktree-path-safety.md → dispatch-cwd-safety.md [Wave 3]
   - [x] 11-05-PLAN.md — execute-phase.md raw-git delete + parallel-verb rewire (preserve sequential Agent() + orchestrator rule + stall surveillance) [Wave 3]
-  - [ ] 11-06-PLAN.md — quick.md raw-git delete + parallel-verb rewire (USE_WORKTREES gating, N=1 trivial) [Wave 3]
+  - [x] 11-06-PLAN.md — quick.md raw-git delete + parallel-verb rewire (USE_WORKTREES gating, N=1 trivial) [Wave 3]
 
 ### Phase 12: A3 colocated pre-commit fix (parallel track)
 
@@ -202,7 +202,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 |-------|----------------|--------|-----------|
 | 9. jj-side parallel verbs | 5/5 | Complete   | 2026-05-15 |
 | 10. git-side parallel verbs + classifier extension | 6/6 | Complete    | 2026-05-16 |
-| 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 5/6 | In Progress|  |
+| 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 6/6 | Complete   | 2026-05-16 |
 | 12. A3 colocated pre-commit fix (parallel track) | 0/0 | Not started | - |
 | 13. CI parallel-path lane + lint close-gate | 0/0 | Not started | - |
 | 14. Default flip + dogfood validation | 0/0 | Not started | - |

@@ -34,7 +34,7 @@ Adapter interface + sidecar files. Mechanical wiring once the verb contracts in 
 Continues v1.1's PROMPT-04 (-242 LOC raw-git fallback delete) and v1.2's PROMPT-05 (zero `vcs.kind === 'jj'` id branches) pattern. Deletions are the architectural evidence.
 
 - [x] **PROMPT-06**: Delete the raw-git worktree dispatch + cleanup block in `get-shit-done/workflows/execute-phase.md:521-810` (~290 LOC). Replace with one `gsd-sdk query workspace.parallel.dispatch` call + one `… fan-in` call.
-- [ ] **PROMPT-07**: Delete the raw-git block in `get-shit-done/workflows/quick.md:660-810` (~150 LOC). Same single-verb replacement.
+- [x] **PROMPT-07**: Delete the raw-git block in `get-shit-done/workflows/quick.md:660-810` (~150 LOC). Same single-verb replacement.
 - [x] **PROMPT-08**: Collapse `agents/gsd-executor.md:412-555` worktree-aware blocks (4 blocks) into one `workspace.assert-dispatched-cwd` query call. Agents receive only a cwd — backend kind is never exposed (anti-feature: no `GSD_BACKEND_KIND` env var).
 - [x] **PROMPT-09**: Rename `get-shit-done/references/worktree-path-safety.md` → `dispatch-cwd-safety.md`; rewrite body to be backend-agnostic. Update all referrers.
 
@@ -118,7 +118,7 @@ Mapped during roadmap creation 2026-05-15. Updated 2026-05-15 after Phase 9 disc
 | VCS-19 | Phase 9 | Complete |
 | VCS-20 | Phase 11 | Complete |
 | PROMPT-06 | Phase 11 | Complete |
-| PROMPT-07 | Phase 11 | Pending |
+| PROMPT-07 | Phase 11 | Complete |
 | PROMPT-08 | Phase 11 | Complete |
 | PROMPT-09 | Phase 11 | Complete |
 | LINT-04 | Phase 13 | Pending |
