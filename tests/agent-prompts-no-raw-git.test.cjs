@@ -25,28 +25,36 @@
  * `workspace.assert-dispatched-cwd` envelope; Task 2 rewired
  * `agents/gsd-executor.md:431` to read it from the existing $DISPATCH_CHECK
  * payload via jq. This test (Task 3) pins the negative state class-wide so
- * future re-introductions of any READ-ONLY raw-git invocation in agent prompt
- * files fail at commit time.
+ * future re-introductions of any raw-git invocation in agent prompt files
+ * fail at commit time.
  *
- * Pattern choice (revision-1 BLOCKER 1 closure; load-bearing):
- *   GIT_INVOCATION_RE is intentionally NARROWED to READ-ONLY verbs only —
- *   (rev-parse|status|log|ls-files|cat-file|show|describe|rev-list).
+ * Pattern choice (WR-N02 / WR-N03 closure; load-bearing):
+ *   GIT_INVOCATION_RE covers the FULL read-side surface PLUS mutating verbs
+ *   (rev-parse|status|log|ls-files|cat-file|show|describe|rev-list|diff|
+ *    branch|worktree|config|for-each-ref|symbolic-ref|merge-base|name-rev|
+ *    tag|blame|remote|reflog|grep|ls-tree|fsck|fetch|clean|rm|checkout|
+ *    reset|update-ref|push).
+ *
+ *   Defect class is verb-agnostic: every raw-git read against `.git/index`
+ *   perturbs colocated jj state (atime updates, staleness-detection inputs).
+ *   The earlier read-only-only narrowing left 16+ common read verbs (diff,
+ *   branch, worktree, config, for-each-ref, etc.) silently uncovered, and
+ *   coupled the regex's safety to the contents of the prohibition block via
+ *   prose alone.
  *
  *   The `<destructive_git_prohibition>` block in agents/gsd-executor.md
- *   (lines ~497-529, preserved as-is per Phase 11 D-04) lists MUTATING verbs
- *   (clean, rm, checkout, reset, update-ref, push) by design — it forbids
- *   those operations. A broader pattern that included mutating verbs would
- *   false-fire on 11+ narrative mentions inside that block.
+ *   (lines ~501-529, preserved verbatim per Phase 11 D-04) intentionally
+ *   enumerates MUTATING verbs (clean, rm, checkout, reset, update-ref,
+ *   push) as forbidden operations — 11+ such mentions. The widened regex
+ *   would false-fire on every one. The fix is a POSITIONAL CARVE-OUT:
+ *   strip the prohibition block before grepping, so the regex covers the
+ *   complete git surface OUTSIDE that block. This makes the regex/block
+ *   coupling explicit (one is a region exclusion, the other is the body
+ *   being scanned) rather than relying on read-only/mutating asymmetry.
  *
- *   Read-only verbs have NO narrative analog in the prohibition prose, so
- *   this narrow pattern catches the actual defect class (line 431 was
- *   `git rev-parse`, a READ verb) without exempting legitimate documentation.
- *   Empirically verified: pre-Task-2 this pattern matches exactly line 431;
- *   post-Task-2 it matches nothing.
- *
- *   If a future agent-prompt regression introduces a MUTATING raw-git
- *   invocation, the existing project-wide lint catches it; this file-scoped
- *   test focuses on the read-side where defenses are thinnest.
+ *   A separate D-04 meta-assertion (test 5) pins the mutating-verb count
+ *   inside the prohibition block at ≥11 so widening the regex AND deleting
+ *   the prohibition block both force re-examination of this invariant.
  *
  * Extending to additional agent files: push the file's repo-relative path
  * into AGENT_FILES below. Test (4) iterates the array, so each addition is a
@@ -67,29 +75,49 @@ const AGENT_FILES = [
 	'agents/gsd-executor.md',
 ];
 
-// READ-ONLY verb subset only. See file-level docstring for the load-bearing
-// rationale: MUTATING-verb mentions inside <destructive_git_prohibition>
-// (lines ~497-529 of gsd-executor.md) are intentional documentation per
-// Phase 11 D-04; widening the pattern to include them would false-fire on
-// preserved prose. Read-only verbs have no narrative analog and are
-// precisely the defect class Plan 11-11 closes.
-const GIT_INVOCATION_RE = /\bgit\s+(rev-parse|status|log|ls-files|cat-file|show|describe|rev-list)\b/;
+// Full read-side + mutating verb surface. See file-level docstring for the
+// load-bearing WR-N02 / WR-N03 rationale. The earlier read-only-only
+// narrowing (rev-parse|status|log|ls-files|cat-file|show|describe|rev-list)
+// silently exempted 16+ common read verbs (diff, branch, worktree, config,
+// for-each-ref, symbolic-ref, merge-base, name-rev, tag, blame, remote,
+// reflog, grep, ls-tree, fsck, fetch) AND coupled the regex's safety to
+// prohibition-block contents via prose alone. The widened pattern + the
+// positional carve-out (`stripProhibitionBlock` below) is the robust fix.
+const GIT_INVOCATION_RE = /\bgit\s+(rev-parse|status|log|ls-files|cat-file|show|describe|rev-list|diff|branch|worktree|config|for-each-ref|symbolic-ref|merge-base|name-rev|tag|blame|remote|reflog|grep|ls-tree|fsck|fetch|clean|rm|checkout|reset|update-ref|push)\b/;
+
+// Positional carve-out (WR-N03 closure): the <destructive_git_prohibition>
+// block in agents/gsd-executor.md intentionally enumerates MUTATING verbs as
+// narrative prose. Scope the search to OUTSIDE that block so the regex above
+// covers the complete git surface without false-firing on preserved
+// documentation. The block boundary is the literal XML-style tag pair; if
+// the boundary tags ever move or rename, this carve-out fails closed
+// (block-match miss → no replacement → full file scanned → mutating-verb
+// mentions in the block surface as test failures, prompting the planner to
+// confront the D-04 invariant).
+const PROHIBITION_RE = /<destructive_git_prohibition>[\s\S]*?<\/destructive_git_prohibition>/;
 
 function readAgentFile(rel) {
 	return fs.readFileSync(path.join(repoRoot, rel), 'utf8');
 }
 
-test.describe('Plan 11-11 / project_no_raw_git: agent prompts contain no read-only raw-git invocations', () => {
-	test.test('agents/gsd-executor.md contains no read-only raw git invocations', () => {
+function stripProhibitionBlock(content) {
+	return content.replace(PROHIBITION_RE, '');
+}
+
+test.describe('Plan 11-11 / project_no_raw_git: agent prompts contain no raw-git invocations (full surface, prohibition-block-carved-out)', () => {
+	test.test('agents/gsd-executor.md contains no raw git invocations outside <destructive_git_prohibition>', () => {
 		const content = readAgentFile('agents/gsd-executor.md');
-		const match = content.match(GIT_INVOCATION_RE);
+		const scoped = stripProhibitionBlock(content);
+		const match = scoped.match(GIT_INVOCATION_RE);
 		assert.ok(
 			!match,
 			`project_no_raw_git violation in agents/gsd-executor.md: found raw "${match?.[0]}" invocation. ` +
 			'Per CLAUDE.md / MEMORY entry project_no_raw_git, all VCS reads in agent prompts must go through ' +
 			'gsd-sdk query verbs (the SDK adapter covers read AND write). Plan 11-11 retired the previous ' +
 			'`git rev-parse --show-toplevel` probe at line 431 by reading primaryWorkspacePath from the ' +
-			'workspace.assert-dispatched-cwd envelope; do not re-introduce raw-git read-side probes.',
+			'workspace.assert-dispatched-cwd envelope; do not re-introduce raw-git read-side probes. ' +
+			'The <destructive_git_prohibition> block is carved out by stripProhibitionBlock(); narrative ' +
+			'MUTATING-verb mentions inside that block are intentional documentation (Phase 11 D-04).',
 		);
 	});
 
@@ -112,9 +140,8 @@ test.describe('Plan 11-11 / project_no_raw_git: agent prompts contain no read-on
 			/<destructive_git_prohibition>/,
 			'Phase 11 D-04: the <destructive_git_prohibition> block must remain in agents/gsd-executor.md ' +
 			'verbatim — its narrative MUTATING-verb mentions (clean, rm, checkout, reset, update-ref, push) ' +
-			'are intentional documentation, NOT project-rule violations. If a future edit deletes this block, ' +
-			'the next planner who wants to widen GIT_INVOCATION_RE to include mutating verbs must confront ' +
-			'the D-04 implications first — co-evolution of the block + the regex is explicitly forced.',
+			'are intentional documentation, NOT project-rule violations. The carve-out in test (1) depends ' +
+			'on this block existing; deleting it would change the scoped-content semantics.',
 		);
 		assert.match(
 			content,
@@ -123,15 +150,47 @@ test.describe('Plan 11-11 / project_no_raw_git: agent prompts contain no read-on
 		);
 	});
 
-	test.test('all AGENT_FILES pass the read-only-git check (class-wide extension hook)', () => {
+	test.test('all AGENT_FILES pass the no-raw-git check with prohibition-block carve-out (class-wide extension hook)', () => {
 		for (const rel of AGENT_FILES) {
 			const content = readAgentFile(rel);
-			const match = content.match(GIT_INVOCATION_RE);
+			const scoped = stripProhibitionBlock(content);
+			const match = scoped.match(GIT_INVOCATION_RE);
 			assert.ok(
 				!match,
 				`project_no_raw_git violation in ${rel}: found raw "${match?.[0]}" invocation. ` +
 				'See test (1) failure message for the full rationale and remediation guidance.',
 			);
 		}
+	});
+
+	test.test('WR-N03 D-04 co-evolution pin: prohibition block mutating-verb count matches docstring claim', () => {
+		// The file-level docstring (and the legacy narrowed regex's safety
+		// argument) claims the <destructive_git_prohibition> block contains
+		// "11+" mutating-verb mentions (clean, rm, checkout, reset,
+		// update-ref, push). This meta-assertion pins that count so the
+		// regex/block co-evolution is enforced by an automated signal, not
+		// reviewer attention alone:
+		//
+		//   - Widening GIT_INVOCATION_RE further (or narrowing it back) AND
+		//     deleting prohibition-block mentions must both fail this test,
+		//     forcing the planner to re-examine the invariant.
+		//   - If the docstring claim of "11+" is updated, update the
+		//     threshold below in lockstep.
+		const content = readAgentFile('agents/gsd-executor.md');
+		const block = content.match(PROHIBITION_RE)?.[0] ?? '';
+		assert.ok(
+			block.length > 0,
+			'WR-N03: <destructive_git_prohibition> block not found — cannot enforce D-04 co-evolution invariant.',
+		);
+		const mutatingVerbs = /\bgit\s+(clean|rm|checkout|reset|update-ref|push)\b/g;
+		const count = (block.match(mutatingVerbs) || []).length;
+		assert.ok(
+			count >= 11,
+			`WR-N03 / Phase 11 D-04: <destructive_git_prohibition> block must contain ≥11 mutating-verb ` +
+			`mentions (file-level docstring claims "11+"). Found ${count}. If the count drops below the ` +
+			`docstring claim, EITHER restore the deleted mentions OR explicitly update both this assertion ` +
+			`AND the docstring rationale in lockstep — the regex's carve-out semantics depend on the ` +
+			`prohibition block remaining the canonical home for mutating-verb prose.`,
+		);
 	});
 });
