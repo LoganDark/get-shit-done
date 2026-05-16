@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: jj octopus merge for subagents fully functional
 status: executing
-stopped_at: Phase 11 context gathered
-last_updated: "2026-05-16T10:01:06.439Z"
-last_activity: 2026-05-16 -- Phase 11 planning complete
+stopped_at: Completed Phase 11 Plan 01
+last_updated: "2026-05-16T10:40:22.144Z"
+last_activity: 2026-05-16
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 17
-  completed_plans: 11
-  percent: 65
+  completed_plans: 12
+  percent: 67
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-15 at v1.3 open)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 10 — git-side-parallel-verbs-classifier-extension
+**Current focus:** Phase 11 — orchestrator-agent-rewire-workspace-assert-dispatched-cwd
 
 ## Current Position
 
-Phase: 10
-Plan: Not started
+Phase: 11 (orchestrator-agent-rewire-workspace-assert-dispatched-cwd) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
-Last activity: 2026-05-16 -- Phase 11 planning complete
+Last activity: 2026-05-16
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Last activity: 2026-05-16 -- Phase 11 planning complete
 | Phase 10-git-side-parallel-verbs-classifier-extension P04 | 10min | 1 tasks | 2 files |
 | Phase 10 P05 | 15min | 2 tasks | 2 files |
 | Phase 10 P06 | 5min | 1 tasks | 1 files |
+| Phase 11 P1 | 12min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,8 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.3-specific decisions 
 - [Phase ?]: Phase 10 Plan 03: lint allowlist net diff is +1 (entries: 23 -> 24) — single new entry for sdk/src/vcs/git/parallel.ts; honors framing-locked +0/+1 invariant from STATE.md
 - [Phase ?]: Phase 10 Plan 05: closed SC2/CR-01 (crashedAgentIds gate in STEP 1) + SC3/CR-02 (expectedNames filter in STEP 3); 6 literal it blocks / 8 vitest passes; pre-existing lint-vcs-no-commit-id failure at line 355 deliberately deferred to plan 10-06
 - [Phase ?]: Phase 10 Plan 06: SC5 closed via toBeIdOf matcher swap at line 355; zero allowlist diff; zero annotations
+- [Phase ?]: Phase 11 Plan 01: jj-side bookmark plumbing retired per D-02; FanInResult.surplusBookmarks contract preserved; test assertions flipped to vcs.workspace.list() source-of-truth; validateAgentBookmarkName helper deleted as dead code
+- [Phase ?]: Phase 11 Plan 01: clean-branch workspace-count assertion deviated from plan's literal '=== 0' to '=== handle.workspaces.length' because Phase 9 fanIn does not abandon clean-agent workspaces (cleanup wiring is downstream Phase 11 work); will flip back to 0 when 11.04/11.05 wires clean-workspace cleanup
 
 ### Pending Todos
 
@@ -127,10 +130,10 @@ Items acknowledged and carried forward from previous milestone close (status upd
 
 ## Session Continuity
 
-Last session: 2026-05-16T08:25:40.447Z
-Stopped at: Phase 11 context gathered
+Last session: 2026-05-16T10:40:22.138Z
+Stopped at: Completed Phase 11 Plan 01
 Resume file: 
 
-.planning/phases/11-orchestrator-agent-rewire-workspace-assert-dispatched-cwd/11-CONTEXT.md
+None
 
 - Phase 12 (A3 fix) is an independent parallel track — may be planned/executed in parallel with Phases 9/10/11; joins at Phase 13 CI integration.

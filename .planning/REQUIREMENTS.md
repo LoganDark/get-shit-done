@@ -15,7 +15,7 @@ The two new high-level verbs that define v1.3's deliverable surface. Verb namesp
 - [x] **PARALLEL-01**: `vcs.workspace.parallel.dispatch(plan): ParallelDispatchHandle` ships on both backends. jj composes `octopus.createPhaseStructure` + N× `createSubagentSlot`. git wraps `git worktree add` with internal serialization (Pitfall 5 — `.git/config.lock` race). Returns `{ phaseRoot, workspaces: [{ name, path, baseRev, agentId }], manifest, phaseNumber, mainBookmark }`. Handle is frozen pure JSON data (D-05 in `09-CONTEXT.md`).
 - [x] **PARALLEL-02**: `vcs.workspace.parallel.fanIn(handle, results): FanInResult` ships on both backends. jj uses one N-parent `jj new <p1>...<pN>` octopus form + batched `jj bookmark delete`. git iterates per-branch 2-parent `git merge --no-ff <agentBookmark>` + per-success `git branch -D`; halts on first conflict; idempotent under re-call via `merge-base --is-ancestor` skip. Returns `{ merged, conflicted, conflictedPaths, incompleteQueued, failedReaped, surplusBookmarks }` — same shape on both backends; `conflicted: boolean` distinguishes in-tree-conflict-success from crash (Pitfall 2). `results` arg shape: `Array<{ agentId, exitCode, lastChangeId?, stderr? }>` (D-07 in `09-CONTEXT.md`).
 - [x] **PARALLEL-05**: `ParallelDispatchHandle.workspaces[].baseRev` JSDoc documents stability semantics across `jj rebase` (rebase-stability differentiator — change_id stable on jj, commit_id stable on git per v1.2 unified revision model).
-- [ ] **PARALLEL-06**: `dispatch({ plan, maxConcurrency })` input field honored — numeric cap on concurrent agent workspaces. Default `undefined` (no cap; runtime's natural agent-cap rules). Differentiator surfaced for the dogfood phase's measurement story.
+- [x] **PARALLEL-06**: `dispatch({ plan, maxConcurrency })` input field honored — numeric cap on concurrent agent workspaces. Default `undefined` (no cap; runtime's natural agent-cap rules). Differentiator surfaced for the dogfood phase's measurement story.
 
 > **PARALLEL-03 and PARALLEL-04 dropped at Phase 9 discuss (2026-05-15)** — see `.planning/phases/09-jj-side-parallel-verbs/09-CONTEXT.md` D-01 / D-02. The orchestrator-awaits-`Agent()` invariant makes the liveness scenario impossible in production; `octopus.ts`'s topology gives each subagent a distinct change so no shared-ancestor concurrent-squash exists. No `acquireJjRepoLock`, no `liveWorkspaces` field on `FanInResult`.
 
@@ -111,7 +111,7 @@ Mapped during roadmap creation 2026-05-15. Updated 2026-05-15 after Phase 9 disc
 | ~~PARALLEL-03~~ | ~~Phase 9 + Phase 10~~ | **Dropped 2026-05-15 (Phase 9 D-01)** |
 | ~~PARALLEL-04~~ | ~~Phase 9~~ | **Dropped 2026-05-15 (Phase 9 D-02)** |
 | PARALLEL-05 | Phase 9 | Complete |
-| PARALLEL-06 | Phase 11 | Pending |
+| PARALLEL-06 | Phase 11 | Complete |
 | VCS-16 | Phase 9 | Complete |
 | VCS-17 | Phase 9 | Complete |
 | VCS-18 | Phase 10 | Complete |
