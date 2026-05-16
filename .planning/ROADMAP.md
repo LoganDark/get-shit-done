@@ -111,7 +111,7 @@ Plans:
 
 **Wave 4** *(gap closure — blocked on Wave 3 + initial verification)*
 
-- [ ] 10-05-PLAN.md — Close SC2 + SC3 gaps: STEP 1 crashed-agent gate (CR-01) + STEP 3 handle-scoped surplus sweep (CR-02) in sdk/src/vcs/git/parallel.ts; +2 regression tests in cmd-parallel-git.test.ts
+- [x] 10-05-PLAN.md — Close SC2 + SC3 gaps: STEP 1 crashed-agent gate (CR-01) + STEP 3 handle-scoped surplus sweep (CR-02) in sdk/src/vcs/git/parallel.ts; +2 regression tests in cmd-parallel-git.test.ts
 
 **Wave 5** *(gap closure — blocked on Wave 4 completion; same-file dep)*
 
@@ -194,7 +194,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 9. jj-side parallel verbs | 5/5 | Complete   | 2026-05-15 |
-| 10. git-side parallel verbs + classifier extension | 4/6 | Gap closure planned (10-05 + 10-06) | 2026-05-15 |
+| 10. git-side parallel verbs + classifier extension | 5/6 | In Progress|  |
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 0/0 | Not started | - |
 | 12. A3 colocated pre-commit fix (parallel track) | 0/0 | Not started | - |
 | 13. CI parallel-path lane + lint close-gate | 0/0 | Not started | - |
