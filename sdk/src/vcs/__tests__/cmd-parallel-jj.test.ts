@@ -122,7 +122,7 @@ for (const N of [2, 3, 4] as const) {
 			// and the default 5s budget runs hot for N ∈ {3, 4} on machines
 			// under load. No retry config (D-15) — timeout adjustment is the
 			// approved knob.
-			it(`N=${N}: dispatch creates ${N} distinct change_ids; clean fanIn returns conflicted===false, merged.length===1, surplusBookmarks empty; post-fanIn divergent() is empty`, { timeout: 30000 }, () => {
+			it(`N=${N}: dispatch creates ${N} distinct change_ids; clean fanIn returns conflicted===false, merged.length===1, workspaces reaped; post-fanIn divergent() is empty`, { timeout: 30000 }, () => {
 				const plan = Array.from({ length: N }, (_, i) => ({
 					agentId: `agent-${i + 1}`,
 					planId: `plan-${i + 1}`,
@@ -163,8 +163,8 @@ for (const N of [2, 3, 4] as const) {
 				}
 
 				// Clean fanIn (TEST-13, second must_have): merged carries the
-				// single N-parent merge change_id; conflicted is false; the
-				// surplusBookmarks D-08 invariant holds; no queue entries.
+				// single N-parent merge change_id; conflicted is false; no
+				// queue entries.
 				const result = vcs.workspace.parallel.fanIn(
 					handle,
 					handle.workspaces.map((w) => ({
@@ -175,9 +175,26 @@ for (const N of [2, 3, 4] as const) {
 				expect(result.conflicted).toBe(false);
 				expect(result.conflictedPaths.length).toBe(0);
 				expect(result.merged.length).toBe(1);
-				expect(result.surplusBookmarks.length).toBe(0);
 				expect(result.incompleteQueued).toBe(0);
 				expect(result.failedReaped.length).toBe(0);
+
+				// Phase 11 D-02 (cross-phase amendment): bookmark plumbing is
+				// retired on jj — the FanInResult.surplusBookmarks field stays on
+				// the type contract but is `[]` by construction on the clean
+				// branch. The post-fanIn workspace SET is now the source-of-truth
+				// for "the dispatched subagents are accounted for." Filter matches
+				// the octopus.ts:300 workspace-name shape `phase-${phaseTag}-subagent-{idx}`
+				// (parseJjWorkspaceList projects jj's `name` field into
+				// `WorkspaceInfo.path`, so `path` is the workspace NAME not an fs
+				// path). On the clean branch fanIn does not abandon clean-agent
+				// workspaces (cleanup wiring belongs to downstream Phase 11 plans),
+				// so all N dispatched workspaces are still present and accounted
+				// for.
+				const phaseTag = String(9).padStart(2, '0');
+				const remainingWorkspaces = vcs.workspace.list().filter((w) =>
+					w.path.startsWith(`phase-${phaseTag}-subagent-`),
+				);
+				expect(remainingWorkspaces.length).toBe(handle.workspaces.length);
 
 				// TEST-14 topology assertion: post-fanIn `divergent()` is empty.
 				// Runs against the same post-fanIn state the scenario just
@@ -284,14 +301,21 @@ describe.sequential.skipIf(!jjAvailable)(
 			);
 			// Bonus: incompleteQueued counter reflects the enqueue.
 			expect(result.incompleteQueued).toBeGreaterThanOrEqual(1);
-			// On the conflicted path the main bookmark was NOT advanced and the
-			// agent bookmarks were NOT deleted — so `merged` is empty (no clean
-			// merge change_id to report).
+			// On the conflicted path the main bookmark was NOT advanced — so
+			// `merged` is empty (no clean merge change_id to report).
 			expect(result.merged.length).toBe(0);
-			// And `surplusBookmarks` is empty by construction: the field reports
-			// unexpected LEFTOVERS from a delete-attempt, not "all bookmarks
-			// alive". No delete was attempted on the conflicted path.
-			expect(result.surplusBookmarks.length).toBe(0);
+			// Phase 11 D-02 (cross-phase amendment): `surplusBookmarks` is `[]`
+			// by construction — the bookmark plumbing retired. The dispatched
+			// workspace SET is LEFT INTACT on the conflicted path so the user
+			// can inspect the conflicted state; the post-fanIn count equals N
+			// (number of dispatched subagents). Filter targets `WorkspaceInfo.path`
+			// which carries jj's workspace NAME, not an fs path (see
+			// parseJjWorkspaceList contract).
+			const phaseTag = String(9).padStart(2, '0');
+			const remainingWorkspaces = vcs.workspace.list().filter((w) =>
+				w.path.startsWith(`phase-${phaseTag}-subagent-`),
+			);
+			expect(remainingWorkspaces.length).toBe(handle.workspaces.length);
 		});
 	},
 );
