@@ -1,176 +1,217 @@
 'use strict';
 /**
- * Phase 7 WAVE-01 — wave-cleanup executor integration tests.
+ * Phase 11 Plan 03 (D-05): wave-cleanup executor regression tests, flipped
+ * to assert the new fanIn-delegation behavior shape.
  *
- * Three scenarios per backend:
- *   1. Empty manifest → ok:true, reason:'empty_plan'.
- *   2. Branch-drift → pending[] with reason:'branch_drift'.
- *   3. Happy-path full chain → ok:true, mergedAs non-empty, main bookmark
- *      advanced (jj-side; git's bookmarks.list().rev is empty per Phase 1
- *      D-04), agent bookmark deleted atomically (D-03).
+ * Per Phase 11 D-05, the 7 pre-merge guards retired; reason taxonomy on
+ * `pending[]` is now:
+ *   - 'merge_conflict'      — FanInResult.conflictedPaths
+ *   - 'crashed_agent'       — FanInResult.failedReaped
+ *   - 'incomplete_queued'   — FanInResult.incompleteQueued > 0
+ *   - 'unexpected_error'    — adapter threw
  *
- * Backends are switched via the `vcsTest('auto', ...)` fixture from
- * tests/helpers.cjs which honors GSD_TEST_BACKENDS. The tests use the real
- * adapter from the fixture — no stub injection — because branch-drift and
- * happy-path both exercise `vcs.refs.currentBookmarksIn(cwd)` which needs
- * a real backend behind it.
+ * Test strategy:
+ *   1. Empty-plan contract preserved EXACTLY — new body still returns the
+ *      same shape (no adapter call required).
+ *   2. Original "branch-drift" regression INTENT (catch executor-side guard
+ *      violations) preserved via option (b) — mock the adapter at the
+ *      `_deps.vcs` boundary so we drive a synthetic FanInResult that
+ *      surfaces the equivalent failure as `merge_conflict`. The MOCK
+ *      adapter replaces the seven inline guards; the regression survives
+ *      as "non-clean FanInResult → non-empty pending[] with the correct
+ *      reason taxonomy."
+ *   3. Clean-merge contract preserved via a mock FanInResult that reports
+ *      no conflicts / no failed reaps — body must return ok:true.
+ *
+ * The previous live-fixture-driven branch-drift + happy-path tests on real
+ * adapters belonged to the per-entry-guard era; with the body delegating
+ * to a single SDK primitive, the executor's contract is best exercised
+ * via the adapter-mock boundary it was designed to expose (ADR-0004
+ * `_deps={}` seam).
  */
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 
 const wsafety = require('../get-shit-done/bin/lib/worktree-safety.cjs');
-const { vcsTest } = require('./helpers.cjs');
 
-vcsTest('auto', ({ getVcs, getCwd, getKind }) => {
-	test('Phase 7 WAVE-01: empty-plan returns ok:true with reason:empty_plan', () => {
-		const cwd = getCwd();
-		const r = wsafety.executeWorktreeWaveCleanupPlan(
-			{ entries: [], action: 'skip', repoRoot: cwd },
-			{ vcs: getVcs() },
-		);
-		assert.equal(r.ok, true);
-		assert.equal(r.reason, 'empty_plan');
-		assert.deepEqual(r.entries, []);
-		assert.deepEqual(r.pending, []);
-	});
+function makeMockVcs(fanInImpl) {
+  return {
+    workspace: {
+      parallel: {
+        fanIn: fanInImpl,
+      },
+    },
+  };
+}
 
-	test('Phase 7 WAVE-01: branch-drift — manifest claims wrong branch → pending[branch_drift]', () => {
-		const vcs = getVcs();
-		const cwd = getCwd();
-		// Seed a commit so HEAD exists.
-		fs.writeFileSync(path.join(cwd, 'bd-a.txt'), 'a');
-		vcs.commit({ files: ['bd-a.txt'], message: 'bd: seed' });
-		// Create a real agent bookmark at HEAD.
-		const ts = Date.now();
-		const realBranch = `worktree-agent-A-${ts}`;
-		vcs.refs.bookmarks.create(realBranch, vcs.refs.head, { raw: true });
-		// Feed a manifest entry claiming a DIFFERENT branch — this is the drift.
-		const claimedBranch = `worktree-agent-B-${ts}`;
-		// Resolve the current main bookmark so the manifest entry is well-formed
-		// even though the drift check fires before the merge step.
-		const mainNames = vcs.refs.currentBookmarksIn(cwd);
-		const mainName = mainNames[0] || 'main';
-		const plan = {
-			entries: [{
-				worktree_path: cwd,
-				branch: claimedBranch,
-				expected_base: 'HEAD',
-				main_bookmark: mainName,
-			}],
-			action: 'cleanup_wave',
-			repoRoot: cwd,
-		};
-		const r = wsafety.executeWorktreeWaveCleanupPlan(plan, { vcs });
-		assert.equal(r.ok, false);
-		assert.equal(r.entries.length, 0);
-		assert.equal(r.pending.length, 1);
-		assert.equal(r.pending[0].reason, 'branch_drift');
-		assert.ok(Array.isArray(r.pending[0].detected), 'pending[0].detected must be an array');
-		// Cleanup so subsequent tests see a clean state if snapshot/restore isn't active.
-		try { vcs.refs.bookmarks.delete(realBranch, { raw: true, force: true }); } catch { /* ignore */ }
-	});
+test('empty-plan returns ok:true with reason:empty_plan', () => {
+  // PRESERVED CONTRACT (Phase 7 WAVE-01 -> Phase 11 D-05): empty entries
+  // returns the same shape on the new code path. No adapter call needed.
+  const r = wsafety.executeWorktreeWaveCleanupPlan(
+    { entries: [], action: 'skip', repoRoot: '/repo/main' },
+  );
+  assert.equal(r.ok, true);
+  assert.equal(r.reason, 'empty_plan');
+  assert.deepEqual(r.entries, []);
+  assert.deepEqual(r.pending, []);
+});
 
-	test('Phase 7 WAVE-01: happy-path — full chain advances main bookmark and returns mergedAs', () => {
-		const vcs = getVcs();
-		const cwd = getCwd();
-		const kind = getKind();
-		// 1. Seed a base commit on main so HEAD is real.
-		fs.writeFileSync(path.join(cwd, 'hp-main.txt'), 'hp-main\n');
-		vcs.commit({ files: ['hp-main.txt'], message: 'hp: add main.txt' });
-		// 2. Resolve the current main bookmark name BEFORE branching off so the
-		//    name is stable (jj's `@-` parent moves as commits land). On a
-		//    fresh jj-colocated fixture there is no default bookmark — create
-		//    one explicitly at @- (where currentBookmarksIn looks) so the
-		//    merge step has a named target to advance.
-		let mainNames = vcs.refs.currentBookmarksIn(cwd);
-		if (mainNames.length === 0) {
-			const exprMod = require('../sdk/dist-cjs/vcs/index.js').expr;
-			// On jj, currentBookmarksIn reads bookmarks at @- (the committed
-			// parent). vcs.refs.head ("@") would put the bookmark on the empty
-			// working-copy draft. Place at @-/parent so the check sees it.
-			const baseRev = kind === 'jj-colocated' ? exprMod.parent() : vcs.refs.head;
-			vcs.refs.bookmarks.create('main', baseRev, { raw: true });
-			mainNames = vcs.refs.currentBookmarksIn(cwd);
-		}
-		assert.ok(mainNames.length > 0, 'expected a current main bookmark before merge');
-		const mainName = mainNames[0];
-		// 3. Create the agent bookmark at HEAD. The drift check at executor
-		//    runtime needs `currentBookmarksIn(<wt>)` to include the agent
-		//    branch — that requires a real second worktree on git (where
-		//    `currentBookmarksIn` reports HEAD's own branch only) and a
-		//    real second workspace on jj (where it reports the workspace's
-		//    `@-` bookmarks). `workspace.add` handles both.
-		const ts = Date.now();
-		const agentBranch = `worktree-agent-hp-${ts}`;
-		// jj: bookmark at @- (the committed parent) so currentBookmarksIn sees it.
-		// git: bookmark at HEAD.
-		const exprMod = require('../sdk/dist-cjs/vcs/index.js').expr;
-		const agentBaseRev = kind === 'jj-colocated' ? exprMod.parent() : vcs.refs.head;
-		vcs.refs.bookmarks.create(agentBranch, agentBaseRev, { raw: true });
-		// 4. Add a second worktree/workspace checked out to the agent branch.
-		//    The path layout for jj uses the D-16 convention so workspace.list()
-		//    can resolve the path back to a name in workspace.remove() (Pitfall
-		//    in Plan 01 RESEARCH §Pattern 4).
-		const wsName = `worktree-agent-hp-${ts}`;
-		const wtPath = kind === 'jj-colocated'
-			? path.join(cwd, '.claude', 'jj-workspaces', wsName)
-			: path.join(cwd, `wt-${wsName}`);
-		const expr = require('../sdk/dist-cjs/vcs/index.js').expr;
-		vcs.workspace.add({
-			path: wtPath,
-			baseRef: expr.bookmark(agentBranch),
-			...(kind === 'jj-colocated' ? { name: wsName } : {}),
-		});
-		// 5. In the agent's worktree/workspace, add a divergent commit so the
-		//    merge has work to integrate. We use a child adapter scoped to the
-		//    wt path to ensure commits land at the wt's `@`/HEAD, not the
-		//    orchestrator's.
-		const vcsLib = require('../sdk/dist-cjs/vcs/index.js');
-		const wtVcs = vcsLib.createVcsAdapter(wtPath, kind === 'jj-colocated' ? { kind: 'jj' } : { kind: 'git' });
-		fs.writeFileSync(path.join(wtPath, 'hp-agent.txt'), 'hp-agent\n');
-		wtVcs.commit({ files: ['hp-agent.txt'], message: 'hp: agent commit' });
-		// 6. Construct the manifest entry threading main_bookmark through.
-		const plan = {
-			entries: [{
-				worktree_path: wtPath,
-				branch: agentBranch,
-				expected_base: 'HEAD',
-				main_bookmark: mainName,
-			}],
-			action: 'cleanup_wave',
-			repoRoot: cwd,
-		};
-		// 7. Run the executor.
-		const r = wsafety.executeWorktreeWaveCleanupPlan(plan, { vcs });
-		// 8. Assert: ok=true, no pending entries, mergedAs is a non-empty backend identifier.
-		assert.equal(r.ok, true, `executor failed: ${JSON.stringify(r.pending)}`);
-		assert.equal(r.pending.length, 0);
-		assert.equal(r.entries.length, 1);
-		assert.equal(typeof r.entries[0].mergedAs, 'string');
-		assert.ok(r.entries[0].mergedAs.length > 0, 'mergedAs must be a non-empty identifier');
-		// 9. D-03 atomic agent-bookmark delete: the agent bookmark must be gone
-		//    on both backends regardless of how list().rev reports.
-		assert.equal(
-			vcs.refs.bookmarks.exists(agentBranch, { raw: true }),
-			false,
-			'agent bookmark must be deleted atomically post-merge (D-03)',
-		);
-		// 10. D-03 main-advance: the main bookmark must still exist. Cross-ID
-		//     equivalence is intentionally NOT asserted because the two IDs
-		//     live in different namespaces (D-05): `mergedAs` is the merge
-		//     result returned by workspace.merge — change_id on jj, commit
-		//     hash on git — while `bookmark.list().rev` is commit_id (non-empty
-		//     on jj, empty on git per Phase 1 D-04). Presence is the
-		//     load-bearing assertion: D-03 guarantees the bookmark survives
-		//     atomically; the contract test in Plan 01 directly verifies the
-		//     bookmark-advance side effect on each backend in its own ID space.
-		if (typeof vcs.refs.bookmarks.list === 'function') {
-			const after = vcs.refs.bookmarks.list();
-			const mainEntry = after.find((b) => b.name === mainName);
-			assert.ok(mainEntry, `main bookmark '${mainName}' must still exist after merge`);
-		}
-	});
+test('clean fanIn -> ok:true, pending empty (Phase 11 D-05 happy path)', () => {
+  // Mock the adapter at the ADR-0004 _deps={} seam: fanIn returns a
+  // clean FanInResult. Body must surface ok:true and no pending entries.
+  let captured;
+  const vcs = makeMockVcs((handle, results) => {
+    captured = { handle, results };
+    return {
+      merged: ['abc123'],
+      conflicted: false,
+      conflictedPaths: [],
+      incompleteQueued: 0,
+      failedReaped: [],
+      surplusBookmarks: [],
+    };
+  });
+  const plan = {
+    repoRoot: '/repo/main',
+    action: 'cleanup_wave',
+    phaseNumber: 11,
+    entries: [{
+      worktree_path: '/repo/.claude/worktrees/agent-a1',
+      branch: 'worktree-agent-a1',
+      expected_base: 'abc123',
+      main_bookmark: 'main',
+    }],
+  };
+  const r = wsafety.executeWorktreeWaveCleanupPlan(plan, { vcs });
+  assert.equal(r.ok, true);
+  assert.equal(r.pending.length, 0);
+  assert.equal(r.entries.length, 1);
+  // The synthetic Handle was reconstructed with workspaces of the right shape.
+  assert.equal(captured.handle.workspaces.length, 1);
+  assert.equal(captured.handle.workspaces[0].path, '/repo/.claude/worktrees/agent-a1');
+  assert.equal(captured.handle.workspaces[0].baseRev, 'abc123');
+  assert.equal(captured.handle.workspaces[0].agentId, 'a1');
+  // Results array sized to entries; default exitCode 0 per Plan 11.03 A3.
+  assert.equal(captured.results.length, 1);
+  assert.equal(captured.results[0].exitCode, 0);
+  assert.equal(captured.results[0].agentId, 'a1');
+});
+
+test('merge-conflict fanIn -> ok:false, pending[merge_conflict] (regression INTENT preserved per A3)', () => {
+  // Per Phase 11 D-05 the 7 pre-merge guards retire; original 'branch_drift'
+  // reason is no longer producible. The regression INTENT (catch executor
+  // pre-merge guard violations) survives as "non-clean FanInResult surfaces
+  // a meaningful pending[] entry with the new taxonomy."
+  //
+  // Option (b) flip from Plan 11-03 Task 2: drive a synthetic
+  // 'merge-in-tree-conflict' via the mocked adapter — the regression INTENT
+  // is preserved, the SHAPE moves to the adapter boundary.
+  const vcs = makeMockVcs(() => ({
+    merged: [],
+    conflicted: true,
+    conflictedPaths: ['src/foo.ts', 'src/bar.ts'],
+    incompleteQueued: 0,
+    failedReaped: [],
+    surplusBookmarks: [],
+  }));
+  const plan = {
+    repoRoot: '/repo/main',
+    action: 'cleanup_wave',
+    phaseNumber: 11,
+    entries: [{
+      worktree_path: '/repo/.claude/worktrees/agent-a1',
+      branch: 'worktree-agent-a1',
+      expected_base: 'abc123',
+      main_bookmark: 'main',
+    }],
+  };
+  const r = wsafety.executeWorktreeWaveCleanupPlan(plan, { vcs });
+  assert.equal(r.ok, false);
+  assert.equal(r.pending.length, 2);
+  for (const p of r.pending) {
+    assert.equal(p.reason, 'merge_conflict');
+    assert.ok(typeof p.file === 'string' && p.file.length > 0);
+  }
+});
+
+test('failed-reap fanIn -> ok:false, pending[crashed_agent] (new reason per A3)', () => {
+  // FanInResult.failedReaped surfaces as a new 'crashed_agent' pending entry.
+  // This is the post-D-05 producible reason that replaces the prior
+  // 'unexpected_error'-via-thrown-merge case.
+  const vcs = makeMockVcs(() => ({
+    merged: [],
+    conflicted: false,
+    conflictedPaths: [],
+    incompleteQueued: 0,
+    failedReaped: ['a1', 'a2'],
+    surplusBookmarks: [],
+  }));
+  const plan = {
+    repoRoot: '/repo/main',
+    action: 'cleanup_wave',
+    phaseNumber: 11,
+    entries: [
+      { worktree_path: '/wt/a1', branch: 'worktree-agent-a1', expected_base: 'abc', main_bookmark: 'main' },
+      { worktree_path: '/wt/a2', branch: 'worktree-agent-a2', expected_base: 'abc', main_bookmark: 'main' },
+    ],
+  };
+  const r = wsafety.executeWorktreeWaveCleanupPlan(plan, { vcs });
+  assert.equal(r.ok, false);
+  assert.equal(r.pending.length, 2);
+  for (const p of r.pending) {
+    assert.equal(p.reason, 'crashed_agent');
+    assert.ok(typeof p.subagentName === 'string');
+  }
+});
+
+test('incomplete-queued fanIn -> pending[incomplete_queued] surfaced once', () => {
+  const vcs = makeMockVcs(() => ({
+    merged: ['abc'],
+    conflicted: false,
+    conflictedPaths: [],
+    incompleteQueued: 3,
+    failedReaped: [],
+    surplusBookmarks: [],
+  }));
+  const plan = {
+    repoRoot: '/repo/main',
+    action: 'cleanup_wave',
+    phaseNumber: 11,
+    entries: [{
+      worktree_path: '/wt/a1',
+      branch: 'worktree-agent-a1',
+      expected_base: 'abc',
+      main_bookmark: 'main',
+    }],
+  };
+  const r = wsafety.executeWorktreeWaveCleanupPlan(plan, { vcs });
+  // ok stays true (no conflict, no failed reap) but pending carries the queued tally.
+  assert.equal(r.ok, true);
+  assert.equal(r.pending.length, 1);
+  assert.equal(r.pending[0].reason, 'incomplete_queued');
+  assert.equal(r.pending[0].count, 3);
+});
+
+test('adapter throw -> pending[unexpected_error], ok:false', () => {
+  const vcs = makeMockVcs(() => {
+    throw new Error('synthetic adapter failure');
+  });
+  const plan = {
+    repoRoot: '/repo/main',
+    action: 'cleanup_wave',
+    phaseNumber: 11,
+    entries: [{
+      worktree_path: '/wt/a1',
+      branch: 'worktree-agent-a1',
+      expected_base: 'abc',
+      main_bookmark: 'main',
+    }],
+  };
+  const r = wsafety.executeWorktreeWaveCleanupPlan(plan, { vcs });
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.entries, []);
+  assert.equal(r.pending.length, 1);
+  assert.equal(r.pending[0].reason, 'unexpected_error');
+  assert.ok(/synthetic adapter failure/.test(r.pending[0].message));
 });
