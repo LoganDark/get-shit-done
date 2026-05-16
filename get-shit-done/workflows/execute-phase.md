@@ -533,9 +533,15 @@ increases monotonically across waves. `{status}` is `complete` (success),
      echo "RECOVERY: check out a named branch/bookmark on the orchestrator before re-running." >&2
      exit 1
    fi
+   # WAVE_WORKTREE_PLANS_JSON: build the dispatch plan-array from the per-plan-worktree-gate.md:94
+   # accumulator. Plan IDs are filename-derived (matches glob 11-NN) — `$WAVE_WORKTREE_PLANS` is
+   # intentionally unquoted here so word-splitting feeds each plan-id as a separate jq -R . input.
+   # Adding quotes would put the entire space-joined list into a single jq line. The attack surface
+   # for shell-meta injection is empty by construction; see Plan 11-10 D-04 / T-11-10-04.
+   WAVE_WORKTREE_PLANS_JSON=$(printf '%s\n' $WAVE_WORKTREE_PLANS | jq -R . | jq -sc 'map({agentId: ., planId: .})')
    HANDLE_JSON=$(printf '%s' "$WAVE_WORKTREE_PLANS_JSON" \
      | gsd-sdk query workspace.parallel.dispatch \
-         --phase "{phase_number}" --main-bookmark "$EXPECTED_BRANCH" --plan @-)
+         --phase "${PHASE_NUMBER}" --main-bookmark "$EXPECTED_BRANCH" --plan @-)
    [ -z "$HANDLE_JSON" ] && { echo "FATAL: workspace.parallel.dispatch returned empty Handle JSON" >&2; exit 1; }
    HANDLE_OK=$(echo "$HANDLE_JSON" | jq -r '.ok // "true"')
    [ "$HANDLE_OK" = "false" ] && { echo "FATAL: workspace.parallel.dispatch failed: $HANDLE_JSON" >&2; exit 1; }
