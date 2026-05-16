@@ -6,12 +6,21 @@
  * create a merge conflict on every upstream-rebase cycle).
  *
  * Pure functions; both return frozen JSON (D-05). dispatch composes
- * `octopus.createPhaseStructure` + N× `octopus.createSubagentSlot`, eagerly
- * creates per-subagent bookmarks (RESEARCH §"What's missing for Phase 9" (a)),
- * and writes the extended WAVE_WORKTREE_MANIFEST with `plan_id` + `backend`
- * (VCS-19). fanIn runs a single N-parent `jj new`, probes conflicts via the
+ * `octopus.createPhaseStructure` + N× `octopus.createSubagentSlot` and writes
+ * the extended WAVE_WORKTREE_MANIFEST with `plan_id` + `backend` (VCS-19).
+ * fanIn runs a single N-parent `jj new`, probes conflicts via the
  * UPSTREAM-02 conflict-paths sidecar, and on the clean path advances the
- * main bookmark + batched bookmark delete (PARALLEL-02 jj-side, D-08).
+ * main bookmark (PARALLEL-02 jj-side).
+ *
+ * Phase 11 D-02 (cross-phase amendment): the eager per-subagent bookmark
+ * create loop in dispatch and the matching batched bookmark delete + surplus
+ * sweep in fanIn retired. The octopus structure already references each
+ * slot's head as a parent of the phase-merge change (N-parent `jj new`
+ * below), so the `gsd/phase-{NN}-subagent-{idx}` bookmarks were redundant
+ * scaffolding. `FanInResult.surplusBookmarks` stays on the type contract
+ * but is trivially `[]` on the clean branch by construction. Git side keeps
+ * `worktree-agent-*` branches — load-bearing backend asymmetry; git
+ * worktrees can't track anonymous heads ergonomically.
  *
  * On octopus in-tree conflict, fanIn appends an `IncompleteWorkEntry` with
  * `reason='merge-in-tree-conflict'` to the queue file at `handle.phaseRoot`
@@ -98,25 +107,11 @@ function validateAgentId(name: string): void {
 }
 
 /**
- * Inline refname validator — sidecar discipline prevents importing
- * `validateRefname` from `backends/jj.ts`. The agent-bookmark name shape is
- * locked at `gsd/phase-{NN}-subagent-{idx}` (two-digit phase, integer idx);
- * caller-supplied strings never reach this regex without first being
- * constructed from validated phase + idx pairs, but defense-in-depth keeps
- * the check here so any future caller drift fails loud.
- */
-function validateAgentBookmarkName(name: string): void {
-	if (!/^gsd\/phase-\d+-subagent-\d+$/.test(name)) {
-		throw new Error(
-			`parallel: agent-bookmark name "${name}" violates the gsd/phase-NN-subagent-N shape`,
-		);
-	}
-}
-
-/**
- * Inline main-bookmark refname validator — same UPSTREAM-02 reason as
- * `validateAgentBookmarkName`. Mirrors the safety floor of
- * `backends/jj.ts:validateRefname` callsite at :1184 without importing.
+ * Inline main-bookmark refname validator. Mirrors the safety floor of
+ * `backends/jj.ts:validateRefname` callsite at :1184 without importing
+ * (UPSTREAM-02 sidecar discipline). The agent-bookmark validator that used
+ * to live alongside this one retired in Phase 11 (D-02) along with the
+ * eager per-subagent bookmark creation loop in `performJjParallelDispatch`.
  */
 function validateMainBookmark(name: string): void {
 	// jj bookmark names accept `[A-Za-z0-9._/-]+` (the same character class
@@ -185,7 +180,6 @@ export function performJjParallelDispatch(
 	// non-conformant name into the handle.
 	validateMainBookmark(mainBookmark);
 
-	const phaseTag = String(phaseNumber).padStart(2, '0');
 	const phaseRoot = derivePhaseRoot(mainRepoRoot, phaseNumber);
 
 	// 1. Lazy phase structure (parent + merge slot). Idempotent.
@@ -221,29 +215,15 @@ export function performJjParallelDispatch(
 		});
 	}
 
-	// 3. Eager agent-bookmark creation (RESEARCH §"What's missing for Phase 9" (a)).
-	// One bookmark per subagent head, named `gsd/phase-{NN}-subagent-{idx}`.
-	// The fanIn batched delete relies on these names being present so the
-	// post-fanIn `surplusBookmarks` invariant (D-08) holds.
-	for (const slot of slots) {
-		const bookmarkName = `gsd/phase-${phaseTag}-subagent-${slot.idx}`;
-		validateAgentBookmarkName(bookmarkName);
-		// `-r <rev>` form per `octopus.ts:169` precedent. `--` separator before
-		// the user-influenced bookmark-name positional defends against any
-		// future drift in the name shape.
-		const bmArgs = [
-			...jjArgvFlags(mainRepoRoot),
-			'bookmark', 'create', '-r', slot.headChange, '--', bookmarkName,
-		];
-		const bmRes = vcsExec(mainRepoRoot, 'jj', bmArgs);
-		if (bmRes.exitCode !== 0) {
-			throw new Error(
-				`parallel.dispatch: bookmark create ${bookmarkName} failed: ${bmRes.stderr || bmRes.stdout}`,
-			);
-		}
-	}
+	// Phase 11 D-02 (cross-phase amendment): eager agent-bookmark creation
+	// retired. The octopus structure built by `createPhaseStructure` +
+	// `createSubagentSlot` already references each slot's head as a parent of
+	// the phase-merge change (see N-parent `jj new` in `performJjParallelFanIn`
+	// below) — bookmarks were redundant scaffolding. On jj this scaffolding now
+	// goes; on git the `worktree-agent-*` branches stay (load-bearing backend
+	// asymmetry — git worktrees can't track anonymous heads ergonomically).
 
-	// 4. WAVE_WORKTREE_MANIFEST writer (VCS-19). New fields: plan_id, backend.
+	// WAVE_WORKTREE_MANIFEST writer (VCS-19). New fields: plan_id, backend.
 	// Allocated under a fresh `mkdtemp` to avoid collisions with concurrent
 	// orchestrator processes (and with the workflow-markdown writer that
 	// collapses in Phase 11). Every agentId already passed `validateAgentId`
@@ -291,9 +271,10 @@ export function performJjParallelDispatch(
 
 /**
  * Phase 9 (VCS-16, PARALLEL-02 jj-side): fanIn — single N-parent `jj new`,
- * conflict probe, on-clean batched bookmark delete + main bookmark advance,
- * on-conflict W3 (a) `merge-in-tree-conflict` queue entry, and crashed-agent
- * reap via `performJjReap`.
+ * conflict probe, on-clean main-bookmark advance, on-conflict W3 (a)
+ * `merge-in-tree-conflict` queue entry, and crashed-agent reap via
+ * `performJjReap`. (Phase 11 D-02: per-subagent bookmark delete retired
+ * along with the matching create loop in dispatch.)
  *
  * W3 (a) rationale (D-16 joint-assertion lock-in): when the N-parent
  * octopus produces an in-tree conflict on otherwise CLEAN agents, fanIn
@@ -413,8 +394,8 @@ export function performJjParallelFanIn(
 	if (conflicted) {
 		// W3 (a): enqueue a merge-in-tree-conflict entry for the merge HEAD.
 		// The on-disk dir + workspace tracking for each agent are LEFT intact
-		// (no bookmark delete, no main-bookmark advance) so the user can
-		// inspect the conflicted state before resolving or discarding.
+		// (no main-bookmark advance) so the user can inspect the conflicted
+		// state before resolving or discarding.
 		const mergeEntry: IncompleteWorkEntry = {
 			subagentName: `phase-${phaseTag}-merge`,
 			changeIdShort: mergeChangeId.slice(0, 12),
@@ -424,14 +405,13 @@ export function performJjParallelFanIn(
 		appendIncomplete(handle.phaseRoot, mergeEntry);
 		incompleteQueued += 1;
 
-		// D-08: on the conflicted path no batched delete was attempted, so
-		// `surplusBookmarks` is by definition empty — the field reports
-		// unexpected leftovers from a delete-attempt, not all-bookmarks-alive.
+		// Phase 11 D-02: surplusBookmarks stays at its `[]` initialization on
+		// the conflicted branch too — no bookmark plumbing fires either way.
 		surplusBookmarks = [];
 	} else {
-		// Clean path: advance the main bookmark to the merge head, then
-		// batched-delete every agent bookmark in one `jj bookmark delete --`
-		// invocation (PARALLEL-02 jj-side).
+		// Clean path: advance the main bookmark to the merge head
+		// (PARALLEL-02 jj-side). Per Phase 11 D-02 there are no per-subagent
+		// agent-bookmarks to delete here — see comment block below.
 		validateMainBookmark(handle.mainBookmark);
 		const setArgs = [
 			...jjArgvFlags(mainRepoRoot),
@@ -444,53 +424,14 @@ export function performJjParallelFanIn(
 			);
 		}
 
-		// Derive agent-bookmark names from the workspace idx pattern. The
-		// dispatch contract guarantees workspaces are indexed 1..N in order;
-		// the bookmark name shape is `gsd/phase-{NN}-subagent-{idx}` per the
-		// dispatch loop above. Validate every name before the delete to
-		// preserve defense-in-depth against any future drift in dispatch.
-		const agentBookmarkNames: string[] = [];
-		for (let i = 0; i < handle.workspaces.length; i++) {
-			const name = `gsd/phase-${phaseTag}-subagent-${i + 1}`;
-			validateAgentBookmarkName(name);
-			agentBookmarkNames.push(name);
-		}
-		const delArgs = [
-			...jjArgvFlags(mainRepoRoot),
-			'bookmark', 'delete', '--', ...agentBookmarkNames,
-		];
-		const delRes = vcsExec(mainRepoRoot, 'jj', delArgs);
-		if (delRes.exitCode !== 0) {
-			throw new Error(
-				`parallel.fanIn: batched bookmark delete failed (N=${agentBookmarkNames.length}): ${delRes.stderr || delRes.stdout}`,
-			);
-		}
+		// Phase 11 D-02 (cross-phase amendment): batched bookmark-delete and
+		// post-delete surplus sweep retired. The dispatch loop no longer
+		// creates `gsd/phase-{NN}-subagent-{idx}` bookmarks, so there is
+		// nothing to delete here and the post-merge `surplusBookmarks` field
+		// is `[]` by construction. The type-contract field stays on
+		// `FanInResult` (default-initialized above) for cross-backend symmetry.
 
 		merged.push(mergeChangeId);
-
-		// D-08 invariant: re-list the gsd/phase-{NN}-subagent-* bookmark set
-		// post-delete; on the clean path the result MUST be empty. Surfacing
-		// any leftover is the cross-backend contract handed to plan 05.
-		//
-		// Bug-fix rationale (plan 09.05 Rule 1): `jj bookmark list` does NOT
-		// accept `--no-graph` (jj 0.41: "unexpected argument '--no-graph'") —
-		// unlike `jj log`, the `bookmark list` subcommand has no graph mode to
-		// suppress. Removing the flag.
-		const listArgs = [
-			...jjArgvFlags(mainRepoRoot),
-			'bookmark', 'list', '-T', 'name ++ "\n"',
-		];
-		const listRes = vcsExec(mainRepoRoot, 'jj', listArgs);
-		if (listRes.exitCode !== 0) {
-			throw new Error(
-				`parallel.fanIn: bookmark list post-delete failed: ${listRes.stderr || listRes.stdout}`,
-			);
-		}
-		const prefix = `gsd/phase-${phaseTag}-subagent-`;
-		surplusBookmarks = listRes.stdout
-			.split('\n')
-			.map((s) => s.trim())
-			.filter((s) => s.length > 0 && s.startsWith(prefix));
 	}
 
 	// 4. Reap crashed agents — those with exitCode !== 0 in the results array.
