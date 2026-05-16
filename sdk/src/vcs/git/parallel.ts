@@ -423,8 +423,22 @@ export function performGitParallelFanIn(
 		// (non-force per D-07 / ROADMAP SC1). On non-zero exit (D-07
 		// dirty-tree refusal), do NOT throw — record agentBookmark as
 		// surplus and continue.
+		//
+		// WR-04: `surplusBookmarks` is `readonly string[]` (locked at Phase 9
+		// D-08), so we cannot widen the contract field to carry per-entry
+		// cleanup-failure context. To preserve diagnosability of fs-error
+		// failures (vs. the expected D-07 dirty-tree refusal), emit the first
+		// line of `removeRes.stderr` to process.stderr — this surfaces in the
+		// same transcript the orchestrator already captures around vcsExec,
+		// without changing the pure-JSON return shape (D-13/D-16 carry).
 		const removeRes = vcsExec(mainRepoRoot, 'git', ['worktree', 'remove', ws.path]);
 		if (removeRes.exitCode !== 0) {
+			const stderrFirstLine = (removeRes.stderr || '').split('\n')[0].trim();
+			if (stderrFirstLine.length > 0) {
+				process.stderr.write(
+					`parallel.fanIn: worktree remove failed for ${agentBookmark} (exit ${removeRes.exitCode}): ${stderrFirstLine}\n`,
+				);
+			}
 			surplusBookmarks.push(agentBookmark);
 		} else {
 			// Worktree gone — try to delete the agent's branch. Failure
