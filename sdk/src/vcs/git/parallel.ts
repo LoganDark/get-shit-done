@@ -500,7 +500,24 @@ export function performGitParallelFanIn(
 		// push to surplusBookmarks here — the queue entry already tracks
 		// the survivor; surplusBookmarks is for branches that outlived a
 		// SUCCESSFUL fan-in cleanup, not for crashed-and-preserved trees.
-		vcsExec(mainRepoRoot, 'git', ['worktree', 'remove', ws.path]);
+		//
+		// WR-06: capture the ExecResult (was previously a statement-
+		// expression discarding both exit code AND stderr). On non-zero exit
+		// (the expected D-07 dirty-tree case AND any unexpected fs error),
+		// surface the first stderr line to process.stderr so the orchestrator
+		// transcript records WHY cleanup did not happen — distinguishing
+		// "worktree preserved on disk for inspection" from "fs error
+		// (worktree may also have survived)". Same approach as WR-04;
+		// failedReaped's `readonly string[]` contract stays unchanged.
+		const removeResStep2 = vcsExec(mainRepoRoot, 'git', ['worktree', 'remove', ws.path]);
+		if (removeResStep2.exitCode !== 0) {
+			const stderrFirstLine = (removeResStep2.stderr || '').split('\n')[0].trim();
+			if (stderrFirstLine.length > 0) {
+				process.stderr.write(
+					`parallel.fanIn: STEP 2 worktree remove failed for ${agentBookmark} (exit ${removeResStep2.exitCode}): ${stderrFirstLine}\n`,
+				);
+			}
+		}
 		failedReaped.push(ws.name);
 	}
 
