@@ -838,6 +838,27 @@ const NON_FAMILY_COMMAND_ALIASES = [
     "mutation": false
   },
   {
+    "canonical": "workspace.assert-dispatched-cwd",
+    "aliases": [
+      "workspace assert-dispatched-cwd"
+    ],
+    "mutation": false
+  },
+  {
+    "canonical": "workspace.parallel.dispatch",
+    "aliases": [
+      "workspace parallel.dispatch"
+    ],
+    "mutation": true
+  },
+  {
+    "canonical": "workspace.parallel.fan-in",
+    "aliases": [
+      "workspace parallel.fan-in"
+    ],
+    "mutation": true
+  },
+  {
     "canonical": "workstream.complete",
     "aliases": [
       "workstream complete"

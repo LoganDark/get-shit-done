@@ -17,6 +17,9 @@ import { intelStatus, intelDiff, intelSnapshot, intelValidate, intelQuery, intel
 import { writeProfile, generateClaudeProfile, generateDevPreferences, generateClaudeMd } from './profile-output.js';
 import { phaseMvpMode, taskIsBehaviorAdding, userStoryValidate } from './mvp.js';
 import { worktreeCleanupWave } from './worktree.js';
+import { workspaceAssertDispatchedCwdQuery } from './workspace-assert-dispatched-cwd.js';
+import { workspaceParallelDispatchQuery } from './workspace-parallel-dispatch.js';
+import { workspaceParallelFanInQuery } from './workspace-parallel-fan-in.js';
 
 export const DOMAIN_STATIC_CATALOG: ReadonlyArray<readonly [string, QueryHandler]> = [
   ['agent-skills', agentSkills],
@@ -62,6 +65,13 @@ export const DOMAIN_STATIC_CATALOG: ReadonlyArray<readonly [string, QueryHandler
   ['workstream progress', workstreamProgress],
   ['worktree.cleanup-wave', worktreeCleanupWave],
   ['worktree cleanup-wave', worktreeCleanupWave],
+  // Phase 11 (VCS-20 + PROMPT-06..09): workspace verbs for parallel orchestration.
+  ['workspace.assert-dispatched-cwd', workspaceAssertDispatchedCwdQuery],
+  ['workspace assert-dispatched-cwd', workspaceAssertDispatchedCwdQuery],
+  ['workspace.parallel.dispatch', workspaceParallelDispatchQuery],
+  ['workspace parallel.dispatch', workspaceParallelDispatchQuery],
+  ['workspace.parallel.fan-in', workspaceParallelFanInQuery],
+  ['workspace parallel.fan-in', workspaceParallelFanInQuery],
   ['docs-init', docsInit],
   ['websearch', websearch],
   ['learnings.copy', learningsCopy],

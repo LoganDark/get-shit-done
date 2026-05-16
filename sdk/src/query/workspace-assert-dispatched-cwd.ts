@@ -62,11 +62,14 @@ export const workspaceAssertDispatchedCwdQuery: QueryHandler = async (args, proj
   }
 
   if (matchedIndex === -1) {
+    // Use `null` (not `undefined`) so the JSON envelope carries the keys
+    // explicitly — consumers that branch on `.workspaceName !== null` see a
+    // stable shape regardless of whether cwd resolved.
     return {
       data: {
         ok: false,
-        workspaceName: undefined,
-        workspacePath: undefined,
+        workspaceName: null,
+        workspacePath: null,
         isPrimary: false,
       },
     };
