@@ -536,32 +536,35 @@ See **Pattern 3** above for the full reconstructHandleFromLegacyPlan shape and p
 
 **If this table seems large:** Most assumptions are low-risk and verifiable by the planner via a single grep or a single file read. The Phase 11 architecture itself is locked by CONTEXT.md D-01..D-09; the assumptions above are about implementation-level details that the planner refines without re-opening the locked decisions.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `cmdWorktreeCleanupWave` be removed entirely OR kept as a thin shim around `workspace.parallel.fan-in`?**
    - What we know: Only two production callers (execute-phase.md:774, quick.md:787) — both delete in Phase 11. The test files `tests/bug-3425-worktree-cleanup-cwd-pin.test.cjs` and `tests/bug-3384-worktree-cleanup-manifest.test.cjs` reference the literal CLI string but those tests pivot in Phase 11 anyway.
    - What's unclear: Whether external (out-of-repo) callers exist. Solo-dev repo per CLAUDE.md framing — unlikely.
-   - Recommendation: REMOVE the alias. Solo-dev repo + zero external consumers + per-Pitfall-4 reasoning. If a future external consumer needs the old surface, re-add as deprecation-warning shim.
+   - RESOLVED: REMOVE the alias entirely. Implemented by Plan 11-03 Task 1 step (4) — `cmdWorktreeCleanupWave` deleted. Whole-repo grep audit added to Plan 11-03 acceptance criteria to confirm no surviving callers outside the in-flight 11-05/11-06 deletions.
 
 2. **Should the new fan-in CLI accept `--handle @file`, `--handle @-` (stdin), AND inline `--handle '<json>'` — or just two of the three?**
    - What we know: `--handle @-` (stdin) is required because process substitution wraps stdin; `--handle @<path>` is natural for debugging.
    - What's unclear: Whether inline `--handle '<json-escaped-string>'` adds enough value to justify the escape-quoting complexity.
-   - Recommendation: Support `--handle @-` and `--handle @<path>` only. No inline string. Same pattern as `gsd-sdk query commit --files @-` precedent.
+   - RESOLVED: NO inline. Plan 11-02 Task 2 implements `--handle @-` (stdin) and `--handle @<path>` (file) ONLY, mirroring the `gsd-sdk query commit --files @-` precedent. Inline JSON omitted to dodge escape-quoting hell.
 
 3. **Should the test-flip for `cmd-parallel-jj.test.ts` happen IN the D-02 amendment plan or in a separate test-flip plan?**
    - What we know: D-02 amendment retires the bookmark loops AND changes test expectations. Atomic = land both together.
    - What's unclear: Whether the test changes are LARGE enough to merit a separate plan for review-readability.
-   - Recommendation: Land together in the D-02 plan. The test surface is ~50 LOC of changes; separating would create a transient broken state where production code retires bookmarks but tests still assert them.
+   - RESOLVED: TOGETHER. Plan 11-01 lands the bookmark-plumbing retirement (Task 1) AND the contract-test assertion flip (Task 2) atomically — no transient broken state.
 
 4. **Does the orchestrator need to retain backwards compatibility for repos where a wave is mid-dispatch when Phase 11 ships?**
    - What we know: Subagent workspaces are ephemeral per `project_ephemeral_subagent_workspaces` memory. No on-disk state survives across orchestrator versions.
    - What's unclear: Whether ANY user is mid-dispatch during a Phase 11 deploy (highly unlikely solo-dev).
-   - Recommendation: No back-compat shim. The Phase 11 deploy is "next-wave-onward uses the new path." Already-running wave finishes on the old path because Agent() bodies were already templated with the old shell.
+   - RESOLVED: NO back-compat shim. Subagent workspaces are ephemeral (locked memory `project_ephemeral_subagent_workspaces`); next-wave-onward uses the new path; any in-flight wave finishes on the old shell already templated into its Agent() body. No plan adds a shim.
 
 5. **Should the SDK CLI emit a JSON wrapper `{ok, data: {...}}` around the Handle/FanInResult, or print them flat?**
    - What we know: `gsd-sdk query head-ref` returns `{ ok: true, head }` flat (top-level fields, no wrapper). `gsd-sdk query worktree.cleanup-wave` returns `{ ok, plan: {...}, result: {...} }` with a wrapper.
    - What's unclear: Which precedent to mirror.
-   - Recommendation: Mirror `head-ref` — flat top-level fields. The Handle is itself a `{phaseRoot, workspaces, manifest, …}` object; wrapping it adds a `.data.handle.workspaces[]` access path that the orchestrator shell will fight with jq. The fan-in result is similar.
+   - RESOLVED: FLAT. Plan 11-02 Task 2 mirrors `head-ref.ts`: `workspaceParallelDispatchQuery` returns `{ data: handle }` (flat — orchestrator accesses `.workspaces[]` directly via jq, not `.data.handle.workspaces[]`); `workspaceParallelFanInQuery` returns `{ data: fanInResult }` similarly.
+
+
+**Audit follow-up (RESOLVED — closed by Plan 11-04 Task 1 step (4)):** Assumption A2 noted `gsd-debugger.md` and `gsd-code-fixer.md` plus "30+ other agents" as MEDIUM-risk for analogous worktree-aware blocks. Plan 11-04 Task 1 step (4) adds a one-shot `grep -lE "worktree-agent-|worktree-path-safety|workspace-aware|cwd-drift|abs-path guard" agents/*.md` audit. Any agent file other than `gsd-executor.md` matching is recorded in the SUMMARY for follow-up; PROMPT-08's scope remains `gsd-executor.md` only.
 
 ## Environment Availability
 
