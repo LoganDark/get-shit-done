@@ -1,18 +1,24 @@
 'use strict';
-// allow-test-rule: reads markdown product files (gsd-executor.md, worktree-path-safety.md) to verify structural protocol — not source-grep
+// allow-test-rule: reads markdown product files (gsd-executor.md, dispatch-cwd-safety.md) to verify structural protocol — not source-grep
 
 // Regression guards for bug #3097 and #3099.
 //
-// #3097: gsd-executor's worktree HEAD guard used `if [ -f .git ]` to detect
-// worktree mode. After a Bash `cd` out of the worktree into the main repo,
-// `.git` is a DIRECTORY (not a file), so the test is false and the entire
-// HEAD safety block is silently skipped. Commits then land on whatever branch
-// the main repo has checked out — not the per-agent worktree branch.
+// #3097 (original): gsd-executor's worktree HEAD guard used `if [ -f .git ]`
+// to detect worktree mode. After a Bash `cd` out of the worktree into the main
+// repo, `.git` is a DIRECTORY (not a file), so the test was false and the entire
+// HEAD safety block was silently skipped. Commits then landed on whatever branch
+// the main repo had checked out — not the per-agent worktree branch.
 //
-// #3099: Executor agents construct absolute paths from `pwd` captured in the
-// orchestrator context (main repo root). Edit/Write calls using these paths
-// resolve to the main repo, not the worktree. git commit from the worktree
-// sees a clean tree; the work is silently lost or leaks to main.
+// #3099 (original): Executor agents constructed absolute paths from `pwd`
+// captured in the orchestrator context (main repo root). Edit/Write calls
+// using these paths resolved to the main repo, not the worktree.
+//
+// Phase 11 (2026-05-16) collapsed the four worktree-aware guards into a single
+// `gsd-sdk query workspace.assert-dispatched-cwd --cwd .` call. The verb's
+// predicate over `vcs.workspace.list()` catches both failure modes by
+// construction: cwd-drift → workspace match flips to `isPrimary: true`;
+// absolute paths outside the workspace → no match (`workspaceName: null`).
+// This test was flipped per Plan 11-04 A5 to assert the new shape.
 
 const { describe, test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -27,77 +33,77 @@ const executePhaseSrc = fs.readFileSync(
   path.join(ROOT, 'get-shit-done', 'workflows', 'execute-phase.md'), 'utf8',
 );
 
-describe('bug #3097: cwd-drift sentinel in gsd-executor.md', () => {
-  test('task_commit_protocol has cwd-drift assertion step (0a)', () => {
+describe('bug #3097: dispatched-cwd precondition guard in gsd-executor.md', () => {
+  test('task_commit_protocol invokes workspace.assert-dispatched-cwd', () => {
     const protocolIdx = executorSrc.indexOf('<task_commit_protocol>');
     const protocolEnd = executorSrc.indexOf('</task_commit_protocol>');
     assert.ok(protocolIdx !== -1 && protocolEnd !== -1, 'task_commit_protocol block not found');
     const protocol = executorSrc.slice(protocolIdx, protocolEnd);
     assert.ok(
-      protocol.includes('cwd') || protocol.includes('drift') || protocol.includes('gsd-spawn-toplevel'),
-      'task_commit_protocol missing cwd-drift assertion step — #3097 fix not applied',
+      protocol.includes('workspace.assert-dispatched-cwd'),
+      'task_commit_protocol missing workspace.assert-dispatched-cwd verb call — Phase 11 collapse not applied',
     );
   });
 
-  test('sentinel uses git rev-parse --git-dir to detect worktree', () => {
+  test('assert-dispatched-cwd call branches on .ok', () => {
     const protocolIdx = executorSrc.indexOf('<task_commit_protocol>');
     const protocolEnd = executorSrc.indexOf('</task_commit_protocol>');
     const protocol = executorSrc.slice(protocolIdx, protocolEnd);
     assert.ok(
-      protocol.includes('rev-parse --git-dir') || protocol.includes('worktrees/'),
-      'cwd-drift detection does not use git rev-parse --git-dir or .git/worktrees/ pattern',
+      protocol.includes("jq -r '.ok'") || protocol.includes('jq -r ".ok"'),
+      'precondition guard must branch on the verb\'s .ok field',
     );
   });
 
-  test('cwd-drift check precedes HEAD assertion', () => {
+  test('precondition guard runs at the start of task_commit_protocol', () => {
     const protocolIdx = executorSrc.indexOf('<task_commit_protocol>');
     const protocolEnd = executorSrc.indexOf('</task_commit_protocol>');
     const protocol = executorSrc.slice(protocolIdx, protocolEnd);
-    const driftIdx = protocol.search(/cwd.drift|gsd-spawn-toplevel|drift.*assertion/i);
-    const headIdx = protocol.indexOf('Pre-commit HEAD safety assertion');
-    assert.ok(driftIdx !== -1, 'cwd-drift assertion not found');
-    assert.ok(headIdx !== -1, 'HEAD assertion not found');
-    assert.ok(driftIdx < headIdx, 'cwd-drift assertion must precede HEAD assertion (step 0a before step 0)');
+    const dispatchIdx = protocol.indexOf('workspace.assert-dispatched-cwd');
+    const commitStepIdx = protocol.indexOf('Check modified files');
+    assert.ok(dispatchIdx !== -1, 'assert-dispatched-cwd call not found');
+    assert.ok(commitStepIdx !== -1, '"Check modified files" step not found');
+    assert.ok(dispatchIdx < commitStepIdx, 'dispatched-cwd assertion must precede the commit-staging steps');
   });
 });
 
-describe('bug #3099: absolute-path safety guidance in gsd-executor.md', () => {
-  test('task_commit_protocol documents absolute-path safety', () => {
+describe('bug #3099: dispatch-cwd-safety reference + verb integration', () => {
+  test('task_commit_protocol cites the safety reference document', () => {
     const protocolIdx = executorSrc.indexOf('<task_commit_protocol>');
     const protocolEnd = executorSrc.indexOf('</task_commit_protocol>');
     const protocol = executorSrc.slice(protocolIdx, protocolEnd);
     assert.ok(
-      (protocol.includes('absolute') || protocol.includes('absolute-path')) &&
-      (protocol.includes('worktree') || protocol.includes('WT_ROOT')),
-      'task_commit_protocol missing absolute-path safety guidance — #3099 fix not applied',
+      protocol.includes('dispatch-cwd-safety.md') ||
+        protocol.includes('workspace.assert-dispatched-cwd'),
+      'task_commit_protocol must reference dispatch-cwd-safety.md or invoke the verb',
     );
   });
 
-  test('execute-phase.md parallel_execution block references path safety', () => {
-    const parallelIdx = executePhaseSrc.indexOf('<parallel_execution>');
-    assert.ok(parallelIdx !== -1, 'parallel_execution block not found in execute-phase.md');
-    // Verify the worktree-path-safety.md reference is present in the execution_context
-    // (loaded via @ reference rather than inlined — the safe extract pattern)
+  test('execute-phase.md execution_context references dispatch-cwd-safety.md', () => {
     assert.ok(
-      executePhaseSrc.includes('worktree-path-safety.md'),
-      'execute-phase.md does not reference worktree-path-safety.md in execution_context',
+      executePhaseSrc.includes('dispatch-cwd-safety.md'),
+      'execute-phase.md does not reference dispatch-cwd-safety.md in execution_context',
     );
   });
 
-  test('worktree-path-safety.md reference file exists', () => {
+  test('dispatch-cwd-safety.md reference file exists', () => {
     assert.ok(
-      fs.existsSync(path.join(ROOT, 'get-shit-done', 'references', 'worktree-path-safety.md')),
-      'get-shit-done/references/worktree-path-safety.md does not exist',
+      fs.existsSync(path.join(ROOT, 'get-shit-done', 'references', 'dispatch-cwd-safety.md')),
+      'get-shit-done/references/dispatch-cwd-safety.md does not exist',
     );
   });
 
-  test('worktree-path-safety.md contains cwd-drift and absolute-path guards', () => {
+  test('dispatch-cwd-safety.md documents the workspace.assert-dispatched-cwd verb', () => {
     const safetySrc = fs.readFileSync(
-      path.join(ROOT, 'get-shit-done', 'references', 'worktree-path-safety.md'), 'utf8',
+      path.join(ROOT, 'get-shit-done', 'references', 'dispatch-cwd-safety.md'), 'utf8',
     );
-    assert.ok(safetySrc.includes('gsd-spawn-toplevel') || safetySrc.includes('cwd-drift'),
-      'worktree-path-safety.md missing cwd-drift sentinel content');
-    assert.ok(safetySrc.includes('WT_ROOT') || safetySrc.includes('absolute'),
-      'worktree-path-safety.md missing absolute-path guard content');
+    assert.ok(
+      safetySrc.includes('workspace.assert-dispatched-cwd'),
+      'dispatch-cwd-safety.md must document the workspace.assert-dispatched-cwd verb literally',
+    );
+    assert.ok(
+      safetySrc.includes('isPrimary'),
+      'dispatch-cwd-safety.md must document the verb return shape including isPrimary',
+    );
   });
 });

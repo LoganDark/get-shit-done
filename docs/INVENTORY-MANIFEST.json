@@ -254,8 +254,8 @@
       "verification-overrides.md",
       "verification-patterns.md",
       "verify-mvp-mode.md",
-      "workstream-flag.md",
-      "worktree-path-safety.md"
+      "dispatch-cwd-safety.md",
+      "workstream-flag.md"
     ],
     "cli_modules": [
       "active-workstream-store.cjs",
