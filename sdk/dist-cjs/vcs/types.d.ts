@@ -200,7 +200,20 @@ export interface IncompleteWorkEntry {
     subagentName: string;
     changeIdShort: string;
     workspacePath: string;
-    reason: string;
+    /**
+     * Phase 9 D-09: closed enum. Values:
+     *  - 'crashed-with-uncommitted-work' (existing; reap.ts:187 emitter — workspace
+     *    head carried real work but the subagent never landed a clean final commit;
+     *    crash-recovery path D-12).
+     *  - 'merge-in-tree-conflict' (new; reap.ts conflict-classifier branch — the
+     *    N-parent octopus merge produced in-tree conflicts on this subagent's
+     *    change, surfaced via `jj log -r 'conflicts() & <change>'`).
+     * The phase-merge gate at backends/jj.ts:182-194 / backends/git.ts:121-138
+     * treats unknown reasons as fail-safe block (09-CONTEXT A1) — keeping the
+     * union closed here makes the parse-time validator extension in plan 02 a
+     * type-narrowing operation rather than an interface change.
+     */
+    reason: 'crashed-with-uncommitted-work' | 'merge-in-tree-conflict';
 }
 /**
  * Phase 4 D-19 / D-29 / WS-11: return shape of `vcs.workspace.reap()`.
@@ -376,6 +389,105 @@ export interface VcsWorkspace {
     remove(path: string, opts?: {
         force?: boolean;
     }): void;
+    parallel: VcsWorkspaceParallel;
+}
+/**
+ * Phase 9 (VCS-16): cross-backend parallel-dispatch verb namespace.
+ *
+ * jj backend body: sdk/src/vcs/jj/parallel.ts (composition over octopus + reap).
+ * git backend: throwing stub in Phase 9; real body in Phase 10.
+ *
+ * Signature locked at `fanIn(handle, results): FanInResult` (two args — D-04;
+ * rejects the v1.2-era one-arg `fanIn(wave)` ARCHITECTURE.md draft).
+ */
+export interface VcsWorkspaceParallel {
+    dispatch(opts: ParallelDispatchOpts): ParallelDispatchHandle;
+    fanIn(handle: ParallelDispatchHandle, results: readonly ParallelAgentResult[]): FanInResult;
+}
+/**
+ * Phase 9 (VCS-16): dispatch options. `plan` enumerates the per-agent slots
+ * to materialize; the adapter creates one workspace per entry. `maxConcurrency`
+ * is advisory — backends MAY ignore (jj currently always serializes octopus
+ * structure creation in a single orchestrator process).
+ */
+export interface ParallelDispatchOpts {
+    plan: readonly {
+        agentId: string;
+        planId: string;
+        workspacePath?: string;
+    }[];
+    phaseNumber: number;
+    mainBookmark: string;
+    maxConcurrency?: number;
+}
+/**
+ * Phase 9 (VCS-16, D-07): per-agent result rolled up by the orchestrator after
+ * each `Agent()` promise resolves. Passed verbatim into `fanIn` so the adapter
+ * can classify success / crash / in-tree-conflict per workspace.
+ *
+ * `lastChangeId` is optional — reap covers the crash-recovery case where the
+ * subagent never landed a clean final commit.
+ */
+export interface ParallelAgentResult {
+    agentId: string;
+    exitCode: number;
+    lastChangeId?: string;
+    stderr?: string;
+}
+/**
+ * Phase 9 (VCS-16, D-05, D-06): pure-JSON handle returned by `dispatch` and
+ * consumed by `fanIn`. Survives `gsd-sdk query` JSON serialization round-trip
+ * cleanly — no closures, methods, Symbols, or class instances. Runtime
+ * `Object.freeze` lives in the adapter body (plan 03); the interface itself
+ * only declares the shape.
+ */
+export interface ParallelDispatchHandle {
+    phaseRoot: string;
+    phaseNumber: number;
+    mainBookmark: string;
+    /** Absolute path to the WAVE_WORKTREE_MANIFEST written at dispatch (VCS-19). */
+    manifest: string;
+    workspaces: readonly Readonly<{
+        name: string;
+        path: string;
+        /**
+         * change_id on jj; stable across `jj rebase`.
+         * commit_id on git; stable across `git rebase`.
+         * Cross-backend semantics: rebase-stable revision pointer to the parent
+         * change the workspace forked from. (PARALLEL-05, D-14.)
+         */
+        baseRev: string;
+        agentId: string;
+        /**
+         * D-01 forward-compat reservation. Currently always `undefined` — Phase 9
+         * discuss-phase dropped PARALLEL-03 (liveness probe) at premise level
+         * (2026-05-15). Reserved on the shape so a future re-introduced liveness
+         * probe can populate without a breaking interface change.
+         */
+        baselineOpId?: string;
+    }>[];
+}
+/**
+ * Phase 9 (VCS-16, D-08): result of `fanIn`. The `conflicted: boolean` field
+ * is the load-bearing Pitfall-2 surface — distinguishes in-tree-conflict-success
+ * (octopus merge produced conflicts that reap classified as
+ * 'merge-in-tree-conflict' and queued for human review) from per-agent crash
+ * (queued as 'crashed-with-uncommitted-work'). Neither sets `conflicted: true`
+ * unless the merge itself produced in-tree conflicts at the phase-merge change.
+ *
+ * No `liveWorkspaces` field — D-01 dropped PARALLEL-03 (the orchestrator
+ * awaits all Agent() resolutions before fanIn; no production scenario fires
+ * fanIn while a workspace is mid-write). No `partial` field for the same
+ * reason.
+ */
+export interface FanInResult {
+    /** change_ids (jj) / commit_ids (git) of agent heads that landed cleanly. */
+    merged: readonly string[];
+    conflicted: boolean;
+    conflictedPaths: readonly string[];
+    incompleteQueued: number;
+    failedReaped: readonly string[];
+    surplusBookmarks: readonly string[];
 }
 export interface GitOnlyOps {
     createAnnotatedTag(name: string, message: string, rev: RevisionExpr): void;

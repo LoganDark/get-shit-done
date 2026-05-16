@@ -29,6 +29,7 @@ const git_rev_js_1 = require("../parse/git-rev.js");
 const worktree_list_js_1 = require("../parse/worktree-list.js");
 const types_js_1 = require("../types.js");
 const incomplete_work_js_1 = require("../jj/incomplete-work.js");
+const parallel_js_1 = require("../git/parallel.js");
 const refs_validator_js_1 = require("../refs-validator.js");
 // Phase 2.1 D-07: hook-bridge import removed — the helper is now module-private
 // to hook-bridge.ts; Phase 4 wires internal invocation from inside this
@@ -543,8 +544,23 @@ function createGitAdapter(cwd) {
     // ─── workspace ───────────────────────────────────────────────────────────
     const workspace = Object.freeze({
         add: (input) => {
+            // Phase 10 plan 04 (Rule 1 auto-fix): when `input.name` is set, render
+            // as `git worktree add <path> -b <name> [<baseRef>]` so the worktree
+            // gets a NEW branch with the requested name. The git-side parallel
+            // dispatch sidecar (`sdk/src/vcs/git/parallel.ts:197-200`) relies on
+            // this behavior to eagerly materialize `worktree-agent-<id>` branches;
+            // before this fix `name` was silently ignored on git, leaving a
+            // detached/no-named branch state that broke the subsequent
+            // `git rev-parse worktree-agent-<id>` lookup.
+            //
+            // Mirrors the JSDoc contract on `WorkspaceAdd.name` (types.ts:193-197)
+            // which previously specified jj-only semantics — this widens it to
+            // both backends so sidecar callers can compose uniformly. The default
+            // (no `name`) preserves the historical Phase 4 git behavior of
+            // checking out an existing branch / detached HEAD at `path`.
             const baseRevArg = input.baseRef ? [(0, git_rev_js_1.toGitRev)(input.baseRef)] : [];
-            const r = (0, exec_js_1.execGit)(cwd, ['worktree', 'add', input.path, ...baseRevArg]);
+            const branchArg = input.name ? ['-b', input.name] : [];
+            const r = (0, exec_js_1.execGit)(cwd, ['worktree', 'add', ...branchArg, input.path, ...baseRevArg]);
             if (r.exitCode !== 0) {
                 throw new Error(`workspace.add failed: ${r.stderr || r.stdout}`);
             }
@@ -679,6 +695,12 @@ function createGitAdapter(cwd) {
                 throw new Error(`workspace.remove failed: ${r.stderr || r.stdout}`);
             }
         },
+        // Phase 10 (VCS-18, PARALLEL-01/02): cross-backend parallel namespace.
+        // Delegates to adapter-internal sidecar in sdk/src/vcs/git/parallel.ts.
+        parallel: Object.freeze({
+            dispatch: (opts) => (0, parallel_js_1.performGitParallelDispatch)({ mainRepoRoot: cwd, vcs: { workspace }, ...opts }),
+            fanIn: (handle, results) => (0, parallel_js_1.performGitParallelFanIn)(cwd, handle, results),
+        }),
     });
     // Phase 4 D-19: kernel-enforced via .git/index.lock; the adapter primitive is
     // a no-op by design. Cross-backend callers get a release-handle for symmetry.

@@ -32,7 +32,9 @@ const refs_validator_js_1 = require("../refs-validator.js");
 const node_fs_1 = require("node:fs");
 const lock_js_1 = require("../jj/lock.js");
 const reap_js_1 = require("../jj/reap.js");
+const parallel_js_1 = require("../jj/parallel.js");
 const incomplete_work_js_1 = require("../jj/incomplete-work.js");
+const conflict_paths_js_1 = require("../jj/conflict-paths.js");
 const hook_bridge_js_1 = require("../hook-bridge.js");
 const pre_push_js_1 = require("../jj/pre-push.js");
 const types_js_1 = require("../types.js");
@@ -471,41 +473,13 @@ function createJjAdapter(cwd) {
      * said the commit IS conflicted — surface drift instead of silently
      * passing.
      */
-    const enumerateConflictedPaths = (rev) => {
-        // Primary: jj resolve --list -r <rev>
-        const primaryArgs = jjArgv('resolve', '--list', '-r', rev);
-        const primary = (0, exec_js_1.vcsExec)(cwd, 'jj', primaryArgs);
-        if (primary.exitCode === 0 && primary.stdout.trim().length > 0) {
-            return primary.stdout
-                .split('\n')
-                .map((s) => s.trim())
-                .filter(Boolean)
-                .map((line) => {
-                // Output: `<path>   <conflict description>` — extract path only.
-                const m = /^(\S+)/.exec(line);
-                return m ? m[1] : line;
-            });
-        }
-        // Fallback: jj diff -r <rev> --summary, filter for the C status
-        // letter. IN-04: `U` removed — jj 0.41 never emits it on `diff
-        // --summary`.
-        const fallbackArgs = jjArgv('diff', '-r', rev, '--summary');
-        const fallback = (0, exec_js_1.vcsExec)(cwd, 'jj', fallbackArgs);
-        if (fallback.exitCode !== 0)
-            return ['<UNRESOLVABLE>'];
-        const paths = fallback.stdout
-            .split('\n')
-            .filter(Boolean)
-            .map((line) => {
-            const m = /^C (.+)$/.exec(line);
-            return m ? m[1] : '';
-        })
-            .filter(Boolean);
-        // WR-04: conflicts() flagged this rev but no enumeration form
-        // yielded anything — surface the drift rather than silently
-        // passing [] through to the verify gate.
-        return paths.length > 0 ? paths : ['<UNRESOLVABLE>'];
-    };
+    // Phase 9 plan 02 (UPSTREAM-02): the enumeration body lives in the sidecar
+    // at `../jj/conflict-paths.ts` so both `reap.ts` (D-09/D-10/D-11 classifier)
+    // and `parallel.ts` (plan 03) can consume it without importing from
+    // `backends/jj.ts`. This binding preserves the original `(rev) => string[]`
+    // closure shape so the `findConflicts` caller below (and any future
+    // in-this-file caller) is unchanged.
+    const enumerateConflictedPaths = (rev) => (0, conflict_paths_js_1.enumerateConflictedPaths)(cwd, rev);
     /**
      * `vcs.findConflicts({scope})` — surfaces in-tree conflicted commits.
      *
@@ -1126,6 +1100,12 @@ function createJjAdapter(cwd) {
             //    basename of the input string.
             (0, node_fs_1.rmSync)(onDiskPath, { recursive: true, force: true });
         },
+        // Phase 9 (VCS-16, PARALLEL-01/02): cross-backend parallel namespace.
+        // Delegates to UPSTREAM-02 sidecar in sdk/src/vcs/jj/parallel.ts.
+        parallel: Object.freeze({
+            dispatch: (opts) => (0, parallel_js_1.performJjParallelDispatch)({ mainRepoRoot: cwd, vcs: { workspace }, ...opts }),
+            fanIn: (handle, results) => (0, parallel_js_1.performJjParallelFanIn)(cwd, handle, results),
+        }),
     });
     /**
      * vcs.acquireWriteLock(workspace, opts?) — Phase 4 plan 03 wiring.
