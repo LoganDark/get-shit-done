@@ -4,13 +4,13 @@ milestone: v1.3
 milestone_name: jj octopus merge for subagents fully functional
 status: executing
 stopped_at: Completed Phase 11 Plan 01
-last_updated: "2026-05-16T10:40:22.144Z"
+last_updated: "2026-05-16T10:54:35.564Z"
 last_activity: 2026-05-16
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 17
-  completed_plans: 12
+  completed_plans: 13
   percent: 67
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-15 at v1.3 open)
 ## Current Position
 
 Phase: 11 (orchestrator-agent-rewire-workspace-assert-dispatched-cwd) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-05-16
 
@@ -60,6 +60,7 @@ Last activity: 2026-05-16
 | Phase 10 P05 | 15min | 2 tasks | 2 files |
 | Phase 10 P06 | 5min | 1 tasks | 1 files |
 | Phase 11 P1 | 12min | 2 tasks | 2 files |
+| Phase 11 P02 | 10min | 4 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,8 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.3-specific decisions 
 - [Phase ?]: Phase 10 Plan 06: SC5 closed via toBeIdOf matcher swap at line 355; zero allowlist diff; zero annotations
 - [Phase ?]: Phase 11 Plan 01: jj-side bookmark plumbing retired per D-02; FanInResult.surplusBookmarks contract preserved; test assertions flipped to vcs.workspace.list() source-of-truth; validateAgentBookmarkName helper deleted as dead code
 - [Phase ?]: Phase 11 Plan 01: clean-branch workspace-count assertion deviated from plan's literal '=== 0' to '=== handle.workspaces.length' because Phase 9 fanIn does not abandon clean-agent workspaces (cleanup wiring is downstream Phase 11 work); will flip back to 0 when 11.04/11.05 wires clean-workspace cleanup
+- [Phase ?]: Phase 11 Plan 02: 3 SDK CLI bridges shipped (workspace.assert-dispatched-cwd + parallel.dispatch + parallel.fan-in); list()[0]===primary convention is load-bearing for the minimal predicate
+- [Phase ?]: Phase 11 Plan 02: emit null (not undefined) for absent optional JSON fields so envelope shape stays stable across JSON.stringify
 
 ### Pending Todos
 
@@ -130,7 +133,7 @@ Items acknowledged and carried forward from previous milestone close (status upd
 
 ## Session Continuity
 
-Last session: 2026-05-16T10:40:22.138Z
+Last session: 2026-05-16T10:54:17.180Z
 Stopped at: Completed Phase 11 Plan 01
 Resume file: 
 
