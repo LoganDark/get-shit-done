@@ -352,7 +352,7 @@ describe.sequential.skipIf(!gitAvailable)(
 			const crashEntry = queue.find((e) => e.reason === 'crashed-with-uncommitted-work');
 			expect(crashEntry).toBeDefined();
 			expect(crashEntry?.subagentName).toBe(agent2WorkspaceName);
-			expect(crashEntry?.changeIdShort).toMatch(/^[0-9a-f]{12}$/);
+			expect(crashEntry?.changeIdShort).toBeIdOf({ kind: 'git', allowShort: true });
 			expect(crashEntry?.workspacePath).toBeTruthy();
 			// D-07: non-force worktree remove refused the dirty tree → the
 			// workspace survives on disk for human inspection. The queued
