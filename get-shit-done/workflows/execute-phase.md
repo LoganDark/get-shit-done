@@ -532,6 +532,8 @@ increases monotonically across waves. `{status}` is `complete` (success),
      | gsd-sdk query workspace.parallel.dispatch \
          --phase "{phase_number}" --main-bookmark "$EXPECTED_BRANCH" --plan @-)
    [ -z "$HANDLE_JSON" ] && { echo "FATAL: workspace.parallel.dispatch returned empty Handle JSON" >&2; exit 1; }
+   HANDLE_OK=$(echo "$HANDLE_JSON" | jq -r '.ok // "true"')
+   [ "$HANDLE_OK" = "false" ] && { echo "FATAL: workspace.parallel.dispatch failed: $HANDLE_JSON" >&2; exit 1; }
    ```
 
    **Sequential dispatch for parallel execution (waves with 2+ agents):**
