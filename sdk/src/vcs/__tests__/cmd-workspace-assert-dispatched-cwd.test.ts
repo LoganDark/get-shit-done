@@ -222,7 +222,7 @@ describe.sequential.skipIf(!jjAvailable)(
 			);
 		});
 
-		it('Scenario 3: no-match cwd outside any workspace → ok:false, workspaceName: null, workspacePath: null (legacy CR-01 pin)', { timeout: 30000 }, async () => {
+		it('Scenario 3: no-match cwd outside any workspace → ok:false, workspaceName: null, workspacePath: null, primaryWorkspacePath: null (legacy CR-01 pin + WR-N04 closure)', { timeout: 30000 }, async () => {
 			// cwd is a fresh tmp outside any repo, so vcs.workspace.list() runs
 			// against a non-repo path and returns empty / no match. Pre Plan
 			// 11-11 this was the only failure-branch scenario; Scenario 5
@@ -243,6 +243,16 @@ describe.sequential.skipIf(!jjAvailable)(
 			expect(d.isPrimary).toBe(false);
 			expect(d.workspaceName).toBeNull();
 			expect(d.workspacePath).toBeNull();
+			// WR-N04 closure: when the cwd is outside any VCS repo entirely
+			// (vcs.workspace.list() returns empty), primaryWorkspacePath MUST
+			// be exactly `null` — not `undefined`, not the empty string, not a
+			// fallback path. The agent's FATAL recovery diagnostic dump uses
+			// `jq -r '.primaryWorkspacePath // "<unresolvable>"'` which fires
+			// the fallback only on JSON null. A silent regression that emits
+			// `""` or `undefined` would degrade the operator-facing diagnostic
+			// ("REPO_ROOT:" vs "REPO_ROOT: <unresolvable>") without tripping
+			// any other assertion in this file.
+			expect(d.primaryWorkspacePath).toBeNull();
 		});
 
 		it('Scenario 5 (Plan 11-11 FATAL-recovery surface): in-repo cwd that does NOT match any workspace → ok:false, names null, primaryWorkspacePath STILL resolves to main repo', { timeout: 30000 }, async () => {
