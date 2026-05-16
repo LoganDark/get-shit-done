@@ -130,7 +130,7 @@ Plans:
   4. `bin/lib/worktree-safety.cjs::executeWorktreeWaveCleanupPlan` body shrinks to a single delegation through the new cross-backend verb; ADR-0004 ownership preserved; public export signature unchanged.
   5. `dispatch({ plan, maxConcurrency })` input field honored end-to-end from workflow call sites (default `undefined` → runtime's natural cap).
 
-**Plans**: 6 plans
+**Plans**: 9 plans (6 original + 3 gap-closure from `--gaps` run 2026-05-16)
 
   - [x] 11-01-PLAN.md — Retire jj-side bookmark plumbing per D-02 + flip cmd-parallel-jj.test.ts assertions [Wave 1]
   - [x] 11-02-PLAN.md — Ship workspace.assert-dispatched-cwd + workspace.parallel.dispatch + workspace.parallel.fan-in SDK CLI bridges (3 handlers + catalog/manifest registration) [Wave 2]
@@ -138,6 +138,9 @@ Plans:
   - [x] 11-04-PLAN.md — Collapse gsd-executor.md worktree-aware guards to assert-dispatched-cwd call; rename worktree-path-safety.md → dispatch-cwd-safety.md [Wave 3]
   - [x] 11-05-PLAN.md — execute-phase.md raw-git delete + parallel-verb rewire (preserve sequential Agent() + orchestrator rule + stall surveillance) [Wave 3]
   - [x] 11-06-PLAN.md — quick.md raw-git delete + parallel-verb rewire (USE_WORKTREES gating, N=1 trivial) [Wave 3]
+  - [ ] 11-07-PLAN.md — Gap closure A: fix workspace-assert-dispatched-cwd.ts jj-side correctness (CR-01) + agent diagnostic dump (CR-04) + dispatch-cwd-safety.md doc cleanup (WR-03); flips VCS-20 + PROMPT-08 BLOCKED → SATISFIED [Wave 4]
+  - [ ] 11-08-PLAN.md — Gap closure B: fix quick.md dispatch shape + numeric --phase + HANDLE_OK guard (CR-02) + EXPECTED_BRANCH empty/HEAD pre-check in both quick.md and execute-phase.md (CR-03); flips PROMPT-07 BLOCKED → SATISFIED + PARALLEL-06 PARTIAL → SATISFIED [Wave 4]
+  - [ ] 11-09-PLAN.md — Gap closure C: retire orphaned WAVE_WORKTREE_MANIFEST write in jj/parallel.ts (WR-01) + fix worktree-safety.cjs ok-derivation (WR-02) + document workspace.* verbs in gsd-tools.cjs --help (IN-02) + uniformly deprecation-guard worktree case (WR-04); architectural completion of D-01 invariant [Wave 4]
 
 ### Phase 12: A3 colocated pre-commit fix (parallel track)
 
