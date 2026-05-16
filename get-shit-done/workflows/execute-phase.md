@@ -528,6 +528,11 @@ increases monotonically across waves. `{status}` is `complete` (success),
    EXPECTED_BASE=$(gsd-sdk query head-ref --cwd . --pick head)
    DISPATCH_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
    EXPECTED_BRANCH=$(gsd-sdk query current-branch --cwd . --pick branch)
+   if [ -z "$EXPECTED_BRANCH" ] || [ "$EXPECTED_BRANCH" = "HEAD" ]; then
+     echo "FATAL: orchestrator is on detached HEAD or branch query returned empty — refusing to dispatch (validateMainBookmark would throw on empty/HEAD)." >&2
+     echo "RECOVERY: check out a named branch/bookmark on the orchestrator before re-running." >&2
+     exit 1
+   fi
    HANDLE_JSON=$(printf '%s' "$WAVE_WORKTREE_PLANS_JSON" \
      | gsd-sdk query workspace.parallel.dispatch \
          --phase "{phase_number}" --main-bookmark "$EXPECTED_BRANCH" --plan @-)
