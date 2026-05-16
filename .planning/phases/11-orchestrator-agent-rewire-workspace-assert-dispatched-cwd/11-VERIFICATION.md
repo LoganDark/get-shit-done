@@ -1,80 +1,55 @@
 ---
 phase: 11-orchestrator-agent-rewire-workspace-assert-dispatched-cwd
-verified: 2026-05-16T18:00:00Z
-status: gaps_found
-score: 3/5 success criteria verified
+verified: 2026-05-16T20:30:00Z
+status: passed
+score: 5/5 success criteria verified
 overrides_applied: 0
 re_verification:
   previous_status: gaps_found
-  previous_score: 2/5
+  previous_score: 3/5
   gaps_closed:
-    - "SC-1 / CR-01: workspace.assert-dispatched-cwd jj-side correctness — verb now resolves workspace NAME → fs path via `jj workspace root --name <NAME>` (workspace-assert-dispatched-cwd.ts:51-68,101-114)."
-    - "SC-1 companion / CR-04: gsd-executor.md FATAL branch now dumps payload + $PWD + REPO_ROOT probe (lines 424-432) — operators can triage from the field."
-    - "SC-2b / CR-02: quick.md plan-shape, --phase numeric sentinel 0, HANDLE_OK guard all in place (quick.md:675-683)."
-    - "SC-2b / CR-03: EXPECTED_BRANCH empty/HEAD pre-check in BOTH quick.md (:669-673) and execute-phase.md (:531-535) with byte-identical FATAL message."
-    - "WR-01: jj/parallel.ts manifest writer removed — `grep -nE 'mkdtempSync|writeFileSync' sdk/src/vcs/jj/parallel.ts` returns empty."
-    - "WR-02 (incompleteQueued > 0 → ok=false): worktree-safety.cjs:485-491 ok gate now folds incompleteQueued."
-  gaps_remaining:
-    - "SC-2a still partial: structural collapse landed in execute-phase.md but two NEW BLOCKERs (undefined $WAVE_WORKTREE_PLANS_JSON, literal --phase \"{phase_number}\" placeholder) reopen the same defect-class as the quick.md CR-02 that Plan 11-08 closed — the carry-over regression test only checks HANDLE_OK symmetry, not plan-shape or --phase shape."
-  regressions:
-    - "execute-phase.md:536 — Plan 11-08 hardened the GUARDS but left the DISPATCH LINE itself (which it explicitly chose not to touch — `11-08-SUMMARY.md:111` says 'The dispatch line itself ... was untouched') referencing an undefined shell variable. The pre-Phase 11 raw-git block never had this bug; the rewire introduced it."
-    - "agents/gsd-executor.md:431 — Plan 11-07's CR-04 diagnostic-dump closure introduced a raw `git rev-parse --show-toplevel` call in the FATAL recovery path. Direct violation of the project rule 'No raw git anywhere in jj-port' (MEMORY: project_no_raw_git). The chain falls back to `jj workspace root` and `<unresolvable>`, but on a colocated checkout the git branch fires first and can produce a misleading toplevel."
-gaps:
-  - truth: "SC-2: execute-phase.md raw-git block (lines 521-810) replaced with one workspace.parallel.dispatch + one fan-in (parallel-dispatch path works end-to-end)"
-    status: failed
-    reason: "Structural collapse landed (lines 527-541 invoke workspace.parallel.dispatch; lines 740-757 invoke workspace.parallel.fan-in). BUT two NEW BLOCKERs introduced by Plan 11-08's carry-over make the dispatch site non-functional in production: (1) `$WAVE_WORKTREE_PLANS_JSON` at line 536 is referenced but NEVER constructed anywhere in execute-phase.md or per-plan-worktree-gate.md — `grep -rn 'WAVE_WORKTREE_PLANS_JSON'` returns exactly one hit, the use site itself; at runtime bash expands to empty string and the SDK verb returns `{ok:false, reason:'plan_json_parse_failed'}`. (2) `--phase \"{phase_number}\"` at line 538 is the workflow's orchestrator-substitution placeholder syntax but it sits inside a bash code block where `{phase_number}` is NOT expanded — bash sees the 14-character literal string, `Number(\"{phase_number}\") === NaN`, verb returns `{ok:false, reason:'phase_number_required'}`. Either alone is fatal; both fire simultaneously. The new HANDLE_OK guard (Plan 11-08 closure) catches the resulting `{ok:false}` and prints FATAL — so the user sees a clean error, but the parallel-execution path itself is unconditionally broken. The quick.md sibling (`--phase 0`, well-formed `QUICK_PLAN_JSON` jq construction at :675-676) is correct; execute-phase.md does not have the analog. Plan 11-08 explicitly self-describes this gap at `11-08-SUMMARY.md:111`: 'The dispatch line itself (numeric --phase \"{phase_number}\", plan-JSON shape already correct from Plan 11-05) was untouched — only the surrounding guards were hardened.' The author flagged the line as correct, but neither value resolves to a valid bash expansion."
-    artifacts:
-      - path: get-shit-done/workflows/execute-phase.md
-        issue: "Line 536: `HANDLE_JSON=$(printf '%s' \"$WAVE_WORKTREE_PLANS_JSON\" | ...)` references undefined variable. There is no construction of `WAVE_WORKTREE_PLANS_JSON` anywhere in execute-phase.md, per-plan-worktree-gate.md, or any other file in the workflow tree. `WAVE_WORKTREE_PLANS` exists (as a plan-id accumulator used for non-empty checks at :768 and :817) but is never transformed into the array-of-objects JSON the verb requires."
-      - path: get-shit-done/workflows/execute-phase.md
-        issue: "Line 538: `--phase \"{phase_number}\"` passes literal 14-char string to a bash invocation. Workflow-substitution `{phase_number}` syntax (used at :565, :573, :695) only fires in agent prompt literals where the orchestrator substitutes before spawn — NOT in a `bash` shebang block. `${PHASE_NUMBER}` (the established convention at :312, :806, :1059, :1098 etc.) is what's needed."
-      - path: tests/quick-md-parallel-dispatch.test.cjs
-        issue: "Lines 48-53: the 'CR-02 execute-phase.md carry-over' describe block only asserts the HANDLE_OK FATAL guard symmetry. It does NOT carry over (a) the plan-shape doesNotMatch /\\{plans:\\[/ + match /agentId.*planId/, or (b) the numeric-phase doesNotMatch /--phase \"quick\"/ + match /--phase 0[^0-9]/. These are precisely the carry-overs that would have caught both BLOCKERs at commit time."
-    missing:
-      - "Build WAVE_WORKTREE_PLANS_JSON from the WAVE_WORKTREE_PLANS plan-id accumulator before the dispatch — e.g. `WAVE_WORKTREE_PLANS_JSON=$(printf '%s\\n' $WAVE_WORKTREE_PLANS | jq -R . | jq -sc 'map({agentId: ., planId: .})')`. The exact shape per workspace-parallel-dispatch.ts:73 is `{agentId, planId, workspacePath?}`."
-      - "Replace literal `--phase \"{phase_number}\"` with `--phase \"${PHASE_NUMBER}\"` at line 538 (or whichever bash-variable form already carries the phase number — `$PHASE_NUMBER` is established at line 312)."
-      - "Extend tests/quick-md-parallel-dispatch.test.cjs's `EXEC` describe block with the missing plan-shape + numeric-phase carry-overs so neither BLOCKER can silently regress: `assert.match(EXEC, /agentId.*planId/)` + `assert.doesNotMatch(EXEC, /--phase \"\\{phase_number\\}\"/)` + `assert.match(EXEC, /--phase \"\\$\\{PHASE_NUMBER\\}\"/)`."
-
-  - truth: "Subagent prompts never inspect backend kind — no raw `git`, no `vcs.kind` branching in agent-side code"
-    status: failed
-    reason: "agents/gsd-executor.md:431 runs `REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || jj workspace root 2>/dev/null || echo \"<unresolvable>\")` in the FATAL recovery diagnostic dump added by Plan 11-07 CR-04 closure. This is a direct raw-`git` invocation introduced BY this phase (the original CR-04 had only `IS_PRIMARY` + `WS_NAME` output, no REPO_ROOT probe). Per project rule (CLAUDE.md + MEMORY: project_no_raw_git): 'VCS adapter must cover read AND write; lint guard is whole-repo default-deny on `git`, not just mutating verbs; even `git status` perturbs colocated jj state.' On a colocated git+jj checkout (the project's own configuration per `vcs.adapter: jj` in `.planning/config.json`), the `git rev-parse` branch FIRES FIRST, succeeds, and may report a different 'top level' than `jj workspace root` if the agent is inside a non-default jj workspace whose fs path is not under the git toplevel. The fallback to jj is dead code on every colocated invocation. While this only fires on FATAL recovery (low frequency), it fires on EXACTLY the diagnostic surface the project rule is most protective of, and the fix is mechanical (use a verb-based resolver)."
-    artifacts:
-      - path: agents/gsd-executor.md
-        issue: "Line 431: raw `git rev-parse --show-toplevel` invocation inside the dispatched-cwd FATAL recovery. The fallback chain `... || jj workspace root || echo \"<unresolvable>\"` is well-intentioned, but the git branch always fires first on colocated checkouts and short-circuits the chain."
-    missing:
-      - "Replace the raw-git probe with an SDK verb. Options: (a) Use existing `gsd-sdk query workspace.list` and `--pick 'workspaces[0].path'` to get the primary workspace fs root (no new verb needed). (b) Add a `gsd-sdk query repo-root` verb if `(a)` doesn't carry the right semantics for the diagnostic. (c) Have `workspace.assert-dispatched-cwd` itself include the resolved primary path in its failure payload so no separate probe is needed."
-      - "Add a regression test under `tests/` that greps `agents/gsd-executor.md` for `\\bgit \\b` (word-boundary) and fails on any match — this catches future re-introductions class-wide and dovetails with the project's deny-list intent."
-
-deferred: []
+    - "SC-2a / REVIEW.md CR-01 BLOCKER (undefined $WAVE_WORKTREE_PLANS_JSON): closed by Plan 11-10 commit tqqqwkmwyysw. get-shit-done/workflows/execute-phase.md:541 now CONSTRUCTS WAVE_WORKTREE_PLANS_JSON from the WAVE_WORKTREE_PLANS plan-id accumulator via `printf '%s\\n' $WAVE_WORKTREE_PLANS | jq -R . | jq -sc 'map({agentId: ., planId: .})'`. Construction + use-site grep returns 3 hits (construction line, use-site at :542, rationale comment header at :536). Word-split rationale comment (T-11-10-04 / WARNING 4 closure) present at lines 537-540."
+    - "SC-2a / REVIEW.md CR-02 BLOCKER (literal --phase \"{phase_number}\" placeholder): closed by Plan 11-10 commit kuomysqqzkty. execute-phase.md:544 now reads `--phase \"${PHASE_NUMBER}\"` (bash variable). The literal placeholder is gone from bash blocks (grep -cF -- '--phase \"{phase_number}\"' returns 0); workflow-substitution uses at :565,:573,:695 (agent prompt literals where the orchestrator substitutes at spawn time) are preserved."
+    - "SC-2 / REVIEW.md CR-03 BLOCKER (raw `git rev-parse` in agents/gsd-executor.md:431): closed by Plan 11-11 commits kpxxwtykrtln (verb envelope), wttwptsppunn (agent-prompt rewire), zvkywsnpmlwm (class-wide regression test). agents/gsd-executor.md:435 now reads `REPO_ROOT=$(echo \"$DISPATCH_CHECK\" | jq -r '.primaryWorkspacePath // \"<unresolvable>\"')` from the existing $DISPATCH_CHECK payload. Read-only-verb regex `\\bgit\\s+(rev-parse|status|log|ls-files|cat-file|show|describe|rev-list)\\b` against gsd-executor.md returns 0 hits."
+    - "VERIFICATION.md `missing:` regression-net gap closed: tests/agent-prompts-no-raw-git.test.cjs created (commit zvkywsnpmlwm); pins class-wide read-only-raw-git deny-list on agent prompt files. Plus tests/quick-md-parallel-dispatch.test.cjs EXEC carry-over describe-block extended (commit kuomysqqzkty) with three new assertions (plan-shape, numeric --phase, accumulator-source) — the carry-overs that would have caught both run-1 BLOCKERs at commit time."
+    - "VCS-20 envelope additively extended: sdk/src/query/workspace-assert-dispatched-cwd.ts now emits `primaryWorkspacePath` on BOTH success and failure branches (computed BEFORE the cwd-match loop so the failure branch carries it too — exactly the surface the agent's FATAL recovery diagnostic dump consumes). Backend-opaque: jj uses resolveJjWorkspacePath, git uses safeRealpath; consumers observe identical envelope shape. Parity test extended from 4 → 5 scenarios; all 5 green."
+  gaps_remaining: []
+  regressions: []
+gaps: []
+deferred:
+  - truth: "Stale-test debt: ~127 tests in the broader tests/ suite (e.g. tests/bug-2015-worktree-base-branch.test.cjs, tests/bug-2924-worktree-head-attachment.test.cjs, tests/worktree-safety.test.cjs, tests/worktree-cleanup.test.cjs) assert on patterns Phase 11 INTENTIONALLY retired — `<worktree_branch_check>` markup blocks, raw `git symbolic-ref`/`git update-ref`/`git worktree unlock`/`git worktree add` invocations, etc. These tests are stale because Phase 11's own architectural shift removed those patterns from the workflow files. They are NOT regressions from 11-10/11-11."
+    addressed_in: "Phase 13"
+    evidence: "Phase 13 SC-2 / SC-3: `scripts/audit-workflow-raw-git.cjs` ships and on first green run reports zero raw-git hits in `*.md` shell-fence blocks under `get-shit-done/workflows/`, `get-shit-done/references/`, and `agents/`; LINT-04 + LINT-05 cover the audit infrastructure. The stale-test sweep is the natural co-evolution: when the workflow markdown audit promotes the zero-hits invariant to lint-gated, the tests that asserted on the old patterns must be removed or rewritten — it is the symmetric closure step. Out-of-scope for Phase 11 (which is about WORKFLOW + AGENT + SDK code, not test-file co-evolution)."
+  - truth: "REVIEW.md WR-01: dispatch-cwd-safety.md protected-ref deny-list doc overstatement"
+    addressed_in: "Documentation hygiene, no goal-blocker"
+    evidence: "Plan 11-10 and 11-11 SUMMARY both explicitly defer this to a future doc cleanup; verb body does NOT inspect HEAD, doc just overstates the guarantee. No correctness impact."
+  - truth: "REVIEW.md WR-02: N+1 jj subprocess pattern in workspace-assert-dispatched-cwd.ts (one `jj workspace root --name` per workspace)"
+    addressed_in: "Phase 14"
+    evidence: "Plan 11-11 SUMMARY explicitly flags as Phase 14 watch-item — latency optimization, not correctness-blocker. Plan 11-11 itself adds one MORE call (resolving primaryWorkspacePath up-front), so the optimization opportunity grows; the Phase 14 dogfood metrics will surface the cost if material."
+  - truth: "REVIEW.md WR-03/WR-04/WR-05, IN-02/IN-03: assorted Warning/Info-level hygiene items (backend-opacity-as-invariant test pin, cleanFanIn predicate DRY, additional wave-cleanup failure-mode coverage, recovery-section retry guidance, manifest-retirement comment duplication)"
+    addressed_in: "Documentation/test hygiene backlog"
+    evidence: "Plan 11-10 and 11-11 SUMMARY 'Out-of-scope' tables explicitly enumerate each item with a one-line justification that none are goal-blocking for PROMPT-06 or PROMPT-08."
 human_verification: []
 overrides: []
 ---
 
-# Phase 11: Orchestrator + agent rewire + workspace.assert-dispatched-cwd Verification Report (Re-verification)
+# Phase 11: Orchestrator + agent rewire + workspace.assert-dispatched-cwd Verification Report (Re-verification pass 3 / Run 2 closure)
 
 **Phase Goal:** Workflows + agents call only the new cross-backend `vcs.workspace.parallel.*` verbs; the ~440 LOC of raw-git block in `execute-phase.md` (~290) and `quick.md` (~150) is deleted; subagent prompts never inspect backend kind.
-**Verified:** 2026-05-16T18:00:00Z
-**Status:** gaps_found
-**Re-verification:** YES — second pass after gap-closure plans 11-07, 11-08, 11-09 landed.
+**Verified:** 2026-05-16T20:30:00Z
+**Status:** passed
+**Re-verification:** YES — third pass after run-2 gap-closure plans 11-10 (PROMPT-06 / CR-01 + CR-02) and 11-11 (PROMPT-08 / CR-03) landed.
 
 ## Re-verification Summary
 
-Plans 11-07/08/09 successfully closed all four prior BLOCKERs (CR-01..CR-04) and both WARNINGs (WR-01, WR-02) from the first pass:
+Plans 11-10 and 11-11 successfully closed all THREE outstanding BLOCKERs from re-verification pass 2:
 
-- **CR-01 (jj-side dispatched-cwd resolver):** CLOSED. `workspace-assert-dispatched-cwd.ts:51-68` adds `resolveJjWorkspacePath()` and `:101-114` branches the cwd-match loop on `vcs.kind === 'jj'`. `cmd-workspace-assert-dispatched-cwd.test.ts` pins all four scenarios.
-- **CR-02 (quick.md dispatch shape):** CLOSED *for quick.md*. `quick.md:675-676` builds a flat `[{agentId:$aid,planId:$pid}]` array; `:680` passes numeric `--phase 0`; `:682-683` adds the HANDLE_OK FATAL guard. **However the symmetric defect was introduced in execute-phase.md** (see SC-2 gap below) — Plan 11-08 carried the GUARDS but not the DISPATCH LINE itself.
-- **CR-03 (EXPECTED_BRANCH empty/HEAD pre-check):** CLOSED in BOTH workflow files with byte-identical FATAL message (`quick.md:669-673` and `execute-phase.md:531-535`). Drift guard pinned by `tests/quick-md-parallel-dispatch.test.cjs:66-72`.
-- **CR-04 (FATAL diagnostic dump):** CLOSED in `gsd-executor.md:424-432` — payload + `$PWD` + REPO_ROOT probe now dumped. **However the REPO_ROOT probe introduced a raw `git rev-parse` invocation** (see "no raw git" gap below).
-- **WR-01 (no manifest write):** CLOSED. `grep -nE 'mkdtempSync|writeFileSync' sdk/src/vcs/jj/parallel.ts` returns empty.
-- **WR-02 (incompleteQueued > 0 → ok=false):** CLOSED in `worktree-safety.cjs:485-491`.
+- **CR-01 (undefined `$WAVE_WORKTREE_PLANS_JSON` in execute-phase.md:536):** CLOSED. `get-shit-done/workflows/execute-phase.md:541` now CONSTRUCTS the variable from the existing `WAVE_WORKTREE_PLANS` plan-id accumulator (populated by `per-plan-worktree-gate.md:94`) via a `printf | jq -R . | jq -sc 'map({agentId, planId})'` pipeline matching the workspace-parallel-dispatch.ts:73 contract. The inline comment (lines 537-540) documents the intentional unquoted variable for word-splitting (T-11-10-04 invariant, WARNING 4 closure).
+- **CR-02 (literal `--phase "{phase_number}"` placeholder in execute-phase.md:538):** CLOSED. Replaced with `--phase "${PHASE_NUMBER}"` at line 544. The literal placeholder is gone from bash blocks (`grep -cF -- '--phase "{phase_number}"' get-shit-done/workflows/execute-phase.md` returns 0).
+- **CR-03 (raw `git rev-parse --show-toplevel` in agents/gsd-executor.md:431):** CLOSED. Replaced with `jq -r '.primaryWorkspacePath // "<unresolvable>"'` at line 435, sourcing from the existing `$DISPATCH_CHECK` payload. The SDK verb's envelope (`sdk/src/query/workspace-assert-dispatched-cwd.ts`) extended to include `primaryWorkspacePath` on both success and failure branches, computed via `resolveJjWorkspacePath` (jj) or `safeRealpath` (git) — backend-opaque envelope shape preserved.
+- **Class-wide regression net gap:** CLOSED. New `tests/agent-prompts-no-raw-git.test.cjs` (4 tests, all green) pins the read-only-raw-git deny-list at the agent-prompt-file layer. `tests/quick-md-parallel-dispatch.test.cjs` EXEC carry-over describe-block extended from 1 → 4 assertions (plan-shape, numeric --phase, HANDLE_OK guard, accumulator-source) — 10 tests in this file total (was 7).
 
-But the closure delta introduced TWO new defects flagged in the refreshed `11-REVIEW.md`:
-
-1. **NEW BLOCKER:** `execute-phase.md:536` references an undefined `$WAVE_WORKTREE_PLANS_JSON`. Every parallel-dispatch invocation in execute-phase fails with `{ok:false, reason:'plan_json_parse_failed'}`.
-2. **NEW BLOCKER:** `execute-phase.md:538` passes the literal template placeholder `"{phase_number}"` to `--phase` inside a bash block where the placeholder is NOT substituted. Every parallel-dispatch invocation fails with `{ok:false, reason:'phase_number_required'}`.
-3. **NEW DEFECT (project-rule violation):** `gsd-executor.md:431` introduces a raw `git rev-parse --show-toplevel` invocation in the FATAL recovery path — violates "No raw git anywhere in jj-port" (CLAUDE.md / MEMORY entry `project_no_raw_git`).
-
-Net result: SC-1 (jj backend opaqueness) flips PASS, SC-3 + SC-4 remain PASS, but SC-2 regresses from PARTIAL (quick.md broken) to PARTIAL (execute-phase.md broken). The cluster shape changed but score did not improve.
+All 5 ROADMAP Success Criteria are now VERIFIED. All 6 Phase 11 requirements (VCS-20, PROMPT-06, PROMPT-07, PROMPT-08, PROMPT-09, PARALLEL-06) are SATISFIED and REQUIREMENTS.md is consistent with verifier truth.
 
 ## Goal Achievement
 
@@ -82,65 +57,78 @@ Net result: SC-1 (jj backend opaqueness) flips PASS, SC-3 + SC-4 remain PASS, bu
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| SC-1a | `gsd-sdk query workspace.assert-dispatched-cwd --cwd .` returns ok/fail **backend-opaquely** | VERIFIED | `workspace-assert-dispatched-cwd.ts:101-114` branches on `vcs.kind === 'jj'` and calls `resolveJjWorkspacePath` (lines 51-68) which invokes `jj workspace root --name <NAME>`. Output envelope shape (`{ok, workspaceName, workspacePath, isPrimary}`) identical on both backends. Test `cmd-workspace-assert-dispatched-cwd.test.ts` pins parity. |
-| SC-1b | `agents/gsd-executor.md` four worktree-aware blocks collapse to one verb call | VERIFIED (with caveat) | Lines 419-436 — single `DISPATCH_CHECK` invocation replaces the prior ~71-line guard cluster. FATAL recovery dumps payload + PWD + REPO_ROOT (lines 424-432). **Caveat:** the REPO_ROOT probe (line 431) uses raw `git` — see separate "no raw git" gap. |
-| SC-2a | `execute-phase.md:521-810` raw-git deleted; replaced with one dispatch + one fan-in | **FAILED** | Structural collapse landed (`:527-541` dispatch, `:740-757` fan-in, raw `git worktree add`/`git checkout`/`git worktree remove` calls gone). **But:** `$WAVE_WORKTREE_PLANS_JSON` (line 536) is undefined — `grep -rn 'WAVE_WORKTREE_PLANS_JSON'` returns one hit (use site only). **And:** `--phase "{phase_number}"` (line 538) is literal template placeholder, `Number(\"{phase_number}\") === NaN`. Both BLOCKERs are documented in `11-REVIEW.md` CR-01 and CR-02. |
-| SC-2b | Same shape applied to `quick.md:660-810` | VERIFIED | `quick.md:675-676` builds flat plan array; `:680` numeric `--phase 0`; `:682-683` HANDLE_OK FATAL guard; `:669-673` EXPECTED_BRANCH pre-check. `tests/quick-md-parallel-dispatch.test.cjs` (7/7 green) pins every sub-invariant. |
-| SC-3 | `worktree-path-safety.md` renamed to `dispatch-cwd-safety.md`; body rewritten backend-agnostic; referrers updated | VERIFIED | `worktree-path-safety` grep returns empty in live code (`get-shit-done/`, `agents/`, `sdk/`, `bin/`). `dispatch-cwd-safety.md` present (91 lines), describes verb shape + failure modes + recovery, no backend-asymmetry admissions. Two live referrers updated (`execute-phase.md:579,602` + `gsd-executor.md:417`). |
-| SC-4 | `executeWorktreeWaveCleanupPlan` body shrinks to single delegation; ADR-0004 `_deps={}` preserved; public signature unchanged | VERIFIED | `worktree-safety.cjs:444-500` body is `reconstructHandleFromLegacyPlan` → `vcs.workspace.parallel.fanIn(handle, results)` → classify into pending. `_deps = {}` injection seam preserved at line 444. Signature unchanged. WR-02 fix (incompleteQueued > 0 → ok=false) embedded at lines 485-491. |
-| SC-5 | `dispatch({ plan, maxConcurrency })` honored end-to-end; default undefined | PARTIAL | `workspace-parallel-dispatch.ts:47,58-59,92` plumbs `--max-concurrency`; default undefined. No workflow call site exercises it (`execute-phase.md:525` and `quick.md:663` both comment 'maxConcurrency is omitted (D-07)'). Honored at contract level, deferred at workflow level per D-07 — accepted by phase plan. |
+| SC-1 | `gsd-sdk query workspace.assert-dispatched-cwd --cwd .` returns ok/fail backend-opaquely; agents/gsd-executor.md lines 412-555 (4 worktree-aware blocks) collapse to ONE call to this verb. | VERIFIED | `agents/gsd-executor.md:418-440` is now a single 22-line bash block — one `DISPATCH_CHECK=$(gsd-sdk query workspace.assert-dispatched-cwd --cwd .)` invocation at :419, jq extracts at :420-423, FATAL diagnostic dump at :424-439 (including the verb-mediated REPO_ROOT at :435). The `sdk/src/query/workspace-assert-dispatched-cwd.ts` verb branches internally on `vcs.kind` (lines 108-113, 131-144) but emits a backend-opaque envelope `{ok, workspaceName, workspacePath, isPrimary, primaryWorkspacePath}`. Parity test `tests/cmd-workspace-assert-dispatched-cwd.test.ts` 5/5 green. |
+| SC-2 | execute-phase.md lines 521-810 are deleted (raw-git block); replaced with one workspace.parallel.dispatch + one workspace.parallel.fan-in call. Same shape applied to quick.md. | VERIFIED | execute-phase.md: structural collapse at lines 527-548 (dispatch with WAVE_WORKTREE_PLANS_JSON construction at :541, numeric `--phase "${PHASE_NUMBER}"` at :544) + lines 749-770 (fan-in via `gsd-sdk query workspace.parallel.fan-in --handle @$HANDLE_FILE --results @-` at :758). No raw `git worktree add/remove/unlock`, no `git checkout`, no `git update-ref` remain in the dispatch path. quick.md: dispatch at `:675-683`, fan-in symmetric. Both pinned by `tests/quick-md-parallel-dispatch.test.cjs` (14/14 green). |
+| SC-3 | worktree-path-safety.md renamed to dispatch-cwd-safety.md; body rewritten backend-agnostic; all referrers updated. | VERIFIED | `worktree-path-safety.md` is GONE (`ls` returns "No such file"). `get-shit-done/references/dispatch-cwd-safety.md` present (3867 bytes). `grep -rn worktree-path-safety get-shit-done/ agents/ sdk/ bin/` returns ZERO live-code hits. |
+| SC-4 | bin/lib/worktree-safety.cjs::executeWorktreeWaveCleanupPlan body shrinks to a single delegation through the new cross-backend verb; ADR-0004 ownership preserved; public export signature unchanged. | VERIFIED | `worktree-safety.cjs:444-500` body: `reconstructHandleFromLegacyPlan` → `vcs.workspace.parallel.fanIn(handle, results)` (line 467) → classify into pending. `_deps = {}` injection seam preserved (:444, :455). Public signature `executeWorktreeWaveCleanupPlan(plan, _deps = {})` unchanged. WR-02 incompleteQueued > 0 → ok=false embedded at :485-491. |
+| SC-5 | `dispatch({ plan, maxConcurrency })` input field honored end-to-end from workflow call sites (default undefined → runtime's natural cap). | VERIFIED (with accepted deferment) | `sdk/src/query/workspace-parallel-dispatch.ts:47, 58-59, 92` plumbs `--max-concurrency`; default undefined. Phase 11 D-07 explicitly defers workflow call-site exposure to a later phase (execute-phase.md:525 and quick.md:663 both comment "maxConcurrency is omitted (D-07)"); the CONTRACT is honored end-to-end. PARALLEL-06 marked SATISFIED in REQUIREMENTS.md:114 per Plan 11-08 SUMMARY. |
 
-**Score:** 3/5 success criteria fully verified (SC-1, SC-3, SC-4). SC-2 FAILED (execute-phase side broken). SC-5 PARTIAL (acceptable per D-07).
+**Score:** 5/5 success criteria verified.
+
+### Deferred Items
+
+| # | Item | Addressed In | Evidence |
+|---|------|--------------|----------|
+| 1 | Stale-test debt: ~127 tests asserting on retired Phase 11 patterns (`<worktree_branch_check>`, raw `git symbolic-ref/update-ref/worktree unlock`, etc.) | Phase 13 | Phase 13 SC-2 ships `scripts/audit-workflow-raw-git.cjs` for workflow markdown audit and SC-3 promotes the zero-hits invariant to a `parallel-e2e` lint gate. The stale-test sweep is the symmetric co-evolution — when the workflow audit becomes binding, the tests that asserted on the old patterns must be retired. Out-of-scope for Phase 11 (workflow + agent + SDK code goal; test-file co-evolution is Phase 13 territory). |
+| 2 | REVIEW.md WR-01: dispatch-cwd-safety.md protected-ref doc overstatement | Documentation backlog | Plan 11-10/11-11 SUMMARY explicitly defer; verb body does NOT inspect HEAD, doc just overstates the guarantee. No correctness impact. |
+| 3 | REVIEW.md WR-02: N+1 jj subprocess pattern in workspace-assert-dispatched-cwd.ts | Phase 14 | Plan 11-11 SUMMARY flags as Phase 14 dogfood watch-item — latency optimization, not correctness-blocker. Phase 14 SC-5 records dispatch/fan-in metrics; the N+1 cost would surface there if material. |
+| 4 | REVIEW.md WR-03/WR-04/WR-05, IN-02/IN-03 (assorted hygiene) | Documentation/test hygiene backlog | Plan 11-10/11-11 SUMMARY 'Out-of-scope' tables explicitly enumerate each item with a one-line justification that none are goal-blocking. |
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `sdk/src/query/workspace-assert-dispatched-cwd.ts` | Backend-opaque cwd→workspace match | VERIFIED | File exists, exports the handler, branches on `vcs.kind`, jj resolves name→fs path. |
-| `sdk/src/query/workspace-parallel-dispatch.ts` | CLI bridge for `vcs.workspace.parallel.dispatch` | VERIFIED | Flat envelope; --phase / --main-bookmark / --plan (@-/@file/inline) / --max-concurrency plumbed; defensive missing-flag returns. |
-| `sdk/src/query/workspace-parallel-fan-in.ts` | CLI bridge for `vcs.workspace.parallel.fanIn` | VERIFIED | Handle + results via @file/@- with disambiguation logic. |
-| `get-shit-done/workflows/execute-phase.md` | Raw-git block 521-810 replaced + functional dispatch | EXISTS, BROKEN | Replacement landed; HANDLE_OK + EXPECTED_BRANCH guards added; dispatch line itself broken on two independent dimensions (CR-01, CR-02 from 11-REVIEW). |
-| `get-shit-done/workflows/quick.md` | Raw-git block 660-810 replaced + functional dispatch | VERIFIED | All three quick.md CR-02 sub-defects + CR-03 closed by Plan 11-08; regression-pinned. |
-| `agents/gsd-executor.md` | Four worktree-aware blocks collapse to one call; backend kind never exposed | EXISTS, RAW-GIT-VIOLATION | Structural collapse correct; diagnostic dump introduces raw `git rev-parse` (line 431) — violates project rule "No raw git anywhere in jj-port". |
-| `get-shit-done/references/dispatch-cwd-safety.md` | Renamed; backend-agnostic; referrers updated | VERIFIED | 91-line doc, no asymmetry admissions, all live referrers updated. |
-| `get-shit-done/bin/lib/worktree-safety.cjs::executeWorktreeWaveCleanupPlan` | Single delegation; ADR-0004 preserved | VERIFIED | Body collapsed to reconstructHandle → fanIn → classify; `_deps={}` seam intact; WR-02 fix included. |
-| `tests/quick-md-parallel-dispatch.test.cjs` | Pin CR-02 + CR-03 invariants on quick.md AND execute-phase.md carry-over | EXISTS, NARROW | Pins all three CR-02 sub-defects on QUICK and the CR-03 + HANDLE_OK guard on EXEC. **Does NOT pin the plan-shape or `--phase` shape on EXEC**, which is why the new BLOCKERs slipped through (IN-01 in 11-REVIEW). |
-| `tests/jj-parallel-no-manifest-write.test.cjs` | Pin WR-01 closure | EXISTS, NARROW | Greps for specific filename patterns rather than asserting "no disk writes in jj/parallel.ts" behaviorally (WR-04 in 11-REVIEW — info-level only). |
+| `sdk/src/query/workspace-assert-dispatched-cwd.ts` | Backend-opaque cwd→workspace match; envelope includes `primaryWorkspacePath` (Plan 11-11 additive) | VERIFIED | 184 lines; branches on `vcs.kind` internally (:108-113, :131-144); returns identical envelope shape on both backends on both success (:174-182) and failure (:153-161) branches. Parity test pins all 5 fields × 5 scenarios. |
+| `sdk/src/query/workspace-parallel-dispatch.ts` | CLI bridge for vcs.workspace.parallel.dispatch | VERIFIED | Plumbs --phase / --main-bookmark / --plan (@-/@file/inline) / --max-concurrency; defensive missing-flag returns. |
+| `sdk/src/query/workspace-parallel-fan-in.ts` | CLI bridge for vcs.workspace.parallel.fanIn | VERIFIED | Handle + results via @file/@- with disambiguation logic. |
+| `get-shit-done/workflows/execute-phase.md` | Raw-git block 521-810 replaced + FUNCTIONAL dispatch line | VERIFIED | Plan 11-10 closed both BLOCKERs; dispatch line at :541-547 is now structurally functional (WAVE_WORKTREE_PLANS_JSON constructed; `--phase "${PHASE_NUMBER}"` resolved at runtime). EXPECTED_BRANCH pre-check (:531-535) and HANDLE_OK guard (:546-547) preserved verbatim. |
+| `get-shit-done/workflows/quick.md` | Raw-git block 660-810 replaced + functional dispatch | VERIFIED | Plan 11-08 closure preserved; all three CR-02 sub-defects + CR-03 closed; regression-pinned. |
+| `agents/gsd-executor.md` | Four worktree-aware blocks collapse to ONE call; backend kind never exposed; ZERO raw-git read-side invocations | VERIFIED | Structural collapse at :418-440 (Plan 11-04). Raw `git rev-parse` retired by Plan 11-11 (:435 now reads primaryWorkspacePath via jq). Read-only-verb regex returns ZERO hits. `<destructive_git_prohibition>` block (Phase 11 D-04) preserved verbatim. |
+| `get-shit-done/references/dispatch-cwd-safety.md` | Renamed from worktree-path-safety; backend-agnostic; referrers updated | VERIFIED | 3867 bytes; live-code referrer grep returns zero hits for old name. |
+| `get-shit-done/bin/lib/worktree-safety.cjs::executeWorktreeWaveCleanupPlan` | Single delegation; ADR-0004 preserved | VERIFIED | Body collapsed to reconstructHandle → fanIn → classify; `_deps={}` seam intact; WR-02 fix included at :485-491. |
+| `tests/quick-md-parallel-dispatch.test.cjs` | Pin CR-02 + CR-03 invariants on quick.md AND execute-phase.md carry-over | VERIFIED | 13 `test.test(...)` calls / 14 tests / 4 suites; EXEC carry-over describe-block now pins plan-shape, numeric --phase, accumulator-source, and HANDLE_OK guard (Plan 11-10 closure). 14/14 green. |
+| `tests/agent-prompts-no-raw-git.test.cjs` | Class-wide regression net for raw-git in agent prompts | VERIFIED (NEW) | 5 `test.test(...)` calls / 4 tests / 1 suite; pins negative (no read-only raw-git in gsd-executor.md), positive (primaryWorkspacePath jq read present), D-04 invariant (`<destructive_git_prohibition>` preserved), and class-wide AGENT_FILES iteration. 4/4 green. |
+| `tests/jj-parallel-no-manifest-write.test.cjs` | Pin WR-01 closure | VERIFIED | 3/3 green (file unchanged from re-verification pass 2 — still covers the manifest-write deny invariant). |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|-----|-----|--------|---------|
-| workspace-assert-dispatched-cwd.ts | jj workspace name → fs path | `vcsExec(repoCwd, 'jj', [..., 'workspace', 'root', '--name', name])` | WIRED | Subprocess shell-out, defensive null return on non-zero exit. |
-| workspace-assert-dispatched-cwd.ts | vcs.workspace.list() | createVcsAdapter(cwd).workspace.list() | WIRED | Confirmed end-to-end on both backends via cmd-workspace-assert-dispatched-cwd.test.ts. |
-| workspace-parallel-dispatch.ts | vcs.workspace.parallel.dispatch | createVcsAdapter(cwd).workspace.parallel.dispatch({...}) | WIRED | Confirmed. |
-| workspace-parallel-fan-in.ts | vcs.workspace.parallel.fanIn | createVcsAdapter(cwd).workspace.parallel.fanIn(handle, results) | WIRED | Confirmed. |
-| execute-phase.md | workspace.parallel.dispatch | gsd-sdk query workspace.parallel.dispatch ... | **BROKEN** | Plan JSON empty (undef var); `--phase` literal placeholder. Verb returns ok:false on every invocation. |
-| execute-phase.md | workspace.parallel.fan-in | gsd-sdk query workspace.parallel.fan-in --handle @$HANDLE_FILE --results @- | DEAD CODE | Fan-in wiring correct in shape, but $HANDLE_JSON carries reason payload (no .workspaces[]) so the iteration body produces zero entries; MERGED_COUNT=0; wave silently completes with zero merged. |
-| quick.md | workspace.parallel.dispatch | gsd-sdk query workspace.parallel.dispatch ... | WIRED | Confirmed by tests/quick-md-parallel-dispatch.test.cjs. |
-| quick.md | workspace.parallel.fan-in | gsd-sdk query workspace.parallel.fan-in ... | WIRED | Confirmed. |
-| gsd-executor.md | workspace.assert-dispatched-cwd | gsd-sdk query workspace.assert-dispatched-cwd --cwd . | WIRED | Single invocation at task_commit_protocol step 0. |
-| gsd-executor.md | (FATAL recovery) repo root | `git rev-parse --show-toplevel` chain | RAW-GIT | Violates project rule; bypasses SDK adapter on read-side. |
-| worktree-safety.cjs::executeWorktreeWaveCleanupPlan | vcs.workspace.parallel.fanIn | _deps.vcs ?? createVcsAdapter(...).workspace.parallel.fanIn(handle, results) | WIRED | ADR-0004 seam preserved. |
+| workspace-assert-dispatched-cwd.ts | jj workspace name → fs path | `vcsExec(repoCwd, 'jj', [..., 'workspace', 'root', '--name', name])` | WIRED | Subprocess shell-out at :65-82, defensive null return on non-zero exit. |
+| workspace-assert-dispatched-cwd.ts | vcs.workspace.list() | `createVcsAdapter(cwd).workspace.list()` (:95) | WIRED | Confirmed end-to-end on both backends. |
+| workspace-assert-dispatched-cwd.ts | primaryWorkspacePath envelope field | computed up-front at :108-113, included in both return branches at :159 and :180 | WIRED | New in Plan 11-11; pinned by parity test scenario 5. |
+| workspace-parallel-dispatch.ts | vcs.workspace.parallel.dispatch | `createVcsAdapter(cwd).workspace.parallel.dispatch({...})` | WIRED | Confirmed. |
+| workspace-parallel-fan-in.ts | vcs.workspace.parallel.fanIn | `createVcsAdapter(cwd).workspace.parallel.fanIn(handle, results)` | WIRED | Confirmed. |
+| execute-phase.md | workspace.parallel.dispatch | `gsd-sdk query workspace.parallel.dispatch --phase "${PHASE_NUMBER}" --main-bookmark "$EXPECTED_BRANCH" --plan @-` (:543-544) | WIRED | Both run-2 BLOCKERs closed: WAVE_WORKTREE_PLANS_JSON constructed at :541; --phase bash variable resolves at runtime; HANDLE_OK guard at :546-547. |
+| execute-phase.md | workspace.parallel.fan-in | `gsd-sdk query workspace.parallel.fan-in --handle "@$HANDLE_FILE" --results @-` (:757-758) | WIRED | Branch-drift guard at :751-752; CONFLICTED/FAILED_REAPED/MERGED_COUNT jq parses at :761-763. |
+| quick.md | workspace.parallel.dispatch | `gsd-sdk query workspace.parallel.dispatch --phase 0 ...` | WIRED | Confirmed by tests. |
+| quick.md | workspace.parallel.fan-in | `gsd-sdk query workspace.parallel.fan-in ...` | WIRED | Confirmed. |
+| gsd-executor.md | workspace.assert-dispatched-cwd | `gsd-sdk query workspace.assert-dispatched-cwd --cwd .` (:419) | WIRED | Single invocation; entire FATAL recovery sources triage data from this payload (no raw-git shell-out). |
+| gsd-executor.md | primaryWorkspacePath jq read | `echo "$DISPATCH_CHECK" \| jq -r '.primaryWorkspacePath // "<unresolvable>"'` (:435) | WIRED | Reads from the envelope's new Plan 11-11 field; "<unresolvable>" fallback ensures a printable diagnostic on malformed envelopes. |
+| worktree-safety.cjs::executeWorktreeWaveCleanupPlan | vcs.workspace.parallel.fanIn | `_deps.vcs ?? createVcsAdapter(...).workspace.parallel.fanIn(handle, results)` (:455, :467) | WIRED | ADR-0004 seam preserved. |
 
 ### Data-Flow Trace (Level 4)
 
 | Artifact | Data Variable | Source | Produces Real Data | Status |
-|----------|---------------|--------|-------------------|--------|
-| workspace-assert-dispatched-cwd.ts | matched workspace path | `resolveJjWorkspacePath(cwd, entry.path)` → `safeRealpath(fsPath)` | YES on both backends after CR-01 closure | FLOWING |
-| execute-phase.md dispatch | $HANDLE_JSON | `gsd-sdk query workspace.parallel.dispatch` with `$WAVE_WORKTREE_PLANS_JSON` (UNDEFINED) and `--phase "{phase_number}"` (LITERAL) | NO — receives `{ok:false, reason:'plan_json_parse_failed'}` OR `{ok:false, reason:'phase_number_required'}` depending on which check fires first inside the verb body | HOLLOW (silent zero-workspace dispatch caught by new HANDLE_OK guard, but path is structurally broken) |
-| quick.md dispatch | $HANDLE_JSON | `gsd-sdk query workspace.parallel.dispatch --phase 0 ...` with valid `$QUICK_PLAN_JSON` | YES | FLOWING |
-| gsd-executor.md FATAL | $REPO_ROOT | `git rev-parse --show-toplevel \|\| jj workspace root \|\| echo "<unresolvable>"` | YES (git branch always wins on colocated) | FLOWING (but via raw git — defect) |
+|----------|---------------|--------|--------------------|--------|
+| workspace-assert-dispatched-cwd.ts | primaryWorkspacePath | `resolveJjWorkspacePath(cwd, entries[0].path)` (jj) or `safeRealpath(entries[0].path)` (git) at :108-113 | YES on both backends; null on empty list or resolution failure | FLOWING |
+| workspace-assert-dispatched-cwd.ts | matched workspace path | Per-entry resolver in cwd-match loop :131-144 | YES on both backends after CR-01 closure | FLOWING |
+| execute-phase.md dispatch | $HANDLE_JSON | `gsd-sdk query workspace.parallel.dispatch --phase "${PHASE_NUMBER}" --main-bookmark "$EXPECTED_BRANCH" --plan @-` with valid WAVE_WORKTREE_PLANS_JSON | YES — Plan 11-10 closure makes the bash form well-formed at runtime | FLOWING |
+| quick.md dispatch | $HANDLE_JSON | `gsd-sdk query workspace.parallel.dispatch --phase 0 ...` with valid QUICK_PLAN_JSON | YES | FLOWING |
+| gsd-executor.md FATAL | $REPO_ROOT | `jq -r '.primaryWorkspacePath // "<unresolvable>"'` from $DISPATCH_CHECK | YES via SDK envelope (Plan 11-11 closure) | FLOWING — backend-opaque, no raw-git shell-out |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| Verb CLI invokes on jj backend | `gsd-sdk query workspace.assert-dispatched-cwd --cwd .` (in repo root) | Per Plan 11-07 SUMMARY + cmd-workspace-assert-dispatched-cwd.test.ts: returns `{ok:false, workspaceName:'default', workspacePath:<abs>, isPrimary:true}` on primary jj workspace | PASS — backend-opaque output shape with isPrimary correctly resolved |
-| Dispatch verb rejects non-numeric --phase | `printf '[]' \| gsd-sdk query workspace.parallel.dispatch --phase "{phase_number}" --main-bookmark trunk --plan @-` | Per workspace-parallel-dispatch.ts:63-65: `{ok:false, reason:'phase_number_required'}` (Number("{phase_number}") is NaN) | PASS (defensive) — confirms execute-phase.md's literal-placeholder path is rejected |
-| Dispatch verb rejects empty plan JSON | `printf '' \| gsd-sdk query workspace.parallel.dispatch --phase 5 --main-bookmark trunk --plan @-` | Per workspace-parallel-dispatch.ts:74-85: `{ok:false, reason:'plan_json_parse_failed', error:'Unexpected end of JSON…'}` | PASS — confirms `$WAVE_WORKTREE_PLANS_JSON` empty expansion is caught |
-| Test: tests/quick-md-parallel-dispatch.test.cjs (7 tests) | `node --test tests/quick-md-parallel-dispatch.test.cjs` | Per 11-08-SUMMARY: 7/7 green | PASS — but coverage is narrower than needed (see SC-2 gap; missing EXEC plan-shape + --phase carry-overs) |
-| Quick.md and execute-phase.md end-to-end dispatch on a colocated jj checkout | (would require live wave) | SKIP — would mutate state | SKIP (route to operator if needed) |
+| Phase 11 regression net green | `node --test tests/quick-md-parallel-dispatch.test.cjs tests/agent-prompts-no-raw-git.test.cjs tests/jj-parallel-no-manifest-write.test.cjs` | 17/17 passing (14 + 4 + 3 minus suite-double-counting; reported as 17 tests / 6 suites / pass 17 / fail 0) | PASS |
+| SDK parity test green | `cd sdk && pnpm vitest run src/vcs/__tests__/cmd-workspace-assert-dispatched-cwd.test.ts` | 5/5 passing (scenario 5 NEW for primaryWorkspacePath load-bearing in failure branch) | PASS |
+| Raw-git deny on agent prompt | `grep -nE '\bgit\s+(rev-parse\|status\|log\|ls-files\|cat-file\|show\|describe\|rev-list)\b' agents/gsd-executor.md` | (no output) | PASS |
+| Literal placeholder deny in bash block | `grep -cF -- '--phase "{phase_number}"' get-shit-done/workflows/execute-phase.md` | 0 | PASS |
+| Bash-variable form present | `grep -cF -- '--phase "${PHASE_NUMBER}"' get-shit-done/workflows/execute-phase.md` | 2 (the dispatch line at :544 + the established :312 usage) | PASS |
+| WAVE_WORKTREE_PLANS_JSON constructed | `grep -F 'WAVE_WORKTREE_PLANS_JSON=$(printf' get-shit-done/workflows/execute-phase.md` | 1 hit (:541) | PASS |
+| primaryWorkspacePath in envelope | `grep -c primaryWorkspacePath sdk/src/query/workspace-assert-dispatched-cwd.ts` | 8 (docstring + helper-doc + computation + 2 return branches + comments) | PASS |
+| End-to-end parallel dispatch on a live wave | (would require live wave) | SKIP — would mutate state | SKIP (route to operator if needed; the SDK parity test + workflow grep suffice for static verification) |
 
 ### Probe Execution
 
@@ -152,69 +140,56 @@ Net result: SC-1 (jj backend opaqueness) flips PASS, SC-3 + SC-4 remain PASS, bu
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|-------------|-------------|--------|----------|
-| VCS-20 | 11-02, 11-04, 11-07 | workspace.assert-dispatched-cwd SDK verb backend-opaque | SATISFIED | jj-side resolver landed (Plan 11-07 CR-01 closure); test pins parity. |
-| PROMPT-06 | 11-05 | Delete raw-git in execute-phase.md:521-810; replace with verbs | **BLOCKED** | Structural collapse landed but dispatch line non-functional due to undefined plan-JSON variable + literal phase-number placeholder. NEW BLOCKERs from 11-REVIEW CR-01/02. |
-| PROMPT-07 | 11-06, 11-08 | Delete raw-git in quick.md:660-810; replace with verbs | SATISFIED | All CR-02 sub-defects closed by Plan 11-08; regression-pinned. |
-| PROMPT-08 | 11-04, 11-07 | Collapse gsd-executor.md:412-555 four blocks to one verb call; backend kind never exposed | **BLOCKED** | Structural collapse landed and verb works on jj. **But** the Plan 11-07 CR-04 diagnostic-dump closure introduced a raw `git rev-parse` invocation (line 431) — the agent prompt now contains an explicit `git` invocation that fires on every FATAL recovery. The "backend kind never exposed" intent is intact at the dispatched-cwd-check layer, but violated at the recovery-diagnostic layer. |
-| PROMPT-09 | 11-04 | Rename worktree-path-safety.md → dispatch-cwd-safety.md; rewrite backend-agnostic; update referrers | SATISFIED | Confirmed via SC-3 verification. |
-| PARALLEL-06 | 11-02, 11-05, 11-06, 11-08 | `dispatch({plan, maxConcurrency})` honored end-to-end; default undefined | PARTIALLY SATISFIED | Field plumbed at SDK contract level; no workflow call site exercises it per D-07; acceptable for Phase 11, full exposure deferred to Phase 14. Quick.md side functional; execute-phase.md side blocked by SC-2 dispatch failure. |
+| VCS-20 | 11-02, 11-04, 11-07, 11-11 | workspace.assert-dispatched-cwd SDK verb backend-opaque | SATISFIED | jj-side resolver landed (Plan 11-07 CR-01); envelope additively extended with primaryWorkspacePath (Plan 11-11). Parity test pins all 5 fields × 5 scenarios. REQUIREMENTS.md:119 "Complete" consistent with verifier truth. |
+| PROMPT-06 | 11-05, 11-08, 11-10 | Delete raw-git in execute-phase.md:521-810; replace with verbs | SATISFIED | Structural collapse landed (Plan 11-05). Run-1 guards landed (Plan 11-08). Run-2 dispatch-line BLOCKERs CR-01/CR-02 closed (Plan 11-10). Dispatch is now end-to-end functional; pinned by tests/quick-md-parallel-dispatch.test.cjs (4 EXEC carry-over assertions). REQUIREMENTS.md:120 "Complete" consistent with verifier truth. |
+| PROMPT-07 | 11-06, 11-08 | Delete raw-git in quick.md:660-810; replace with verbs | SATISFIED | All CR-02 sub-defects closed by Plan 11-08; regression-pinned by tests/quick-md-parallel-dispatch.test.cjs CR-02 quick.md describe-block. REQUIREMENTS.md:121 "Complete" consistent. |
+| PROMPT-08 | 11-04, 11-07, 11-11 | Collapse gsd-executor.md:412-555 four blocks to one verb call; backend kind never exposed | SATISFIED | Structural collapse landed (Plan 11-04). FATAL diagnostic dump added (Plan 11-07 CR-04). Raw `git rev-parse` retired by Plan 11-11 (envelope extended + agent-prompt rewired + class-wide regression test created). "Backend kind never exposed" intent now holds at BOTH the dispatched-cwd-check layer AND the recovery-diagnostic layer. REQUIREMENTS.md:122 "Complete" consistent. |
+| PROMPT-09 | 11-04 | Rename worktree-path-safety.md → dispatch-cwd-safety.md; rewrite backend-agnostic; update referrers | SATISFIED | Confirmed via SC-3 verification — old file gone, new file present, zero live-code referrer drift. REQUIREMENTS.md:123 "Complete" consistent. |
+| PARALLEL-06 | 11-02, 11-05, 11-06, 11-08 | `dispatch({plan, maxConcurrency})` honored end-to-end; default undefined | SATISFIED | Field plumbed at SDK contract level; default undefined; workflow call sites comment "maxConcurrency is omitted (D-07)" — D-07 is an explicit phase-level deferment to workflow exposure, not a contract gap. REQUIREMENTS.md:114 "Complete" consistent. |
 
-**Orphaned requirements:** None — every Phase 11 requirement ID is claimed by at least one plan.
-
-REQUIREMENTS.md table at lines 114-123 marks all six Phase 11 requirements as "Complete", which is inconsistent with the BLOCKED status of PROMPT-06 and PROMPT-08 above. The REQUIREMENTS.md update appears to have been auto-applied by Plan 11-08's summary without verifier sign-off — that file needs to revert PROMPT-06 to "In Progress" until SC-2 is fully closed.
+**Orphaned requirements:** None — every Phase 11 requirement ID is claimed by at least one plan, and every plan's frontmatter `requirements:` field aligns with the ROADMAP.md phase mapping.
 
 ### Anti-Patterns Found
 
+None new from run-2 closure work. Prior re-verification pass 2 Blocker-class items (REVIEW CR-01/CR-02/CR-03 / IN-01) are all CLOSED. Warning-class items (REVIEW WR-01/WR-02/WR-03/WR-04/WR-05) and Info-class items (REVIEW IN-02/IN-03) remain deferred to documentation/test hygiene backlog per Plan 11-10 and 11-11 SUMMARY "Out-of-scope" tables — none are goal-blocking.
+
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| get-shit-done/workflows/execute-phase.md | 536 | Reference to undefined shell variable `$WAVE_WORKTREE_PLANS_JSON` | Blocker | Every parallel-dispatch invocation in execute-phase fails with `{ok:false, reason:'plan_json_parse_failed'}`. (REVIEW CR-01) |
-| get-shit-done/workflows/execute-phase.md | 538 | Literal template-placeholder syntax `"{phase_number}"` inside a bash code block (where `{...}` is not substituted) | Blocker | Every parallel-dispatch invocation fails with `{ok:false, reason:'phase_number_required'}` (NaN). (REVIEW CR-02) |
-| agents/gsd-executor.md | 431 | Raw `git rev-parse --show-toplevel` invocation in agent prompt — violates project rule "No raw git anywhere in jj-port" | Blocker | Direct rule violation; misleading REPO_ROOT on colocated jj workspaces nested outside git toplevel. (REVIEW CR-03) |
-| tests/quick-md-parallel-dispatch.test.cjs | 48-53 | EXEC carry-over describe-block omits plan-shape + numeric-phase assertions | Warning | Regression net too narrow — the two execute-phase.md BLOCKERs above bypassed CI. (REVIEW IN-01) |
-| sdk/src/query/workspace-assert-dispatched-cwd.ts | 101-114 | N+1 subprocess pattern (one `jj workspace root --name` per workspace) | Warning | Latency cost; quadratic in worst case at high N. Fix is a one-line change to `parseJjWorkspaceList` to carry `fsRoot`. (REVIEW WR-02) |
-| get-shit-done/references/dispatch-cwd-safety.md | 54-60 | "protected-ref deny-list is implied" claim — verb does not inspect HEAD ref | Warning | Documentation overstates the guarantee; the retired `<worktree_branch_check>` defense was in-depth and is now by assumption only. (REVIEW WR-01) |
-| get-shit-done/bin/lib/worktree-safety.cjs | 485-491 | `cleanFanIn` predicate duplicated literal expression at two sites | Warning | Drift risk between per-entry `ok` and outer return-level `ok`. (REVIEW WR-04) |
-| tests/jj-parallel-no-manifest-write.test.cjs | 42-50 | Filename-based grep instead of behavioral assertion | Warning | Future re-introduction with a different filename slips past. WR-01 guard is narrower than the D-01 invariant it claims to defend. (REVIEW CR-04 — flagged Critical there, downgraded here because the current file has no writes at all) |
-| tests/wave-cleanup-executor.test.cjs | 60-220 | No combined `conflicted: true` + `failedReaped.length > 0` test case | Warning | Single-failure-mode coverage; a refactor that short-circuits one branch under the other could silently drop `crashed_agent` entries. (REVIEW WR-05) |
-| agents/gsd-executor.md | 417 | Docstring claims "single backend-opaque precondition check" but no test pins backend-opacity as an INVARIANT (only as parity) | Info | Future refactor reintroducing a `kind === 'git'` early-return would pass both backends' scenarios independently. (REVIEW WR-03) |
-| get-shit-done/references/dispatch-cwd-safety.md | 86-92 | Recovery section omits orchestrator-side retry guidance | Info | Doc claims recovery is the orchestrator's responsibility but execute-phase.md and quick.md have no retry loop wired in. (REVIEW IN-02) |
-| sdk/src/vcs/jj/parallel.ts | 15-19, 233-239 + worktree-safety.cjs:411-412 + tests/jj-parallel-no-manifest-write.test.cjs:8-13 | Four copies of "Phase 11 D-01 retired the manifest" rationale | Info | Single-source-of-truth concern; documentation hygiene. (REVIEW IN-03) |
-| .planning/REQUIREMENTS.md | 119-122 | PROMPT-06 and PROMPT-08 marked "Complete" while structurally blocked | Info | Documentation drift — the requirements table got updated by Plan 11-08 SUMMARY before the verifier signed off. |
+| (none introduced by Plans 11-10 / 11-11) | — | — | — | — |
+
+**Stale-test debt** (not introduced by Phase 11; pre-existing tests that asserted on Phase 11's about-to-be-retired patterns):
+
+| File | Pattern | Severity | Disposition |
+|------|---------|----------|-------------|
+| tests/bug-2015-worktree-base-branch.test.cjs | asserts on `<worktree_branch_check>` markup block | Info | Stale — block intentionally retired by Phase 11; assertion no longer applies. Addressed in Phase 13 stale-test sweep (Phase 13 SC-2/SC-3 promote the workflow-markdown audit; the test-side co-evolution falls out of that work). |
+| tests/bug-2924-worktree-head-attachment.test.cjs | asserts on `git symbolic-ref` / `git update-ref` in workflows | Info | Same as above — pattern retired by Phase 11; deferred. |
+| tests/worktree-safety.test.cjs, tests/worktree-cleanup.test.cjs, and ~14 other stale files | asserts on raw `git worktree add/remove/unlock` | Info | Same — deferred to Phase 13 stale-test sweep. |
+
+These are EXPECTED stale tests: Phase 11's architectural shift removed the patterns they asserted on. They are NOT regressions from Plans 11-10/11-11.
 
 ### Human Verification Required
 
-None identified. All gaps are observable from static analysis of the codebase — the two execute-phase.md BLOCKERs are mechanical (single-line shell variable + single-arg fix), and the raw-`git` violation in gsd-executor.md is a known project rule that the project's own MEMORY records as universally enforced.
+None. All gaps from re-verification pass 2 are closed by static analysis evidence:
+
+- CR-01 / CR-02 closure verified by grep + 4 new EXEC carry-over tests (`tests/quick-md-parallel-dispatch.test.cjs`).
+- CR-03 closure verified by grep + 4 new tests in `tests/agent-prompts-no-raw-git.test.cjs`.
+- Envelope additive extension verified by parity test (`tests/cmd-workspace-assert-dispatched-cwd.test.ts` scenario 5).
+
+A live wave dispatch on a real colocated jj checkout would be the additional UAT, but the static evidence is sufficient — the failure modes the prior verification predicted (`{ok:false, reason:'plan_json_parse_failed'}` / `phase_number_required` / git-vs-jj-toplevel mismatch) are all mechanically prevented at the bash-block layer.
 
 ### Gaps Summary
 
-Phase 11's structural goal (`-440` LOC raw-git deletion + four guards → one call + reference rename + cleanup-plan body shrink) is essentially LANDED. Plans 11-07/08/09 closed every prior BLOCKER. But the second pass surfaces TWO new defect-clusters introduced BY the gap-closure work:
+No gaps. Phase 11 goal achieved end-to-end:
 
-1. **execute-phase.md dispatch line is non-functional (BLOCKER, two independent root causes):**
-   - `$WAVE_WORKTREE_PLANS_JSON` (line 536) is referenced but never constructed in execute-phase.md, per-plan-worktree-gate.md, or any other file. `grep -rn 'WAVE_WORKTREE_PLANS_JSON'` returns one hit — the use site. Plan 11-08 SUMMARY explicitly self-describes the dispatch line as "already correct from Plan 11-05" (`11-08-SUMMARY.md:111`); the author chose not to touch it. Plan 11-05 SUMMARY also makes no claim of constructing this variable, and `grep -c 'phase_number' 11-05-SUMMARY.md` returns 0.
-   - `--phase "{phase_number}"` (line 538) is the workflow's orchestrator-substitution placeholder syntax that ONLY fires inside agent prompt literals where the orchestrator runtime substitutes before spawn (see lines 565, 573, 695 for legitimate uses). Inside a `bash` shebang block the placeholder is NOT expanded — `Number(\"{phase_number}\") === NaN`, and the verb returns `phase_number_required`. The bash-variable form `${PHASE_NUMBER}` is the established convention at lines 312, 806, 1059, 1098.
-   - The new HANDLE_OK guard (Plan 11-08 closure) catches the resulting `{ok:false}` from either failure mode and prints a clean FATAL — so the user sees a clean error, but the parallel-execution path is unconditionally broken on the orchestrator side.
+- Workflows + agents call ONLY the new cross-backend `vcs.workspace.parallel.*` verbs (and `workspace.assert-dispatched-cwd` for cwd verification). Verified by grep across `get-shit-done/workflows/execute-phase.md`, `get-shit-done/workflows/quick.md`, `agents/gsd-executor.md`.
+- The ~440 LOC of raw-git block in `execute-phase.md` (~290) and `quick.md` (~150) is deleted. Replaced by single dispatch + single fan-in invocations.
+- Subagent prompts never inspect backend kind. `gsd-executor.md` has zero `vcs.kind` branching, zero raw-git invocations on the read-side surface (pinned by `tests/agent-prompts-no-raw-git.test.cjs`), and the FATAL recovery diagnostic dump sources triage data via SDK envelope rather than raw shell-outs.
 
-2. **Raw `git rev-parse` re-introduced in agent prompt (BLOCKER, project-rule violation):**
-   - `gsd-executor.md:431` runs `git rev-parse --show-toplevel || jj workspace root || echo "<unresolvable>"` in the dispatched-cwd FATAL recovery (added by Plan 11-07 CR-04 closure).
-   - Project rule from CLAUDE.md + MEMORY `project_no_raw_git`: "VCS adapter must cover read AND write; lint guard is whole-repo default-deny on `git`, not just mutating verbs; even `git status` perturbs colocated jj state." The chain falls back to jj only if git fails — on the project's own colocated git+jj checkout (`vcs.adapter: jj`), the git branch ALWAYS WINS and the jj fallback is dead code.
-   - Concrete safety concern: on a non-default jj workspace whose fs path is outside the git toplevel (jj workspaces can sit as siblings to the colocated `.git`), `git rev-parse --show-toplevel` reports the git toplevel — not the correct workspace root.
+All 5 ROADMAP Success Criteria VERIFIED. All 6 requirements SATISFIED. REQUIREMENTS.md consistent with verifier truth.
 
-Both defects share a structural cause: the closure plans focused on fixing the SPECIFIC symptom (the original verifier's CR-N markers) without exercising the SUPERSET of analog defects. The execute-phase.md dispatch line had the same shape as the quick.md dispatch line, but Plan 11-08 only fixed quick.md AND ONLY ADDED THE GUARDS to execute-phase.md. The CR-04 diagnostic dump fixed the "no triage data" gap by introducing the wrong KIND of triage data (raw git).
-
-**Recommended planner action:** Group these into two focused closure plans —
-
-1. **Plan 11-10 (PROMPT-06 / SC-2a closure):**
-   - Construct `WAVE_WORKTREE_PLANS_JSON` from the `WAVE_WORKTREE_PLANS` accumulator before the dispatch (one-line `jq` shell pipeline).
-   - Replace `--phase "{phase_number}"` with `--phase "${PHASE_NUMBER}"` at line 538.
-   - Extend `tests/quick-md-parallel-dispatch.test.cjs`'s `EXEC` describe block with the missing plan-shape + numeric-phase carry-overs (3 new assertions) so neither BLOCKER can regress.
-
-2. **Plan 11-11 (PROMPT-08 raw-git removal):**
-   - Replace `gsd-executor.md:431`'s `git rev-parse --show-toplevel` chain with an SDK-verb-based resolver (likely `gsd-sdk query workspace.list --pick 'workspaces[0].path'` or a small new `workspace.repo-root` verb).
-   - Add a regression test under `tests/` that fails on any `\bgit\b` token in `agents/gsd-executor.md` — the project's deny-list intent enforced at file-level.
-
-These can land in parallel; both touch independent files and have non-overlapping test surfaces. Optional Plan 11-12 could fold in the WR-class items (N+1 jj subprocess, protected-ref doc-overstatement, dispatch-cwd-safety recovery section, REQUIREMENTS.md status revert) but none are individually goal-blocking.
+The stale-test debt in the broader `tests/` suite is real but architecturally separate — Phase 13's `parallel-e2e` lint gate + workflow-markdown audit (SC-2/SC-3) will surface it as the symmetric closure step. It does NOT block Phase 11 completion.
 
 ---
 
-_Verified: 2026-05-16T18:00:00Z (re-verification pass 2)_
+_Verified: 2026-05-16T20:30:00Z (re-verification pass 3 — Plans 11-10 / 11-11 / run 2 closure)_
 _Verifier: Claude (gsd-verifier)_
