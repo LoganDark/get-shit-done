@@ -1,10 +1,24 @@
 /**
  * sdk/src/query/workspace-assert-dispatched-cwd.ts — Phase 11 plan 02 Task 1 (VCS-20)
  * Phase 11 plan 07: CR-01 closure — jj backend now resolves workspace-name → fs path.
+ * Phase 11 plan 11: PROMPT-08 BLOCKER closure — envelope additively carries
+ *                   `primaryWorkspacePath` so the agent's FATAL recovery
+ *                   diagnostic dump can read the resolved primary workspace
+ *                   fs path from the SDK verb instead of shelling out to raw
+ *                   `git rev-parse --show-toplevel` (per project rule
+ *                   `project_no_raw_git`).
  *
  * SDK query bridge for "is the current cwd a dispatched (non-primary) workspace?"
  * Returns the flat predicate D-03 contract:
- *   { ok, workspaceName, workspacePath, isPrimary }
+ *   { ok, workspaceName, workspacePath, isPrimary, primaryWorkspacePath }
+ *
+ * `primaryWorkspacePath` is the resolved fs path of `entries[0]` (the primary
+ * workspace), backend-opaque, always present (null on resolution failure or
+ * empty workspace list). Plan 11-11 adds this field to retire the raw-`git
+ * rev-parse` probe from `agents/gsd-executor.md` per project rule
+ * `project_no_raw_git`. The field is computed independently of the cwd-match
+ * outcome so the failure branch (ok:false) STILL carries the primary path —
+ * which is exactly when the agent's FATAL recovery needs it.
  *
  * Backend-opaque to the CONSUMER: the JSON envelope shape is identical on both
  * backends; `workspaceName` is the backend's name-like identifier (git worktree
@@ -82,6 +96,22 @@ export const workspaceAssertDispatchedCwdQuery: QueryHandler = async (args, proj
 
   const cwdReal = safeRealpath(cwd);
 
+  // Plan 11-11 (PROMPT-08 closure): resolve the primary workspace's fs path
+  // independently of the cwd-match outcome. The agent's FATAL recovery
+  // diagnostic dump in `agents/gsd-executor.md` reads this value via jq from
+  // the verb's envelope, retiring the raw-`git rev-parse --show-toplevel`
+  // probe that previously violated the project rule `project_no_raw_git`. The
+  // value is computed BEFORE the match loop so the failure branch (ok:false)
+  // carries it too — which is exactly when the agent needs it for triage.
+  // `null` on resolution failure or empty workspace list — same defensive
+  // shape as `safeRealpath` / `resolveJjWorkspacePath`.
+  const primaryWorkspacePath: string | null =
+    entries.length === 0
+      ? null
+      : vcs.kind === 'jj'
+        ? resolveJjWorkspacePath(cwd, entries[0].path)
+        : safeRealpath(entries[0].path);
+
   // Convention (load-bearing across both backends): the first entry in
   // `vcs.workspace.list()` is the primary workspace.
   //   - git: `git worktree list --porcelain` lists the main worktree first.
@@ -116,13 +146,17 @@ export const workspaceAssertDispatchedCwdQuery: QueryHandler = async (args, proj
   if (matchedIndex === -1) {
     // Use `null` (not `undefined`) so the JSON envelope carries the keys
     // explicitly — consumers that branch on `.workspaceName !== null` see a
-    // stable shape regardless of whether cwd resolved.
+    // stable shape regardless of whether cwd resolved. Plan 11-11:
+    // `primaryWorkspacePath` is ALWAYS present (computed above), independent
+    // of the cwd-match outcome — exactly the failure-branch consumer surface
+    // the agent's FATAL recovery diagnostic dump needs.
     return {
       data: {
         ok: false,
         workspaceName: null,
         workspacePath: null,
         isPrimary: false,
+        primaryWorkspacePath,
       },
     };
   }
@@ -135,12 +169,15 @@ export const workspaceAssertDispatchedCwdQuery: QueryHandler = async (args, proj
   // `workspacePath` now carry semantically equivalent values on both backends:
   // a name-like identifier and an fs path, respectively. On git the two are
   // equal because git's `WorkspaceInfo.path` doubles as both fields.
+  // Plan 11-11: `primaryWorkspacePath` additively present here too —
+  // backend-opaque envelope-shape consistency (same shape on success + failure).
   return {
     data: {
       ok: !isPrimary,
       workspaceName: matched.path,
       workspacePath: matchedPath ?? matched.path,
       isPrimary,
+      primaryWorkspacePath,
     },
   };
 };
