@@ -130,7 +130,7 @@ Plans:
   4. `bin/lib/worktree-safety.cjs::executeWorktreeWaveCleanupPlan` body shrinks to a single delegation through the new cross-backend verb; ADR-0004 ownership preserved; public export signature unchanged.
   5. `dispatch({ plan, maxConcurrency })` input field honored end-to-end from workflow call sites (default `undefined` → runtime's natural cap).
 
-**Plans**: 9 plans (6 original + 3 gap-closure from `--gaps` run 2026-05-16)
+**Plans**: 11 plans (6 original + 3 gap-closure run 1 from 2026-05-16 + 2 gap-closure run 2 from 2026-05-16 re-verify)
 
   - [x] 11-01-PLAN.md — Retire jj-side bookmark plumbing per D-02 + flip cmd-parallel-jj.test.ts assertions [Wave 1]
   - [x] 11-02-PLAN.md — Ship workspace.assert-dispatched-cwd + workspace.parallel.dispatch + workspace.parallel.fan-in SDK CLI bridges (3 handlers + catalog/manifest registration) [Wave 2]
@@ -141,6 +141,8 @@ Plans:
   - [x] 11-07-PLAN.md — Gap closure A: fix workspace-assert-dispatched-cwd.ts jj-side correctness (CR-01) + agent diagnostic dump (CR-04) + dispatch-cwd-safety.md doc cleanup (WR-03); flips VCS-20 + PROMPT-08 BLOCKED → SATISFIED [Wave 4]
   - [x] 11-08-PLAN.md — Gap closure B: fix quick.md dispatch shape + numeric --phase + HANDLE_OK guard (CR-02) + EXPECTED_BRANCH empty/HEAD pre-check in both quick.md and execute-phase.md (CR-03); flips PROMPT-07 BLOCKED → SATISFIED + PARALLEL-06 PARTIAL → SATISFIED [Wave 4]
   - [x] 11-09-PLAN.md — Gap closure C: retire orphaned WAVE_WORKTREE_MANIFEST write in jj/parallel.ts (WR-01) + fix worktree-safety.cjs ok-derivation (WR-02) + document workspace.* verbs in gsd-tools.cjs --help (IN-02) + uniformly deprecation-guard worktree case (WR-04); architectural completion of D-01 invariant [Wave 4]
+  - [ ] 11-10-PLAN.md — Gap closure D (run 2): execute-phase.md dispatch line — construct WAVE_WORKTREE_PLANS_JSON via jq pipeline (REVIEW CR-01) + replace literal --phase "{phase_number}" placeholder with bash variable ${PHASE_NUMBER} (REVIEW CR-02) + extend tests/quick-md-parallel-dispatch.test.cjs EXEC carry-over with plan-shape + numeric-phase assertions (REVIEW IN-01); flips PROMPT-06 BLOCKED → SATISFIED [Wave 5]
+  - [ ] 11-11-PLAN.md — Gap closure E (run 2): retire raw git rev-parse from agents/gsd-executor.md:431 (REVIEW CR-03 — violates project_no_raw_git) by extending workspace.assert-dispatched-cwd envelope with primaryWorkspacePath + agent prompt reads via jq + new class-wide regression test tests/agent-prompts-no-raw-git.test.cjs; flips PROMPT-08 BLOCKED → SATISFIED [Wave 5]
 
 ### Phase 12: A3 colocated pre-commit fix (parallel track)
 
