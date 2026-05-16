@@ -482,11 +482,13 @@ function executeWorktreeWaveCleanupPlan(plan, _deps = {}) {
         branch: src.branch,
         expected_base: ws.baseRev,
         main_bookmark: src.main_bookmark ?? handle.mainBookmark,
-        ok: !fanIn.conflicted && (fanIn.failedReaped || []).length === 0,
+        // WR-02 fix: incompleteQueued > 0 means retries are queued; callers must not mark ROADMAP complete while queue is non-empty.
+        ok: !fanIn.conflicted && (fanIn.failedReaped || []).length === 0 && (fanIn.incompleteQueued || 0) === 0,
       };
     });
     return {
-      ok: fanIn.conflicted === false && (fanIn.failedReaped || []).length === 0,
+      // WR-02 fix: incompleteQueued > 0 means retries are queued; callers must not mark ROADMAP complete while queue is non-empty.
+      ok: fanIn.conflicted === false && (fanIn.failedReaped || []).length === 0 && (fanIn.incompleteQueued || 0) === 0,
       action: plan.action,
       entries: processedFromHandle,
       pending,

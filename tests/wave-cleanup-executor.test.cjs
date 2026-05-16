@@ -186,8 +186,11 @@ test('incomplete-queued fanIn -> pending[incomplete_queued] surfaced once', () =
     }],
   };
   const r = wsafety.executeWorktreeWaveCleanupPlan(plan, { vcs });
-  // ok stays true (no conflict, no failed reap) but pending carries the queued tally.
-  assert.equal(r.ok, true);
+  // WR-02 (Plan 11-09): incompleteQueued > 0 means retries are queued — callers
+  // must not mark ROADMAP complete while the queue is non-empty. `ok` is now
+  // gated on `incompleteQueued === 0` in addition to `conflicted === false` and
+  // `failedReaped.length === 0`.
+  assert.equal(r.ok, false);
   assert.equal(r.pending.length, 1);
   assert.equal(r.pending[0].reason, 'incomplete_queued');
   assert.equal(r.pending[0].count, 3);
