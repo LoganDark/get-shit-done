@@ -745,7 +745,7 @@ Note: `commit.gpgsign false` is needed because the test environment may have glo
 
 The table is non-empty but every claim is LOW risk and grounded in either empirical verification, existing in-tree precedent that has been green for months, or LOCKED upstream decisions. None require user confirmation before planning.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`surplusBookmarks` population strategy — incremental vs. audit-only**
    - What we know: CONTEXT.md flags this as Claude's Discretion. Recommendation is incremental (each failed in-loop cleanup adds to the field; final-clean re-call returns full audit). jj-side at `jj/parallel.ts:471-493` does post-delete audit via `jj bookmark list` — but that's because jj's batched delete makes per-success accumulation moot. git-side has per-success cleanup, so the question lives.
