@@ -308,6 +308,23 @@ export function performGitParallelFanIn(
 	// `phase ${phaseTag} merge: ${ws.agentId}` is well-formed.
 	const phaseTag = String(handle.phaseNumber).padStart(2, '0');
 
+	// WR-03 pre-flight: refuse to run with a wedged in-progress merge. If
+	// MERGE_HEAD is set (a prior fanIn halted on conflict and the user has
+	// not yet `git commit`/`git merge --abort`'d), the next `git merge
+	// --no-ff` exits non-zero with "You have not concluded your merge". The
+	// loop body's conflict regex (line 367) does NOT match that stderr, so
+	// the fallthrough at line 369 would queue another
+	// `merge-in-tree-conflict` entry with `conflictedPaths` derived from
+	// the PREVIOUS wedged merge's unmerged index — i.e. wrong data in the
+	// cross-backend queue. Halting up-front with a clear error directs the
+	// caller to resolve the prior wedge before re-call.
+	const mergeHeadProbe = vcsExec(mainRepoRoot, 'git', ['rev-parse', '--verify', '--quiet', 'MERGE_HEAD']);
+	if (mergeHeadProbe.exitCode === 0) {
+		throw new Error(
+			`parallel.fanIn: refusing to run with mid-merge state (MERGE_HEAD set); resolve via 'git commit' or 'git merge --abort' first`,
+		);
+	}
+
 	const merged: string[] = [];
 	let conflicted = false;
 	let conflictedPaths: string[] = [];
