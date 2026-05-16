@@ -373,7 +373,11 @@ async function main() {
     'generate-dev-preferences, generate-slug, graphify, history-digest, init, intel, ' +
     'learnings, list-todos, milestone, phase, phase-plan-index, phases, profile-questionnaire, ' +
     'profile-sample, progress, requirements, resolve-model, roadmap, scaffold, state, ' +
-    'template, validate, verify, verify-path-exists, verify-summary, workstream, worktree\n\n' +
+    'template, validate, verify, verify-path-exists, verify-summary, workstream\n\n' +
+    'Workspace verbs (routed via `gsd-sdk query workspace.*`):\n' +
+    '  workspace.assert-dispatched-cwd   - assert cwd is a dispatched (non-primary) workspace\n' +
+    '  workspace.parallel.dispatch       - dispatch N parallel subagent workspaces (returns Handle JSON)\n' +
+    '  workspace.parallel.fan-in         - merge dispatched workspaces back; returns FanInResult JSON\n\n' +
     'Global flags:\n' +
     '  --raw              Emit raw output without post-processing\n' +
     '  --pick <field>     Extract a single field from JSON output (dot/bracket notation)\n' +
@@ -982,15 +986,12 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
       break;
     }
 
-    case 'worktree': {
-      // Phase 11 Plan 03 (D-05): the `worktree cleanup-wave` CJS alias is
-      // retired. Workflow markdown call sites are deleted by Plans 11.5/11.6;
-      // the SDK-side `worktree.cleanup-wave` route in
-      // `sdk/src/query/worktree.ts` is the surviving CLI front door until
-      // those plans rewrite it to `workspace.parallel.fan-in`.
-      error('worktree cleanup-wave is retired (Phase 11 D-05). Use `gsd-sdk query workspace.parallel.fan-in` instead.', ERROR_REASON.SDK_UNKNOWN_COMMAND);
-      break;
-    }
+    // Phase 11 Plan 11-09 (WR-04): the `worktree` dispatcher case was retired
+    // entirely. The `cleanup-wave` alias retired in Plan 11-03 (D-05); after
+    // grep audit confirmed no live callers invoke `gsd-tools worktree` for any
+    // subcommand (the `gsd-sdk query workspace.parallel.fan-in` path is the
+    // canonical front door), the case is gone. The dispatcher's default
+    // "Unknown command" branch is the correct UX for any stragglers.
 
     // ─── Intel ────────────────────────────────────────────────────────────
 
