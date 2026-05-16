@@ -608,6 +608,16 @@ describe.sequential.skipIf(!gitAvailable)(
 			// absorbing its partial work. Use spawnSync (non-throwing) because
 			// non-zero exit is the EXPECTED success signal here.
 			expect(spawnSync('git', ['merge-base', '--is-ancestor', agent2Tip, 'HEAD'], { cwd: dir }).status).not.toBe(0);
+
+			// WR-05 regression: STEP 2's clean-WC branch (the path this test
+			// constructs — agent-2 committed before crashing, so its worktree
+			// is clean and non-force `worktree remove` succeeds) must delete
+			// the agent's branch explicitly. Without that delete, STEP 3's
+			// expectedNames audit would re-enumerate the orphaned
+			// `worktree-agent-agent-2` ref and double-count it into
+			// `surplusBookmarks` — alongside its existing
+			// `crashed-with-uncommitted-work` queue entry.
+			expect(result.surplusBookmarks).not.toContain('worktree-agent-agent-2');
 		});
 	},
 );
