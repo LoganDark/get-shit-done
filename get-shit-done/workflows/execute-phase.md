@@ -520,16 +520,18 @@ increases monotonically across waves. `{status}` is `complete` (success),
 
    **Worktree mode** (`USE_WORKTREES_FOR_PLAN` is not `false` — evaluated per-plan in step 2.5):
 
-   Before spawning, capture the current HEAD:
+   Capture HEAD + dispatch the wave via the cross-backend parallel verb. Per Phase 11
+   D-01, no manifest file is written — the `ParallelDispatchHandle` JSON lives in
+   `$HANDLE_JSON`. `maxConcurrency` is omitted (D-07).
+
    ```bash
    EXPECTED_BASE=$(gsd-sdk query head-ref --cwd . --pick head)
    DISPATCH_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
    EXPECTED_BRANCH=$(gsd-sdk query current-branch --cwd . --pick branch)
-   if [ "${USE_WORKTREES_FOR_PLAN:-true}" != "false" ] && [ -z "${WAVE_WORKTREE_MANIFEST:-}" ]; then
-     WAVE_WORKTREE_MANIFEST=$(mktemp "${TMPDIR:-/tmp}/gsd-worktree-wave-XXXXXX.json")
-     printf '{"worktrees":[]}\n' > "$WAVE_WORKTREE_MANIFEST"
-     export WAVE_WORKTREE_MANIFEST
-   fi
+   HANDLE_JSON=$(printf '%s' "$WAVE_WORKTREE_PLANS_JSON" \
+     | gsd-sdk query workspace.parallel.dispatch \
+         --phase "{phase_number}" --main-bookmark "$EXPECTED_BRANCH" --plan @-)
+   [ -z "$HANDLE_JSON" ] && { echo "FATAL: workspace.parallel.dispatch returned empty Handle JSON" >&2; exit 1; }
    ```
 
    **Sequential dispatch for parallel execution (waves with 2+ agents):**
@@ -540,6 +542,14 @@ increases monotonically across waves. `{status}` is `complete` (success),
    ```text
    # CORRECT: one Agent() per message with run_in_background: true
    # WRONG: multiple Agent() calls in one message -> .git/config.lock contention
+   ```
+
+   Iterate `.workspaces[]` from `$HANDLE_JSON` — each entry is `{ name, path, baseRev,
+   agentId, baselineOpId }`. `path` is the per-agent cwd; `agentId` keys the
+   `ParallelAgentResult` accumulated for fan-in. Initialize the results array:
+
+   ```bash
+   RESULTS_ACCUM='[]'   # ParallelAgentResult[]; one appended per Agent() return
    ```
 
    ```text
@@ -557,34 +567,6 @@ increases monotonically across waves. `{status}` is `complete` (success),
        Commit each task atomically. Create SUMMARY.md.
        Do NOT update STATE.md or ROADMAP.md — the orchestrator owns those writes after all worktree agents in the wave complete.
        </objective>
-
-       <worktree_branch_check>
-       FIRST ACTION: HEAD assertion MUST run before any reset/checkout. Worktrees
-       spawned by Claude Code's `isolation="worktree"` use the `worktree-agent-<id>`
-       namespace. If HEAD is on a protected ref (main/master/develop/trunk/release/*)
-       or detached, HALT — do NOT self-recover by force-rewinding via `git update-ref`,
-       that destroys concurrent commits in multi-active scenarios (#2924). Only after
-       Step 1 passes is `git reset --hard` safe (#2015 — affects all platforms).
-       ```bash
-       # TODO(05-05 sweep): this whole HEAD-assertion block is git-mode-only by construction — it runs inside a git worktree spawned by Claude Code's `isolation="worktree"` (the `worktree-agent-*` namespace, the `.git/config.lock` contention pattern from #2924, the protected-ref deny-list). The raw `git symbolic-ref` / `git rev-parse --abbrev-ref HEAD` calls have no clean SDK substitute: `gsd-sdk query current-branch` returns the bookmarks-pointing-at-HEAD array (Phase 2.1 D-15), not the single-branch-name shape this block needs. `git merge-base` has no SDK verb yet. The full block stays raw git until WS-01/WS-02 lands a jj-workspace equivalent prompt template; D-33 anti-pattern guard does NOT apply here (no backend conditional — git mode is the only path that reaches this prompt body).
-       HEAD_REF=$(git symbolic-ref --quiet HEAD || echo "DETACHED")
-       ACTUAL_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-       if [ "$HEAD_REF" = "DETACHED" ] || echo "$ACTUAL_BRANCH" | grep -Eq '^(main|master|develop|trunk|release/.*)$'; then
-         echo "FATAL: worktree HEAD on '$ACTUAL_BRANCH' (expected worktree-agent-*); refusing to self-recover via 'git update-ref' (#2924)." >&2
-         exit 1
-       fi
-       if ! echo "$ACTUAL_BRANCH" | grep -Eq '^worktree-agent-[A-Za-z0-9._/-]+$'; then
-         echo "FATAL: worktree HEAD '$ACTUAL_BRANCH' is not in the worktree-agent-* namespace; refusing to commit (#2924)." >&2
-         exit 1
-       fi
-       ACTUAL_BASE=$(git merge-base HEAD {EXPECTED_BASE})
-       if [ "$ACTUAL_BASE" != "{EXPECTED_BASE}" ]; then
-         gsd-sdk query reset --ref {EXPECTED_BASE} --mode hard --cwd .
-         [ "$(gsd-sdk query head-ref --cwd . --pick head)" != "{EXPECTED_BASE}" ] && { echo "ERROR: could not correct worktree base"; exit 1; }
-       fi
-       ```
-       Per-commit dispatched-cwd assertion: `agents/gsd-executor.md` step 0 + `references/dispatch-cwd-safety.md` (in <execution_context>).
-       </worktree_branch_check>
 
        <parallel_execution>
        You are running as a PARALLEL executor agent in a dispatched workspace. Dispatched-cwd safety (workspace.assert-dispatched-cwd precondition guard) is in `dispatch-cwd-safety.md` (loaded below).
@@ -648,7 +630,10 @@ increases monotonically across waves. `{status}` is `complete` (success),
    )
    ```
 
-   Immediately after each worktree `Agent()` spawn returns metadata, atomically append `{agent_id, worktree_path, branch, expected_base}` to `WAVE_WORKTREE_MANIFEST`. If any field is missing, stop and ask for recovery instead of scanning all agent worktrees.
+   After each `Agent()` returns, append one `ParallelAgentResult` (`{ agentId,
+   exitCode, lastChangeId?, stderr? }`) to `$RESULTS_ACCUM`. Probe the workspace head
+   via `gsd-sdk query head-ref --cwd "$WS_PATH" --pick head`. `$HANDLE_JSON` is the
+   source of truth for the workspace SET; do not re-discover via filesystem scans.
 
    > **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above to spawn executor agent(s), stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
@@ -740,82 +725,44 @@ increases monotonically across waves. `{status}` is `complete` (success),
    ```
    If hooks fail: report the failure and ask "Fix hook issues now?" or "Continue to next wave?"
 
-5.5. **Worktree cleanup (when `isolation="worktree"` was used):**
+5.5. **Workspace fan-in (when `isolation="worktree"` was used):**
 
-   **Standard wave contract:** Each wave's worktrees merge to main via the templated path below before the next wave's worktrees fork. The cleanup loop runs once per wave at the end of the wave lifecycle. Worktrees created in wave N must be fully removed before wave N+1 forks new ones.
-
-   **Cross-wave dependency deviation (supported execution mode):** When the orchestrator legitimately deviates from the standard wave model — for example, a phase with cross-wave plan dependencies that requires custom inter-worktree base-update merges (e.g., `merge: bring 09-01 + 09-02 into 09-03 base`) — the cleanup loop below is NOT automatically re-entered for those custom merges. The deviation path produces correct final history but bypasses this loop, leaving `worktree-agent-*` directories in place. Use the **cleanup-tail snippet** below to remove any residual worktrees after such a deviation.
-
-   When executor agents ran in worktree isolation, their commits land on temporary branches in separate working trees. After the wave completes, merge these changes back and clean up:
-
-   **Manifest source of truth (#3384):** Cleanup consumes the `WAVE_WORKTREE_MANIFEST` created and populated during executor dispatch in step 3. Do not recreate or truncate it here.
-
-   Prefer the bounded helper, which validates branch identity, expected base, deletion
-   diffs, merge result, and worktree removal before deleting the temporary branch.
-   If the helper reports a blocked cleanup, resolve the reported manifest entry and
-   rerun the same command. Do not fall back to broad worktree discovery.
+   Each wave's dispatched workspaces merge back via `vcs.workspace.parallel.fanIn`
+   before the next wave forks. The adapter handles per-success cleanup (git) and
+   atomic octopus merge + reap (jj). Per Phase 11 D-01, no manifest file is on disk
+   — the Handle JSON in `$HANDLE_JSON` + the `$RESULTS_ACCUM` array accumulated in
+   step 3 are the full input.
 
    ```bash
-   [ -n "${WAVE_WORKTREE_MANIFEST:-}" ] && [ -f "$WAVE_WORKTREE_MANIFEST" ] || {
-     echo "BLOCKED: missing WAVE_WORKTREE_MANIFEST; refusing broad worktree cleanup (#3384)." >&2
-     exit 1
-   }
-
-   # Branch-drift guard (#3174-class). Adapter-mediated current-branch probe.
-   # NOTE(jj-port): upstream pinned the orchestrator CWD back to the primary
-   # worktree here via `git worktree list --porcelain`. The jj-port has no
-   # adapter verb for "primary workspace path" yet, and on jj the cwd IS the
-   # canonical workspace by convention — multi-workspace setups go through
-   # explicit `jj workspace forget`/`add` rather than ambient worktree drift.
-   # Restore the pin once `gsd-sdk query workspace-list --pick primary` exists.
+   # Branch-drift guard (#3174-class).
    ORCH_BRANCH=$(gsd-sdk query current-branch --cwd . --pick branch 2>/dev/null)
-   [ -z "${EXPECTED_BRANCH:-}" ] || [ "$ORCH_BRANCH" = "$EXPECTED_BRANCH" ] || { echo "FATAL: orchestrator on '$ORCH_BRANCH' but expected '$EXPECTED_BRANCH' before worktree cleanup — refusing to merge (#3174-class drift)" >&2; exit 1; }
+   [ -z "${EXPECTED_BRANCH:-}" ] || [ "$ORCH_BRANCH" = "$EXPECTED_BRANCH" ] || { echo "FATAL: orchestrator on '$ORCH_BRANCH' but expected '$EXPECTED_BRANCH' before fan-in (#3174-class drift)" >&2; exit 1; }
 
-   gsd-sdk query worktree.cleanup-wave --manifest "$WAVE_WORKTREE_MANIFEST" || exit 1
-   ```
+   # Handle via tmpfile (CLI rejects both --handle @- and --results @- per Plan 11.2).
+   HANDLE_FILE=$(mktemp "${TMPDIR:-/tmp}/gsd-handle-XXXXXX.json")
+   printf '%s' "$HANDLE_JSON" > "$HANDLE_FILE"
+   FAN_RESULT=$(printf '%s' "$RESULTS_ACCUM" \
+     | gsd-sdk query workspace.parallel.fan-in --handle "@$HANDLE_FILE" --results @-)
+   rm -f "$HANDLE_FILE"
 
-   **Cleanup-tail snippet (use after any wave whose merges did not flow through the templated path above):**
-
-   If the orchestrator deviated from the standard wave merge path (e.g., custom inter-worktree base-update merges with `merge: bring …` style messages), run this snippet after the custom merges are complete. It reads only `WAVE_WORKTREE_MANIFEST`; do not discover unrelated `worktree-agent-*` worktrees.
-
-   ```bash
-   # Cleanup-tail: pin orchestrator CWD to primary worktree before cleanup-tail (#3174).
-   PRIMARY_WT=$(git worktree list --porcelain | awk '/^worktree /{print substr($0,10); exit}')
-   if [ -n "$PRIMARY_WT" ] && [ "$(pwd -P 2>/dev/null)" != "$(cd "$PRIMARY_WT" 2>/dev/null && pwd -P)" ]; then echo "⚠ Orchestrator CWD drifted to $(pwd) — pinning to $PRIMARY_WT before cleanup-tail (#3174)"; cd "$PRIMARY_WT" || { echo "FATAL: cannot cd to primary worktree $PRIMARY_WT" >&2; exit 1; }; fi
-   # Cleanup-tail: remove residual agent worktrees after a cross-wave-dependency deviation.
-   # Uses only the current wave manifest to avoid touching unrelated active agents (#3384).
-   WT_PATHS_FILE=$(mktemp "${TMPDIR:-/tmp}/gsd-worktree-paths-XXXXXX")
-   node -e 'const fs=require("fs");const p=process.env.WAVE_WORKTREE_MANIFEST;try{if(!p)throw new Error("WAVE_WORKTREE_MANIFEST is unset");if(!fs.existsSync(p))throw new Error("manifest does not exist");const s=fs.readFileSync(p,"utf8");if(!s.trim())throw new Error("manifest is empty");const j=JSON.parse(s);for(const w of j.worktrees||[])if(w.worktree_path)console.log(w.worktree_path)}catch(e){console.error(`ERROR: cannot read worktree manifest ${p||"(unset)"}: ${e.message}`);process.exit(1)}' > "$WT_PATHS_FILE" || { echo "BLOCKED: cannot read WAVE_WORKTREE_MANIFEST; refusing cleanup (#3384)." >&2; exit 1; }
-   while IFS= read -r WT; do
-     [ -z "$WT" ] && continue
-     WT_BRANCH=$(git -C "$WT" rev-parse --abbrev-ref HEAD 2>/dev/null)
-     [ -z "$WT_BRANCH" ] || [ "$WT_BRANCH" = "HEAD" ] && continue
-     echo "Cleaning up residual worktree: $WT (branch: $WT_BRANCH)"
-     git worktree unlock "$WT" 2>/dev/null || true
-     if ! git worktree remove "$WT" --force; then
-       WT_NAME=$(basename "$WT")
-       if [ -f ".git/worktrees/${WT_NAME}/locked" ]; then
-         echo "⚠ Worktree $WT is locked — unlock failed; manual cleanup required:"
-         echo "    git worktree unlock \"$WT\" && git worktree remove \"$WT\" --force && git branch -D \"$WT_BRANCH\""
-       else
-         echo "⚠ Residual worktree at $WT — remove failed; manual cleanup required"
-       fi
-     else
-       git branch -D "$WT_BRANCH" 2>/dev/null || true
-     fi
-   done < "$WT_PATHS_FILE"
-   git worktree prune
+   CONFLICTED=$(echo "$FAN_RESULT" | jq -r '.conflicted // false')
+   FAILED_REAPED=$(echo "$FAN_RESULT" | jq -r '.failedReaped // [] | length')
+   MERGED_COUNT=$(echo "$FAN_RESULT" | jq -r '.merged // [] | length')
+   if [ "$CONFLICTED" = "true" ] || [ "$FAILED_REAPED" -gt 0 ]; then
+     echo "⚠ Fan-in surfaced issues (conflicted=$CONFLICTED, failedReaped=$FAILED_REAPED)" >&2
+     echo "$FAN_RESULT" | jq .
+     exit 1
+   fi
+   echo "✓ Fan-in merged $MERGED_COUNT workspaces cleanly."
    ```
 
    **When to skip step 5.5:**
 
    **If no plan in this wave used worktree isolation** (project-level `USE_WORKTREES=false` OR every plan in the wave had `USE_WORKTREES_FOR_PLAN=false` — i.e. `WAVE_WORKTREE_PLANS` from step 2.5 is empty): all agents ran on the main working tree — skip this step entirely.
 
-   **If the orchestrator merged via custom messages (cross-wave-dependency deviation):** the templated cleanup loop above was not triggered for those merges. Run the cleanup-tail snippet above instead. After the snippet completes, proceed to step 5.6.
+   **If at least one plan used worktrees but others did not:** still run fan-in — the adapter's workspace SET (derived from `$HANDLE_JSON.workspaces[]`) covers only the workspaces dispatched in step 3, leaving sequential plans' commits on the main tree untouched.
 
-   **If at least one plan used worktrees but others did not:** still run this cleanup — it iterates over actual `git worktree list` output and only merges back the worktrees that were created, leaving sequential plans' commits on the main tree untouched.
-
-   **If no worktrees found at runtime:** Skip silently — agents may have been spawned without worktree isolation, or the orchestrator already cleaned them up.
+   **If `$HANDLE_JSON` is empty or carries zero workspaces at runtime:** Skip silently — agents may have been spawned without worktree isolation, or fan-in already merged them. The fan-in CLI itself is a trivial no-op when invoked with an empty workspace SET.
 
 5.6. **Post-merge build & test gate:**
 
