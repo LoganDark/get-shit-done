@@ -21,6 +21,7 @@ import {
 	mkdtempSync,
 	mkdirSync,
 	writeFileSync,
+	readFileSync,
 	chmodSync,
 	existsSync,
 	rmSync,
@@ -244,6 +245,56 @@ describe.skipIf(!jjAvailable)(
 						process.env.GSD_HOOK_SKIP_COLOCATED = prev;
 					}
 				}
+			});
+
+			it('HOOK-07: colocated vcs.commit fires .githooks/pre-commit exactly once', () => {
+				// HOOK-07 regression guard (Phase 12 / SC2): the sibling D-32
+				// test at :199 asserts the hook marker merely EXISTS (a >=1-fire
+				// assertion). HOOK-07 is the net-new exact-count proof — a
+				// counter hook body appends one line per fire, so a single
+				// commit must leave a marker with exactly 1 line. A future
+				// double-fire regression (or a re-introduced D-10 colocated
+				// no-op) breaks this. The unconditional fireHook lives at
+				// sdk/src/vcs/backends/jj.ts:249-289 (Path 1, already shipped).
+				const markerPath = join(dir, '.hook07-fire-count');
+				safeUnlink(markerPath);
+				// Counter body: APPEND one constant line per invocation (>>),
+				// not truncate — so a double-fire would yield 2 lines.
+				writeHook(
+					dir,
+					'pre-commit',
+					`#!/bin/bash\necho fired >> "${markerPath}"\nexit 0\n`,
+				);
+
+				// First commit — distinct co-* stem so the shared `dir` does
+				// not collide with sibling tests' staged files.
+				writeFileSync(join(dir, 'co-hook07.txt'), 'h7\n');
+				const r1 = vcs.commit({
+					message: 'hook07 fire-count test',
+					files: ['co-hook07.txt'],
+				});
+				expect(r1.exitCode).toBe(0);
+				// Drop the trailing empty string left by the final newline,
+				// then assert the hook fired EXACTLY once for one commit.
+				const lines1 = readFileSync(markerPath, 'utf8')
+					.split('\n')
+					.filter((l) => l !== '');
+				expect(lines1.length).toBe(1);
+
+				// Edge: a second independent commit again fires exactly once —
+				// proves "once per commit", not a cumulative drift. Reset the
+				// marker first so the count is per-commit, not accumulated.
+				safeUnlink(markerPath);
+				writeFileSync(join(dir, 'co-hook07-b.txt'), 'h7b\n');
+				const r2 = vcs.commit({
+					message: 'hook07 fire-count test (second commit)',
+					files: ['co-hook07-b.txt'],
+				});
+				expect(r2.exitCode).toBe(0);
+				const lines2 = readFileSync(markerPath, 'utf8')
+					.split('\n')
+					.filter((l) => l !== '');
+				expect(lines2.length).toBe(1);
 			});
 
 			// A3 assumption regression — does git's .git/hooks/pre-commit fire
