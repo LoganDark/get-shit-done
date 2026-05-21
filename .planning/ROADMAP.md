@@ -152,8 +152,8 @@ Plans:
 **Success Criteria** (what must be TRUE):
 
   1. **CONTEXT-level decision recorded at discuss-phase**: ONE of Path A ("remove D-10 no-op"), Path B ("explicit shell of `.git/hooks/pre-commit` in colocated mode"), or Path 1 ("always-fire + `GSD_HOOK_SKIP_COLOCATED` env opt-out") is chosen after re-reading Phase 4 LEARNINGS Open Q1 (archived `51ee72a3`). Path C (version-probe) is rejected. CONTEXT.md records the rationale.
-  2. On a colocated jj fixture, installing a sentinel `.git/hooks/pre-commit` and running `vcs.commit` (or direct `jj squash`) fires the hook exactly once (or zero times if `GSD_HOOK_SKIP_COLOCATED` opt-out applies and the chosen path uses it).
-  3. Regression test at `sdk/src/vcs/__tests__/jj-colocated-hooks.test.ts` (or extension of existing `jj-hooks.test.ts`) is green on jj-colocated CI lane.
+  2. On a colocated jj fixture, installing a sentinel `.githooks/pre-commit` and running `vcs.commit` (or direct `jj squash`) fires the hook exactly once (or zero times if `GSD_HOOK_SKIP_COLOCATED` opt-out applies and the chosen path uses it).
+  3. Regression test extends the existing `jj-colocated` describe block at `sdk/src/vcs/__tests__/jj-hooks.test.ts:167` (no new test file) and is green on the jj-colocated CI lane.
   4. If chosen path relies on hook idempotency (Path 1 variant), an audit of repo hooks for non-idempotent operations is recorded as Phase 12 close-gate evidence.
   5. The public `CommitInput`/`CommitResult` adapter surface is unchanged (fix lives in the jj backend body, not as an interface change).
 
