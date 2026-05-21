@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: jj octopus merge for subagents fully functional
-status: verifying
-stopped_at: Completed 12-02-PLAN.md
+status: executing
+stopped_at: Phase 12 complete and verified
 last_updated: "2026-05-21T03:35:54.446Z"
-last_activity: 2026-05-21 -- Phase 12 plan 03 complete (SC4 hook idempotency audit)
+last_activity: 2026-05-21 -- Phase 12 complete and verified (5/5)
 progress:
-  total_phases: 4
+  total_phases: 6
   completed_phases: 4
   total_plans: 25
   completed_plans: 25
-  percent: 100
+  percent: 67
 ---
 
 # Project State
@@ -21,20 +21,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-15 at v1.3 open)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 12 — a3-colocated-pre-commit-fix-parallel-track
+**Current focus:** Phase 13 — CI parallel-path lane + lint close-gate
 
 ## Current Position
 
-Phase: 12 (a3-colocated-pre-commit-fix-parallel-track) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
-Last activity: 2026-05-21 -- Phase 12 plan 03 complete (SC4 hook idempotency audit)
+Phase: 13
+Plan: Not started
+Status: Ready to discuss
+Last activity: 2026-05-21 -- Phase 12 complete and verified
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 90 (v1.0: 56 + v1.1: 5 + v1.2: 3 + v1.3: 0)
+- Total plans completed: 93 (v1.0: 56 + v1.1: 5 + v1.2: 3 + v1.3: 0)
 - Average duration: see per-milestone table
 - Total execution time: 3 milestones shipped (v1.0, v1.1, v1.2)
 
