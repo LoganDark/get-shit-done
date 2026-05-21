@@ -157,7 +157,16 @@ Plans:
   4. If chosen path relies on hook idempotency (Path 1 variant), an audit of repo hooks for non-idempotent operations is recorded as Phase 12 close-gate evidence.
   5. The public `CommitInput`/`CommitResult` adapter surface is unchanged (fix lives in the jj backend body, not as an interface change).
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+**Wave 1** *(docs cascade-amendment — runs before test/audit so later plan task text references corrected wording)*
+
+- [ ] 12-01-PLAN.md — Cascade-amendment doc edits: ROADMAP Phase 12 SC2 + SC3 and REQUIREMENTS HOOK-06 + HOOK-07 rewritten from `.git/hooks/pre-commit` to `.githooks/pre-commit` per CONTEXT D-03
+
+**Wave 2** *(blocked on Wave 1 completion; the two plans touch disjoint files and run in parallel)*
+
+- [ ] 12-02-PLAN.md — HOOK-07 regression test: extend the `jj-colocated` describe block at `jj-hooks.test.ts:167` with a fires-exactly-once sentinel assertion
+- [ ] 12-03-PLAN.md — SC4 hook idempotency audit: standalone `12-HOOK-IDEMPOTENCY-AUDIT.md` classifying `.githooks/pre-commit` + `.githooks/pre-push` operations
 
 ### Phase 13: CI parallel-path lane + lint close-gate
 
