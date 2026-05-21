@@ -49,8 +49,8 @@ Audit script captures the "raw-git in workflow markdown collapses to zero" evide
 
 Closes the gap inherited from v1.0 Phase 4. Path A vs B vs 1 not pre-decided at requirements time — re-read Phase 4 LEARNINGS Open Q1 (archived `51ee72a3`) at discuss-phase; CONTEXT.md records the chosen path with rationale. REQ-IDs continue from v1.0's HOOK-05.
 
-- [ ] **HOOK-06**: A3 colocated pre-commit fix landed. jj 0.41 colocated `jj squash` reliably fires `.githooks/pre-commit` (whichever path; CONTEXT-level decision). Lives in `sdk/src/vcs/backends/jj.ts::commit` or new `sdk/src/vcs/jj/pre-commit-bridge.ts` sidecar — NOT an adapter interface change. Firing git's own `.git/hooks/<stage>` namespace under jj-driven commits in colocated mode is explicitly out of scope (D-02 invariant): the jj adapter's fire surface is bound to `.githooks/<stage>` only. Migration callout — husky / `pre-commit`-framework users (anyone whose tooling installs hooks at `.git/hooks/`) must migrate those hooks to the `.githooks/` convention (symlink, framework reconfiguration via a custom `--hooks-path`, or manual copy) to get hook execution under jj-driven colocated commits.
-- [ ] **HOOK-07**: Regression test for HOOK-06 on a colocated jj fixture; the sentinel hook location is `.githooks/pre-commit`. Pre-commit hook fires exactly once (or zero times if `GSD_HOOK_SKIP_COLOCATED` env opt-out applies, depending on chosen path). The regression test lives in the extended `jj-colocated` describe block at `sdk/src/vcs/__tests__/jj-hooks.test.ts:167` (no new test file). Hook idempotency audit recorded if the chosen path relies on it (e.g., always-fire variant).
+- [x] **HOOK-06**: A3 colocated pre-commit fix landed. jj 0.41 colocated `jj squash` reliably fires `.githooks/pre-commit` (whichever path; CONTEXT-level decision). Lives in `sdk/src/vcs/backends/jj.ts::commit` or new `sdk/src/vcs/jj/pre-commit-bridge.ts` sidecar — NOT an adapter interface change. Firing git's own `.git/hooks/<stage>` namespace under jj-driven commits in colocated mode is explicitly out of scope (D-02 invariant): the jj adapter's fire surface is bound to `.githooks/<stage>` only. Migration callout — husky / `pre-commit`-framework users (anyone whose tooling installs hooks at `.git/hooks/`) must migrate those hooks to the `.githooks/` convention (symlink, framework reconfiguration via a custom `--hooks-path`, or manual copy) to get hook execution under jj-driven colocated commits.
+- [x] **HOOK-07**: Regression test for HOOK-06 on a colocated jj fixture; the sentinel hook location is `.githooks/pre-commit`. Pre-commit hook fires exactly once (or zero times if `GSD_HOOK_SKIP_COLOCATED` env opt-out applies, depending on chosen path). The regression test lives in the extended `jj-colocated` describe block at `sdk/src/vcs/__tests__/jj-hooks.test.ts:167` (no new test file). Hook idempotency audit recorded if the chosen path relies on it (e.g., always-fire variant).
 
 ### CI parallel-path lane (CI)
 
@@ -123,8 +123,8 @@ Mapped during roadmap creation 2026-05-15. Updated 2026-05-15 after Phase 9 disc
 | PROMPT-09 | Phase 11 | Complete |
 | LINT-04 | Phase 13 | Pending |
 | LINT-05 | Phase 13 | Pending |
-| HOOK-06 | Phase 12 | Pending |
-| HOOK-07 | Phase 12 | Pending |
+| HOOK-06 | Phase 12 | Complete |
+| HOOK-07 | Phase 12 | Complete |
 | CI-05 | Phase 13 | Pending |
 | CI-06 | Phase 13 | Pending |
 | TEST-13 | Phase 9 (jj contract tests) + Phase 10 (git contract tests) | Complete |

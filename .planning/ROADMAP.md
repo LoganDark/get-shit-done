@@ -161,7 +161,7 @@ Plans:
 
 **Wave 1** *(docs cascade-amendment — runs before test/audit so later plan task text references corrected wording)*
 
-- [ ] 12-01-PLAN.md — Cascade-amendment doc edits: ROADMAP Phase 12 SC2 + SC3 and REQUIREMENTS HOOK-06 + HOOK-07 rewritten from `.git/hooks/pre-commit` to `.githooks/pre-commit` per CONTEXT D-03
+- [x] 12-01-PLAN.md — Cascade-amendment doc edits: ROADMAP Phase 12 SC2 + SC3 and REQUIREMENTS HOOK-06 + HOOK-07 rewritten from `.git/hooks/pre-commit` to `.githooks/pre-commit` per CONTEXT D-03
 
 **Wave 2** *(blocked on Wave 1 completion; the two plans touch disjoint files and run in parallel)*
 
@@ -217,7 +217,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 | 9. jj-side parallel verbs | 5/5 | Complete   | 2026-05-15 |
 | 10. git-side parallel verbs + classifier extension | 6/6 | Complete    | 2026-05-16 |
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 11/11 | Complete    | 2026-05-16 |
-| 12. A3 colocated pre-commit fix (parallel track) | 0/0 | Not started | - |
+| 12. A3 colocated pre-commit fix (parallel track) | 1/3 | In Progress|  |
 | 13. CI parallel-path lane + lint close-gate | 0/0 | Not started | - |
 | 14. Default flip + dogfood validation | 0/0 | Not started | - |
 
