@@ -274,6 +274,11 @@ describe.skipIf(!jjAvailable)(
 					files: ['co-hook07.txt'],
 				});
 				expect(r1.exitCode).toBe(0);
+				// Assert the marker exists before reading it: in the exact
+				// zero-fire regression HOOK-07 guards against, the marker is
+				// never created and a raw readFileSync would throw ENOENT
+				// before any expect() runs — masking the count signal.
+				expect(existsSync(markerPath)).toBe(true);
 				// Drop the trailing empty string left by the final newline,
 				// then assert the hook fired EXACTLY once for one commit.
 				const lines1 = readFileSync(markerPath, 'utf8')
@@ -291,6 +296,10 @@ describe.skipIf(!jjAvailable)(
 					files: ['co-hook07-b.txt'],
 				});
 				expect(r2.exitCode).toBe(0);
+				// Same existsSync guard as the first read: a zero-fire on the
+				// second commit must surface as a clean count assertion, not
+				// an ENOENT stack trace.
+				expect(existsSync(markerPath)).toBe(true);
 				const lines2 = readFileSync(markerPath, 'utf8')
 					.split('\n')
 					.filter((l) => l !== '');
