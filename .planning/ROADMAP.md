@@ -165,7 +165,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion; the two plans touch disjoint files and run in parallel)*
 
-- [ ] 12-02-PLAN.md — HOOK-07 regression test: extend the `jj-colocated` describe block at `jj-hooks.test.ts:167` with a fires-exactly-once sentinel assertion
+- [x] 12-02-PLAN.md — HOOK-07 regression test: extend the `jj-colocated` describe block at `jj-hooks.test.ts:167` with a fires-exactly-once sentinel assertion
 - [ ] 12-03-PLAN.md — SC4 hook idempotency audit: standalone `12-HOOK-IDEMPOTENCY-AUDIT.md` classifying `.githooks/pre-commit` + `.githooks/pre-push` operations
 
 ### Phase 13: CI parallel-path lane + lint close-gate
@@ -217,7 +217,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 | 9. jj-side parallel verbs | 5/5 | Complete   | 2026-05-15 |
 | 10. git-side parallel verbs + classifier extension | 6/6 | Complete    | 2026-05-16 |
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 11/11 | Complete    | 2026-05-16 |
-| 12. A3 colocated pre-commit fix (parallel track) | 1/3 | In Progress|  |
+| 12. A3 colocated pre-commit fix (parallel track) | 2/3 | In Progress|  |
 | 13. CI parallel-path lane + lint close-gate | 0/0 | Not started | - |
 | 14. Default flip + dogfood validation | 0/0 | Not started | - |
 
