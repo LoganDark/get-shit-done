@@ -4,13 +4,13 @@ milestone: v1.3
 milestone_name: jj octopus merge for subagents fully functional
 status: executing
 stopped_at: Phase 13 context gathered
-last_updated: "2026-05-22T20:11:43.201Z"
-last_activity: 2026-05-22 -- Phase 13 planning complete
+last_updated: "2026-05-22T20:25:34.998Z"
+last_activity: 2026-05-22
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 29
-  completed_plans: 25
+  completed_plans: 26
   percent: 80
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-15 at v1.3 open)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 13 — CI parallel-path lane + lint close-gate
+**Current focus:** Phase 13 — ci-parallel-path-lane-lint-close-gate
 
 ## Current Position
 
-Phase: 13
-Plan: Not started
+Phase: 13 (ci-parallel-path-lane-lint-close-gate) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-05-22 -- Phase 13 planning complete
+Last activity: 2026-05-22
 
 ## Performance Metrics
 
@@ -72,6 +72,7 @@ Last activity: 2026-05-22 -- Phase 13 planning complete
 | Phase 12 P01 | 3min | 2 tasks | 2 files |
 | Phase 12 P02 | 5min | 1 tasks | 1 files |
 | Phase 12 P03 | 2min | 1 tasks | 1 files |
+| Phase 13 P01 | 4min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -126,6 +127,7 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.3-specific decisions 
 - [Phase 12]: Phase 12 Plan 02: treated the tdd-flagged plan as a single test(...) commit with no separate RED/GREEN — Path 1 production code is already shipped at jj.ts:249-289 (Phase 5 plan 05-01); the regression test guards shipped behavior and is EXPECTED to pass on first run per the plan's acceptance_criteria, so the plan-level TDD fail-fast-on-passing-RED rule does not apply
 - [Phase 12]: Phase 12 Plan 03: classified all 5 hook operations as idempotent — every operation in .githooks/pre-commit + pre-push is a read-only inspection (staged-diff read, env-var read, commit-history read) feeding an accept/reject decision; none mutate index/working-tree/refs, so the jj.ts:264-266 idempotency assumption holds for the installed scripts
 - [Phase 12]: Phase 12 Plan 03: recorded the SC4 empty-finding baseline explicitly per D-05 (0 non-idempotent operations, dated 2026-05-21); standalone artifact at 12-HOOK-IDEMPOTENCY-AUDIT.md so a future contributor adding a non-idempotent hook op has a dated prior record to reconcile against
+- [Phase ?]: Phase 13 Plan 01: cascade-amendment doc edits — ROADMAP Phase 13 SC2/SC3 + CONTEXT D-08 + Phase Boundary + REQUIREMENTS LINT-04/CI-06 re-baselined from a false 'zero raw-git hits' assertion to the baseline-regression-guard framing (audit carries a frozen 127-hit baseline, fails only on raw-git ADDED beyond it; first green run current == baseline == pass) per RESEARCH Open Q1; the Phase 13 Goal line's 'collapses to zero' milestone framing left untouched (explicitly out of scope)
 
 ### Pending Todos
 
@@ -157,10 +159,10 @@ Items acknowledged and carried forward from previous milestone close (status upd
 
 ## Session Continuity
 
-Last session: 2026-05-22T12:35:55.942Z
+Last session: 2026-05-22T20:25:21.727Z
 Stopped at: Phase 13 context gathered
 Resume file: 
 
-.planning/phases/13-ci-parallel-path-lane-lint-close-gate/13-CONTEXT.md
+None
 
 - Phase 12 (A3 fix) is an independent parallel track — may be planned/executed in parallel with Phases 9/10/11; joins at Phase 13 CI integration.
