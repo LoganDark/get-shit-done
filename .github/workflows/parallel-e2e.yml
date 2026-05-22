@@ -1,0 +1,127 @@
+name: Parallel E2E
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CI-03 BOUNDARY (carried from test.yml lines 3-17):
+# GitHub Actions workflows themselves stay on git — GitHub *is* git. The jj
+# port covers the GSD CLI + SDK that USERS run locally / in workspaces; it does
+# NOT extend to the workflow runtime. The raw `git` invocations in this file's
+# own steps (actions/checkout internals, etc.) are idiomatic on the CI runner
+# and are NOT routed through the VCS adapter.
+#
+# The harness this lane runs (scripts/e2e-parallel-phase.sh) is different: it
+# routes ALL of its VCS operations through `gsd-sdk query` (D-09). The no-raw-git
+# rule governs that harness, not the GitHub Actions runtime around it.
+#
+# Why this is a STANDALONE file and not a job in test.yml (D-03): this lane's
+# blocking polarity is the INVERSE of test.yml's `test` job. `test` is
+# required-blocking on git and allow-failure on jj; `parallel-e2e` is
+# required-blocking on jj-colocated and allow-failure on git. Co-locating two
+# jobs with opposite `continue-on-error` polarity in one file is a misread
+# hazard, so the lane gets its own single-concern workflow file.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+      - 'hotfix/**'
+  pull_request:
+    branches:
+      - main
+    # The lane is expensive (15 min, two backends, a jj install), so PR runs
+    # are scoped to the surfaces that can affect parallel-dispatch behavior:
+    # the VCS adapter, the workspace-parallel CLI bridges, the workflow
+    # markdown the harness/audit mirror, and the three files this lane owns.
+    paths:
+      - 'sdk/src/vcs/**'
+      - 'sdk/src/query/workspace-parallel-*.ts'
+      - 'get-shit-done/workflows/**'
+      - 'scripts/audit-workflow-raw-git.cjs'
+      - 'scripts/e2e-parallel-phase.sh'
+      - '.github/workflows/parallel-e2e.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: parallel-e2e-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  # The CI-05 lane: run the synthetic 2-plan parallel phase end-to-end on both
+  # backends. INVERTED polarity vs test.yml — git is allow-fail, jj-colocated
+  # is required. `continue-on-error` alone does NOT make a job a required
+  # check (a failed `continue-on-error: true` cell still reports green); the
+  # `parallel-e2e-gate` job below is what enforces the blocking guarantee.
+  parallel-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # INVERSE of test.yml line 91: there git is required and jj allow-fail;
+    # here jj-colocated is required and git allow-fail. This inversion is the
+    # whole reason D-03 mandates a separate workflow file.
+    continue-on-error: ${{ matrix.backend == 'git' }}
+
+    strategy:
+      # fail-fast disabled so a git-cell failure does NOT abort the
+      # jj-colocated cell (and vice versa) — both cells always report.
+      fail-fast: false
+      matrix:
+        backend: [git, jj-colocated]
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          # Full history — keep parity with the other lanes' checkout shape;
+          # the harness creates its own throwaway repo, but origin/main may be
+          # consulted by tooling in the build path.
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      # Install jj 0.41.0 via the official GitHub release tarball — only on
+      # the jj-colocated cell. The `v0.41.0` tarball-curl block is copied
+      # VERBATIM from test.yml lines 159-169 (the `if:` drops `jj-native` —
+      # this lane has no jj-native cell). Pinned version is Renovate-bumpable;
+      # no `cargo install`. ubuntu-latest resolves `uname -m` to `x86_64`; the
+      # tarball provides a static `unknown-linux-musl` build.
+      - name: Install jj
+        if: matrix.backend == 'jj-colocated'
+        shell: bash
+        run: |
+          set -euo pipefail
+          JJ_VERSION=v0.41.0
+          JJ_ARCH=$(uname -m)
+          curl -fsSL "https://github.com/jj-vcs/jj/releases/download/${JJ_VERSION}/jj-${JJ_VERSION#v}-${JJ_ARCH}-unknown-linux-musl.tar.gz" \
+            | tar xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/jj" --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The harness depends on the built SDK at sdk/dist/cli.js — build it
+      # before the harness step runs.
+      - name: Build SDK dist
+        run: npm run build:sdk
+
+      # The CI-05 lane proper: run the Wave-1 harness once for this matrix
+      # cell's backend. GSD_SDK points the harness at the repo-checkout SDK
+      # (no global install — Pattern 4); GSD_E2E_BACKEND selects the cell.
+      - name: Run parallel-dispatch E2E harness
+        shell: bash
+        env:
+          GSD_E2E_BACKEND: ${{ matrix.backend }}
+          GSD_SDK: "node $GITHUB_WORKSPACE/sdk/dist/cli.js"
+        run: bash scripts/e2e-parallel-phase.sh
+
+      # CI-06: the milestone-completeness regression guard. The audit carries a
+      # frozen 127-hit baseline of raw-git in workflow markdown and exits
+      # non-zero only when a scanned file's count EXCEEDS its baseline — i.e.
+      # NEW raw-git was added. A non-zero exit fails this cell.
+      - name: Audit — raw git in workflow markdown (CI-06)
+        shell: bash
+        run: node scripts/audit-workflow-raw-git.cjs
