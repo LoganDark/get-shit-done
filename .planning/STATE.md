@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: jj octopus merge for subagents fully functional
 status: executing
-stopped_at: Phase 13 context gathered
-last_updated: "2026-05-22T20:37:18.529Z"
+stopped_at: Completed 13-03-PLAN.md
+last_updated: "2026-05-22T20:51:38.674Z"
 last_activity: 2026-05-22
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 29
-  completed_plans: 27
+  completed_plans: 28
   percent: 80
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-15 at v1.3 open)
 ## Current Position
 
 Phase: 13 (ci-parallel-path-lane-lint-close-gate) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-05-22
 
@@ -74,6 +74,7 @@ Last activity: 2026-05-22
 | Phase 12 P03 | 2min | 1 tasks | 1 files |
 | Phase 13 P01 | 4min | 2 tasks | 3 files |
 | Phase 13 P02 | 7min | 2 tasks | 2 files |
+| Phase 13 P03 | 9min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -131,6 +132,10 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.3-specific decisions 
 - [Phase ?]: Phase 13 Plan 01: cascade-amendment doc edits — ROADMAP Phase 13 SC2/SC3 + CONTEXT D-08 + Phase Boundary + REQUIREMENTS LINT-04/CI-06 re-baselined from a false 'zero raw-git hits' assertion to the baseline-regression-guard framing (audit carries a frozen 127-hit baseline, fails only on raw-git ADDED beyond it; first green run current == baseline == pass) per RESEARCH Open Q1; the Phase 13 Goal line's 'collapses to zero' milestone framing left untouched (explicitly out of scope)
 - [Phase 13]: Phase 13 Plan 02: shipped scripts/audit-workflow-raw-git.cjs (LINT-04) — baseline storage is an embedded Object.freeze const over a companion JSON; live-tree re-scan reproduced the 127-hit verified_baseline exactly (no drift); CI-gate exit process.exit(result.ok ? 0 : 1) is the deliberate divergence from audit-id-namespace.cjs
 - [Phase 13]: Phase 13 Plan 02: discovered a pre-existing +4 skip-count regression on the Phase 13 branch (22 vs origin/main 18) from Phase 10/11 cmd-*.test.ts files — out of plan 13-02 scope, logged to deferred-items.md; plan 13-02's two new files add zero net skips
+- [Phase 13]: Phase 13 Plan 03: git-backend repo init in the CI-05 harness routes through 'jj git init --colocate' (raw jj, lint-clean) — no gsd-sdk query verb runs git init and D-09 forbids raw git; a colocated repo is a valid .git repo and GSD_VCS=git pins the git adapter
+- [Phase 13]: Phase 13 Plan 03: gsd-sdk query commit has NO --cwd flag (Open Q2 / Assumption A3 RESOLVED) — resolves projectDir from process.cwd(); harness runs per-workspace commits in cwd-pinned subshells, a .planning/ marker per workspace stops findProjectRoot redirecting to the repo root
+- [Phase 13]: Phase 13 Plan 03 Rule-3 deviation: the plan d09_constraint wrongly claimed jj-git-init is no-raw-git-lint-clean — the lint regex matches the inner git substring; fixed by quoting the subcommand word, preserving D-09 (no allowlist entry, no escape hatch)
+- [Phase 13]: CI-05 harness verified end-to-end green on both backends; the SC5 sentinel githooks pre-commit fired once per workspace, proving the Phase 12 A3 fix during a parallel-dispatched run
 
 ### Pending Todos
 
@@ -162,8 +167,8 @@ Items acknowledged and carried forward from previous milestone close (status upd
 
 ## Session Continuity
 
-Last session: 2026-05-22T20:36:23.891Z
-Stopped at: Phase 13 context gathered
+Last session: 2026-05-22T20:51:06.951Z
+Stopped at: Completed 13-03-PLAN.md
 Resume file: 
 
 None

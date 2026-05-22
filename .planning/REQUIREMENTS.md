@@ -56,7 +56,7 @@ Closes the gap inherited from v1.0 Phase 4. Path A vs B vs 1 not pre-decided at 
 
 Validates the verbs in real CI before flipping the default. REQ-IDs continue from v1.0's CI-04.
 
-- [ ] **CI-05**: New CI matrix lane `parallel-e2e` runs a synthetic 2-plan phase end-to-end on both backends. Required-blocking on jj-colocated; optional on git-only.
+- [x] **CI-05**: New CI matrix lane `parallel-e2e` runs a synthetic 2-plan phase end-to-end on both backends. Required-blocking on jj-colocated; optional on git-only.
 - [x] **CI-06**: `parallel-e2e` lane runs the LINT-04 audit script and fails if baseline / no-regression invariant breaks. Acts as the milestone-completeness regression guard.
 
 ### Test infrastructure (TEST)
@@ -125,7 +125,7 @@ Mapped during roadmap creation 2026-05-15. Updated 2026-05-15 after Phase 9 disc
 | LINT-05 | Phase 13 | Pending |
 | HOOK-06 | Phase 12 | Complete |
 | HOOK-07 | Phase 12 | Complete |
-| CI-05 | Phase 13 | Pending |
+| CI-05 | Phase 13 | Complete |
 | CI-06 | Phase 13 | Complete |
 | TEST-13 | Phase 9 (jj contract tests) + Phase 10 (git contract tests) | Complete |
 | TEST-14 | Phase 9 | Complete |

@@ -188,7 +188,7 @@ Plans:
 
 - [x] 13-01-PLAN.md — Cascade-amendment: re-baseline ROADMAP SC2/SC3 + CONTEXT.md D-08 to the regression-guard framing (resolves Open Q1; the 127-hit baseline) [Wave 1]
 - [x] 13-02-PLAN.md — Ship scripts/audit-workflow-raw-git.cjs (LINT-04 — stdout-only baseline-regression-guard scanner, frozen per-file 127-hit baseline) + its node:test unit test [Wave 1]
-- [ ] 13-03-PLAN.md — Ship scripts/e2e-parallel-phase.sh (CI-05 — the parallel-dispatch E2E harness driving the gsd-sdk query CLI bridges on both backends) [Wave 1]
+- [x] 13-03-PLAN.md — Ship scripts/e2e-parallel-phase.sh (CI-05 — the parallel-dispatch E2E harness driving the gsd-sdk query CLI bridges on both backends) [Wave 1]
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -229,7 +229,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 | 10. git-side parallel verbs + classifier extension | 6/6 | Complete    | 2026-05-16 |
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 11/11 | Complete    | 2026-05-16 |
 | 12. A3 colocated pre-commit fix (parallel track) | 3/3 | Complete    | 2026-05-21 |
-| 13. CI parallel-path lane + lint close-gate | 2/4 | In Progress|  |
+| 13. CI parallel-path lane + lint close-gate | 3/4 | In Progress|  |
 | 14. Default flip + dogfood validation | 0/0 | Not started | - |
 
 ## Next
