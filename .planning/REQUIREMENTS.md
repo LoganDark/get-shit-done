@@ -42,7 +42,7 @@ Continues v1.1's PROMPT-04 (-242 LOC raw-git fallback delete) and v1.2's PROMPT-
 
 Audit script captures the "raw-git in workflow markdown collapses to zero" evidence. NOT promoted to permanent CI lint — close-gate evidence only.
 
-- [ ] **LINT-04**: Ship `scripts/audit-workflow-raw-git.cjs` — scans `*.md` shell-fence blocks (` ```bash` / ` ```sh` / ` ```zsh`) under `get-shit-done/workflows/` + `get-shit-done/references/` + `agents/` for raw `git ` invocations. Emits both `.md` + JSON sidecar (per v1.2's D-01 single-source-of-truth pattern). v1.3 close-gate evidence: first green run with zero hits = milestone complete. Documented as one-shot; not added to CI pretest.
+- [ ] **LINT-04**: Ship `scripts/audit-workflow-raw-git.cjs` — scans `*.md` shell-fence blocks (` ```bash` / ` ```sh` / ` ```zsh`) under `get-shit-done/workflows/` + `get-shit-done/references/` + `agents/` for raw `git ` invocations. Emits both `.md` + JSON sidecar (per v1.2's D-01 single-source-of-truth pattern). v1.3 close-gate evidence: first green run within the recorded 127-hit baseline (no raw-git added) = milestone complete. Documented as one-shot; not added to CI pretest.
 - [ ] **LINT-05**: `lint-vcs-no-raw-git.allow.json` net change is +0 or +1 — the single addition (if any) is the new `sdk/src/vcs/git/parallel.ts` adapter-internal entry. The 23 existing production entries are NOT touched (architecture-researcher's calibration; PROJECT.md framing corrected). Allowlist diff recorded in milestone close commit.
 
 ### A3 colocated pre-commit fix (HOOK)
@@ -57,7 +57,7 @@ Closes the gap inherited from v1.0 Phase 4. Path A vs B vs 1 not pre-decided at 
 Validates the verbs in real CI before flipping the default. REQ-IDs continue from v1.0's CI-04.
 
 - [ ] **CI-05**: New CI matrix lane `parallel-e2e` runs a synthetic 2-plan phase end-to-end on both backends. Required-blocking on jj-colocated; optional on git-only.
-- [ ] **CI-06**: `parallel-e2e` lane runs the LINT-04 audit script and fails if zero-hits invariant breaks. Acts as the milestone-completeness regression guard.
+- [ ] **CI-06**: `parallel-e2e` lane runs the LINT-04 audit script and fails if baseline / no-regression invariant breaks. Acts as the milestone-completeness regression guard.
 
 ### Test infrastructure (TEST)
 
