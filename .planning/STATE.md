@@ -4,13 +4,13 @@ milestone: v1.3
 milestone_name: jj octopus merge for subagents fully functional
 status: executing
 stopped_at: Phase 13 context gathered
-last_updated: "2026-05-22T20:25:34.998Z"
+last_updated: "2026-05-22T20:37:18.529Z"
 last_activity: 2026-05-22
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 29
-  completed_plans: 26
+  completed_plans: 27
   percent: 80
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-15 at v1.3 open)
 ## Current Position
 
 Phase: 13 (ci-parallel-path-lane-lint-close-gate) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-05-22
 
@@ -73,6 +73,7 @@ Last activity: 2026-05-22
 | Phase 12 P02 | 5min | 1 tasks | 1 files |
 | Phase 12 P03 | 2min | 1 tasks | 1 files |
 | Phase 13 P01 | 4min | 2 tasks | 3 files |
+| Phase 13 P02 | 7min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -128,6 +129,8 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.3-specific decisions 
 - [Phase 12]: Phase 12 Plan 03: classified all 5 hook operations as idempotent — every operation in .githooks/pre-commit + pre-push is a read-only inspection (staged-diff read, env-var read, commit-history read) feeding an accept/reject decision; none mutate index/working-tree/refs, so the jj.ts:264-266 idempotency assumption holds for the installed scripts
 - [Phase 12]: Phase 12 Plan 03: recorded the SC4 empty-finding baseline explicitly per D-05 (0 non-idempotent operations, dated 2026-05-21); standalone artifact at 12-HOOK-IDEMPOTENCY-AUDIT.md so a future contributor adding a non-idempotent hook op has a dated prior record to reconcile against
 - [Phase ?]: Phase 13 Plan 01: cascade-amendment doc edits — ROADMAP Phase 13 SC2/SC3 + CONTEXT D-08 + Phase Boundary + REQUIREMENTS LINT-04/CI-06 re-baselined from a false 'zero raw-git hits' assertion to the baseline-regression-guard framing (audit carries a frozen 127-hit baseline, fails only on raw-git ADDED beyond it; first green run current == baseline == pass) per RESEARCH Open Q1; the Phase 13 Goal line's 'collapses to zero' milestone framing left untouched (explicitly out of scope)
+- [Phase 13]: Phase 13 Plan 02: shipped scripts/audit-workflow-raw-git.cjs (LINT-04) — baseline storage is an embedded Object.freeze const over a companion JSON; live-tree re-scan reproduced the 127-hit verified_baseline exactly (no drift); CI-gate exit process.exit(result.ok ? 0 : 1) is the deliberate divergence from audit-id-namespace.cjs
+- [Phase 13]: Phase 13 Plan 02: discovered a pre-existing +4 skip-count regression on the Phase 13 branch (22 vs origin/main 18) from Phase 10/11 cmd-*.test.ts files — out of plan 13-02 scope, logged to deferred-items.md; plan 13-02's two new files add zero net skips
 
 ### Pending Todos
 
@@ -159,7 +162,7 @@ Items acknowledged and carried forward from previous milestone close (status upd
 
 ## Session Continuity
 
-Last session: 2026-05-22T20:25:21.727Z
+Last session: 2026-05-22T20:36:23.891Z
 Stopped at: Phase 13 context gathered
 Resume file: 
 
