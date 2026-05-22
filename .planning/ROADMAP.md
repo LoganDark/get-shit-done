@@ -192,7 +192,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 13-04-PLAN.md — Ship .github/workflows/parallel-e2e.yml (CI-05 lane + parallel-e2e-gate blocking job + CI-06 audit step) + record the LINT-05 allowlist +1 diff [Wave 2]
+- [x] 13-04-PLAN.md — Ship .github/workflows/parallel-e2e.yml (CI-05 lane + parallel-e2e-gate blocking job + CI-06 audit step) + record the LINT-05 allowlist +1 diff [Wave 2]
 
 ### Phase 14: Default flip + dogfood validation
 
@@ -229,7 +229,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 | 10. git-side parallel verbs + classifier extension | 6/6 | Complete    | 2026-05-16 |
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 11/11 | Complete    | 2026-05-16 |
 | 12. A3 colocated pre-commit fix (parallel track) | 3/3 | Complete    | 2026-05-21 |
-| 13. CI parallel-path lane + lint close-gate | 3/4 | In Progress|  |
+| 13. CI parallel-path lane + lint close-gate | 4/4 | Complete   | 2026-05-22 |
 | 14. Default flip + dogfood validation | 0/0 | Not started | - |
 
 ## Next

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: jj octopus merge for subagents fully functional
-status: executing
-stopped_at: Completed 13-03-PLAN.md
-last_updated: "2026-05-22T20:51:38.674Z"
+status: verifying
+stopped_at: Completed 13-04-PLAN.md
+last_updated: "2026-05-22T21:10:28.085Z"
 last_activity: 2026-05-22
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 29
-  completed_plans: 28
-  percent: 80
+  completed_plans: 29
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-15 at v1.3 open)
 
 Phase: 13 (ci-parallel-path-lane-lint-close-gate) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-22
 
 ## Performance Metrics
@@ -75,6 +75,7 @@ Last activity: 2026-05-22
 | Phase 13 P01 | 4min | 2 tasks | 3 files |
 | Phase 13 P02 | 7min | 2 tasks | 2 files |
 | Phase 13 P03 | 9min | 2 tasks | 1 files |
+| Phase 13 P04 | 4min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -136,6 +137,9 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.3-specific decisions 
 - [Phase 13]: Phase 13 Plan 03: gsd-sdk query commit has NO --cwd flag (Open Q2 / Assumption A3 RESOLVED) — resolves projectDir from process.cwd(); harness runs per-workspace commits in cwd-pinned subshells, a .planning/ marker per workspace stops findProjectRoot redirecting to the repo root
 - [Phase 13]: Phase 13 Plan 03 Rule-3 deviation: the plan d09_constraint wrongly claimed jj-git-init is no-raw-git-lint-clean — the lint regex matches the inner git substring; fixed by quoting the subcommand word, preserving D-09 (no allowlist entry, no escape hatch)
 - [Phase 13]: CI-05 harness verified end-to-end green on both backends; the SC5 sentinel githooks pre-commit fired once per workspace, proving the Phase 12 A3 fix during a parallel-dispatched run
+- [Phase 13]: Phase 13 Plan 04: A2 red-cell confirmation — the needs.<job>.result aggregate model holds; a failed continue-on-error:true git cell does not flip the aggregate, a failed non-continue-on-error jj-colocated cell does. parallel-e2e-gate requires aggregate=='success' (exactly 'jj-colocated passed'); no outputs+fromJSON fallback needed
+- [Phase 13]: Phase 13 Plan 04: shipped standalone .github/workflows/parallel-e2e.yml (D-03) — inverted-polarity matrix (git allow-fail / jj-colocated required), CI-06 audit step, and the needs:-gated parallel-e2e-gate blocking job (D-04 option b); parallel-e2e-gate must be registered as a required branch-protection check (config outside repo)
+- [Phase 13]: Phase 13 Plan 04: LINT-05 is pure bookkeeping — zero changes to lint-vcs-no-raw-git.allow.json; the +1 (24 entries, sdk/src/vcs/git/parallel.ts) landed in Phase 10; both Wave-1 files are raw-git-clean so no new entry was needed; recorded in 13-LINT05-ALLOWLIST-DIFF.md
 
 ### Pending Todos
 
@@ -167,8 +171,8 @@ Items acknowledged and carried forward from previous milestone close (status upd
 
 ## Session Continuity
 
-Last session: 2026-05-22T20:51:06.951Z
-Stopped at: Completed 13-03-PLAN.md
+Last session: 2026-05-22T21:10:27.660Z
+Stopped at: Completed 13-04-PLAN.md
 Resume file: 
 
 None
