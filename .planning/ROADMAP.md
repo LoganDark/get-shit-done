@@ -181,7 +181,13 @@ Plans:
   4. `lint-vcs-no-raw-git.allow.json` net diff is +0 or +1 (the optional addition is the new `sdk/src/vcs/git/parallel.ts` adapter-internal entry with reason "git backend `parallel.*` verb body — adapter-internal substrate, not workflow-facing"). The 23 existing production entries are NOT touched. Diff recorded in milestone close commit.
   5. A3 fix from Phase 12 is exercised on the jj-colocated `parallel-e2e` lane (hook fires correctly during a parallel-dispatched phase's `jj squash` calls).
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 13-01-PLAN.md — Cascade-amendment: re-baseline ROADMAP SC2/SC3 + CONTEXT.md D-08 to the regression-guard framing (resolves Open Q1; the 127-hit baseline) [Wave 1]
+- [ ] 13-02-PLAN.md — Ship scripts/audit-workflow-raw-git.cjs (LINT-04 — stdout-only baseline-regression-guard scanner, frozen per-file 127-hit baseline) + its node:test unit test [Wave 1]
+- [ ] 13-03-PLAN.md — Ship scripts/e2e-parallel-phase.sh (CI-05 — the parallel-dispatch E2E harness driving the gsd-sdk query CLI bridges on both backends) [Wave 1]
+- [ ] 13-04-PLAN.md — Ship .github/workflows/parallel-e2e.yml (CI-05 lane + parallel-e2e-gate blocking job + CI-06 audit step) + record the LINT-05 allowlist +1 diff [Wave 2]
 
 ### Phase 14: Default flip + dogfood validation
 
