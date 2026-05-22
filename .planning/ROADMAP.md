@@ -176,8 +176,8 @@ Plans:
 **Success Criteria** (what must be TRUE):
 
   1. New CI matrix lane `parallel-e2e` runs a synthetic 2-plan phase end-to-end on both backends; required-blocking on jj-colocated, optional on git-only.
-  2. `scripts/audit-workflow-raw-git.cjs` ships and on first green run reports zero raw-git hits in `*.md` shell-fence blocks under `get-shit-done/workflows/`, `get-shit-done/references/`, and `agents/`; documented as one-shot (NOT added to CI pretest).
-  3. `parallel-e2e` lane runs LINT-04 audit and fails if the zero-hits invariant breaks (acts as milestone-completeness regression guard).
+  2. `scripts/audit-workflow-raw-git.cjs` ships as a baseline-regression guard: it carries a frozen baseline of the current 127-hit raw-git state in `*.md` shell-fence blocks across the three scan roots (`get-shit-done/workflows/`, `get-shit-done/references/`, and `agents/`), fails (non-passing exit) only when a scan EXCEEDS that baseline (NEW raw-git ADDED to workflow markdown), and passes when the scan is within baseline; on the first green run the current scan equals the baseline, so it passes; documented as one-shot (NOT added to CI pretest).
+  3. `parallel-e2e` lane runs LINT-04 audit and fails if the baseline / no-regression invariant breaks (acts as milestone-completeness regression guard).
   4. `lint-vcs-no-raw-git.allow.json` net diff is +0 or +1 (the optional addition is the new `sdk/src/vcs/git/parallel.ts` adapter-internal entry with reason "git backend `parallel.*` verb body — adapter-internal substrate, not workflow-facing"). The 23 existing production entries are NOT touched. Diff recorded in milestone close commit.
   5. A3 fix from Phase 12 is exercised on the jj-colocated `parallel-e2e` lane (hook fires correctly during a parallel-dispatched phase's `jj squash` calls).
 
