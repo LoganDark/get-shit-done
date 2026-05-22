@@ -125,3 +125,37 @@ jobs:
       - name: Audit — raw git in workflow markdown (CI-06)
         shell: bash
         run: node scripts/audit-workflow-raw-git.cjs
+
+  # D-04 blocking guarantee. GitHub counts `continue-on-error: true` and
+  # skipped matrix cells as PASSING for branch protection — so registering the
+  # `parallel-e2e` matrix job as a required check would let a failed
+  # jj-colocated cell silently pass. This separate gate job is what actually
+  # enforces "the jj-colocated cell passed": register THIS job's name
+  # (`parallel-e2e-gate`) as the required branch-protection check, never the
+  # matrix job.
+  parallel-e2e-gate:
+    runs-on: ubuntu-latest
+    needs: [parallel-e2e]
+    # `if: always()` so the gate still runs when the matrix job's overall
+    # conclusion is `failure` (a failed jj-colocated cell flips it). Without
+    # this the gate would be skipped — and a skipped required check counts
+    # as passing, defeating the whole guarantee.
+    if: always()
+    steps:
+      - name: Require the jj-colocated cell to have passed
+        shell: bash
+        env:
+          MATRIX_RESULT: ${{ needs.parallel-e2e.result }}
+        run: |
+          set -euo pipefail
+          # `needs.parallel-e2e.result` is the AGGREGATE conclusion of all
+          # matrix cells. Because the git cell carries `continue-on-error: true`,
+          # a FAILED git cell reports its conclusion as `success` and does NOT
+          # flip this aggregate — but a failed jj-colocated cell (no
+          # `continue-on-error`) DOES flip it to `failure`. So requiring the
+          # aggregate to be `success` is exactly "the jj-colocated cell passed".
+          if [ "$MATRIX_RESULT" != "success" ]; then
+            echo "::error::parallel-e2e jj-colocated cell did not pass (aggregate result: $MATRIX_RESULT). This is a required check."
+            exit 1
+          fi
+          echo "✓ parallel-e2e jj-colocated cell passed."
