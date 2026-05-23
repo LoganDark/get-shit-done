@@ -54,6 +54,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execSync, spawnSync } from 'node:child_process';
@@ -709,3 +710,116 @@ describe.sequential.skipIf(!gitAvailable)(
 		});
 	},
 );
+
+
+// ───────────────────────────────────────────────────────────────────────────
+// CONFIG-02 (Phase 14 plan 02 — D-03 mitigation):
+// Contract tests for the `parallelization_disabled` envelope at the CLI
+// bridge (`sdk/src/query/workspace-parallel-dispatch.ts`). The envelope
+// returns BEFORE `createVcsAdapter` is called, so this describe block does
+// NOT need `jj git init --colocate` — a plain `mkdtemp` with a
+// `.planning/config.json` file is sufficient. No `jjAvailable` / `gitAvailable`
+// gate either: the code path under test is backend-agnostic.
+//
+// Replaces the in-the-wild "this repo's `parallelization: false` is
+// preserved" invariant fixture that was retired by Phase 14 Plan 01's
+// permanent flip of this repo's `.planning/config.json` to `true`.
+// See `.planning/phases/14-default-flip-dogfood-validation/14-CONTEXT.md`
+// §D-03 mitigation.
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('CONFIG-02 — parallelization_disabled', () => {
+	it('returns {ok:false, reason:parallelization_disabled} when .planning/config.json has explicit false', async () => {
+		const tmpDir = await mkdtemp(
+			join(tmpdir(), `gsd-cfg02-git-${Math.random().toString(36).slice(2, 10)}-`),
+		);
+		await mkdir(join(tmpDir, '.planning'), { recursive: true });
+		await writeFile(
+			join(tmpDir, '.planning', 'config.json'),
+			JSON.stringify({ parallelization: false }),
+		);
+
+		const { workspaceParallelDispatchQuery } = await import(
+			'../../query/workspace-parallel-dispatch.js'
+		);
+		const plan = JSON.stringify([{ agentId: 'a', planId: 'p' }]);
+		const res = await workspaceParallelDispatchQuery(
+			['--phase', '14', '--main-bookmark', 'main', '--plan', plan],
+			tmpDir,
+		);
+		const data = res.data as {
+			ok?: boolean;
+			reason?: string;
+			message?: string;
+		};
+		expect(data.ok).toBe(false);
+		expect(data.reason).toBe('parallelization_disabled');
+		expect(typeof data.message).toBe('string');
+		// D-08: message must guide the user to the canonical unblock path
+		// (set `parallelization: true` explicitly).
+		expect(data.message).toMatch(/parallelization: true/);
+	});
+
+	it('does NOT fire envelope when .planning/config.json omits parallelization key', async () => {
+		const tmpDir = await mkdtemp(
+			join(tmpdir(), `gsd-cfg02-git-${Math.random().toString(36).slice(2, 10)}-`),
+		);
+		await mkdir(join(tmpDir, '.planning'), { recursive: true });
+		// D-07: missing-key resolves via loadConfig's defaults-merge to
+		// CONFIG_DEFAULTS.parallelization = true; envelope must NOT fire.
+		await writeFile(
+			join(tmpDir, '.planning', 'config.json'),
+			JSON.stringify({ workflow: {} }),
+		);
+
+		const { workspaceParallelDispatchQuery } = await import(
+			'../../query/workspace-parallel-dispatch.js'
+		);
+		const plan = JSON.stringify([{ agentId: 'a', planId: 'p' }]);
+		// The envelope is the ONLY surface under test. Past the envelope,
+		// the handler proceeds to adapter dispatch — which throws because
+		// tmpDir is not a real VCS repo. Either outcome (return without the
+		// envelope reason, or throw) proves the envelope did not fire.
+		let envelopeReason: string | undefined;
+		try {
+			const res = await workspaceParallelDispatchQuery(
+				['--phase', '14', '--main-bookmark', 'main', '--plan', plan],
+				tmpDir,
+			);
+			const data = res.data as { reason?: string };
+			envelopeReason = data.reason;
+		} catch {
+			// adapter-dispatch crash proves the envelope did NOT short-circuit.
+			envelopeReason = undefined;
+		}
+		expect(envelopeReason).not.toBe('parallelization_disabled');
+	});
+
+	it('does NOT fire envelope when .planning/config.json has explicit true', async () => {
+		const tmpDir = await mkdtemp(
+			join(tmpdir(), `gsd-cfg02-git-${Math.random().toString(36).slice(2, 10)}-`),
+		);
+		await mkdir(join(tmpDir, '.planning'), { recursive: true });
+		await writeFile(
+			join(tmpDir, '.planning', 'config.json'),
+			JSON.stringify({ parallelization: true }),
+		);
+
+		const { workspaceParallelDispatchQuery } = await import(
+			'../../query/workspace-parallel-dispatch.js'
+		);
+		const plan = JSON.stringify([{ agentId: 'a', planId: 'p' }]);
+		let envelopeReason: string | undefined;
+		try {
+			const res = await workspaceParallelDispatchQuery(
+				['--phase', '14', '--main-bookmark', 'main', '--plan', plan],
+				tmpDir,
+			);
+			const data = res.data as { reason?: string };
+			envelopeReason = data.reason;
+		} catch {
+			envelopeReason = undefined;
+		}
+		expect(envelopeReason).not.toBe('parallelization_disabled');
+	});
+});
