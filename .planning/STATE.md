@@ -4,8 +4,8 @@ milestone: v1.3
 milestone_name: jj octopus merge for subagents fully functional
 status: verifying
 stopped_at: Completed 13-04-PLAN.md
-last_updated: "2026-05-22T21:10:28.085Z"
-last_activity: 2026-05-22
+last_updated: "2026-05-23T06:15:00.000Z"
+last_activity: 2026-05-23
 progress:
   total_phases: 5
   completed_phases: 5
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-05-15 at v1.3 open)
 Phase: 13 (ci-parallel-path-lane-lint-close-gate) — EXECUTING
 Plan: 4 of 4
 Status: Phase complete — ready for verification
-Last activity: 2026-05-22
+Last activity: 2026-05-23 — Completed quick task 260522-vx2: test maintenance triage (probe-only)
 
 ## Performance Metrics
 
@@ -153,6 +153,12 @@ None yet for v1.3. Phase 9 discuss/plan steps will surface plan-level todos.
 - **Pitfall 5 (Phase 10):** `.git/config.lock` race on simultaneous `git worktree add`. Internal serialization in `sdk/src/vcs/git/parallel.ts` (not prompt-text rule).
 - **Pitfall 10 (Phase 14 last):** Dogfood blast-radius — pre-snapshot via `jj op log` + `.planning/` tarball, isolated bookmark only, synthetic plans, loud-fail rollback.
 - **Carry-forward (A3, Phase 12):** jj 0.41 doesn't auto-fire `.git/hooks/pre-commit` after `jj squash` colocated. Three fix paths in Phase 4 LEARNINGS Open Q1 (archived `51ee72a3`). Chosen at Phase 12 discuss-phase.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260522-vx2 | test maintenance — triage of npm test failures (probe-only, no fix) | 2026-05-23 | xuxxkkqp | [260522-vx2-test-maintenance-need-to-make-sure-all-p](./quick/260522-vx2-test-maintenance-need-to-make-sure-all-p/) |
 
 ## Deferred Items
 
