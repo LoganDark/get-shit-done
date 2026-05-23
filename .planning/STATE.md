@@ -4,13 +4,13 @@ milestone: v1.3
 milestone_name: jj octopus merge for subagents fully functional
 status: executing
 stopped_at: Phase 14 context gathered
-last_updated: "2026-05-23T23:35:40.259Z"
+last_updated: "2026-05-23T23:54:38.217Z"
 last_activity: 2026-05-23
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 34
-  completed_plans: 30
+  completed_plans: 31
   percent: 83
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-15 at v1.3 open)
 ## Current Position
 
 Phase: 14 (default-flip-dogfood-validation) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-05-23
 
@@ -77,6 +77,7 @@ Last activity: 2026-05-23
 | Phase 13 P03 | 9min | 2 tasks | 1 files |
 | Phase 13 P04 | 4min | 2 tasks | 2 files |
 | Phase 14 P01 | 2min | 2 tasks | 2 files |
+| Phase 14 P02 | 14min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -142,6 +143,7 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.3-specific decisions 
 - [Phase 13]: Phase 13 Plan 04: shipped standalone .github/workflows/parallel-e2e.yml (D-03) — inverted-polarity matrix (git allow-fail / jj-colocated required), CI-06 audit step, and the needs:-gated parallel-e2e-gate blocking job (D-04 option b); parallel-e2e-gate must be registered as a required branch-protection check (config outside repo)
 - [Phase 13]: Phase 13 Plan 04: LINT-05 is pure bookkeeping — zero changes to lint-vcs-no-raw-git.allow.json; the +1 (24 entries, sdk/src/vcs/git/parallel.ts) landed in Phase 10; both Wave-1 files are raw-git-clean so no new entry was needed; recorded in 13-LINT05-ALLOWLIST-DIFF.md
 - [Phase ?]: Phase 14 Plan 01: D-04 template flatten + D-03 brownfield flip — get-shit-done/templates/config.json parallelization collapsed from nested 6-key block to flat boolean true; this repo's .planning/config.json flipped permanently from false to true; D-05 honored (no greenfield/brownfield boundary added); feat-3167 stays green; in-the-wild invariant moves to Plan 14-02 contract-test fixtures
+- [Phase 14]: Phase 14 Plan 02: CONFIG-02 envelope uses strict-equal-false (config.parallelization === false) per RESEARCH §A 'Critical caveat' — protects legacy nested-shape brownfield repos from loose-falsey trap. D-03 mitigation: 6 contract tests in cmd-parallel-{jj,git}.test.ts (3 it cases each) — Loose-falsey would mis-fire on the legacy {enabled: true, ...} object shape because SDK loadConfig does NOT do nested→flat normalization (unlike core.cjs:480-485 CJS); strict-equal-false keeps the failure mode unambiguous. 'does NOT fire' tests use try/catch to tolerate adapter throws on tmpDir non-repo (envelope returns BEFORE createVcsAdapter is called)
 
 ### Pending Todos
 
@@ -179,7 +181,7 @@ Items acknowledged and carried forward from previous milestone close (status upd
 
 ## Session Continuity
 
-Last session: 2026-05-23T23:35:30.961Z
+Last session: 2026-05-23T23:54:38.210Z
 Stopped at: Phase 14 context gathered
 Resume file: 
 

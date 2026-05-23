@@ -73,7 +73,7 @@ Continues v1.1's TEST-11 strict-green + v1.2's TEST-12 matcher. REQ-IDs continue
 The user-observable success signal. New prefix.
 
 - [x] **CONFIG-01**: Install template default for `.planning/config.json` `parallelization` flips from `false` to `true`. Existing repos with explicit `false` keep `false` (config wins over default — no migration needed since subagent workspaces are ephemeral and no on-disk dispatcher state persists).
-- [ ] **CONFIG-02**: `parallel.dispatch` pre-flight reads `parallelization` config and refuses with a clear error if `false`. Pre-flight removes the silent-no-op footgun.
+- [x] **CONFIG-02**: `parallel.dispatch` pre-flight reads `parallelization` config and refuses with a clear error if `false`. Pre-flight removes the silent-no-op footgun.
 
 ### Dogfood validation (DOGFOOD)
 
@@ -132,7 +132,7 @@ Mapped during roadmap creation 2026-05-15. Updated 2026-05-15 after Phase 9 disc
 | TEST-15 | Phase 10 | Complete |
 | TEST-16 | Phase 10 | Complete |
 | CONFIG-01 | Phase 14 | Complete |
-| CONFIG-02 | Phase 14 | Pending |
+| CONFIG-02 | Phase 14 | Complete |
 | DOGFOOD-01 | Phase 14 | Pending |
 | DOGFOOD-02 | Phase 14 | Pending |
 
