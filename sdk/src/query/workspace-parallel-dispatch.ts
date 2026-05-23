@@ -26,6 +26,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { loadConfig } from '../config.js';
 import { createVcsAdapter } from '../vcs/index.js';
 import type { QueryHandler } from './utils.js';
 
@@ -68,6 +69,20 @@ export const workspaceParallelDispatchQuery: QueryHandler = async (args, project
   }
   if (planRaw === undefined) {
     return { data: { ok: false, reason: 'plan_required' } };
+  }
+
+  const config = await loadConfig(cwd);
+  if (config.parallelization === false) {
+    return {
+      data: {
+        ok: false,
+        reason: 'parallelization_disabled',
+        message:
+          'Parallelization is disabled in .planning/config.json. ' +
+          'Set `parallelization: true`, or remove the explicit `false` ' +
+          'entry to fall back to the default (true).',
+      },
+    };
   }
 
   let plan: readonly { agentId: string; planId: string; workspacePath?: string }[];
