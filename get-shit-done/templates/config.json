@@ -28,14 +28,7 @@
     "search_gitignored": false,
     "sub_repos": []
   },
-  "parallelization": {
-    "enabled": true,
-    "plan_level": true,
-    "task_level": false,
-    "skip_checkpoints": true,
-    "max_concurrent_agents": 3,
-    "min_plans_for_parallel": 2
-  },
+  "parallelization": true,
   "gates": {
     "confirm_project": true,
     "confirm_phases": true,
