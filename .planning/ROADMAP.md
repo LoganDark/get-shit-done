@@ -207,7 +207,26 @@ Plans:
   4. Pre-snapshot via `jj op log -n 200 > pre.oplog` + `.planning/` tarball captured BEFORE the dogfood run; recovery procedure documented in the dogfood phase's CONTEXT.md.
   5. Metrics recorded to `.planning/intel/v1.3-dogfood-metrics.md`: dispatch time, fan-in time, conflict rate. (Partial-wave incidence and lock-wait durations dropped — PARALLEL-03/04 dropped at Phase 9 discuss.) Establishes baseline for v1.4+ regression comparison.
 
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+**Wave 1** *(parallel-safe, no inter-dependencies — file-disjoint)*
+
+- [ ] 14-01-PLAN.md — Config flips (D-04 template flatten + D-03 this-repo flip); requirements: CONFIG-01
+- [ ] 14-02-PLAN.md — CONFIG-02 envelope (D-06 + D-07 + D-08) + D-03 mitigation contract tests in cmd-parallel-{jj,git}.test.ts; requirements: CONFIG-02
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 14-03-PLAN.md — `scripts/dogfood-restore.sh` recovery primitive (D-10 surface 2 of 2); requirements: DOGFOOD-02
+
+**Wave 3** *(blocked on Wave 2 completion; human-verify checkpoint at the end)*
+
+- [ ] 14-04-PLAN.md — `scripts/dogfood-rehearse.sh` rehearsal step against `cp -a` clone (D-11); requirements: DOGFOOD-02
+
+**Wave 4** *(blocked on Wave 3 approval; human-verify checkpoint at the end)*
+
+- [ ] 14-05-PLAN.md — `scripts/dogfood-phase-14.sh` (jj-cell + git-cell dogfood) + `.planning/intel/v1.3-dogfood-metrics.md` + post-execute CONTEXT.md recovery prose (D-01, D-02, D-09, D-10 surface 1, D-12); requirements: DOGFOOD-01, DOGFOOD-02
+
 
 ## Progress
 
@@ -230,7 +249,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 11/11 | Complete    | 2026-05-16 |
 | 12. A3 colocated pre-commit fix (parallel track) | 3/3 | Complete    | 2026-05-21 |
 | 13. CI parallel-path lane + lint close-gate | 4/4 | Complete   | 2026-05-22 |
-| 14. Default flip + dogfood validation | 0/0 | Not started | - |
+| 14. Default flip + dogfood validation | 0/5 | Planning | - |
 
 ## Next
 
