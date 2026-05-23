@@ -212,7 +212,7 @@ Plans:
 Plans:
 **Wave 1** *(parallel-safe, no inter-dependencies — file-disjoint)*
 
-- [ ] 14-01-PLAN.md — Config flips (D-04 template flatten + D-03 this-repo flip); requirements: CONFIG-01
+- [x] 14-01-PLAN.md — Config flips (D-04 template flatten + D-03 this-repo flip); requirements: CONFIG-01
 - [ ] 14-02-PLAN.md — CONFIG-02 envelope (D-06 + D-07 + D-08) + D-03 mitigation contract tests in cmd-parallel-{jj,git}.test.ts; requirements: CONFIG-02
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -249,7 +249,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 11/11 | Complete    | 2026-05-16 |
 | 12. A3 colocated pre-commit fix (parallel track) | 3/3 | Complete    | 2026-05-21 |
 | 13. CI parallel-path lane + lint close-gate | 4/4 | Complete   | 2026-05-22 |
-| 14. Default flip + dogfood validation | 0/5 | Planning | - |
+| 14. Default flip + dogfood validation | 1/5 | In Progress|  |
 
 ## Next
 

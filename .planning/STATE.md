@@ -4,13 +4,13 @@ milestone: v1.3
 milestone_name: jj octopus merge for subagents fully functional
 status: executing
 stopped_at: Phase 14 context gathered
-last_updated: "2026-05-23T21:32:12.317Z"
-last_activity: 2026-05-23 -- Phase 14 planning complete
+last_updated: "2026-05-23T23:35:40.259Z"
+last_activity: 2026-05-23
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 34
-  completed_plans: 29
+  completed_plans: 30
   percent: 83
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-15 at v1.3 open)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 13 — ci-parallel-path-lane-lint-close-gate
+**Current focus:** Phase 14 — default-flip-dogfood-validation
 
 ## Current Position
 
-Phase: 13 (ci-parallel-path-lane-lint-close-gate) — EXECUTING
-Plan: 4 of 4
+Phase: 14 (default-flip-dogfood-validation) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-05-23 -- Phase 14 planning complete
+Last activity: 2026-05-23
 
 ## Performance Metrics
 
@@ -76,6 +76,7 @@ Last activity: 2026-05-23 -- Phase 14 planning complete
 | Phase 13 P02 | 7min | 2 tasks | 2 files |
 | Phase 13 P03 | 9min | 2 tasks | 1 files |
 | Phase 13 P04 | 4min | 2 tasks | 2 files |
+| Phase 14 P01 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -140,6 +141,7 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.3-specific decisions 
 - [Phase 13]: Phase 13 Plan 04: A2 red-cell confirmation — the needs.<job>.result aggregate model holds; a failed continue-on-error:true git cell does not flip the aggregate, a failed non-continue-on-error jj-colocated cell does. parallel-e2e-gate requires aggregate=='success' (exactly 'jj-colocated passed'); no outputs+fromJSON fallback needed
 - [Phase 13]: Phase 13 Plan 04: shipped standalone .github/workflows/parallel-e2e.yml (D-03) — inverted-polarity matrix (git allow-fail / jj-colocated required), CI-06 audit step, and the needs:-gated parallel-e2e-gate blocking job (D-04 option b); parallel-e2e-gate must be registered as a required branch-protection check (config outside repo)
 - [Phase 13]: Phase 13 Plan 04: LINT-05 is pure bookkeeping — zero changes to lint-vcs-no-raw-git.allow.json; the +1 (24 entries, sdk/src/vcs/git/parallel.ts) landed in Phase 10; both Wave-1 files are raw-git-clean so no new entry was needed; recorded in 13-LINT05-ALLOWLIST-DIFF.md
+- [Phase ?]: Phase 14 Plan 01: D-04 template flatten + D-03 brownfield flip — get-shit-done/templates/config.json parallelization collapsed from nested 6-key block to flat boolean true; this repo's .planning/config.json flipped permanently from false to true; D-05 honored (no greenfield/brownfield boundary added); feat-3167 stays green; in-the-wild invariant moves to Plan 14-02 contract-test fixtures
 
 ### Pending Todos
 
@@ -177,10 +179,10 @@ Items acknowledged and carried forward from previous milestone close (status upd
 
 ## Session Continuity
 
-Last session: 2026-05-23T20:22:37.958Z
+Last session: 2026-05-23T23:35:30.961Z
 Stopped at: Phase 14 context gathered
 Resume file: 
 
-.planning/phases/14-default-flip-dogfood-validation/14-CONTEXT.md
+None
 
 - Phase 12 (A3 fix) is an independent parallel track — may be planned/executed in parallel with Phases 9/10/11; joins at Phase 13 CI integration.
