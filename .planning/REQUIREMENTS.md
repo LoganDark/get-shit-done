@@ -34,7 +34,8 @@ Three v1.2/v1.3 deferred items pulled in. New public verbs on `VcsAdapter`. Stri
 
 ### Deferred-Item Harvest (Parallel Verb)
 
-- [ ] **PARALLEL-07**: `vcs.workspace.parallel.cancel(handle: ParallelDispatchHandle): CancelResult` — synchronous teardown of already-materialized workspaces from a prior `dispatch` call. Composes `workspace.forget` + `rm -rf` (jj) or `worktree remove --force` (git) + `bookmarks.delete({force:true})`. Does NOT signal subagent processes (the `spawnSync` exec layer can't accept AbortSignal; Phase 9 D-01 orchestrator-awaits-Agent invariant makes mid-flight cancel a non-problem). Reuses `cleanupSubagentWorkspaces` helper extracted by CLEANUP-02. Returns rich result envelope matching `WorkspaceMergeResult` shape. (Continues v1.3 open deferral; STACK-lens semantics per v1.4 research synthesizer recommendation — discuss-phase confirms)
+- [ ] **PARALLEL-07**: `vcs.workspace.parallel.cancel(handle: ParallelDispatchHandle): CancelResult` — synchronous teardown of already-materialized workspaces from a prior `dispatch` call. Composes `workspace.forget` + `rm -rf` (jj) or `worktree remove --force` (git) + `bookmarks.delete({force:true})`. Does NOT signal subagent processes (the `spawnSync` exec layer can't accept AbortSignal; Phase 9 D-01 orchestrator-awaits-Agent invariant makes mid-flight cancel a non-problem). Reuses `cleanupSubagentWorkspaces` helper extracted by CLEANUP-02. Returns rich result envelope matching `WorkspaceMergeResult` shape. Does NOT inherit the bookmark requirement (PARALLEL-08) — cancel operates on `@` and the workspace SET only. (Continues v1.3 open deferral; STACK-lens semantics per v1.4 research synthesizer recommendation — discuss-phase confirms)
+- [ ] **PARALLEL-08**: Parallel-dispatch bookmark optionality + detached-HEAD support. The `ParallelDispatchOpts` / `ParallelDispatchHandle` contract MUST NOT require a bookmark name. Callers MAY pass an optional `mainBookmarks?: readonly string[]` list (default `[]`) of bookmarks/branches to advance after successful fan-in; an empty list / omitted argument means no advance is performed. Both backends MUST support dispatch + fan-in when the orchestrator is on a bookmark-less change (jj) OR detached HEAD (git). The single source of truth for the merge target is `@` (jj) / current HEAD (git); bookmarks are advisory and entirely optional. Why this is an emergency gap-closure: the bookmark requirement was baked in by Phase 11 (PARALLEL-01) "D-03 atomic main-advance: REQUIRED" — but parallel dispatch is fundamentally a working-copy operation; the underlying primitives (`@-` parent creation, `@` merge on jj; `git merge --no-ff` into current HEAD on git) operate on `@`/HEAD natively. Coupling the contract to a required bookmark name blocks two legitimate states: bookmark-less jj `@` (normal jj WIP) and git detached HEAD. The contract revision restores `@` / current HEAD as the only required reference. Acceptance: SDK type change (`mainBookmark` removed; `mainBookmarks?: readonly string[]` added); jj fan-in skips `bookmark set` when list empty + all-or-nothing validation when non-empty; git fan-in works on detached HEAD (merge logic unchanged — `merge --no-ff` already detached-safe) + optionally `update-ref` per name; workflow drops `current-branch` FATAL preflight; cross-backend tests cover empty-list, detached-HEAD, and all-or-nothing-validation scenarios. (Continues v1.3 gap-closure as emergency Phase 14.1)
 
 ### Deferred-Item Harvest (Rename)
 
@@ -99,6 +100,7 @@ Which phases cover which requirements. Updated during roadmap creation 2026-05-2
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| PARALLEL-08 | Phase 14.1 (plan 14.1-01) | Pending |
 | NAMING-01 | Phase 15 (plan 15.01) | Pending |
 | VCS-21 | Phase 15 (plan 15.02) | Pending |
 | VCS-22 | Phase 15 (plan 15.03) | Pending |
@@ -127,12 +129,13 @@ Which phases cover which requirements. Updated during roadmap creation 2026-05-2
 
 **Coverage:**
 
-- v1.4 requirements: 25 total
-- Mapped to phases: 25 ✓
+- v1.4 requirements: 26 total
+- Mapped to phases: 26 ✓
 - Unmapped: 0 ✓
 
 **Phase distribution:**
 
+- Phase 14.1 (Drop mandatory bookmark on parallel dispatch + fan-in): 1 requirement (PARALLEL-08)
 - Phase 15 (Adapter surface extensions + rename): 4 requirements (NAMING-01, VCS-21, VCS-22, PARALLEL-07)
 - Phase 16 (Workflow + invariant tooling): 2 requirements (LINT-06, CLEANUP-02)
 - Phase 17 (Drift control + reconciliation): 12 requirements (DOCS-08, DRIFT-01, DRIFT-02, DOCS-01..07, DOCS-09, PROJECT-01)

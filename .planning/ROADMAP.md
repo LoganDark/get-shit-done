@@ -14,7 +14,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 - ✅ **v1.1 first upstream sync** — Phase 7 (shipped 2026-05-14) — see `.planning/milestones/v1.1-ROADMAP.md`
 - ✅ **v1.2 jujutsu is change-only — never commit id anywhere** — Phase 8 (shipped 2026-05-15) — see `.planning/milestones/v1.2-ROADMAP.md`
 - ✅ **v1.3 jj octopus merge for subagents fully functional** — Phases 9-14 (shipped 2026-05-24) — see `.planning/milestones/v1.3-ROADMAP.md`
-- ⏳ **v1.4 Clean, consistent state for next upstream pull** — Phases 15-18 (planning) — see Phase Details below
+- ⏳ **v1.4 Clean, consistent state for next upstream pull** — Phase 14.1 + Phases 15-18 (planning) — see Phase Details below
 
 ## Phases
 
@@ -59,8 +59,9 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 </details>
 
 <details>
-<summary>⏳ v1.4 Clean, consistent state for next upstream pull (Phases 15-18) — PLANNING</summary>
+<summary>⏳ v1.4 Clean, consistent state for next upstream pull (Phase 14.1 + Phases 15-18) — PLANNING</summary>
 
+- [ ] **Phase 14.1: Drop mandatory bookmark on parallel dispatch + fan-in (emergency)** — Replace required `mainBookmark: string` with optional `mainBookmarks?: readonly string[]` (default `[]` → no advance) on `ParallelDispatchOpts` / `ParallelDispatchHandle`. jj fan-in skips the `jj bookmark set` step when list is empty; iterates with all-or-nothing validation when non-empty. git fan-in (already detached-HEAD-safe mechanically — `merge --no-ff` operates on current HEAD whether detached or not) drops the dead-weight required field; advances via `git update-ref refs/heads/<name> HEAD` per provided name when non-empty. Workflow `workflows/execute-phase.md` drops the `current-branch` FATAL preflight. Operating on `@` (jj) / current HEAD (git, including detached) becomes a first-class working state. Requirements: PARALLEL-08. (1 plan)
 - [ ] **Phase 15: Adapter surface extensions + rename** — Hard-rename `rootCommits` → `rootRevisions` across 13+ call sites (with pre-rename JSON sidecar audit per Pitfall 3); add `vcs.refs.idAlphabet` introspection (`'0-9a-f'` git, `'k-z'` jj); add `vcs.refs.matchPrefix(id, prefix): boolean` alphabet-aware short-prefix matching (throws on wrong-alphabet per Pitfall 6); add `vcs.workspace.parallel.cancel(handle): CancelResult` synchronous teardown of materialized workspaces (no signal handling — STACK-lens semantics per Pitfall 5; extracts `cleanupSubagentWorkspaces` helper as Wave 1). Sequential plans within phase (file-overlap on `types.ts`). Requirements: NAMING-01, VCS-21, VCS-22, PARALLEL-07. (4 plans)
 - [ ] **Phase 16: Workflow + invariant tooling** — Ship `scripts/lint-vcs-parallel-call-presence.cjs` (content-driven detection of `workspace.parallel.dispatch` / `workspace.parallel.fan-in` literals in shell fences; default-deny + per-entry `{path|glob, reason, owner}` allowlist; CI-blocking in `parallel-e2e.yml`, NOT pretest per audit-workflow-raw-git.cjs D-07 precedent); reap orphan `.claude/jj-workspaces/phase-*-subagent-*` FS dirs on `vcs.workspace.parallel.fan-in` clean-path success branch (preserves W3 (a) inspection contract on conflicted branch) AND via `scripts/dogfood-restore.sh` post-restore step (consumes `cleanupSubagentWorkspaces` helper extracted in Phase 15). Parallel-safe within phase (file-disjoint). Requirements: LINT-06, CLEANUP-02. (2 plans)
 - [ ] **Phase 17: Drift control + reconciliation** — Wave 1 = ARCHITECTURE.md prose-count fixes across en + 3 translations (44→68 commands, 46→89 workflows, 16→33 agents, 17→60 lib modules, ~3000→10,978 install.js LOC) BEFORE drift tests RED per Pitfall 4; Wave 2 = `tests/architecture-counts.test.cjs` + `tests/command-count-sync.test.cjs` (`node:test` framework, verbatim copy of `tests/inventory-counts.test.cjs` shape, live-scan not snapshot); Wave 3 = remaining docs-update themes 1-7+9 (per-theme triage per Pitfall 12 — ADR supersession notes for theme 3, change-id-anchored references for theme 5); Wave 4 = PROJECT.md `### Validated` reconciliation LAST per IP-4 (so v1.4's own REQ-IDs are in truth source; two-pass approach per Pitfall 8 — machine-generated `.planning/intel/project-validated-truth.md` + human-edited narrative). Requirements: DOCS-08, DRIFT-01, DRIFT-02, DOCS-01..07, DOCS-09, PROJECT-01. (4 plans)
@@ -238,10 +239,28 @@ Plans:
 
 - [x] 14-05-PLAN.md — `scripts/dogfood-phase-14.sh` (jj-cell + git-cell dogfood) + `.planning/intel/v1.3-dogfood-metrics.md` + post-execute CONTEXT.md recovery prose (D-01, D-02, D-09, D-10 surface 1, D-12); requirements: DOGFOOD-01, DOGFOOD-02
 
+### Phase 14.1: Drop mandatory bookmark on parallel dispatch + fan-in (emergency)
+
+**Goal**: Remove the required `mainBookmark: string` field from `ParallelDispatchOpts` / `ParallelDispatchHandle` across both backends, replacing it with optional `mainBookmarks?: readonly string[]` (default `[]` → no advance). Fan-in still merges into `@` (jj) / current HEAD (git — detached or branch). Only the *advance* step becomes opt-in. Drop the workflow's over-broad `current-branch` FATAL preflight so bookmark-less jj working copies and detached-HEAD git working copies are both first-class. Single source of truth: `@` / current HEAD; bookmarks are advisory. This is gap-closure for the v1.3 close: the bookmark requirement was baked in by Phase 11 (PARALLEL-01) and Phase 14 should have caught it but didn't surface until a real `--auto` chain hit a bookmark-less `@`.
+**Depends on**: Phase 14 (v1.3 close — stable parallel-verb surface to revise; PARALLEL-01/02/04 must already have landed so this is a contract revision, not a new design)
+**Requirements**: PARALLEL-08
+**Success Criteria** (what must be TRUE):
+
+  1. `ParallelDispatchOpts.mainBookmark` and `ParallelDispatchHandle.mainBookmark` are removed; replaced by optional `mainBookmarks?: readonly string[]` (default `[]`). SDK type-checks cleanly with no caller referencing the old field. Public type at `sdk/src/vcs/types.ts:226,467,496` is updated atomically.
+  2. jj fan-in (`sdk/src/vcs/jj/parallel.ts:409-417`): when `mainBookmarks` is empty/omitted, the `jj bookmark set <name> -r @` step is skipped — fan-in completes with a merge into `@` and zero bookmark mutation. When non-empty, every name is validated via `validateMainBookmark` BEFORE any advance side effect; iteration is all-or-nothing (any single invalid name throws before any `bookmark set` runs).
+  3. git fan-in (`sdk/src/vcs/git/parallel.ts`): works on detached HEAD without error. Merge still lands via `git merge --no-ff` into current HEAD (no logic change to the merge loop — `merge --no-ff` is already detached-HEAD-safe). No "no current branch" or "main bookmark missing" error path exists. When `mainBookmarks` is non-empty, each name advances via `git update-ref refs/heads/<name> HEAD` after successful merge.
+  4. `workflows/execute-phase.md`: the `current-branch` FATAL preflight at the dispatch-block top (~lines 530-535: `EXPECTED_BRANCH=$(gsd-sdk query current-branch ...)`/`exit 1`) is removed. The dispatch CLI invocation either omits `--main-bookmark` or passes an empty list. Bookmark-less jj `@` and detached-HEAD git working copies dispatch successfully.
+  5. New cross-backend tests in `sdk/src/vcs/__tests__/cmd-parallel-{jj,git}.test.ts` cover: (a) dispatch+fan-in with empty `mainBookmarks` on bookmark-less jj `@` AND on detached-HEAD git; (b) dispatch+fan-in with valid non-empty list — each name advances; (c) non-empty list containing one invalid name — all-or-nothing rejection BEFORE any side effect (no partial bookmark moves).
+  6. PARALLEL-07's new `vcs.workspace.parallel.cancel` verb (Phase 15.04) does NOT inherit the bookmark requirement — cancel operates on `@` and the workspace SET only, no bookmark advance step. If Phase 15.04's plan currently assumes otherwise, it is updated to reflect the revised contract.
+
+**Plans**: 1 plan (tight surface change; type + jj fan-in fix + git fan-in cleanup + workflow preflight removal + tests grouped — single wave)
+
+  - [ ] 14.1-01-PLAN.md — Optional mainBookmarks across SDK + workflow + tests (PARALLEL-08). Touches `sdk/src/vcs/types.ts`, `sdk/src/vcs/jj/parallel.ts`, `sdk/src/vcs/git/parallel.ts`, `workflows/execute-phase.md`, `sdk/src/vcs/__tests__/cmd-parallel-jj.test.ts`, `sdk/src/vcs/__tests__/cmd-parallel-git.test.ts`. Empty-list + detached-HEAD + all-or-nothing validation scenarios mandatory.
+
 ### Phase 15: Adapter surface extensions + rename
 
 **Goal**: Three new public verbs ship on the cross-backend `VcsAdapter` surface (`vcs.refs.idAlphabet`, `vcs.refs.matchPrefix`, `vcs.workspace.parallel.cancel`) and the v1.2 NAMING-01 deferred `rootCommits` → `rootRevisions` rename completes across 13+ call sites. Pure adapter-surface work; no workflow markdown change. The `cleanupSubagentWorkspaces` shared helper extracted by PARALLEL-07 (Wave 1 of its plan) is consumed by Phase 16's CLEANUP-02 — single owner, three call sites per IP-5.
-**Depends on**: Phase 14 (v1.3 close — all parallel-verb surfaces stable before extending them)
+**Depends on**: Phase 14 (v1.3 close — all parallel-verb surfaces stable before extending them) + Phase 14.1 (PARALLEL-08 contract revision lands first so 15.04's new cancel verb does not inherit the bookmark requirement)
 **Requirements**: NAMING-01, VCS-21, VCS-22, PARALLEL-07
 **Success Criteria** (what must be TRUE):
 
