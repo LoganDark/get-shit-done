@@ -12,11 +12,25 @@ A hard fork of [`gsd-build/get-shit-done`](https://github.com/gsd-build/get-shit
 
 **v1.3 SHIPPED (2026-05-24).** v1.0 MVP shipped 2026-05-14 (8/8 phases). v1.1 first upstream sync shipped 2026-05-14 (1 phase, 5 plans). v1.2 (jujutsu is change-only — never commit id anywhere) shipped 2026-05-15 (1 phase, 3 plans, 14 reqs). v1.3 (jj octopus merge for subagents fully functional) shipped 2026-05-24 (6 phases, 32 plans): jj + git backends expose `vcs.workspace.parallel.{dispatch,fanIn}` with uniform `FanInResult` shape, orchestrator + agents rewired through the adapter (zero raw-git in workflow markdown), A3 colocated pre-commit gap closed, CI parallel-path lane + LINT-05 close-gate green on both backends, and Phase 14 (default flip + dogfood) shipped 2026-05-24 (5/5 plans, 18/18 must-haves verified): install-template `parallelization` flattened to flat boolean `true`, CONFIG-02 envelope ships at the CLI bridge with strict-equal-`false` (`{ok:false, reason:'parallelization_disabled'}` peer to the existing three validation envelopes), real dogfood ran end-to-end on this very repo via isolated `gsd/phase-14-dogfood` bookmark (0 conflicts both backends, main untouched per Pitfall 10), durable metrics baseline + recovery anchor committed to `.planning/intel/v1.3-dogfood-metrics.md`, recovery primitive `scripts/dogfood-restore.sh` validated by rehearsal step (3/3 assertions PASS). Code review CR-01 (latent `jq .ok//"true"` envelope-guard bug — didn't fire because parallelization=true during dogfood) fixed inline. One v1.4 follow-up filed: orphan `.claude/jj-workspaces/phase-{N}-subagent-*` FS dirs survive `jj op restore` (cleanup contract gap).
 
-## Most Recent Milestone: v1.3 jj octopus merge for subagents fully functional — SHIPPED 2026-05-24
+## Current Milestone: v1.4 — Clean, consistent state for next upstream pull
+
+**Goal:** Drive every outstanding fork-internal todo, deferred item, and known drift to zero so the next upstream rebase lands on a clean, fully-tested, fully-documented baseline. Upstream pull itself is OUT OF SCOPE for v1.4 — the operator performs the pull as a separate action once v1.4 ships.
+
+**Target features:**
+
+- **5 v14-* todos from `.planning/todos/pending/`** — `v14-transition-md-update-gap` (apply `assert_clean_wc` + commit-adjacency to `transition.md:166` HIGH-RISK site); `v14-orphan-jj-workspace-dirs` (reap `.claude/jj-workspaces/phase-*-subagent-*` FS dirs on `vcs.workspace.parallel.fan-in` success + via `scripts/dogfood-restore.sh` recovery); `v14-review-followups` (Phase 14 code-review WR-01..05 hardening — bash project-root assertion, tar-overlay semantics, JSON-parse Array.isArray guard, `--max-concurrency` NaN guard, CONFIG-02 test-tmpDir cleanup); `v14-jj-reap-test-flake` (fix `jj-reap.test.ts > inclusion-filter` 5s timeout under parallel test load — narrow scope per todo); `v14-docs-verify-only-followups` (resolve 45 `/gsd:docs-update --verify-only` failures across 8 themes; re-verify pass rate ≥99%).
+- **5 deferred items pulled in** — `vcs.refs.matchPrefix(id, prefix)` alphabet-aware short-prefix matching (v1.2 TEST-13 deferred); `rootCommits` → `rootRevisions` cosmetic rename (v1.2 NAMING-01); `vcs.refs.idAlphabet` public introspection (v1.2 API-01, first consumer is `matchPrefix`); `vcs.workspace.parallel.cancel(handle)` mid-execution graceful abandonment (v1.3 open deferral); workflow call-presence lint that `vcs.parallel.*` is called in dispatch sections (v1.3 open deferral, mirrors `lint-vcs-no-raw-git.cjs` shape).
+- **Drift control + reconciliation** — implement `tests/architecture-counts.test.cjs` + `tests/command-count-sync.test.cjs` (lock prose counts in ARCHITECTURE.md / INVENTORY.md to live filesystem state, prevents the kind of drift documented in v14-docs-verify-only-followups theme 6); fix `ARCHITECTURE.md` prose-count drift across en + 4 translations (44→68 commands, 46→89 workflows, 16→33 agents, 17→60 lib modules, ~3000→10,978 install.js LOC — forced by the new drift tests); reconcile PROJECT.md `### Validated` against MILESTONES.md + per-phase SUMMARYs (pre-Phase-11 drift noted at v1.3 close, separate workstream from docs cleanup per discuss).
+
+**Out of scope (explicit):**
+
+- **Next upstream pull itself** — v1.4 ends in a clean state ready for upstream rebase; operator performs the pull as a separate action.
+- **Broader test-perf sweep** — only the specific `jj-reap.test.ts > inclusion-filter` flake is in scope; the `project_test_perf_pain_vitest` longstanding pain stays deferred.
+- **No new feature work** — strictly cleanup, deferred-item harvest, drift control, and consistency.
+
+## Most Recent Shipped Milestone: v1.3 jj octopus merge for subagents fully functional — SHIPPED 2026-05-24
 
 **Goal (achieved):** All subagent dispatch machinery routes through the `VcsAdapter` via new high-level `vcs.parallel.*` verbs. Git backend implements them via raw-git worktree+merge under the hood (the single remaining acknowledged raw-git exception collapses to zero). jj backend implements them via the already-shipped `octopus.ts` + `reap.ts` helpers, promoted from jj-namespaced to backend `parallel.*` verb bodies. `parallelization: true` flips on by default for both backends. Workflows never branch on `vcs.kind` for parallel-dispatch reasons.
-
-**Next milestone:** v1.4 — scope set during `/gsd-new-milestone`. Five v14-* todos already filed for promotion (docs drift cleanup, drift-control tests, `performJjReap` test flake, review followups, orphan workspace dir cleanup, transition.md update gap).
 
 **Target features:**
 
@@ -83,14 +97,18 @@ A hard fork of [`gsd-build/get-shit-done`](https://github.com/gsd-build/get-shit
 - ✓ **TEST-12** Vitest `toBeIdOf(kind)` custom matcher at `tests/__tools__/vitest-matchers.ts` (D-02 `expect.extend` form, NOT free function `expectIdShape`); module augmentation in `vitest.d.ts`; registered via `setupFiles` (D-02a); REQUIREMENTS-12 text updated to reflect actual API (D-02b); golden-parity baselines re-recorded — v1.2
 - ✓ **MIGR-06** Close-gate `.planning/` rewriter pass at `scripts/migr-06-close-gate.cjs`: single B-07-style rewrite scoped to Phase 8 dir only; idempotent; one-time prose hex grep recorded with 10 grandfathered hits — v1.2
 
-### Active (v1.4 — TBD; will be set during `/gsd-new-milestone`)
+### Active (v1.4 — Clean, consistent state for next upstream pull)
+
+See `.planning/REQUIREMENTS.md` for the formal REQ-ID list and traceability. v1.4 scope groups into three themes:
+
+1. **Tactical cleanup + test fix** — five v14-* todos from `.planning/todos/pending/`: transition.md `assert_clean_wc` gate, orphan `.claude/jj-workspaces/phase-*-subagent-*` FS dir reap, Phase 14 code-review WR-01..05 hardening, `jj-reap.test.ts > inclusion-filter` flake fix, 45-failure `/gsd:docs-update --verify-only` cleanup.
+2. **Deferred-item harvest** — five v1.2/v1.3 deferred items pulled in: `vcs.refs.matchPrefix` (alphabet-aware short-prefix matching), `vcs.refs.idAlphabet` (public introspection), `rootCommits` → `rootRevisions` rename, `vcs.workspace.parallel.cancel(handle)` mid-execution graceful abandonment, workflow call-presence lint (`vcs.parallel.*` must be called in dispatch sections).
+3. **Drift control + PROJECT.md reconciliation** — `tests/architecture-counts.test.cjs` + `tests/command-count-sync.test.cjs` drift-control tests, ARCHITECTURE.md prose-count fixes across en + 4 translations (forced by the new tests), PROJECT.md `### Validated` reconciliation against MILESTONES.md + per-phase SUMMARYs (separate workstream from docs cleanup).
 
 Both v1.0/v1.1/v1.2 carry-forwards closed in v1.3:
 
 - **Orchestrator parallelization rewrite** — ✓ **CLOSED in v1.3 Phases 9–11 + 14 (2026-05-15 → 2026-05-23).** `vcs.workspace.parallel.{dispatch,fanIn}` shipped on both backends; `execute-phase.md` / `quick.md` raw-git worktree blocks deleted; `parallelization: true` default-flipped in the install template + this repo per Phase 14 plan 01; CONFIG-02 `parallelization_disabled` envelope at the CLI bridge with strict-equal-`false` brownfield safety; dogfood run on this repo (Phase 14 plan 05) clean on both backends (0 conflicts; main bookmark untouched per Pitfall 10).
 - **A3 colocated pre-commit gap** — ✓ **CLOSED in v1.3 Phase 12 (2026-05-21).** jj 0.41 doesn't auto-fire `.git/hooks/pre-commit` after `jj squash` in colocated mode. Path 1 (chosen from the three Phase 4 LEARNINGS Open Q1 fix paths) makes the jj backend's `commit()` always fire the adapter-managed `.githooks/<stage>` hook in colocated mode, with `GSD_HOOK_SKIP_COLOCATED` as the env opt-out. HOOK-06/HOOK-07 validated; HOOK-07 fires-exactly-once regression test + SC4 hook-idempotency audit shipped.
-
-v1.4 requirements get set during `/gsd-new-milestone`. The five v14-* todos already in `.planning/todos/pending/` (docs drift cleanup, drift-control tests, `performJjReap` test flake, review followups, orphan jj-workspace dirs, `transition.md` update gap) are the seed list; `/gsd-new-milestone` will promote them into v1.4 phases.
 
 **Historical seeds (not future candidates):**
 
@@ -169,4 +187,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-24 — v1.3 closed with Phase 14 (default flip + dogfood validation) complete: 5/5 plans, 18/18 must-haves verified, real dogfood ran on this very repo via isolated `gsd/phase-14-dogfood` bookmark (jj-cell dispatch_ms=6209 / fan_in_ms=780 / 0 conflicts; git-cell dispatch_ms=390 / fan_in_ms=1276 / 0 conflicts), Pitfall 10 main-untouched invariant proven (`MAIN_BEFORE`≡`MAIN_AFTER`), durable recovery anchor committed (`pre_op_id` + `tarball_sha256` + sibling `mktemp` path), CONFIG-02 envelope shipped at CLI bridge with strict-equal-`false`, CR-01 (latent `jq .ok//"true"` guard bug) fixed inline. v1.3 = 6 phases (9–14) + 32 plans + 27 requirements (CONFIG-01/02, DOGFOOD-01/02, PARALLEL-01/02/05/06, VCS-16..20, PROMPT-06..09, LINT-04..05, HOOK-06..07, CI-05..06, TEST-13..16). One v1.4 follow-up filed: orphan `.claude/jj-workspaces/phase-{N}-subagent-*` FS dirs survive `jj op restore`. NOTE: `### Validated` carries pre-Phase-11 drift — `/gsd:docs-update` reconciliation recommended at v1.4 kickoff.*
+*Last updated: 2026-05-24 — v1.4 opened via `/gsd-new-milestone v1.4`. Scope: drive every outstanding fork-internal todo, deferred item, and known drift to zero so the next upstream rebase lands on a clean, fully-tested, fully-documented baseline. Three themes: (1) 5 v14-* todos from pending/ queue; (2) 5 v1.2/v1.3 deferred items pulled in (matchPrefix, idAlphabet, rootCommits→rootRevisions, parallel.cancel, workflow call-presence lint); (3) drift-control tests + ARCHITECTURE.md prose-count fixes + PROJECT.md `### Validated` reconciliation. Upstream pull itself is OUT OF SCOPE — v1.4 ends in clean state, operator performs the pull as a separate action. v1.3 shipped 2026-05-24: 6 phases (9–14), 34 plans, 27 requirements. NOTE: `### Validated` carries pre-Phase-11 drift, addressed in v1.4 by the PROJECT.md reconciliation workstream.*

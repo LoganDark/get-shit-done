@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3
-milestone_name: jj octopus merge for subagents fully functional
-status: Awaiting next milestone
-stopped_at: Phase 14 context gathered
-last_updated: "2026-05-24T03:02:32.700Z"
-last_activity: 2026-05-24 — Milestone v1.3 completed and archived
+milestone: v1.4
+milestone_name: Clean, consistent state for next upstream pull
+status: planning
+last_updated: "2026-05-24T03:40:09.303Z"
+last_activity: 2026-05-24
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 34
-  completed_plans: 34
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-15 at v1.3 open)
 
 ## Current Position
 
-Phase: Milestone v1.3 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-05-24 — Milestone v1.3 completed and archived
+Status: Defining requirements
+Last activity: 2026-05-24 — Milestone v1.4 started
 
 ## Performance Metrics
 
