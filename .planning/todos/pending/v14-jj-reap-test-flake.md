@@ -4,7 +4,7 @@ source: phase-14 regression-gate run
 created: 2026-05-24
 priority: low
 cross_backend: false
-resolves_phase: null
+resolves_phase: 18
 target_milestone: v1.4
 ---
 

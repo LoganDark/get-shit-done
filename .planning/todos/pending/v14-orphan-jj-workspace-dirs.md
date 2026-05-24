@@ -4,7 +4,7 @@ source: phase-14 dogfood deviation #3
 created: 2026-05-23
 priority: medium
 cross_backend: false
-resolves_phase: null
+resolves_phase: 16
 target_milestone: v1.4
 ---
 

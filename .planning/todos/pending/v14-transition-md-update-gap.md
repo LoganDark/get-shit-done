@@ -4,7 +4,7 @@ source: phase-14 quick-task 260523-ovw audit Task 1
 created: 2026-05-24
 priority: medium
 cross_backend: false
-resolves_phase: null
+resolves_phase: 18
 target_milestone: v1.4
 ---
 

@@ -4,7 +4,7 @@ source: phase-14 session /gsd:docs-update --verify-only audit
 created: 2026-05-24
 priority: medium
 cross_backend: false
-resolves_phase: null
+resolves_phase: 17
 target_milestone: v1.4
 ---
 
