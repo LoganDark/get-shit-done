@@ -149,7 +149,7 @@ for (const N of [2, 3, 4] as const) {
 				const handle = vcs.workspace.parallel.dispatch({
 					plan,
 					phaseNumber: 10,
-					mainBookmark: 'main',
+					mainBookmarks: ['main'],
 				});
 				// Dispatch invariants (TEST-13, first must_have): N workspaces,
 				// frozen pure-JSON handle (D-14 carry / D-13 shape lock).
@@ -232,7 +232,7 @@ describe.sequential.skipIf(!gitAvailable)(
 					{ agentId: 'agent-2', planId: 'plan-2' },
 				],
 				phaseNumber: 10,
-				mainBookmark: 'main',
+				mainBookmarks: ['main'],
 			});
 			// Both agents modify the SAME line of seed.txt differently. The
 			// FIRST per-branch merge (agent-1) succeeds against main (no
@@ -318,7 +318,7 @@ describe.sequential.skipIf(!gitAvailable)(
 					{ agentId: 'agent-2', planId: 'plan-2' },
 				],
 				phaseNumber: 10,
-				mainBookmark: 'main',
+				mainBookmarks: ['main'],
 			});
 			// Workspace 1: clean work that commits cleanly.
 			writeFileSync(join(handle.workspaces[0].path, 'clean.txt'), 'clean\n');
@@ -406,7 +406,7 @@ describe.sequential.skipIf(!gitAvailable)(
 					{ agentId: 'agent-c', planId: 'plan-c' },
 				],
 				phaseNumber: 10,
-				mainBookmark: 'main',
+				mainBookmarks: ['main'],
 			});
 
 			// agent-a: clean non-conflicting change.
@@ -551,7 +551,7 @@ describe.sequential.skipIf(!gitAvailable)(
 					{ agentId: 'agent-2', planId: 'plan-2' },
 				],
 				phaseNumber: 10,
-				mainBookmark: 'main',
+				mainBookmarks: ['main'],
 			});
 
 			// agent-1: clean non-conflicting commit. The fan-in loop will merge
@@ -669,7 +669,7 @@ describe.sequential.skipIf(!gitAvailable)(
 					{ agentId: 'agent-2', planId: 'plan-2' },
 				],
 				phaseNumber: 10,
-				mainBookmark: 'main',
+				mainBookmarks: ['main'],
 			});
 
 			// Clean non-conflicting commits in each workspace — both agents

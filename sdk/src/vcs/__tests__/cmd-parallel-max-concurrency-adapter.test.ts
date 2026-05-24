@@ -107,7 +107,7 @@ describe.sequential.skipIf(!gitAvailable)(
 			const handle = vcs.workspace.parallel.dispatch({
 				plan,
 				phaseNumber: 11,
-				mainBookmark: 'main',
+				mainBookmarks: ['main'],
 				maxConcurrency: 2,
 			});
 			// Honored == accepted without regression: one workspace per plan
@@ -147,13 +147,13 @@ describe.sequential.skipIf(!gitAvailable)(
 			const withCap = createGitAdapter(plainDirA).workspace.parallel.dispatch({
 				plan,
 				phaseNumber: 11,
-				mainBookmark: 'main',
+				mainBookmarks: ['main'],
 				maxConcurrency: 1,
 			});
 			const withoutCap = createGitAdapter(plainDirB).workspace.parallel.dispatch({
 				plan,
 				phaseNumber: 11,
-				mainBookmark: 'main',
+				mainBookmarks: ['main'],
 			});
 			// Same count, same agentIds, same workspace names — the cap is
 			// advisory and produces no observable difference in the handle's

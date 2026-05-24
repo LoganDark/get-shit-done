@@ -1,5 +1,6 @@
 /**
  * sdk/src/query/workspace-parallel-dispatch.ts — Phase 11 plan 02 Task 2a
+ * (Phase 14.1 PARALLEL-08: --main-bookmark flag now optional repeated-singular)
  *
  * CLI bridge for `vcs.workspace.parallel.dispatch`. Per Phase 11 D-01 the
  * orchestrator holds the `ParallelDispatchHandle` JSON in a shell variable
@@ -9,7 +10,15 @@
  * Flags:
  *   --cwd <path>             optional; defaults to projectDir
  *   --phase <number>         required: phase number
- *   --main-bookmark <name>   required: main bookmark name
+ *   --main-bookmark <name>   OPTIONAL, REPEATABLE: zero or more bookmark/branch
+ *                            names to advance after fan-in. Zero flags → empty
+ *                            `mainBookmarks` list → fan-in skips the advance
+ *                            step entirely (bookmark-less jj `@` and
+ *                            detached-HEAD git working copies are first-class).
+ *                            Each repeat appends to an argv-order list; no
+ *                            de-dup. Idiom precedent: `gh pr create --label foo
+ *                            --label bar`, `git -c k=v -c k=v`. PARALLEL-08 /
+ *                            Phase 14.1 D-02.
  *   --plan <input>           required: plan items as JSON.
  *                            "@-"  → read from stdin
  *                            "@<path>" → read from file
@@ -22,7 +31,11 @@
  *
  * Usage:
  *   gsd-sdk query workspace.parallel.dispatch \
- *     --phase 11 --main-bookmark trunk --plan @-  < plan.json
+ *     --phase 11 --plan @-  < plan.json                       # no advance
+ *   gsd-sdk query workspace.parallel.dispatch \
+ *     --phase 11 --main-bookmark trunk --plan @-  < plan.json # advance 1
+ *   gsd-sdk query workspace.parallel.dispatch \
+ *     --phase 11 --main-bookmark trunk --main-bookmark release --plan @-  < plan.json
  */
 
 import { readFileSync } from 'node:fs';
@@ -43,7 +56,9 @@ function resolvePlanInput(raw: string): string {
 export const workspaceParallelDispatchQuery: QueryHandler = async (args, projectDir) => {
   let cwd = projectDir;
   let phaseNumber: number | undefined;
-  let mainBookmark = '';
+  // Phase 14.1 (PARALLEL-08, D-02): repeated-singular --main-bookmark accumulator.
+  // Const because we push into the mutable array; preserves argv order; no dedup.
+  const mainBookmarks: string[] = [];
   let planRaw: string | undefined;
   let maxConcurrency: number | undefined;
 
@@ -53,7 +68,7 @@ export const workspaceParallelDispatchQuery: QueryHandler = async (args, project
     } else if (args[i] === '--phase' && args[i + 1]) {
       phaseNumber = Number(args[++i]);
     } else if (args[i] === '--main-bookmark' && args[i + 1]) {
-      mainBookmark = args[++i];
+      mainBookmarks.push(args[++i]);
     } else if (args[i] === '--plan' && args[i + 1]) {
       planRaw = args[++i];
     } else if (args[i] === '--max-concurrency' && args[i + 1]) {
@@ -64,9 +79,9 @@ export const workspaceParallelDispatchQuery: QueryHandler = async (args, project
   if (phaseNumber === undefined || Number.isNaN(phaseNumber)) {
     return { data: { ok: false, reason: 'phase_number_required' } };
   }
-  if (!mainBookmark) {
-    return { data: { ok: false, reason: 'main_bookmark_required' } };
-  }
+  // Phase 14.1 (PARALLEL-08, D-02): the `main_bookmark_required` envelope path
+  // is DELETED. Empty list is now legal — bookmark-less first-class. Every
+  // OTHER envelope reason token stays unchanged.
   if (planRaw === undefined) {
     return { data: { ok: false, reason: 'plan_required' } };
   }
@@ -102,7 +117,7 @@ export const workspaceParallelDispatchQuery: QueryHandler = async (args, project
   const vcs = createVcsAdapter(cwd);
   const handle = vcs.workspace.parallel.dispatch({
     phaseNumber,
-    mainBookmark,
+    mainBookmarks,
     plan,
     maxConcurrency,
   });

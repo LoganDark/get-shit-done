@@ -173,7 +173,7 @@ export function performJjParallelDispatch(
 		};
 	},
 ): ParallelDispatchHandle {
-	const { mainRepoRoot, vcs, plan, phaseNumber, mainBookmark } = opts;
+	const { mainRepoRoot, vcs, plan, phaseNumber, mainBookmarks } = opts;
 
 	// W1: validate every agentId BEFORE any side effect that depends on it.
 	// `createPhaseStructure` is idempotent (marker bookmarks) so even if a
@@ -183,9 +183,10 @@ export function performJjParallelDispatch(
 		validateAgentId(item.agentId);
 	}
 
-	// Validate main bookmark up-front so a late fanIn failure can't leak a
-	// non-conformant name into the handle.
-	validateMainBookmark(mainBookmark);
+	// Phase 14.1 (PARALLEL-08): the single up-front `validateMainBookmark`
+	// call retired here — per-name validation moves to the fan-in
+	// all-or-nothing loop (CF-02). `validateMainBookmark` itself is KEPT
+	// (called per-name in the loop below).
 
 	const phaseRoot = derivePhaseRoot(mainRepoRoot, phaseNumber);
 
@@ -244,7 +245,10 @@ export function performJjParallelDispatch(
 	return Object.freeze({
 		phaseRoot,
 		phaseNumber,
-		mainBookmark,
+		// Phase 14.1 (PARALLEL-08, CF-05): frozen mirror of opts.mainBookmarks
+		// preserves pure-JSON cross-call immutability. Defensive shallow copy
+		// before freeze guards against caller mutation of the input array.
+		mainBookmarks: Object.freeze([...(mainBookmarks ?? [])]) as readonly string[],
 		manifest: '', // D-01: no orchestrator-managed sidecar state (parity with bin/lib/worktree-safety.cjs:reconstructHandleFromLegacyPlan)
 		workspaces: Object.freeze(
 			slots.map((s) =>
@@ -403,19 +407,45 @@ export function performJjParallelFanIn(
 		// the conflicted branch too — no bookmark plumbing fires either way.
 		surplusBookmarks = [];
 	} else {
-		// Clean path: advance the main bookmark to the merge head
-		// (PARALLEL-02 jj-side). Per Phase 11 D-02 there are no per-subagent
-		// agent-bookmarks to delete here — see comment block below.
-		validateMainBookmark(handle.mainBookmark);
-		const setArgs = [
-			...jjArgvFlags(mainRepoRoot),
-			'bookmark', 'set', handle.mainBookmark, '-r', '@',
-		];
-		const setRes = vcsExec(mainRepoRoot, 'jj', setArgs);
-		if (setRes.exitCode !== 0) {
-			throw new Error(
-				`parallel.fanIn: main-bookmark advance (${handle.mainBookmark}) failed: ${setRes.stderr || setRes.stdout}`,
-			);
+		// Clean path: advance each named main bookmark to the merge head if
+		// the dispatch-time list was non-empty.
+		//
+		// Phase 14.1 (PARALLEL-08, CF-02): empty/omitted `mainBookmarks` ↔
+		// SKIP the advance step entirely — bookmark-less jj `@` is a first-
+		// class working state for parallel dispatch. Non-empty list ↔
+		// all-or-nothing pre-validation in pass 1 (mirrors the W1 idiom at
+		// :178-188), then sequential `jj bookmark set <name> -r @` per name
+		// in pass 2.
+		//
+		// Partial-state caveat: pass 2 advances names in argv order; on a
+		// vcsExec failure at name K, names 1..K-1 already advanced. Atomic
+		// rollback via `jj op restore` is deferred (no atomic primitive
+		// available at this layer; surface noted in PARALLEL-08 CONTEXT.md
+		// "Mid-iteration jj bookmark set failure semantics").
+		//
+		// Per Phase 11 D-02 there are no per-subagent agent-bookmarks to
+		// delete here — see comment block below.
+		const mainBookmarks = handle.mainBookmarks ?? [];
+		if (mainBookmarks.length > 0) {
+			// Pass 1: validate every name. Throws on first invalid; no side
+			// effects yet.
+			for (const name of mainBookmarks) {
+				validateMainBookmark(name);
+			}
+			// Pass 2: advance each. Partial-state on mid-iteration failure
+			// is documented above; no atomic rollback at this layer.
+			for (const name of mainBookmarks) {
+				const setArgs = [
+					...jjArgvFlags(mainRepoRoot),
+					'bookmark', 'set', name, '-r', '@',
+				];
+				const setRes = vcsExec(mainRepoRoot, 'jj', setArgs);
+				if (setRes.exitCode !== 0) {
+					throw new Error(
+						`parallel.fanIn: main-bookmark advance (${name}) failed: ${setRes.stderr || setRes.stdout}`,
+					);
+				}
+			}
 		}
 
 		// Phase 11 D-02 (cross-phase amendment): batched bookmark-delete and

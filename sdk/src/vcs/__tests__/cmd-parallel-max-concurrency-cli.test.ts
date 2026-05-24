@@ -45,7 +45,7 @@ vi.mock('../index.js', () => ({
 					return Object.freeze({
 						phaseRoot: '/tmp/fake-phase',
 						phaseNumber: 11,
-						mainBookmark: 'main',
+						mainBookmarks: ['main'],
 						manifest: '',
 						workspaces: Object.freeze([]),
 					});

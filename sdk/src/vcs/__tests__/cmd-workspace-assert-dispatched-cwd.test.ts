@@ -145,7 +145,7 @@ describe.sequential.skipIf(!jjAvailable)(
 					{ agentId: 'agent-2', planId: 'plan-2' },
 				],
 				phaseNumber: 11,
-				mainBookmark: 'main',
+				mainBookmarks: ['main'],
 			});
 			nonPrimaryWsPath = handle.workspaces[0].path;
 			// A no-match cwd: a fresh mkdtemp outside any repo.
@@ -313,7 +313,7 @@ describe.sequential.skipIf(!gitAvailable)(
 					{ agentId: 'agent-2', planId: 'plan-2' },
 				],
 				phaseNumber: 11,
-				mainBookmark: 'main',
+				mainBookmarks: ['main'],
 			});
 			nonPrimaryWsPath = handle.workspaces[0].path;
 		});

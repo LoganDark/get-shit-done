@@ -95,6 +95,7 @@ import type {
 } from '../types.js';
 import { appendIncomplete } from '../jj/incomplete-work.js';
 import { derivePhaseRoot } from '../jj/parallel.js';
+import { validateRefname } from '../refs-validator.js';
 
 /**
  * Inline agentId validator. UPSTREAM-02 sidecar discipline: this file does
@@ -146,7 +147,7 @@ export function performGitParallelDispatch(
 		};
 	},
 ): ParallelDispatchHandle {
-	const { mainRepoRoot, vcs, plan, phaseNumber, mainBookmark } = opts;
+	const { mainRepoRoot, vcs, plan, phaseNumber, mainBookmarks } = opts;
 
 	const phaseTag = String(phaseNumber).padStart(2, '0');
 	const phaseRoot = derivePhaseRoot(mainRepoRoot, phaseNumber);
@@ -229,6 +230,11 @@ export function performGitParallelDispatch(
 	// collapses in Phase 11).
 	const manifestDir = mkdtempSync(join(tmpdir(), 'gsd-wave-manifest-'));
 	const manifestPath = join(manifestDir, 'wave-worktree-manifest.json');
+	// Phase 14.1 (PARALLEL-08 / "Manifest writer cleanup"): the `main_bookmark`
+	// row is DROPPED from this manifest writer. No live reader on either
+	// backend (jj-side already emits `manifest: ''` per Phase 11 D-01; the
+	// workflow-side reader was retired in Phase 11 P05). Other rows stay for
+	// parity with jj-side state introspection.
 	const manifestBody = {
 		worktrees: slots.map((slot) => ({
 			agent_id: slot.agentId,
@@ -237,7 +243,6 @@ export function performGitParallelDispatch(
 			worktree_path: slot.workspacePath,
 			branch: `worktree-agent-${slot.agentId}`,
 			expected_base: slot.headSha,
-			main_bookmark: mainBookmark,
 		})),
 	};
 	writeFileSync(manifestPath, JSON.stringify(manifestBody, null, 2), 'utf-8');
@@ -249,7 +254,10 @@ export function performGitParallelDispatch(
 	return Object.freeze({
 		phaseRoot,
 		phaseNumber,
-		mainBookmark,
+		// Phase 14.1 (PARALLEL-08, CF-05): frozen mirror of opts.mainBookmarks
+		// preserves pure-JSON cross-call immutability. Defensive shallow copy
+		// before freeze guards against caller mutation of the input array.
+		mainBookmarks: Object.freeze([...(mainBookmarks ?? [])]) as readonly string[],
 		manifest: manifestPath,
 		workspaces: Object.freeze(
 			slots.map((s) =>
@@ -449,6 +457,45 @@ export function performGitParallelFanIn(
 			const delRes = vcsExec(mainRepoRoot, 'git', ['branch', '-D', '--', agentBookmark]);
 			if (delRes.exitCode !== 0) {
 				surplusBookmarks.push(agentBookmark);
+			}
+		}
+	}
+
+	// ── STEP 1.5: optional per-name branch advance (PARALLEL-08 / CF-03). ─
+	// Phase 14.1 (PARALLEL-08): when `handle.mainBookmarks` is non-empty AND
+	// the per-branch merge loop above did NOT conflict, advance each name via
+	// `git update-ref refs/heads/<name> HEAD`. Empty/omitted list → SKIP
+	// (detached-HEAD git is a first-class dispatch state — the merge already
+	// landed into HEAD itself via `merge --no-ff`).
+	//
+	// All-or-nothing pre-validation mirrors the jj-side CF-02 idiom:
+	//   Pass 1: validateRefname every name (stricter than the jj-side
+	//   validateMainBookmark — rejects `..`, `@{`, `.lock` per
+	//   git-check-ref-format(1)). Throws on first invalid; zero side effects.
+	//   Pass 2: spawn `git update-ref refs/heads/<name> HEAD` per name.
+	//
+	// Conflict gate: skip when `conflicted === true` (the merge loop halted
+	// with MERGE_HEAD set; HEAD has not advanced past the conflicted state,
+	// so advancing branches would point them at a pre-merge revision —
+	// semantically wrong). The skip matches the jj-side body which also
+	// only runs the bookmark-set loop under the `!conflicted` branch.
+	//
+	// Partial-state on a mid-iteration `update-ref` failure: same caveat
+	// as the jj-side. `update-ref` is per-ref-atomic, so no torn single-ref
+	// state, but names 1..K-1 already advanced. Atomic rollback deferred.
+	const mainBookmarks = handle.mainBookmarks ?? [];
+	if (mainBookmarks.length > 0 && !conflicted) {
+		for (const name of mainBookmarks) {
+			validateRefname(name);
+		}
+		for (const name of mainBookmarks) {
+			const refRes = vcsExec(mainRepoRoot, 'git', [
+				'update-ref', `refs/heads/${name}`, 'HEAD',
+			]);
+			if (refRes.exitCode !== 0) {
+				throw new Error(
+					`parallel.fanIn: update-ref refs/heads/${name} failed: ${refRes.stderr || refRes.stdout}`,
+				);
 			}
 		}
 	}

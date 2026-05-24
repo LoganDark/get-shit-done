@@ -131,7 +131,7 @@ for (const N of [2, 3, 4] as const) {
 				const handle = vcs.workspace.parallel.dispatch({
 					plan,
 					phaseNumber: 9,
-					mainBookmark: 'main',
+					mainBookmarks: ['main'],
 				});
 				// Dispatch invariants (TEST-13, first must_have): N workspaces,
 				// distinct change_ids, frozen pure-JSON handle (D-05).
@@ -252,7 +252,7 @@ describe.sequential.skipIf(!jjAvailable)(
 					{ agentId: 'agent-2', planId: 'plan-2' },
 				],
 				phaseNumber: 9,
-				mainBookmark: 'main',
+				mainBookmarks: ['main'],
 			});
 			// Workspace 1: CONFLICT.txt = "version A\n"
 			writeFileSync(
@@ -353,7 +353,7 @@ describe.sequential.skipIf(!jjAvailable)(
 					{ agentId: 'agent-2', planId: 'plan-2' },
 				],
 				phaseNumber: 9,
-				mainBookmark: 'main',
+				mainBookmarks: ['main'],
 			});
 			// Workspace 1: clean work that squashes into `@`.
 			writeFileSync(join(handle.workspaces[0].path, 'clean.txt'), 'clean\n');
