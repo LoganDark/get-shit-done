@@ -1475,7 +1475,10 @@ Gap closure cycle: `/gsd:plan-phase {X} --gaps ${GSD_WS}` reads VERIFICATION.md 
 
 ```bash
 COMPLETION=$(gsd-sdk query phase.complete "${PHASE_NUMBER}")
+gsd-sdk query commit "docs(phase-{X}): complete phase execution" --files .planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md {phase_dir}/*-VERIFICATION.md
 ```
+
+The commit block above MUST run immediately after `phase.complete` — the mutating verb writes to `.planning/ROADMAP.md` + `.planning/STATE.md` + `.planning/REQUIREMENTS.md` on disk but does NOT commit. The order is load-bearing: do NOT defer the commit past the result-parsing prose that follows, or the orchestrator may declare "PHASE COMPLETE" with the planning files still uncommitted.
 
 The CLI handles:
 - Marking phase checkbox `[x]` with completion date
@@ -1494,10 +1497,6 @@ Extract from result: `next_phase`, `next_phase_name`, `is_last_phase`, `warnings
 {list each warning}
 
 These items are tracked and will appear in `/gsd:progress` and `/gsd:audit-uat`.
-```
-
-```bash
-gsd-sdk query commit "docs(phase-{X}): complete phase execution" --files .planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md {phase_dir}/*-VERIFICATION.md
 ```
 </step>
 
