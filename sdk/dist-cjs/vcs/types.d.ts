@@ -417,7 +417,18 @@ export interface ParallelDispatchOpts {
         workspacePath?: string;
     }[];
     phaseNumber: number;
-    mainBookmark: string;
+    /**
+     * Phase 14.1 (PARALLEL-08): optional list of bookmark/branch names to advance
+     * to the merge head after a successful fan-in. Empty or omitted → skip the
+     * advance step entirely (CF-02/CF-03 — bookmark-less jj `@` and detached-HEAD
+     * git working copies are first-class dispatch states). Non-empty → all-or-
+     * nothing pre-validation runs over every name BEFORE any `jj bookmark set` /
+     * `git update-ref` side effect; iteration then advances each name in argv
+     * order. Validation throws on the first invalid name; partial advance is
+     * possible only on a vcsExec failure mid-iteration of pass 2 (atomic
+     * rollback is deferred — see fan-in body JSDoc).
+     */
+    mainBookmarks?: readonly string[];
     maxConcurrency?: number;
 }
 /**
@@ -444,7 +455,15 @@ export interface ParallelAgentResult {
 export interface ParallelDispatchHandle {
     phaseRoot: string;
     phaseNumber: number;
-    mainBookmark: string;
+    /**
+     * Phase 14.1 (PARALLEL-08): frozen mirror of the dispatch-time
+     * `ParallelDispatchOpts.mainBookmarks`. `Object.freeze`d (CF-05 — preserves
+     * pure-JSON cross-call immutability) in both backend Handle construction
+     * sites. Empty/omitted → fan-in skips the advance step; non-empty → fan-in
+     * runs all-or-nothing pre-validation then per-name advance via `jj bookmark
+     * set <name> -r @` (jj) / `git update-ref refs/heads/<name> HEAD` (git).
+     */
+    mainBookmarks?: readonly string[];
     /** Absolute path to the WAVE_WORKTREE_MANIFEST written at dispatch (VCS-19). */
     manifest: string;
     workspaces: readonly Readonly<{
