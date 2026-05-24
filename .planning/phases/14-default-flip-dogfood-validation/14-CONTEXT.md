@@ -563,5 +563,32 @@ Phase 14 closes v1.3 with four deliverables:
 
 ---
 
+## Post-execute recovery procedure (run-specific)
+
+Filled in by Plan 14-05 (Task 3) on 2026-05-23 after the dogfood ran.
+
+**Pre-op-id:** `9db977b62aca89aa25e2412da874770db37812d6be273b2b95917ba29654c246f90f1f9f100e264f24aa7e81534861d653769a29c473531ad8a766dde73371ea`
+**Pre-snapshot dir:** `/var/folders/sq/v1_sd6990ysgkqvckj68qcvw0000gn/T//gsd-dogfood-pre-PGZH`
+**Tarball:** `/var/folders/sq/v1_sd6990ysgkqvckj68qcvw0000gn/T//gsd-dogfood-pre-PGZH/planning.tar`
+**Tarball SHA-256:** `873522cf59a7d635ea65dc5db299ece3d5e785a95930d9dd2734d53ef0a624f4`
+
+**Recovery invocation (run from project root):**
+
+```bash
+bash scripts/dogfood-restore.sh '9db977b62aca89aa25e2412da874770db37812d6be273b2b95917ba29654c246f90f1f9f100e264f24aa7e81534861d653769a29c473531ad8a766dde73371ea' '/var/folders/sq/v1_sd6990ysgkqvckj68qcvw0000gn/T//gsd-dogfood-pre-PGZH/planning.tar'
+```
+
+The recovery script restores jj repo state via `jj op restore <pre-op-id>` (default `--what=repo,remote-tracking`) FIRST, then extracts the planning tarball via `tar -xf <tarball> -C .` LAST (Pitfall 2 ordering — restore first so the WC update doesn't clobber the authoritative .planning/ tarball content).
+
+If the `/var/folders/sq/v1_sd6990ysgkqvckj68qcvw0000gn/T//gsd-dogfood-pre-PGZH` directory has been GC'd by the OS (typical TMPDIR cleanup interval), the tarball is irrecoverable from this anchor. The pre-op-id alone (without the tarball) restores jj repo state including the WC and bookmarks; the `.planning/` content reverts to whatever the WC had at the snapshot operation.
+
+Operators must save unrelated post-dogfood work before invoking recovery — `jj op restore` reverts to the pre-op-id snapshot, discarding everything that happened after.
+
+Rehearsal evidence (Plan 14-04) confirmed the recovery script works correctly against a `cp -a` clone of this repo before the real dogfood ran. See `.planning/intel/v1.3-dogfood-metrics.md` § "Rehearsal evidence" for the PASS lines.
+
+The same recovery anchor (pre-op-id + path + SHA-256) appears verbatim in `.planning/intel/v1.3-dogfood-metrics.md` § Recovery Anchor — two surfaces of D-10 must agree byte-for-byte on these values.
+
+---
+
 *Phase: 14-default-flip-dogfood-validation*
 *Context gathered: 2026-05-23*
