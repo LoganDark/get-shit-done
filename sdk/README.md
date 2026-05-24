@@ -51,3 +51,26 @@ If no native handler is registered for a command, the CLI can transparently shel
 |----------|---------|
 | `GSD_QUERY_FALLBACK` | `off` / `never` disables CLI fallback to `gsd-tools.cjs` for unknown commands |
 | `GSD_AGENTS_DIR` | Override directory scanned for installed GSD agents (`~/.claude/agents` by default) |
+
+## Testing
+
+Tests run under [Vitest](https://vitest.dev/) and are split into `unit` and `integration` projects. From the monorepo root, use the workspace-scoped command:
+
+```bash
+pnpm --filter @gsd-build/sdk test
+pnpm --filter @gsd-build/sdk test:unit
+pnpm --filter @gsd-build/sdk test:integration
+```
+
+Or run them directly inside this package:
+
+```bash
+cd sdk
+pnpm test                  # vitest run (all projects)
+pnpm test:unit             # vitest run --project unit
+pnpm test:integration      # vitest run --project integration
+```
+
+A successful `pnpm build` (which produces both ESM and CJS outputs under `dist/` and `dist-cjs/`) is required before the integration project can resolve compiled CLI entries.
+
+Part of the [get-shit-done monorepo](../README.md).

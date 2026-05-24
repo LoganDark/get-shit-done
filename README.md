@@ -276,6 +276,12 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
+
 <div align="center">
 
 **Claude Code is powerful. GSD makes it reliable.**
