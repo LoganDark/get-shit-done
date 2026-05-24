@@ -95,27 +95,49 @@ Explicitly excluded. Documented to prevent scope creep.
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
+Which phases cover which requirements. Updated during roadmap creation 2026-05-23.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CLEANUP-01..07 | (assigned during roadmap) | Pending |
-| TEST-17 | (assigned during roadmap) | Pending |
-| VCS-21 | (assigned during roadmap) | Pending |
-| VCS-22 | (assigned during roadmap) | Pending |
-| PARALLEL-07 | (assigned during roadmap) | Pending |
-| NAMING-01 | (assigned during roadmap) | Pending |
-| LINT-06 | (assigned during roadmap) | Pending |
-| DRIFT-01..02 | (assigned during roadmap) | Pending |
-| DOCS-01..09 | (assigned during roadmap) | Pending |
-| PROJECT-01 | (assigned during roadmap) | Pending |
+| NAMING-01 | Phase 15 (plan 15.01) | Pending |
+| VCS-21 | Phase 15 (plan 15.02) | Pending |
+| VCS-22 | Phase 15 (plan 15.03) | Pending |
+| PARALLEL-07 | Phase 15 (plan 15.04) | Pending |
+| LINT-06 | Phase 16 (plan 16.01) | Pending |
+| CLEANUP-02 | Phase 16 (plan 16.02) | Pending |
+| DOCS-08 | Phase 17 (plan 17.01) | Pending |
+| DRIFT-01 | Phase 17 (plan 17.02) | Pending |
+| DRIFT-02 | Phase 17 (plan 17.02) | Pending |
+| DOCS-01 | Phase 17 (plan 17.03) | Pending |
+| DOCS-02 | Phase 17 (plan 17.03) | Pending |
+| DOCS-03 | Phase 17 (plan 17.03) | Pending |
+| DOCS-04 | Phase 17 (plan 17.03) | Pending |
+| DOCS-05 | Phase 17 (plan 17.03) | Pending |
+| DOCS-06 | Phase 17 (plan 17.03) | Pending |
+| DOCS-07 | Phase 17 (plan 17.03) | Pending |
+| DOCS-09 | Phase 17 (plan 17.03) | Pending |
+| PROJECT-01 | Phase 17 (plan 17.04) | Pending |
+| CLEANUP-01 | Phase 18 (plan 18.01) | Pending |
+| CLEANUP-03 | Phase 18 (plan 18.02) | Pending |
+| CLEANUP-04 | Phase 18 (plan 18.02) | Pending |
+| CLEANUP-05 | Phase 18 (plan 18.02) | Pending |
+| CLEANUP-06 | Phase 18 (plan 18.02) | Pending |
+| CLEANUP-07 | Phase 18 (plan 18.02) | Pending |
+| TEST-17 | Phase 18 (plan 18.03) | Pending |
 
 **Coverage:**
 
 - v1.4 requirements: 25 total
-- Mapped to phases: 0 (roadmap creation pending)
-- Unmapped: 25 ⚠️
+- Mapped to phases: 25 ✓
+- Unmapped: 0 ✓
+
+**Phase distribution:**
+
+- Phase 15 (Adapter surface extensions + rename): 4 requirements (NAMING-01, VCS-21, VCS-22, PARALLEL-07)
+- Phase 16 (Workflow + invariant tooling): 2 requirements (LINT-06, CLEANUP-02)
+- Phase 17 (Drift control + reconciliation): 12 requirements (DOCS-08, DRIFT-01, DRIFT-02, DOCS-01..07, DOCS-09, PROJECT-01)
+- Phase 18 (Tactical cleanup + test-flake): 7 requirements (CLEANUP-01, CLEANUP-03..07, TEST-17)
 
 ---
 *Requirements defined: 2026-05-24*
-*Last updated: 2026-05-24 after `/gsd-new-milestone v1.4` definition (research-informed)*
+*Last updated: 2026-05-23 — Traceability table filled in during v1.4 roadmap creation (4 phases, 13 plans, 25 requirements mapped 100%, no orphans). Phase shape per research synthesis with one clarification: PARALLEL-07's plan extracts the `cleanupSubagentWorkspaces` shared helper as its Wave 1, consumed by Phase 16 CLEANUP-02 (single-owner per IP-5).*

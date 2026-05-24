@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Clean, consistent state for next upstream pull
 status: planning
-last_updated: "2026-05-24T03:40:09.303Z"
-last_activity: 2026-05-24
+last_updated: "2026-05-23T22:00:00.000Z"
+last_activity: 2026-05-23
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
-  total_plans: 0
+  total_plans: 13
   completed_plans: 0
   percent: 0
 ---
@@ -17,25 +17,25 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-15 at v1.3 open)
+See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 14 — default-flip-dogfood-validation
+**Current focus:** Phase 15 — Adapter surface extensions + rename (NAMING-01 + VCS-21 + VCS-22 + PARALLEL-07)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 15 — Adapter surface extensions + rename (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-24 — Milestone v1.4 started
+Status: Not started — roadmap created
+Last activity: 2026-05-23 — v1.4 roadmap created (4 phases, 13 plans, 25 requirements mapped 100%)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 98 (v1.0: 56 + v1.1: 5 + v1.2: 3 + v1.3: 0)
+- Total plans completed: 98 (v1.0: 56 + v1.1: 5 + v1.2: 3 + v1.3: 34)
 - Average duration: see per-milestone table
-- Total execution time: 3 milestones shipped (v1.0, v1.1, v1.2)
+- Total execution time: 4 milestones shipped (v1.0, v1.1, v1.2, v1.3)
 
 **By Milestone:**
 
@@ -44,7 +44,8 @@ Last activity: 2026-05-24 — Milestone v1.4 started
 | v1.0 | 8 | 56 | Shipped 2026-05-14 |
 | v1.1 | 1 (Phase 7) | 5 | Shipped 2026-05-14 |
 | v1.2 | 1 (Phase 8) | 3 | Shipped 2026-05-15 |
-| v1.3 | 6 (Phases 9–14) | 0 | Planning |
+| v1.3 | 6 (Phases 9–14) | 34 | Shipped 2026-05-24 |
+| v1.4 | 4 (Phases 15–18) | 0/13 | Planning |
 
 *Updated after each plan completion*
 | Phase 09 P01 | 6min | 1 tasks | 1 files |
@@ -84,6 +85,7 @@ Last activity: 2026-05-24 — Milestone v1.4 started
 
 ### Roadmap Evolution
 
+- **v1.4 roadmap created 2026-05-23:** 4-phase shape (Phases 15-18) derived from research synthesis, 13 plans estimated, 25 v1.4 requirements mapped 100% (no orphans). Phase 15 = adapter surface extensions + rename (NAMING-01, VCS-21, VCS-22, PARALLEL-07; sequential plans on shared types.ts); Phase 16 = workflow + invariant tooling (LINT-06, CLEANUP-02; parallel-safe, consumes Phase 15 helper); Phase 17 = drift control + reconciliation (DOCS-08 fix → DRIFT-01/02 tests → DOCS-01..07/09 batched → PROJECT-01 reconciliation LAST per IP-4); Phase 18 = tactical cleanup + test-flake (CLEANUP-01 transition.md gate FIRST per Pitfall 2, CLEANUP-03..07 per-WR commits per Pitfall 10, TEST-17 narrow scope per Pitfall 9). One clarification vs research recommendation: PARALLEL-07's plan extracts the shared `cleanupSubagentWorkspaces` helper as its Wave 1 (single-owner per IP-5), then Phase 16 CLEANUP-02 consumes the same helper — avoids cross-phase dependency inversion.
 - **Phase 9 discuss 2026-05-15:** PARALLEL-03 (liveness probe) and PARALLEL-04 (repo-scoped lock) dropped at premise level. Orchestrator awaits `Agent()` completion before fanIn → no production scenario where a workspace is mid-write. In `octopus.ts` topology each subagent owns a distinct change at distinct change_id → agents never squash into shared ancestors → no inter-process contention. fanIn signature locked at two-arg `fanIn(handle, results)` with frozen-JSON Handle per SDK pure-data convention. Reap classifier widens 1→2 in `reap.ts` during Phase 9; Phase 10 adds git-side producer. See `09-CONTEXT.md`.
 - **v1.3 opened 2026-05-15:** 6-phase shape derived from (originally 29, now 27) requirements; verb namespace locked at `vcs.workspace.parallel.*` (Tension 1 resolved); A3 fix path deferred to Phase 12 discuss-phase decision (Tension 3 NOT pre-decided); no migration command for default-flip (subagent workspaces ephemeral); lint allowlist framing locked at +0/+1 (production entries stay); dogfood is LAST (Pitfall 10); CI parallel-path lane (Phase 13) ships BEFORE default-flip (Phase 14).
 - v1.2 closed 2026-05-15: Phase 8 (3/3 plans) — SEED-001 inverted, `lint-vcs-no-commit-id.cjs` enforcing 1032 files / 0 violations.
@@ -92,15 +94,24 @@ Last activity: 2026-05-24 — Milestone v1.4 started
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table. v1.3-specific decisions (locked at roadmap time):
+Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions (locked at roadmap time):
 
-- **Verb namespace** locked at `vcs.workspace.parallel.*` (sub-sub-namespace under `workspace`, precedent: `refs.bookmarks.*`). Not top-level `vcs.parallel.*`.
-- **A3 fix path** NOT pre-decided at roadmap time. Phase 12 discuss-phase chooses Path A / Path B / Path 1 by re-reading Phase 4 LEARNINGS Open Q1 (archived `51ee72a3`). Path C (version-probe) rejected.
-- **No migration command** for default-flip. Subagent workspaces are ephemeral; nothing to migrate. Only gate is CONFIG-02 pre-flight refusal on explicit `false`.
-- **Lint allowlist framing**: `lint-vcs-no-raw-git.allow.json` net change is +0 or +1 (optional addition is `sdk/src/vcs/git/parallel.ts` adapter-internal). The 23 production entries stay. The "collapse to zero" target is `.md` shell-fence blocks (workflow-markdown raw-git), validated via one-shot `scripts/audit-workflow-raw-git.cjs` (Phase 13).
-- **Dogfood phase is LAST** (Pitfall 10 blast-radius). Phase 14, after CI green.
-- **CI parallel-path lane ships BEFORE default-flip** (CI-05/06 in Phase 13 → CONFIG-01/02 in Phase 14). Validates verbs in real CI before user-observable flip.
-- **Same-PR coupling on `FanInResult` shape**: PARALLEL-02 jj-side contract + git-side contract must ship together (per v1.2 retro precedent). Phase 10 finalizes the cross-backend shape.
+- **Phase shape** = 4 phases (15-18) by surface-affinity grouping per research synthesis. Phase 15 = adapter; Phase 16 = workflow tooling; Phase 17 = drift control + reconciliation; Phase 18 = tactical cleanup + test-flake.
+- **`cleanupSubagentWorkspaces` helper extraction** lives in Phase 15 plan 15.04 Wave 1 (PARALLEL-07's plan). Phase 16 plan 16.02 (CLEANUP-02) consumes the same helper. Single-owner per IP-5 (recovery script as third consumer in Phase 16). Alternative considered: extract in Phase 16 first, Phase 15 PARALLEL-07 consume cross-phase — rejected to avoid cross-phase dependency inversion in canonical execution order.
+- **Strict Wave ordering in Phase 17** = Wave 1 (17.01 DOCS-08 prose fixes) → Wave 2 (17.02 DRIFT-01/02 tests) per Pitfall 4 prevention (no day-1 red CI). Reframed audit-as-baseline approach NOT used since fix is bounded (≤15 prose changes across 3 translations).
+- **PROJECT.md reconciliation runs LAST** (Phase 17 plan 17.04) per IP-4 — captures v1.4's own REQ-IDs (NAMING-01, VCS-21, VCS-22, PARALLEL-07, LINT-06, CLEANUP-01..07, TEST-17, DRIFT-01/02, DOCS-01..09, PROJECT-01) in the truth source.
+- **`transition.md` gate (CLEANUP-01) is HIGHEST PRIORITY within Phase 18** per Pitfall 2 — same false-clean-WC pattern as Phase 14 quick-task; high-risk repeat surface if other v1.4 workflow changes land before it.
+- **PARALLEL-07 cancel semantics**: STACK lens (synchronous teardown only, no signal handling) adopted per Pitfall 5 reconciliation. The FEATURES "mixed SIGTERM/SIGKILL" alternative explicitly rejected — assumes a different exec layer than `spawnSync` provides. `CancelResult` shape mirrors `FanInResult` (structured, NOT void/boolean). Discuss-phase 15 confirms.
+- **`idAlphabet` return shape** = opaque `readonly string` (`'0-9a-f'` git, `'k-z'` jj). Structured `{kind, chars, minLen, maxLen}` alternative rejected per ARCHITECTURE.md (typed enum would force callers to switch on backend kind, defeating unified-revision-model invariant). YAGNI: widen later if real consumer needs it.
+- **Drift-test file count** = TWO separate files (`tests/architecture-counts.test.cjs` + `tests/command-count-sync.test.cjs`). INVENTORY.md theme 6 specifically names both; single-responsibility; separate failure messages. Cross-link via comment.
+- **LINT-06 scope** = SHELL FENCE not prose mention per Pitfall 7 (reuse `audit-workflow-raw-git.cjs` fence-aware walker shape); content-driven literal substring detection; default-deny + per-file allowlist for legitimate non-dispatchers (`code-review.md`, `audit-fix.md`); CI-blocking in `parallel-e2e.yml` (NOT pretest per D-07 audit-workflow-raw-git.cjs precedent).
+- Verb namespace locked at `vcs.workspace.parallel.*` (sub-sub-namespace under `workspace`, precedent: `refs.bookmarks.*`). Not top-level `vcs.parallel.*`. (Inherited from v1.3.)
+- A3 fix path NOT pre-decided at roadmap time. Phase 12 discuss-phase chose Path 1. (v1.3 closed.)
+- No migration command for default-flip. Subagent workspaces are ephemeral; nothing to migrate. Only gate is CONFIG-02 pre-flight refusal on explicit `false`. (v1.3 closed.)
+- Lint allowlist framing: `lint-vcs-no-raw-git.allow.json` net change is +0 or +1 (optional addition is `sdk/src/vcs/git/parallel.ts` adapter-internal). The 23 production entries stay. The "collapse to zero" target is `.md` shell-fence blocks (workflow-markdown raw-git), validated via one-shot `scripts/audit-workflow-raw-git.cjs` (Phase 13). (v1.3 closed.)
+- Dogfood phase is LAST (Pitfall 10 blast-radius). Phase 14, after CI green. (v1.3 closed.)
+- CI parallel-path lane ships BEFORE default-flip (CI-05/06 in Phase 13 → CONFIG-01/02 in Phase 14). Validates verbs in real CI before user-observable flip. (v1.3 closed.)
+- Same-PR coupling on `FanInResult` shape: PARALLEL-02 jj-side contract + git-side contract must ship together (per v1.2 retro precedent). Phase 10 finalizes the cross-backend shape. (v1.3 closed.)
 - [Phase ?]: Phase 9 Plan 01: VcsWorkspaceParallel type contract landed; wave-2 compile gate active (backends/jj.ts + incomplete-work.ts fail tsc until plans 02/03/04 wire parallel field + closed-union reason)
 - [Phase ?]: Phase 9 Plan 01: kept baselineOpId? on ParallelDispatchHandle.workspaces[] as documented forward-compat reservation (D-06 planner discretion) rather than YAGNI-stripping
 - [Phase ?]: Phase 9 plan 02: enumerateConflictedPaths sidecar extraction + three-branch reap classifier + parse-time reason validator — UPSTREAM-02 preserved end-to-end
@@ -152,16 +163,41 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.3-specific decisions 
 
 ### Pending Todos
 
-None yet for v1.3. Phase 9 discuss/plan steps will surface plan-level todos.
+v1.4 todos all promoted to REQ-IDs in `.planning/REQUIREMENTS.md` and mapped to phases per `.planning/ROADMAP.md` traceability table. Phase 15 discuss-phase will surface plan-level todos.
 
 ### Blockers/Concerns
 
+**v1.4-specific blockers (from PITFALLS.md):**
+
+- **Pitfall 1 (Scope creep, all phases):** Lock the closed acceptance set at REQUIREMENTS.md write time. The 5 v14-* todos' `## Acceptance criteria` sections are the spec; do NOT add bullets at plan-phase. Warning sign: any plan PLAN.md whose `must_haves` count exceeds the source todo's acceptance count.
+- **Pitfall 2 (Phase 18 plan 18.01, transition.md gate):** v14-transition-md-update-gap is the highest-risk known recurrence site for the Phase 14 false-clean-WC pattern. Fix FIRST among workflow waves before any new workflow surface lands. Global-install caveat: `~/.claude/get-shit-done/workflows/` still has OLD workflow until reinstall.
+- **Pitfall 3 (Phase 15 plan 15.01, rootCommits rename):** 13+ call sites including `backends.ts:79` capability matrix string literal. TypeScript compiler protects `.ts` only; CJS + workflow markdown + capability matrix surfaces are silent failure modes. Mandatory pre-rename JSON sidecar audit; per-extension `grep -c` exit 0 before commit.
+- **Pitfall 4 (Phase 17 plans 17.01 → 17.02 ordering):** Codebase ALREADY HAS DRIFT in `docs/ja-JP/ARCHITECTURE.md` (44→68 commands, 46→89 workflows, 16→33 agents, 17→60 lib modules). Tests-first ships day-1 red CI. STRICT ORDERING: drift FIX (Wave 1 = 17.01) → drift TEST (Wave 2 = 17.02).
+- **Pitfall 5 (Phase 15 plan 15.04, parallel.cancel):** STACK lens correct (synchronous teardown only, no signal handling). Cancel does NOT signal subagents (`spawnSync` exec layer can't accept AbortSignal per `sdk/src/vcs/exec.ts:19`; Phase 9 D-01 orchestrator-awaits-Agent invariant). Cancel return shape = structured `CancelResult` (NOT void/boolean); reuses shared `cleanupSubagentWorkspaces` helper.
+- **Pitfall 6 (Phase 15 plan 15.03, matchPrefix):** THROW on wrong-alphabet prefix (not silent false); throw on empty prefix (caller bug); return false on `prefix.length > id.length`; hex case-insensitive (matches git); k-z lowercase-only (matches jj). Test cross-product mandatory.
+- **Pitfall 7 (Phase 16 plan 16.01, call-presence lint):** Define scope by SHELL FENCE, not by prose mention. Reuse `audit-workflow-raw-git.cjs` fence-aware walker. False-positive risk on `code-review.md`/`audit-fix.md`/similar workflows that mention "wave" only in prose.
+- **Pitfall 8 (Phase 17 plan 17.04, PROJECT.md reconciliation):** Two-pass approach — machine-generate truth source at `.planning/intel/project-validated-truth.md`, human-edit PROJECT.md narrative citing it. Preserve hand-curated parentheticals like "(caveat: A3 colocated pre-commit gap remains open, see Active)".
+- **Pitfall 9 (Phase 18 plan 18.03, jj-reap test flake fix):** Per-test fix only. Diff ≤5 LOC, ≤1 file, `sdk/vitest.config.ts` UNTOUCHED, `scripts/check-skip-count.cjs` green. Out-of-scope reaffirmation in plan CONTEXT.md citing PROJECT.md OOS clause verbatim. No `retry: N`, no broader vitest reorg.
+- **Pitfall 10 (Phase 18 plan 18.02, WR-NN review followups):** Per-WR commits (or per-WR delimited sections of one commit), each with its own verification test. Order: prod-code fixes (CLEANUP-05 Array.isArray, CLEANUP-06 Number.isNaN) FIRST, then script fixes, then test fixes (CLEANUP-07 afterEach rm). Info findings addressed opportunistically.
+- **Pitfall 11 (Phase 15 plan 15.04 + Phase 16 plan 16.02, orphan-dirs ownership):** Single owner = dispatcher fanIn cleanup. Shared `cleanupSubagentWorkspaces(phaseRoot, phaseNumber)` helper consumed by: (1) dispatcher fanIn success branch, (2) recovery script, (3) cancel verb. One implementation, three consumers, no drift.
+- **Pitfall 12 (Phase 17 plan 17.03, docs-update batched fix):** Triage-then-fix per theme. ADRs immutable; add append-only "## Update YYYY-MM-DD" supersession notes for theme 3. Phase 3 archived planning: anchor to closure change_ids (NOT deleted) for theme 5. Per-theme decisions in `.planning/intel/docs-update-fix-triage.md` BEFORE execute.
+
+**Cross-phase integration pitfalls (from PITFALLS.md IP-1..IP-5):**
+
+- **IP-1 (Rename + drift-test):** Phase 15 plan 15.01 ships rename BEFORE Phase 17 plan 17.02 ships drift-control-tests. Canonical phase order auto-resolves.
+- **IP-2 (cancel + call-presence lint):** Lint excludes cancel from required-presence; lint enforces dispatch-call presence only. Phase 15 plan 15.04 + Phase 16 plan 16.01 file-disjoint, no coupling.
+- **IP-3 (assert_clean_wc + docs-fix):** Theme 1 fix in Phase 17 plan 17.03 is single-step single-commit. Workflow MUST commit immediately after script returns; assert_clean_wc gate runs LAST.
+- **IP-4 (Reconciliation + new REQ-IDs):** Phase 17 plan 17.04 PROJECT.md reconciliation runs LAST so v1.4's OWN REQ-IDs (NAMING-01, VCS-21, VCS-22, PARALLEL-07, LINT-06, CLEANUP-01..07, TEST-17, DRIFT-01/02, DOCS-01..09, PROJECT-01) land in truth source.
+- **IP-5 (Cleanup helper across 3 consumers):** Wave 1 = extract `cleanupSubagentWorkspaces` helper as Phase 15 plan 15.04 Wave 1. Wave 2 = orphan-dirs todo (Phase 16 plan 16.02 CLEANUP-02) + cancel verb (already in 15.04 Wave 2) both call the new helper. Same code path, no drift.
+
+**Inherited (v1.3 close + earlier):**
+
 - **~~Pitfall 1~~ (SUPERSEDED 2026-05-15 by Phase 9 D-02):** Pitfall posited "concurrent `jj squash` from N workspaces against shared ancestor diverges silently." Phase 9 discuss rejected the premise: `octopus.ts` topology gives each subagent a distinct change at distinct change_id; agents only squash into their own `@-`. The orchestrator-only operations (`createPhaseStructure`, fanIn, bookmark advance) run in single processes. No inter-process contention exists. No `acquireJjRepoLock`. TEST-14 stays as a topology assertion (not lock-effectiveness).
-- **Pitfall 2 (Phase 9+10 same-PR coupling):** In-tree conflicts on octopus merge get classified as crashes by reap unless `FanInResult.conflicted: boolean` ships. `IncompleteWorkEntry.reason` enum extends from 1 → **2** values (`'crashed-with-uncommitted-work'` + `'merge-in-tree-conflict'`; `'partial-wave-live-workspace'` dropped because Pitfall 3 superseded). Phase 9 lands enum + jj producer in `reap.ts`; Phase 10 adds git producer.
+- **Pitfall 2 (Phase 9+10 same-PR coupling):** In-tree conflicts on octopus merge get classified as crashes by reap unless `FanInResult.conflicted: boolean` ships. `IncompleteWorkEntry.reason` enum extends from 1 → **2** values (`'crashed-with-uncommitted-work'` + `'merge-in-tree-conflict'`; `'partial-wave-live-workspace'` dropped because Pitfall 3 superseded). Phase 9 lands enum + jj producer in `reap.ts`; Phase 10 adds git producer. (v1.3 closed.)
 - **~~Pitfall 3~~ (SUPERSEDED 2026-05-15 by Phase 9 D-01):** Pitfall posited "partial-wave failure with one agent still running needs a liveness probe before reap." Phase 9 discuss rejected the premise: the orchestrator awaits `Agent()` completion before calling fanIn, so no production scenario has a workspace mid-write. No `PARALLEL-03`. `FanInResult` does NOT carry `liveWorkspaces` / `partial: true`. `git worktree remove --force` is still forbidden in the cross-backend path (non-force only) — that constraint survives independent of the dropped probe.
-- **Pitfall 5 (Phase 10):** `.git/config.lock` race on simultaneous `git worktree add`. Internal serialization in `sdk/src/vcs/git/parallel.ts` (not prompt-text rule).
-- **Pitfall 10 (Phase 14 last):** Dogfood blast-radius — pre-snapshot via `jj op log` + `.planning/` tarball, isolated bookmark only, synthetic plans, loud-fail rollback.
-- **Carry-forward (A3, Phase 12):** jj 0.41 doesn't auto-fire `.git/hooks/pre-commit` after `jj squash` colocated. Three fix paths in Phase 4 LEARNINGS Open Q1 (archived `51ee72a3`). Chosen at Phase 12 discuss-phase.
+- **Pitfall 5 (Phase 10):** `.git/config.lock` race on simultaneous `git worktree add`. Internal serialization in `sdk/src/vcs/git/parallel.ts` (not prompt-text rule). (v1.3 closed.)
+- **Pitfall 10 (Phase 14 last):** Dogfood blast-radius — pre-snapshot via `jj op log` + `.planning/` tarball, isolated bookmark only, synthetic plans, loud-fail rollback. (v1.3 closed.)
+- **Carry-forward (A3, Phase 12):** jj 0.41 doesn't auto-fire `.git/hooks/pre-commit` after `jj squash` colocated. Three fix paths in Phase 4 LEARNINGS Open Q1 (archived `51ee72a3`). Chosen at Phase 12 discuss-phase. (v1.3 closed — Path 1 chosen.)
 
 ### Quick Tasks Completed
 
@@ -172,34 +208,37 @@ None yet for v1.3. Phase 9 discuss/plan steps will surface plan-level todos.
 
 ## Deferred Items
 
-Items acknowledged and carried forward from previous milestone close (status updated at v1.3 open):
+All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQUIREMENTS.md` (see Traceability table). No new deferrals being created in v1.4 — every prior-deferred item in scope has been promoted; this is a cleanup milestone.
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| Architecture | Orchestrator parallelization rewrite (raw-git worktree dispatch → cross-backend `vcs.workspace.parallel.*`) | **IN-SCOPE for v1.3 Phases 9–11** | v1.0 → v1.1 → v1.2 (now closing in v1.3) |
-| Hooks | A3 colocated pre-commit gap (jj 0.41 doesn't auto-fire `.git/hooks/pre-commit` after `jj squash` colocated) | **IN-SCOPE for v1.3 Phase 12** | v1.0 → v1.1 → v1.2 (now closing in v1.3) |
-| Lint | LINT-04 markdown / `.planning/` prose-level lint (separate from `lint-vcs-no-commit-id.cjs`) | Reframed as v1.3 LINT-04 one-shot `audit-workflow-raw-git.cjs` (Phase 13) | v1.2 |
-| API | TEST-13 (v1.2 deferred) `vcs.refs.matchPrefix(id, prefix)` alphabet-aware short-prefix matching | Still deferred — no consumer in v1.3 | v1.2 |
-| Naming | NAMING-01 cosmetic rename `rootCommits` → `rootRevisions` | Still deferred (low value, high churn) | v1.2 |
-| API | API-01 public `vcs.refs.idAlphabet` introspection | Still deferred (no consumer) | v1.2 |
-| API | `vcs.workspace.parallel.cancel(handle)` mid-execution graceful abandonment | Deferred to v1.4+; surfaces if dogfood (Phase 14) reveals need | v1.3 open |
-| Lint | Workflow call-presence lint (`vcs.parallel.*` must be called in dispatch sections) | Deferred to v1.4 | v1.3 open |
-| Docs | 45 docs failures across 8 themes from `/gsd-docs-update --verify-only` — author-machine path leaks, split-workspace-command translations, ADR drift, renamed hooks, archived planning refs, missing drift-control tests, translation date mismatches; see [v14-docs-verify-only-followups](./todos/pending/v14-docs-verify-only-followups.md) | Acknowledged for v1.4 coordinated cleanup pass | v1.3 close (2026-05-24) |
-| Tests | `performJjReap` test flake (Phase 14 dogfood observation); see [v14-jj-reap-test-flake](./todos/pending/v14-jj-reap-test-flake.md) | Acknowledged for v1.4 | v1.3 close (2026-05-24) |
-| Cleanup | Orphan `jj-workspace` directories left behind by dispatch; see [v14-orphan-jj-workspace-dirs](./todos/pending/v14-orphan-jj-workspace-dirs.md) | Acknowledged for v1.4 | v1.3 close (2026-05-24) |
-| Reviews | Phase 14 review followups (CR-01 closed, additional WR-* items pending); see [v14-review-followups](./todos/pending/v14-review-followups.md) | Acknowledged for v1.4 | v1.3 close (2026-05-24) |
-| Docs | `transition.md` update-gap (`update_roadmap_and_state` step lacks immediate commit); see [v14-transition-md-update-gap](./todos/pending/v14-transition-md-update-gap.md) | Acknowledged for v1.4 | v1.3 close (2026-05-24) |
+| Architecture | Orchestrator parallelization rewrite (raw-git worktree dispatch → cross-backend `vcs.workspace.parallel.*`) | ✓ **CLOSED in v1.3 Phases 9–11 + 14** | v1.0 → v1.1 → v1.2 (closed in v1.3) |
+| Hooks | A3 colocated pre-commit gap (jj 0.41 doesn't auto-fire `.git/hooks/pre-commit` after `jj squash` colocated) | ✓ **CLOSED in v1.3 Phase 12** | v1.0 → v1.1 → v1.2 (closed in v1.3) |
+| Lint | LINT-04 markdown / `.planning/` prose-level lint (separate from `lint-vcs-no-commit-id.cjs`) | Reframed as v1.3 LINT-04 one-shot `audit-workflow-raw-git.cjs` (Phase 13) | v1.2 (closed in v1.3) |
+| API | TEST-13 (v1.2 deferred) `vcs.refs.matchPrefix(id, prefix)` alphabet-aware short-prefix matching | **IN-SCOPE for v1.4 Phase 15 plan 15.03** (REQ: VCS-22) | v1.2 → v1.3 (promoted in v1.4) |
+| Naming | NAMING-01 cosmetic rename `rootCommits` → `rootRevisions` | **IN-SCOPE for v1.4 Phase 15 plan 15.01** (REQ: NAMING-01) | v1.2 → v1.3 (promoted in v1.4) |
+| API | API-01 public `vcs.refs.idAlphabet` introspection | **IN-SCOPE for v1.4 Phase 15 plan 15.02** (REQ: VCS-21) | v1.2 → v1.3 (promoted in v1.4) |
+| API | `vcs.workspace.parallel.cancel(handle)` mid-execution graceful abandonment | **IN-SCOPE for v1.4 Phase 15 plan 15.04** (REQ: PARALLEL-07) | v1.3 open (promoted in v1.4) |
+| Lint | Workflow call-presence lint (`vcs.parallel.*` must be called in dispatch sections) | **IN-SCOPE for v1.4 Phase 16 plan 16.01** (REQ: LINT-06) | v1.3 open (promoted in v1.4) |
+| Docs | 45 docs failures across 8 themes from `/gsd-docs-update --verify-only` — author-machine path leaks, split-workspace-command translations, ADR drift, renamed hooks, archived planning refs, missing drift-control tests, translation date mismatches; see [v14-docs-verify-only-followups](./todos/pending/v14-docs-verify-only-followups.md) | **IN-SCOPE for v1.4 Phase 17 plans 17.01/17.02/17.03** (REQs: DOCS-01..09 + DRIFT-01/02) | v1.3 close (promoted in v1.4) |
+| Tests | `performJjReap` test flake (Phase 14 dogfood observation); see [v14-jj-reap-test-flake](./todos/pending/v14-jj-reap-test-flake.md) | **IN-SCOPE for v1.4 Phase 18 plan 18.03** (REQ: TEST-17) | v1.3 close (promoted in v1.4) |
+| Cleanup | Orphan `jj-workspace` directories left behind by dispatch; see [v14-orphan-jj-workspace-dirs](./todos/pending/v14-orphan-jj-workspace-dirs.md) | **IN-SCOPE for v1.4 Phase 16 plan 16.02** (REQ: CLEANUP-02) | v1.3 close (promoted in v1.4) |
+| Reviews | Phase 14 review followups (CR-01 closed, additional WR-* items pending); see [v14-review-followups](./todos/pending/v14-review-followups.md) | **IN-SCOPE for v1.4 Phase 18 plan 18.02** (REQs: CLEANUP-03..07) | v1.3 close (promoted in v1.4) |
+| Docs | `transition.md` update-gap (`update_roadmap_and_state` step lacks immediate commit); see [v14-transition-md-update-gap](./todos/pending/v14-transition-md-update-gap.md) | **IN-SCOPE for v1.4 Phase 18 plan 18.01** (REQ: CLEANUP-01) | v1.3 close (promoted in v1.4) |
 
 ## Session Continuity
 
-Last session: 2026-05-24T00:26:41.021Z
-Stopped at: Phase 14 context gathered
+Last session: 2026-05-23T22:00:00.000Z
+Stopped at: v1.4 roadmap created (4 phases, 13 plans, 25 requirements 100% mapped)
 Resume file: 
 
 None
 
-- Phase 12 (A3 fix) is an independent parallel track — may be planned/executed in parallel with Phases 9/10/11; joins at Phase 13 CI integration.
+- Phase 12 (A3 fix) is an independent parallel track — may be planned/executed in parallel with Phases 9/10/11; joins at Phase 13 CI integration. (v1.3 closed.)
+- v1.4 phases (15-18) execute in canonical order; Phase 15 plan 15.04 (PARALLEL-07) extracts `cleanupSubagentWorkspaces` helper as Wave 1, consumed by Phase 16 plan 16.02 (CLEANUP-02) — single-owner per IP-5.
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Review v1.4 roadmap at `.planning/ROADMAP.md` (4 phases, 13 plans, 25 requirements)
+- When ready, run `/gsd:plan-phase 15` to decompose Phase 15 (Adapter surface extensions + rename) into executable plans
+- Plan 15.01 (rootCommits → rootRevisions hard rename) ships FIRST per Pitfall 3 sequencing — pre-rename JSON sidecar audit is Wave 1 of that plan
