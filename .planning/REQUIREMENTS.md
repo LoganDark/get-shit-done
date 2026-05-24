@@ -79,8 +79,8 @@ The user-observable success signal. New prefix.
 
 Last phase. Synthetic plans on this very repo's jj backend. New prefix.
 
-- [ ] **DOGFOOD-01**: Spin up 2-3 synthetic plans on an isolated bookmark (NOT main). Run them in parallel via the new `vcs.workspace.parallel.dispatch` + `fanIn`. Validate: clean fan-in (no `divergent()`), agent-bookmark cleanup, manifest schema correctness on both jj and git fixtures.
-- [ ] **DOGFOOD-02**: Metrics recorded to `.planning/intel/v1.3-dogfood-metrics.md`: dispatch time, fan-in time, conflict rate, partial-wave incidence (if any). Pre-snapshot via `jj op log` + `.planning/` tarball before dogfood run; pre-snapshot recovery procedure documented.
+- [x] **DOGFOOD-01**: Spin up 2-3 synthetic plans on an isolated bookmark (NOT main). Run them in parallel via the new `vcs.workspace.parallel.dispatch` + `fanIn`. Validate: clean fan-in (no `divergent()`), agent-bookmark cleanup, manifest schema correctness on both jj and git fixtures.
+- [x] **DOGFOOD-02**: Metrics recorded to `.planning/intel/v1.3-dogfood-metrics.md`: dispatch time, fan-in time, conflict rate, partial-wave incidence (if any). Pre-snapshot via `jj op log` + `.planning/` tarball before dogfood run; pre-snapshot recovery procedure documented.
 
 ## Out of Scope
 
@@ -133,8 +133,8 @@ Mapped during roadmap creation 2026-05-15. Updated 2026-05-15 after Phase 9 disc
 | TEST-16 | Phase 10 | Complete |
 | CONFIG-01 | Phase 14 | Complete |
 | CONFIG-02 | Phase 14 | Complete |
-| DOGFOOD-01 | Phase 14 | Pending |
-| DOGFOOD-02 | Phase 14 | Pending |
+| DOGFOOD-01 | Phase 14 | Complete |
+| DOGFOOD-02 | Phase 14 | Complete |
 
 **Note on cross-phase REQ-IDs:** PARALLEL-01, PARALLEL-02, and TEST-13 span two phases each. This reflects the must-honor sequencing constraint that the cross-backend `FanInResult` shape (PARALLEL-02 specifically) requires same-PR coupling between jj-side and git-side per v1.2 retro precedent — Phase 9 ships the jj implementation and the contract; Phase 10 ships the git implementation and finalizes the contract. Each phase has distinct deliverables (jj-side bodies + tests in Phase 9; git-side bodies + tests + per-branch loop happy-path fixture in Phase 10) so the "exactly one phase" coverage rule is honored at the per-deliverable level even where the REQ-ID umbrella spans two.
 
