@@ -221,7 +221,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion; human-verify checkpoint at the end)*
 
-- [ ] 14-04-PLAN.md — `scripts/dogfood-rehearse.sh` rehearsal step against `cp -a` clone (D-11); requirements: DOGFOOD-02
+- [x] 14-04-PLAN.md — `scripts/dogfood-rehearse.sh` rehearsal step against `cp -a` clone (D-11); requirements: DOGFOOD-02
 
 **Wave 4** *(blocked on Wave 3 approval; human-verify checkpoint at the end)*
 
@@ -249,7 +249,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 11/11 | Complete    | 2026-05-16 |
 | 12. A3 colocated pre-commit fix (parallel track) | 3/3 | Complete    | 2026-05-21 |
 | 13. CI parallel-path lane + lint close-gate | 4/4 | Complete   | 2026-05-22 |
-| 14. Default flip + dogfood validation | 3/5 | In Progress|  |
+| 14. Default flip + dogfood validation | 4/5 | In Progress|  |
 
 ## Next
 
