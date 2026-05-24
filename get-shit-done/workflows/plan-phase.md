@@ -1664,26 +1664,41 @@ Route to `<offer_next>` (existing behavior).
 
 **Final-gate check: assert the working copy is clean before declaring phase planned.**
 
-After all mutating verbs in this workflow have fired (`state.planned-phase` at §13b, `roadmap.annotate-dependencies` at §13c, the conditional `commit_docs` commit at §13d), verify nothing critical is left uncommitted before the `<offer_next>` route emits the "PHASE PLANNED ✓" banner.
+By the time we reach this step, every committable change should already be in history:
+- §13b's `state.planned-phase` mutation should have been committed by §13d (when `commit_docs: true`).
+- §13c's `roadmap.annotate-dependencies` mutation likewise.
+- Any subagent (researcher / pattern-mapper / planner / plan-checker) that wrote artifacts to disk should have committed them inline.
 
-This gate catches the class of bug where §13d's commit is gated on `commit_docs` and the operator forgot to flip it on, OR where a future workflow edit adds a new mutating verb (e.g. another `state.*` or `roadmap.*` call site) without an immediate commit. Without this gate, plan-phase can declare "PHASE PLANNED" while STATE.md / ROADMAP.md sit dirty in the working copy.
+Any uncommitted change at this point is a real problem — either (a) §13d was gated off by `commit_docs: false` leaving §13b/§13c mutations dirty, (b) a future-added mutating verb call site forgot its follow-up commit, (c) a subagent wrote files without committing, or (d) the user mixed unrelated WIP with phase planning. All four cases warrant aborting before the "PHASE PLANNED ✓" banner rather than silently lying about WC cleanliness.
 
 ```bash
 DIRTY=$(gsd-sdk query diff --name-only 2>/dev/null | jq -r '.nameOnly // [] | join("\n")')
-PLANNING_DIRTY=$(echo "$DIRTY" | grep -E '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
-if [ -n "$PLANNING_DIRTY" ]; then
-	echo "FATAL: planning artifacts uncommitted after phase planning." >&2
-	echo "This is a workflow bug — a mutating verb's commit was skipped." >&2
-	echo "Dirty files:" >&2
-	echo "$PLANNING_DIRTY" >&2
+if [ -n "$DIRTY" ]; then
+	# Categorise so the operator can diagnose which class of leak fired.
+	PLANNING_DIRTY=$(echo "$DIRTY" | grep -E '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
+	OTHER_DIRTY=$(echo "$DIRTY" | grep -vE '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
+
+	echo "FATAL: working copy is dirty before phase planning declaration." >&2
 	echo "" >&2
-	echo "Resolve by committing the listed files before re-running, or report this as a GSD workflow defect." >&2
-	echo "Most common cause: 'commit_docs: false' in .planning/config.json with §13d skipped; either flip it on, or commit STATE.md/ROADMAP.md manually." >&2
+	if [ -n "$PLANNING_DIRTY" ]; then
+		echo "Orchestrator-owned planning artifacts (a workflow step skipped its follow-up commit, OR commit_docs is false):" >&2
+		echo "$PLANNING_DIRTY" | sed 's/^/  /' >&2
+	fi
+	if [ -n "$OTHER_DIRTY" ]; then
+		echo "Source / scripts / tests (a planning subagent leaked, OR unrelated WIP was present):" >&2
+		echo "$OTHER_DIRTY" | sed 's/^/  /' >&2
+	fi
+	echo "" >&2
+	echo "Phase-planned declaration requires a clean working copy. Resolve via one of:" >&2
+	echo "  - commit the listed files with a descriptive message" >&2
+	echo "  - if commit_docs is false but §13b/§13c ran: flip it on, or commit STATE.md/ROADMAP.md manually" >&2
+	echo "  - if planning artifacts dirty: find the workflow step that produced them and add its missing commit (do not just paper over here)" >&2
+	echo "  - if unrelated WIP: jj abandon @ / git stash before re-running plan-phase" >&2
 	exit 1
 fi
 ```
 
-**Scope:** Only `.planning/` paths and `*-SUMMARY.md` / `*-VERIFICATION.md` files trip the gate. Source files outside `.planning/` are excluded.
+**Why unconditional and not just `.planning/`:** the gate's job is to catch ALL forms of "we're declaring done but state isn't durable" — orchestrator mutations, subagent artifacts, mixed-in WIP. Restricting to `.planning/` would only catch case (a)/(b) and silently rubber-stamp cases (c)/(d). The categorisation in the error message keeps the diagnostic story clean without weakening the gate.
 
 **Auto-advance path:** When §15 dispatches execute-phase via Skill, execute-phase has its OWN `assert_clean_wc` gate before its "PHASE COMPLETE" emission. This gate here protects the manual route only (where §15 routes to `<offer_next>`).
 

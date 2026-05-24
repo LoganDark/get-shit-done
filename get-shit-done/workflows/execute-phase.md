@@ -1580,25 +1580,46 @@ gsd-sdk query commit "docs(phase-{X}): evolve PROJECT.md after phase completion"
 <step name="assert_clean_wc">
 **Final-gate check: assert the working copy is clean before declaring phase complete.**
 
-After all mutating verbs (`phase.complete`, `state.*`, `roadmap.*`) have fired and their commits should have landed, verify nothing critical is left uncommitted. This gate catches the class of bug where a workflow step calls a mutating SDK verb (which writes planning files on disk) but forgets to run the follow-up `gsd-sdk query commit`. Without this gate, the orchestrator can declare "PHASE COMPLETE" while ROADMAP.md / STATE.md / SUMMARY.md / VERIFICATION.md sit dirty in the working copy.
+By the time we reach this step, every committable change should already be in history:
+- The executor's per-task commit protocol committed each task's source/test/script edits inline.
+- Every workflow-orchestrator-owned mutation (`phase.complete`, `state.*`, `roadmap.*`, `update_project_md`, `close_phase_todos`, etc.) was followed by an immediate `gsd-sdk query commit`.
+
+Any uncommitted change at this point is therefore a real problem — either (a) a workflow step ran a mutating SDK verb but forgot the follow-up commit, (b) the executor's commit protocol leaked, (c) a pre-commit hook silently aborted a commit, or (d) the user mixed unrelated WIP with phase execution. All four cases warrant aborting before "PHASE COMPLETE" emission rather than silently lying about WC cleanliness.
 
 ```bash
 DIRTY=$(gsd-sdk query diff --name-only 2>/dev/null | jq -r '.nameOnly // [] | join("\n")')
-PLANNING_DIRTY=$(echo "$DIRTY" | grep -E '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
-if [ -n "$PLANNING_DIRTY" ]; then
-	echo "FATAL: planning artifacts uncommitted after phase execution." >&2
-	echo "This is a workflow bug — a mutating verb's commit was skipped." >&2
-	echo "Dirty files:" >&2
-	echo "$PLANNING_DIRTY" >&2
+if [ -n "$DIRTY" ]; then
+	# Categorise the dirty paths so the operator can diagnose which class of leak fired.
+	PLANNING_DIRTY=$(echo "$DIRTY" | grep -E '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
+	OTHER_DIRTY=$(echo "$DIRTY" | grep -vE '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
+
+	echo "FATAL: working copy is dirty before phase completion." >&2
 	echo "" >&2
-	echo "Resolve by committing the listed files before re-running, or report this as a GSD workflow defect." >&2
+	if [ -n "$PLANNING_DIRTY" ]; then
+		echo "Orchestrator-owned planning artifacts (a workflow step skipped its follow-up commit):" >&2
+		echo "$PLANNING_DIRTY" | sed 's/^/  /' >&2
+	fi
+	if [ -n "$OTHER_DIRTY" ]; then
+		echo "Source / scripts / tests (executor commit protocol may have leaked, OR unrelated WIP was present):" >&2
+		echo "$OTHER_DIRTY" | sed 's/^/  /' >&2
+	fi
+	echo "" >&2
+	echo "Phase completion requires a clean working copy. Resolve via one of:" >&2
+	echo "  - commit the listed files with a descriptive message" >&2
+	echo "  - if planning artifacts: identify the workflow step that produced them and add its missing commit (do not just paper over here)" >&2
+	echo "  - if unrelated WIP: jj abandon @ / git stash before re-running phase execution" >&2
 	exit 1
 fi
 ```
 
-**Scope:** Only `.planning/` paths and `*-SUMMARY.md` / `*-VERIFICATION.md` files trip the gate. Source files outside `.planning/` belong to the executor's per-task commit protocol, not the orchestrator's tracking commits — they are explicitly NOT flagged here. The gate protects orchestrator-owned artifacts only.
+**Why unconditional and not just `.planning/`:** the gate's job is to catch ALL forms of "we're declaring done but state isn't durable" — orchestrator mutations, executor mutations, hook-aborted commits, mixed-in WIP. Restricting to `.planning/` would only catch case (a) and silently rubber-stamp cases (b)–(d). The categorisation in the error message keeps the diagnostic story clean without weakening the gate.
 
-**Do not bypass.** If this gate fires, the correct fix is to identify which earlier step (`update_roadmap`, `update_project_md`, `close_phase_todos`, etc.) ran a mutating verb without an immediate commit, and add the missing commit there. Suppressing the gate without fixing the root cause re-introduces the original Phase 14 bug.
+**Do not bypass.** If this gate fires, fix the root cause:
+- Orchestrator-owned planning paths dirty → find the workflow step that ran the mutating verb without an immediate commit and add the commit there
+- Source/script/test paths dirty → trace which executor task left them; the executor commit protocol should have caught it
+- Mixed unrelated WIP → commit or `jj abandon @` before re-running
+
+Suppressing the gate without fixing the root cause re-introduces the original Phase 14 bug.
 </step>
 
 <step name="offer_next">
