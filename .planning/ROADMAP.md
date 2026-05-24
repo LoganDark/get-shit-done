@@ -249,7 +249,7 @@ Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurr
 | 11. Orchestrator + agent rewire + workspace.assert-dispatched-cwd | 11/11 | Complete    | 2026-05-16 |
 | 12. A3 colocated pre-commit fix (parallel track) | 3/3 | Complete    | 2026-05-21 |
 | 13. CI parallel-path lane + lint close-gate | 4/4 | Complete   | 2026-05-22 |
-| 14. Default flip + dogfood validation | 5/5 | Complete   | 2026-05-24 |
+| 14. Default flip + dogfood validation | 5/5 | Complete    | 2026-05-24 |
 
 ## Next
 
