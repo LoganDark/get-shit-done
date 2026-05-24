@@ -1316,32 +1316,32 @@ describe.sequential.skipIf(!jjAvailable)(
 | A3 | `mainRepoRoot` for git-side cancel is the wire-in `cwd` per `backends/git.ts:738` parallel namespace pattern — same as fanIn | Example 4 git cancel | Verified by reading the existing wire-in. No risk. |
 | A4 | The `15-04-PLAN.md` stale references at :151 and :404 can be patched by the executor as an opening task | Pitfall 7 | If the planner instead amends the plan ahead of execute (recommended), the executor's first task is a no-op. Either path resolves the TSC-red risk. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Helper signature: 2-arg or 3-arg? `phaseRoot` or `mainRepoRoot`?**
    - What we know: CONTEXT D-05 literal: `(phaseRoot: string, phaseNumber: number)`.
    - What's unclear: whether the additional `workspaces?: readonly {name, path}[]` parameter is a forbidden contract widening AND whether the first parameter should be `mainRepoRoot` (what the body actually needs) or `phaseRoot` (what the CONTEXT literal says).
-   - Recommendation: implement 3-arg with `workspaces?` optional AND rename the first param to `mainRepoRoot`. Document the dual-mode in the helper's JSDoc. This preserves D-05's intent (helper is a self-contained sidecar callable from cancel + fanIn + dogfood-restore.sh) while resolving the actual exec needs. The CONTEXT D-05 literal probably said "phaseRoot" because the example use case was the cancel body that already has `handle.phaseRoot`; in practice the body needs `mainRepoRoot`. Planner-level decision; document the rename in plan 15.04 CONTEXT amendment if reconciled.
+   - RESOLVED: (user 2026-05-24, consumed by plan 15-04 + CONTEXT D-05 amendment) implement 3-arg with `workspaces?` optional AND rename the first param to `mainRepoRoot`. Document the dual-mode in the helper's JSDoc. This preserves D-05's intent (helper is a self-contained sidecar callable from cancel + fanIn + dogfood-restore.sh) while resolving the actual exec needs. The CONTEXT D-05 literal probably said "phaseRoot" because the example use case was the cancel body that already has `handle.phaseRoot`; in practice the body needs `mainRepoRoot`. Planner-level decision; document the rename in plan 15.04 CONTEXT amendment if reconciled.
 
 2. **Idempotency semantic on already-cancelled handle: empty arrays or full mirror of the original?**
    - What we know: CONTEXT D-03 says re-call "returns CancelResult with empty arrays (no error)".
    - What's unclear: helper enumeration finds 0 dirs on second call (already torn down). Should `abandoned[]` be `[]` (literal interpretation of D-03) or should the helper consider the dirs "already abandoned" and include them?
-   - Recommendation: empty arrays per literal D-03 reading. The semantic is "what did this call DO?", not "what is the cumulative state?". An idempotent re-call did nothing; report nothing. Example 9 test asserts this.
+   - RESOLVED: (consumed by plan 15-04 D-03 truth + idempotent-recall scenario) empty arrays per literal D-03 reading. The semantic is "what did this call DO?", not "what is the cumulative state?". An idempotent re-call did nothing; report nothing. Example 9 test asserts this.
 
 3. **Cancel-on-conflicted state: cancel-after-fanIn-with-conflicts is allowed?**
    - What we know: fanIn returns `conflicted: true` when octopus merge produces in-tree conflicts. The conflicted workspaces are LEFT intact for review per reap's W3(a).
    - What's unclear: if the operator then calls `cancel(handle)`, should cancel respect the W3(a) preservation (skip the conflicted workspaces) or tear them down anyway?
-   - Recommendation: cancel tears them down. CONTEXT D-04 file boundary rationale explicitly says cancel's contract is "tear down everything explicitly requested" — diverges from reap. Document this in the cancel JSDoc.
+   - RESOLVED: (consumed by plan 15-04 cancel JSDoc — diverges from reap by design per D-04) cancel tears them down. CONTEXT D-04 file boundary rationale explicitly says cancel's contract is "tear down everything explicitly requested" — diverges from reap. Document this in the cancel JSDoc.
 
 4. **Surplus-bookmark cleanup on jj cancel: skip entirely or run a probe?**
    - What we know: Phase 11 D-02 retired the per-subagent jj agent-bookmark create loop. The jj-side `surplusBookmarks` in fanIn is `[]` by construction.
    - What's unclear: does jj cancel still need any bookmark cleanup, or is `surplusBookmarks: []` always correct?
-   - Recommendation: always `[]` on jj side. No probe needed. Document the asymmetry in JSDoc: "jj cancel returns surplusBookmarks: [] by construction (no per-subagent bookmarks); git cancel may return non-empty when worktree-agent-* refs outlive cleanup."
+   - RESOLVED: (consumed by plan 15-04 jj truth — surplusBookmarks always [] by Phase 11 D-02 retirement of per-subagent bookmarks) always `[]` on jj side. No probe needed. Document the asymmetry in JSDoc: "jj cancel returns surplusBookmarks: [] by construction (no per-subagent bookmarks); git cancel may return non-empty when worktree-agent-* refs outlive cleanup."
 
 5. **15.04 plan stale references — pre-patch or executor-patch?**
    - What we know: 14.1-VERIFICATION.md lines 132-143 flagged `15-04-PLAN.md:151` and `:404` as carrying `mainBookmark` literals.
    - What's unclear: whether to amend the plan now (one-time edit, simpler) or leave the executor to patch (more honest about ordering).
-   - Recommendation: pre-patch via a planner-level edit to 15-04-PLAN.md (`mainBookmark: string` → `mainBookmarks?: readonly string[]` at :151; `mainBookmark:'main'` → omit at :404 since cancel doesn't need it). Saves the executor's "first task" of patching the plan it's executing.
+   - RESOLVED: (N/A per N2 — prior 15-04-PLAN.md deleted as part of replan-from-scratch; no pre-patch required since new content is bookmark-clean by construction) pre-patch via a planner-level edit to 15-04-PLAN.md (`mainBookmark: string` → `mainBookmarks?: readonly string[]` at :151; `mainBookmark:'main'` → omit at :404 since cancel doesn't need it). Saves the executor's "first task" of patching the plan it's executing.
 
 ## Environment Availability
 
