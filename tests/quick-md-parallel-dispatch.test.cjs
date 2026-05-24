@@ -11,10 +11,16 @@
 //   is non-empty JSON so the guard never fires and downstream .workspaces[] iteration
 //   produced zero entries.
 //
-// CR-03 (both quick.md and execute-phase.md): EXPECTED_BRANCH was passed straight to
-//   --main-bookmark with no empty/HEAD pre-check; validateMainBookmark
-//   (sdk/src/vcs/jj/parallel.ts:121-125) throws on empty strings, surfacing a Node stack
-//   trace instead of a clean recovery message.
+// CR-03 (Phase 14.1 PARALLEL-08 polarity flip): the `current-branch` FATAL preflight
+//   was removed from BOTH quick.md and execute-phase.md per Phase 14.1 D-01
+//   (symmetric workflow scope). Bookmark-less jj `@` and detached-HEAD git working
+//   copies are now first-class dispatch states — the dispatch verb no longer requires
+//   a non-empty bookmark name. validateMainBookmark fires only when callers explicitly
+//   pass a `mainBookmarks` entry. The Phase 11-08 polarity was "preflight PRESENT in
+//   both files"; the Phase 14.1 polarity is "preflight ABSENT in both files". The
+//   tests below now guard against accidental REINTRODUCTION of the preflight (regression
+//   net) rather than its removal. The byte-identical FATAL-message symmetry guard is
+//   DROPPED entirely — no message string survives to compare.
 //
 // This test pins every invariant Plan 11-08 corrects so future edits cannot silently
 // re-open either blocker.
@@ -84,22 +90,14 @@ test.describe('CR-02 execute-phase.md carry-over', () => {
 	});
 });
 
-test.describe('CR-03 EXPECTED_BRANCH empty/HEAD pre-check', () => {
-	test.test('quick.md refuses to dispatch on detached HEAD or empty branch', () => {
-		assert.match(QUICK, /\[ -z "\$EXPECTED_BRANCH" \] \|\| \[ "\$EXPECTED_BRANCH" = "HEAD" \]/, 'CR-03: quick.md must pre-check EXPECTED_BRANCH for empty/HEAD before dispatch');
-		assert.match(QUICK, /FATAL: orchestrator is on detached HEAD/, 'CR-03: quick.md must surface clean FATAL message (not let validateMainBookmark throw a stack trace)');
+test.describe('CR-03 EXPECTED_BRANCH preflight ABSENT (PARALLEL-08 polarity flip)', () => {
+	test.test('quick.md does NOT pre-check EXPECTED_BRANCH (preflight removed per PARALLEL-08)', () => {
+		assert.doesNotMatch(QUICK, /\[ -z "\$EXPECTED_BRANCH" \] \|\| \[ "\$EXPECTED_BRANCH" = "HEAD" \]/, 'CR-03 (Phase 14.1): quick.md must NOT pre-check EXPECTED_BRANCH — bookmark-less / detached working copies are first-class per PARALLEL-08');
+		assert.doesNotMatch(QUICK, /FATAL: orchestrator is on detached HEAD/, 'CR-03 (Phase 14.1): quick.md must NOT carry the FATAL message — the preflight has been removed');
 	});
 
-	test.test('execute-phase.md refuses to dispatch on detached HEAD or empty branch', () => {
-		assert.match(EXEC, /\[ -z "\$EXPECTED_BRANCH" \] \|\| \[ "\$EXPECTED_BRANCH" = "HEAD" \]/, 'CR-03: execute-phase.md must pre-check EXPECTED_BRANCH for empty/HEAD before dispatch');
-		assert.match(EXEC, /FATAL: orchestrator is on detached HEAD/, 'CR-03: execute-phase.md must surface clean FATAL message');
-	});
-
-	test.test('both files use byte-identical FATAL message (symmetry guard)', () => {
-		const re = /FATAL: orchestrator is on detached HEAD[^\n"]*/;
-		const qm = QUICK.match(re)?.[0];
-		const em = EXEC.match(re)?.[0];
-		assert.ok(qm && em, 'CR-03: both files must contain the FATAL message line');
-		assert.equal(qm, em, 'CR-03: FATAL message lines must be byte-identical across files (drift guard)');
+	test.test('execute-phase.md does NOT pre-check EXPECTED_BRANCH (preflight removed per PARALLEL-08)', () => {
+		assert.doesNotMatch(EXEC, /\[ -z "\$EXPECTED_BRANCH" \] \|\| \[ "\$EXPECTED_BRANCH" = "HEAD" \]/, 'CR-03 (Phase 14.1): execute-phase.md must NOT pre-check EXPECTED_BRANCH — bookmark-less / detached working copies are first-class per PARALLEL-08');
+		assert.doesNotMatch(EXEC, /FATAL: orchestrator is on detached HEAD/, 'CR-03 (Phase 14.1): execute-phase.md must NOT carry the FATAL message — the preflight has been removed');
 	});
 });

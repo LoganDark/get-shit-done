@@ -665,19 +665,22 @@ Capture current HEAD + dispatch the quick task via the cross-backend parallel ve
 ```bash
 EXPECTED_BASE=$(gsd-sdk query head-ref --cwd . --pick head)
 DISPATCH_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+# Phase 14.1 (PARALLEL-08, D-01 symmetric workflow scope): the `current-branch`
+# FATAL preflight is removed — bookmark-less jj `@` and detached-HEAD git
+# working copies are first-class dispatch states. EXPECTED_BRANCH is still
+# captured here because the fan-in branch-drift guard at line ~766 still
+# consumes it (gracefully degrades to a no-op when empty per Pitfall 6).
 EXPECTED_BRANCH=$(gsd-sdk query current-branch --cwd . --pick branch)
-if [ -z "$EXPECTED_BRANCH" ] || [ "$EXPECTED_BRANCH" = "HEAD" ]; then
-  echo "FATAL: orchestrator is on detached HEAD or branch query returned empty — refusing to dispatch (validateMainBookmark would throw on empty/HEAD)." >&2
-  echo "RECOVERY: check out a named branch/bookmark on the orchestrator before re-running." >&2
-  exit 1
-fi
 if [ "${USE_WORKTREES:-true}" != "false" ]; then
   QUICK_PLAN_JSON=$(jq -nc --arg aid "${quick_id}" --arg pid "${quick_id}" \
     '[{agentId:$aid,planId:$pid}]')
   # Phase sentinel 0 for quick mode (no real phase number; the verb requires Number()-able input — see workspace-parallel-dispatch.ts:63-65).
+  # Phase 14.1 (PARALLEL-08, D-02): no --main-bookmark flag — zero flags
+  # yields empty mainBookmarks → fan-in skips the bookmark/ref advance step.
+  # Bookmark-less jj `@` and detached-HEAD git working copies pass cleanly.
   HANDLE_JSON=$(printf '%s' "$QUICK_PLAN_JSON" \
     | gsd-sdk query workspace.parallel.dispatch \
-        --phase 0 --main-bookmark "$EXPECTED_BRANCH" --plan @-)
+        --phase 0 --plan @-)
   [ -z "$HANDLE_JSON" ] && { echo "FATAL: workspace.parallel.dispatch returned empty Handle JSON" >&2; exit 1; }
   HANDLE_OK=$(echo "$HANDLE_JSON" | jq -r '.ok // "true"')
   [ "$HANDLE_OK" = "false" ] && { echo "FATAL: workspace.parallel.dispatch failed: $HANDLE_JSON" >&2; exit 1; }
