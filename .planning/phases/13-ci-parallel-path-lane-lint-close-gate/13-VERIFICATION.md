@@ -1,13 +1,16 @@
 ---
 phase: 13-ci-parallel-path-lane-lint-close-gate
 verified: 2026-05-22T00:00:00Z
-status: gaps_found
-score: 4/5 must-haves verified
+re_verified: 2026-05-24T00:00:00Z
+status: passed
+score: 5/5 must-haves verified (truth 6 resolved 2026-05-24 via scripts/run-tests.cjs recursive discovery)
 overrides_applied: 0
 gaps:
   - truth: "The LINT-04 audit's unit test is executed by the project's existing test runner (`node scripts/run-tests.cjs` / `npm test`), giving the CI-06 gate an executing regression guard"
-    status: failed
-    reason: "tests/scripts/audit-workflow-raw-git.test.cjs exists and all 7 cases pass when run directly (node --test → exit 0), but scripts/run-tests.cjs does a NON-recursive readdirSync('tests') and only collects tests/*.test.cjs. The new test is one directory deeper (tests/scripts/) so it is collected by no runner — npm test discovers 506 files, none of them this test, and no CI workflow references tests/scripts. The audit is documented as the CI-06 gate but its backing test runs nowhere; a future edit that breaks fence detection or the per-file comparison would ship green. CONTEXT.md D-07 / REQUIREMENTS.md LINT-04 imply the audit gets a working unit test. The test is a substantive, well-written artifact that has zero regression-protection value as wired."
+    status: resolved
+    resolved_at: 2026-05-24
+    resolution: "scripts/run-tests.cjs:12 now does readdirSync(testDir, { recursive: true }) so tests/scripts/*.test.cjs files are collected by the runner. Verified: node --test on all 4 tests/scripts/*.test.cjs files passes 29/29 (881ms). The 4 newly-collected tests are audit-workflow-raw-git (Phase 13's), allowlist-parser, audit-id-namespace, and migr-06-close-gate."
+    original_reason: "tests/scripts/audit-workflow-raw-git.test.cjs exists and all 7 cases pass when run directly (node --test → exit 0), but scripts/run-tests.cjs does a NON-recursive readdirSync('tests') and only collects tests/*.test.cjs. The new test is one directory deeper (tests/scripts/) so it is collected by no runner — npm test discovers 506 files, none of them this test, and no CI workflow references tests/scripts. The audit is documented as the CI-06 gate but its backing test runs nowhere; a future edit that breaks fence detection or the per-file comparison would ship green. CONTEXT.md D-07 / REQUIREMENTS.md LINT-04 imply the audit gets a working unit test. The test is a substantive, well-written artifact that has zero regression-protection value as wired."
     artifacts:
       - path: "scripts/run-tests.cjs"
         issue: "Line 12: `readdirSync(testDir)` is non-recursive (testDir = tests/), then `.map(f => join('tests', f))` — only tests/*.test.cjs is ever passed to `node --test`. tests/scripts/*.test.cjs is invisible to the runner."
@@ -155,5 +158,27 @@ The four `ℹ️ Info` anti-patterns (WR-01..WR-04 from REVIEW.md) are robustnes
 
 ---
 
+## Gap Closure — 2026-05-24
+
+Truth 6 (the single failing must-have) was closed inline during v1.3 pre-milestone-close hygiene by applying the first recommended path above.
+
+**Fix:** `scripts/run-tests.cjs:12` now does `readdirSync(testDir, { recursive: true })` so the runner collects nested `tests/<subdir>/*.test.cjs` files.
+
+**Effect:** `npm test` discovery jumped from 506 → 510 files. The 4 newly-collected tests are:
+
+- `tests/scripts/audit-workflow-raw-git.test.cjs` — Phase 13's CI-06 regression guard (7 cases, all pass)
+- `tests/scripts/allowlist-parser.test.cjs` — pre-existing stranded test
+- `tests/scripts/audit-id-namespace.test.cjs` — pre-existing stranded test
+- `tests/scripts/migr-06-close-gate.test.cjs` — pre-existing stranded test from v1.2's MIGR-06 close-gate (the dead-test pattern Phase 13 propagated)
+
+**Verification of fix:** `node --test tests/scripts/*.test.cjs` → 29/29 pass, 881ms. The 4 tests now run on every `npm test` invocation and on the GitHub Actions test matrix.
+
+**Frontmatter updated:** `status: gaps_found` → `status: passed`, `score: 4/5` → `score: 5/5`, the gap's `status: failed` → `status: resolved` (with `resolution:` and `original_reason:` fields preserved for audit trail). The body sections above are kept verbatim as the historical record of how the gap was discovered.
+
+The four `ℹ️ Info` anti-patterns from REVIEW.md (WR-01..WR-04) remain as documented and are not in scope for this closure — they were not goal blockers and are listed for separate triage as v1.4 work if warranted.
+
+---
+
 _Verified: 2026-05-22_
+_Re-verified: 2026-05-24 (gap closure)_
 _Verifier: Claude (gsd-verifier)_

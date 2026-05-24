@@ -1,6 +1,8 @@
 ---
 quick_id: 260523-ovw
 slug: investigate-how-that-happened-and-potent
+status: complete
+completed: 2026-05-23
 date: 2026-05-23
 duration: ~25min
 tasks: 2

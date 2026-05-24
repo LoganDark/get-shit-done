@@ -9,7 +9,10 @@ const { join } = require('path');
 const { execFileSync } = require('child_process');
 
 const testDir = join(__dirname, '..', 'tests');
-const files = readdirSync(testDir)
+// Recursive: collects tests/*.test.cjs AND tests/<subdir>/*.test.cjs (e.g.
+// tests/scripts/audit-workflow-raw-git.test.cjs added in Phase 13 for CI-06).
+// Node >=22 (project minimum) supports { recursive: true }.
+const files = readdirSync(testDir, { recursive: true })
   .filter(f => f.endsWith('.test.cjs'))
   .sort()
   .map(f => join('tests', f));
