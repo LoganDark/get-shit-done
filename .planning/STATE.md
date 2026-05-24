@@ -4,12 +4,12 @@ milestone: v1.4
 milestone_name: Clean, consistent state for next upstream pull
 status: executing
 stopped_at: Phase 14.1 context gathered
-last_updated: "2026-05-24T19:43:19.198Z"
-last_activity: 2026-05-24 -- Phase 15 planning complete
+last_updated: "2026-05-24T20:37:02.993Z"
+last_activity: 2026-05-24 -- Phase 14.1 planning complete
 progress:
   total_phases: 2
   completed_phases: 0
-  total_plans: 4
+  total_plans: 5
   completed_plans: 0
   percent: 0
 ---
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 Phase: 15 — Adapter surface extensions + rename (not started)
 Plan: —
 Status: Ready to execute
-Last activity: 2026-05-24 -- Phase 15 planning complete
+Last activity: 2026-05-24 -- Phase 14.1 planning complete
 
 ## Performance Metrics
 
