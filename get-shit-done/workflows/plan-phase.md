@@ -1660,6 +1660,33 @@ The `--no-transition` flag tells execute-phase to return status after verificati
 **If neither `--auto` nor config enabled:**
 Route to `<offer_next>` (existing behavior).
 
+## 16. Assert Clean Working Copy
+
+**Final-gate check: assert the working copy is clean before declaring phase planned.**
+
+After all mutating verbs in this workflow have fired (`state.planned-phase` at §13b, `roadmap.annotate-dependencies` at §13c, the conditional `commit_docs` commit at §13d), verify nothing critical is left uncommitted before the `<offer_next>` route emits the "PHASE PLANNED ✓" banner.
+
+This gate catches the class of bug where §13d's commit is gated on `commit_docs` and the operator forgot to flip it on, OR where a future workflow edit adds a new mutating verb (e.g. another `state.*` or `roadmap.*` call site) without an immediate commit. Without this gate, plan-phase can declare "PHASE PLANNED" while STATE.md / ROADMAP.md sit dirty in the working copy.
+
+```bash
+DIRTY=$(gsd-sdk query diff --name-only 2>/dev/null | jq -r '.nameOnly // [] | join("\n")')
+PLANNING_DIRTY=$(echo "$DIRTY" | grep -E '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
+if [ -n "$PLANNING_DIRTY" ]; then
+	echo "FATAL: planning artifacts uncommitted after phase planning." >&2
+	echo "This is a workflow bug — a mutating verb's commit was skipped." >&2
+	echo "Dirty files:" >&2
+	echo "$PLANNING_DIRTY" >&2
+	echo "" >&2
+	echo "Resolve by committing the listed files before re-running, or report this as a GSD workflow defect." >&2
+	echo "Most common cause: 'commit_docs: false' in .planning/config.json with §13d skipped; either flip it on, or commit STATE.md/ROADMAP.md manually." >&2
+	exit 1
+fi
+```
+
+**Scope:** Only `.planning/` paths and `*-SUMMARY.md` / `*-VERIFICATION.md` files trip the gate. Source files outside `.planning/` are excluded.
+
+**Auto-advance path:** When §15 dispatches execute-phase via Skill, execute-phase has its OWN `assert_clean_wc` gate before its "PHASE COMPLETE" emission. This gate here protects the manual route only (where §15 routes to `<offer_next>`).
+
 </process>
 
 <offer_next>
