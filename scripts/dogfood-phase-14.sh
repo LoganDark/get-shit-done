@@ -202,7 +202,7 @@ DISPATCH_MS_JJ=$((DISPATCH_END_MS - DISPATCH_START_MS))
 	echo "FATAL: jj cell dispatch returned empty Handle JSON" >&2
 	exit 1
 }
-HANDLE_OK_JJ=$(printf '%s' "$HANDLE_JSON_JJ" | jq -r '.ok // "true"')
+HANDLE_OK_JJ=$(printf '%s' "$HANDLE_JSON_JJ" | jq -r 'if .ok == false then "false" else "true" end')
 [ "$HANDLE_OK_JJ" = "false" ] && {
 	echo "FATAL: jj cell dispatch failed: $HANDLE_JSON_JJ" >&2
 	exit 1
@@ -256,7 +256,7 @@ rm -f "$HANDLE_FILE_JJ"
 	echo "FATAL: jj cell fan-in returned empty result" >&2
 	exit 1
 }
-FAN_OK_JJ=$(printf '%s' "$FAN_RESULT_JJ" | jq -r '.ok // "true"')
+FAN_OK_JJ=$(printf '%s' "$FAN_RESULT_JJ" | jq -r 'if .ok == false then "false" else "true" end')
 [ "$FAN_OK_JJ" = "false" ] && {
 	echo "FATAL: jj cell fan-in failed: $FAN_RESULT_JJ" >&2
 	exit 1
@@ -348,7 +348,7 @@ DISPATCH_MS_GIT=$((DISPATCH_END_MS - DISPATCH_START_MS))
 	echo "FATAL: git-cell dispatch returned empty Handle JSON" >&2
 	exit 1
 }
-HANDLE_OK_GIT=$(printf '%s' "$HANDLE_JSON_GIT" | jq -r '.ok // "true"')
+HANDLE_OK_GIT=$(printf '%s' "$HANDLE_JSON_GIT" | jq -r 'if .ok == false then "false" else "true" end')
 [ "$HANDLE_OK_GIT" = "false" ] && {
 	echo "FATAL: git-cell dispatch failed: $HANDLE_JSON_GIT" >&2
 	exit 1
@@ -400,7 +400,7 @@ rm -f "$HANDLE_FILE_GIT"
 	echo "FATAL: git-cell fan-in returned empty result" >&2
 	exit 1
 }
-FAN_OK_GIT=$(printf '%s' "$FAN_RESULT_GIT" | jq -r '.ok // "true"')
+FAN_OK_GIT=$(printf '%s' "$FAN_RESULT_GIT" | jq -r 'if .ok == false then "false" else "true" end')
 [ "$FAN_OK_GIT" = "false" ] && {
 	echo "FATAL: git-cell fan-in failed: $FAN_RESULT_GIT" >&2
 	exit 1
