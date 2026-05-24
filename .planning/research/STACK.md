@@ -1,148 +1,317 @@
-# Stack Research — v1.3 `vcs.parallel.*` cross-backend verbs
+# STACK Research: v1.4 cleanup + deferred-item harvest
 
-**Domain:** TypeScript VCS adapter — wiring layer for new cross-backend `vcs.parallel.dispatch(plan)` / `vcs.parallel.fanIn(branches)` verbs on top of an already-shipped two-backend (git + jj) adapter
-**Researched:** 2026-05-15
+**Mode:** Project research (STACK focus only)
 **Confidence:** HIGH
+**Default lens:** prefer pure reuse; explicit anti-additions list
 
-## TL;DR
+## Executive Summary
 
-**No new npm dependencies are needed.** This milestone is pure WIRING: lift two already-shipped sidecar helpers (`sdk/src/vcs/jj/octopus.ts`, `sdk/src/vcs/jj/reap.ts`) behind a new cross-backend verb surface, add a symmetric raw-git body inside `sdk/src/vcs/backends/git.ts`, and rewire `execute-phase.md` to call the new verbs. Every primitive needed — `spawnSync` for `jj`/`git` invocations, `vitest@3.1.1` for tests (`describe.sequential.skipIf` already used for jj-octopus / jj-reap suites), `node:fs`/`node:os`/`node:path` for workspace dir management, the existing `acquireJjWriteLock` RAII helper for the under-lock atomic sequences — already ships with the adapter. Parallelism happens **OUT-OF-PROCESS** (Claude Code `Agent()` subagents writing into separate workspaces); the adapter itself runs sequential `spawnSync` against the `jj` / `git` binaries. There is no in-process parallelism to add and therefore no `worker_threads` / `child_process.fork` need.
+**Stack additions required for v1.4: ZERO net-new dependencies, ZERO version bumps, ZERO new tooling.** Every item in the v1.4 scope is pure-reuse-of-existing-stack work. The cleanup framing holds: this milestone consumes existing patterns (existing lint scaffolds, existing `node:test` drift-control idiom, existing `parallel.*` adapter surface, existing alphabet-aware string handling) rather than introducing anything new.
 
-The only version question worth verifying is the jj binary floor. Per `project_a3_colocated_pre_commit_gap` memory + Phase 4 LEARNINGS Open Q1, the A3 colocated pre-commit fix may require a jj-version bump above 0.41 if the chosen fix path is "wait for upstream jj". The other two fix paths (synthetic-hook bridge in adapter, or document-and-skip) keep the 0.41 floor intact. Roadmapper picks the path during planning.
+The only "version verification" worth recording is that **AbortController/AbortSignal are native on Node ≥22** (confirmed: `Node v25.9.0` runtime + Node 22 baseline both expose `AbortController`, `AbortSignal`, `AbortSignal.timeout`, `AbortSignal.abort` as globals) and `child_process.spawn`/`exec` accept `{signal}` since Node 14.17/15.5 — so the `cancel(handle)` verb body can use native Web-standard primitives without any polyfill or new dependency. **However**, the current adapter exec surface (`sdk/src/vcs/exec.ts:19,33,37-43`) is built on **`spawnSync`, which does NOT accept `AbortSignal`** (verified via Node.js docs). This is the single load-bearing constraint that shapes the cancel-verb design — see Item 2 below.
 
-## Recommended Stack
+The drift-control tests question resolves cleanly: **`tests/inventory-counts.test.cjs:19-21,28-35` is the precedent** — it's a `node:test` file at the repo root that walks `commands/gsd`, `agents`, `get-shit-done/workflows`, `get-shit-done/references`, `get-shit-done/bin/lib`, and `hooks` directories and asserts ls counts against INVENTORY.md headlines. `tests/architecture-counts.test.cjs` and `tests/command-count-sync.test.cjs` belong in the same shape (already referenced in `docs/INVENTORY.md:9` as part of the drift-control test family — they're documented but not yet shipped).
 
-### Core Technologies — already present, no changes needed
-
-| Technology | Version | Purpose | Why no change |
-|------------|---------|---------|---------------|
-| Node.js | ≥22.0.0 (matches `package.json` `engines`) | Runtime host for SDK adapter + CLI shims | Already required by upstream. `spawnSync` lives in `node:child_process`, available since Node 0.x. No new Node feature surface needed. |
-| TypeScript | ≥5.7.0 (matches `sdk/package.json` `devDependencies`) | Type-checks new `VcsAdapterCommon.parallel` namespace + return shapes | Already shipped. New verb additions are pure interface extensions on `sdk/src/vcs/types.ts`. |
-| pnpm | 11+ (matches `packageManager: pnpm@11.0.8`) | Workspace + dependency manager | Already shipped. No new packages to add. |
-| `jj` binary | ≥0.41 (current floor) | Runtime backend for octopus structure + reap; invoked via `spawnSync` from `sdk/src/vcs/exec.ts` | Already shipped. The `octopus.ts` and `reap.ts` helpers were empirically verified on jj 0.41 (per file headers). A3 fix may push the floor higher — see "Version Compatibility" below. |
-| `git` binary | upstream baseline | Runtime backend for `worktree add`/`merge --no-ff`/`worktree remove` chain currently inlined in `execute-phase.md` lines ~714+, to be lifted into `git.ts` `parallel.*` verbs | Already shipped. The lift is mechanical — copy the bash from `execute-phase.md` into `execGit(cwd, [...])` calls. |
-
-### Supporting Libraries — already present, exhaustive
-
-| Library / Module | Version | Purpose | Already-shipped consumer to extend |
-|------------------|---------|---------|-----------------------------------|
-| `node:child_process` (`spawnSync`) | bundled | Single-call shell-out backing every adapter invocation | `sdk/src/vcs/exec.ts` line 19. Already routes `vcs.workspace.add`, `vcs.workspace.merge`, every octopus + reap call. New `parallel.*` bodies call the same `vcsExec()` / `execGit()` wrappers — no new import surface. |
-| `node:fs` (`mkdtempSync`, `rmSync`, `existsSync`, `mkdirSync`) | bundled | Workspace dir lifecycle | Already used by `sdk/src/vcs/jj/reap.ts` (the `rmSync` for empty-head dirs) and `sdk/src/vcs/backends/jj.ts:1049` (`mkdirSync` parent-dir prep before `workspace.add`). New git-backend `parallel.*` body needs the same primitives for symmetry. |
-| `node:path` (`join`, `basename`, `dirname`) | bundled | Workspace-path composition (`.claude/jj-workspaces/<name>` on jj, `worktree-agent-<id>/` on git) | Already used by `octopus.ts:37` and `backends/jj.ts:1149`. |
-| `node:os` (`tmpdir`) | bundled | Test-fixture temp dirs | Already used by `__tests__/jj-octopus.test.ts:21` and `__tests__/jj-reap.test.ts:22`. The new `parallel.*` test files copy this pattern verbatim. |
-| `vitest` | ^3.1.1 (matches `sdk/package.json`) | Test runner | Already shipped. Has `describe.sequential.skipIf(!jjAvailable)(...)` (Pattern A from Phase 5 plan 05-05 flake-fix) which is the exact shape new `parallel.*` tests need — see "Testing Patterns" below. |
-| `expect.extend` custom matcher `toBeIdOf('jj' \| 'git')` | shipped v1.2 at `tests/__tools__/vitest-matchers.ts` | Cross-backend id-shape assertion | Already shipped. New `parallel.*` tests can assert `expect(result.mergeChange).toBeIdOf('jj')` / `toBeIdOf('git')` without ad-hoc regexes. |
-
-### Development Tools — already present
-
-| Tool | Purpose | Already-shipped touchpoint to extend |
-|------|---------|--------------------------------------|
-| `scripts/lint-vcs-no-raw-git.cjs` | Whole-repo default-deny on `git` shell-outs | The current single allowlisted exception block in `execute-phase.md` lines ~714+ COLLAPSES TO ZERO once the `parallel.*` lift lands; remove the allowlist entry in `lint-vcs-no-raw-git.allow.json` as part of the close gate. |
-| `scripts/lint-vcs-no-commit-id.cjs` | v1.2 architectural enforcer at 1032 files / 0 violations | New git-backend `parallel.*` body emits `commit_id` shapes (git's native id); new jj-backend body emits `change_id` (existing octopus.ts/reap.ts already do). Lint stays green by construction — but **add lint-test coverage** for the new file paths as part of the close gate (v1.2 retrospective Pattern: "Audit + lint must cover the same regex surface"). |
-| `sdk/dist-cjs` build via `tsc -p tsconfig.cjs.json` | Dual-emit (ESM + CJS) so CJS-side `bin/lib/*.cjs` consumers can require the SDK | Already wired in `sdk/package.json` `build:cjs`. New `parallel.*` types in `types.ts` and impls in both backends emit through the existing pipeline — no build-script change. Verify post-build by checking `sdk/dist-cjs/vcs/backends/git.js` + `jj.js` carry the new functions; v1.2 retrospective Lesson 3 ("explicit grep-sweep over `.cjs` consumers AFTER TS rename") applies if any `.cjs` consumer wraps the new verbs. |
-
-## Installation
-
-```bash
-# Nothing to install. Every primitive needed for v1.3 already ships in the
-# repo. No `pnpm add ...` step in this milestone.
-```
-
-## Alternatives Considered
-
-| Recommended (do nothing new) | Alternative | When the alternative would make sense |
-|------------------------------|-------------|----------------------------------------|
-| `spawnSync` via existing `vcsExec` / `execGit` wrappers | `node:child_process.spawn` (async) for parallel within-adapter dispatch | If we needed in-process parallel calls **from** the adapter (e.g., dispatch 3 `jj workspace add` calls simultaneously). We don't — parallelism happens at the Claude Code `Agent()` boundary OUT-OF-PROCESS, and `jj` working-copy contention (Phase 5 05-05 flake-fix) actively forbids concurrent jj calls against the same repo anyway. |
-| `node:child_process` | `node:worker_threads` for race-condition reproduction in tests | If we couldn't reproduce race conditions any other way. We can: the existing `acquireJjWriteLock` test pattern + `describe.sequential` covers under-lock atomicity, and the git side's `.git/config.lock` contention pattern (referenced at `execute-phase.md:537`) is reproducible by running two `worktree add` calls in fast succession via existing `spawnSync` — no thread library needed. |
-| `vitest` 3.1.1 built-in | Add `vitest-fixtures` / `@vitest/test-fixtures` style ecosystem libs | If shared fixture setup were heavyweight. It's not — `beforeAll` + `mkdtempSync` + `jj git init --colocate` (used in every jj test file today) is the established pattern and runs in <500ms per file. Adding a fixture lib would create a non-trivial upstream-rebase surface for zero gain. |
-| Composite raw-git body inside `git.ts` `parallel.dispatch` | Extract raw-git body into a sidecar like `sdk/src/vcs/git/parallel.ts` mirroring `jj/octopus.ts` | If the git body grew >150 LOC OR if the body needed UPSTREAM-02 sidecar discipline (zero-conflict upstream-rebase surface). Neither holds: the git body is ~30 LOC (3 `execGit` calls), and it's NEW fork code with no upstream counterpart, so a sidecar would only add an import layer. **Keep it inline in `git.ts`.** Revisit if A3 colocated pre-commit fix grows the git body beyond ~80 LOC. |
-| `child_process.spawnSync` per call | Long-lived `jj` REPL subprocess via `spawn` + stdin pipe (avoid startup overhead) | If startup overhead dominated wall-time. jj 0.41 cold-start is ~30-50ms per call; for v1.3's lifetime (3-5 `jj` calls per dispatch + 2-3 per fan-in), savings would be ~150-400ms total. Not worth the complexity surface (REPL state machine, deadlock recovery, stdin/stdout demuxing). |
-
-## What NOT to Use
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| `node:worker_threads` | The adapter is single-threaded by design — `vcsExec` is a serial `spawnSync` wrapper. Parallelism lives at the `Agent()` orchestration layer, OUT OF the adapter's process. Adding `worker_threads` here would conflate two architectural tiers and violate the existing `acquireJjWriteLock` invariant (one-writer-at-a-time on jj). | Existing `Agent(run_in_background: true)` dispatch with `isolation="worktree"` (git side) or `vcs.workspace.add()` per-subagent (jj side, via `octopus.createSubagentSlot`). |
-| `child_process.exec` (the shell-string form) | Shell-string composition is the historical attack-surface root for raw-git/raw-jj injection in this codebase. v1.0 D-12 forbade it; the entire adapter uses argv-array `spawnSync` exclusively. | `vcsExec(cwd, 'jj', [...argv])` / `execGit(cwd, [...argv])` from `sdk/src/vcs/exec.ts`. New `parallel.*` bodies must follow the same argv-array discipline + `--` end-of-options separator for any user-influenced positional (cf. `octopus.ts:169` `bookmark create -r <rev> -- <name>`). |
-| `simple-git`, `nodegit`, `isomorphic-git`, or any libgit2 binding | The whole-repo `lint-vcs-no-raw-git` default-deny is a default-deny on the literal string `git` AND on any in-process git access (per `project_no_raw_git`). Pulling in libgit2 / native-binding git would bypass the lint guard's intent AND add a heavy native dep that doesn't help with jj at all. | Continue shelling out to the `git` binary via `execGit`. |
-| `jest`, `mocha`, `node:test` for new `parallel.*` suites | `node:test` is the upstream pattern for `tests/*.test.cjs` (legacy CJS surface) but the SDK side has been on `vitest` since v1.0 (vitest config at `sdk/vitest.config.ts`). Mixing runners adds a CI matrix surface for zero gain. Per `project_test_perf_pain_vitest`, perf pain is a separate concern not addressed by switching frameworks. | `vitest` with the established `describe.sequential.skipIf(!jjAvailable)` shape. |
-| `execa` or `cross-spawn` | `spawnSync` works fine cross-platform for our use case (Linux/macOS CI matrix, no Windows path). `execa` adds a 200KB+ dep + Promise interface we don't want (the whole adapter is sync by D-12 convention). | `node:child_process.spawnSync` via existing `vcsExec` wrapper. |
-| `tmp` / `tempy` for test fixtures | `mkdtempSync(join(tmpdir(), 'gsd-...'))` is the established pattern in every existing jj test file and does exactly what's needed. Adding a tmp-dir lib creates an unowned-by-anyone dependency surface. | Existing `node:fs.mkdtempSync` + `node:os.tmpdir()` pattern from `__tests__/jj-octopus.test.ts:21`. |
-
-## Stack Patterns by Variant
-
-**If the chosen A3 colocated pre-commit fix path is "synthetic hook bridge in adapter":**
-- No version bumps. Add a private helper in `sdk/src/vcs/hook-bridge.ts` (already exists per `types.ts:266` — `HookStage` / `HookContext` types) that fires `.git/hooks/pre-commit` from `jj.ts` post-squash on detection of `.jj/.git`-colocation.
-- Wire from the existing post-squash code path in `backends/jj.ts` `commit()` body; no new module.
-
-**If the chosen A3 fix path is "wait for upstream jj":**
-- Bump the floor jj version above 0.41 to whichever upstream release fixes it. Likely 0.42+ — verify against the jj-vcs/jj changelog at plan-time. Update CI matrix lane setup + `__tests__/*` `execSync('jj --version')` skip-gate to assert the new floor.
-
-**If the chosen A3 fix path is "document and skip":**
-- No code change. Document the gap in `agents/gsd-executor.md` / `references/worktree-path-safety.md` and ship.
-
-**If `parallel.dispatch()` plan grows to need bulk-workspace pre-allocation:**
-- Stay with sequential `vcsExec` calls — `describe.sequential` test discipline empirically prevents the jj working-copy contention that plagued Phase 5 05-05.
-- DO NOT introduce async parallelism inside the adapter even if it looks like a clean dispatch loop. The performance ceiling is governed by jj cold-start × N subagents, not by adapter concurrency.
-
-## Version Compatibility
-
-| Package / Binary | Compatible With | Notes |
-|------------------|-----------------|-------|
-| `vitest@3.1.1` | TS 5.7+, Node ≥22 | `describe.sequential` (run blocks in declaration order, no concurrent within-file dispatch) verified in active suites at `sdk/src/vcs/__tests__/jj-octopus.test.ts:45`. Pattern A from Phase 5 plan 05-05 flake-fix. |
-| `jj 0.41` | TypeScript adapter, Node ≥22 | Floor for v1.3 unless A3 fix path chooses "wait for upstream jj". Empirically verified primitives used by `octopus.ts` + `reap.ts`: `jj new -A <p> -B <m> --no-edit` (octopus.ts:217), `subject(exact:"…")` revset function (octopus.ts:159), `subject(glob:"…")` revset function (octopus.ts:249), `<parent>+ ~ <merge>` difference operator with `~` not `-` (octopus.ts:235 — explicit anti-Renovate-bump note), `jj diff --from <p> --to <h> -s` (reap.ts:61 — corrected form, NOT the `-r <h> --from <p>` form CONTEXT D-12 originally sketched). |
-| `git` binary | upstream-tested baseline | `git worktree add` / `merge --no-ff` / `worktree remove` / `branch -D` already exercised by upstream + Phase 7 VCS-12 `workspace.merge` body. No new git verb introduced — the v1.3 git-backend `parallel.*` body composes verbs already in `git.ts`. |
-| `@anthropic-ai/claude-agent-sdk@^0.2.84` | n/a | Agent dispatch lives outside the adapter; SDK version not a constraint on `parallel.*` verb shape. |
-
-## Integration Points — Where the New Verbs Wire In
-
-This section is for the roadmapper. It's not a stack recommendation but a stack-rooted map of which existing files the new verbs touch.
-
-| Touchpoint | File | Role |
-|------------|------|------|
-| Adapter interface | `sdk/src/vcs/types.ts` | Add new namespace on `VcsAdapterCommon`: `parallel: { dispatch(plan): DispatchResult; fanIn(branches): FanInResult }`. Both backend interfaces (`GitVcsAdapter`, `JjVcsAdapter`) inherit through `VcsAdapterCommon`. Return shapes use the unified-revision model from v1.2 — `change_id` on jj, `commit_id` on git, both typed as `string` (the FLIP-01 `LogEntry.id`/`CommitResult.id` precedent). |
-| jj backend body | `sdk/src/vcs/backends/jj.ts` (~1387 LOC) | New `parallel.dispatch` body imports `createPhaseStructure` + `createSubagentSlot` from `./jj/octopus.js` (already imported in spirit via `performJjReap` at line 33 — same import pattern). New `parallel.fanIn` body composes `workspace.merge` (Phase 7 VCS-12, already in jj.ts:1175) + `performJjReap` (line 33 import). Under `acquireJjWriteLock` RAII for atomicity, mirroring the existing `workspace.merge` body lines 1175-1235. |
-| git backend body | `sdk/src/vcs/backends/git.ts` (~945 LOC) | New `parallel.dispatch` body wraps `execGit(cwd, ['worktree', 'add', ...])` (already used at line 572 in `workspace.add`). New `parallel.fanIn` body wraps `execGit(cwd, ['merge', '--no-ff', '-m', ..., branchRev])` (already used at line 678 in `workspace.merge`) + `execGit(cwd, ['worktree', 'remove', ...])` (line 645) + `execGit(cwd, ['branch', '-D', '--', name])` (line 692). All primitives already proven; the new code is composition, not invention. |
-| Existing helpers (zero changes) | `sdk/src/vcs/jj/octopus.ts`, `sdk/src/vcs/jj/reap.ts` | Source code unchanged — they're already correct per their respective Phase 4/5 contract tests. Only their CALLER moves: from `jj-internal` test fixtures + (planned) orchestrator direct-use → from inside `backends/jj.ts` `parallel.*` verb bodies. The existing `__tests__/jj-octopus.test.ts` + `__tests__/jj-reap.test.ts` stay green by construction (they test the helpers directly, not via the new verbs). |
-| Orchestrator rewire | `get-shit-done/workflows/execute-phase.md` (~1716 LOC) | Delete the raw-git `worktree add` / `merge --no-ff` / `worktree remove` blocks at lines 537-651 + ~714-810. Replace with single `gsd-sdk query vcs.parallel.dispatch ...` / `vcs.parallel.fan-in ...` calls. Pattern: same shape as v1.1 Plan 07-03 PROMPT-04 which deleted 242 LOC of dead raw-git fallback. The orchestrator stays `vcs.kind`-agnostic by design (PROMPT-05 invariant from v1.2). |
-| CLI shim | `bin/gsd-sdk.js` + the CJS query layer | New `gsd-sdk query vcs.parallel.dispatch` / `vcs.parallel.fan-in` subcommands. Existing shim pattern from `worktree.cleanup-wave` (v1.1 Plan 07-02 — at `get-shit-done/bin/lib/worktree-safety.cjs:402`) is the template: argv → adapter call → JSON-serialized result on stdout. |
-| Tests — backend contract | new `sdk/src/vcs/__tests__/parallel-{jj,git}.test.ts` (or parameterized) | Pattern A from Phase 5 plan 05-05: `describe.sequential.skipIf(!jjAvailable)` on the jj side; ordinary `describe` on the git side. Use `toBeIdOf('jj')` / `toBeIdOf('git')` for id-shape assertions (v1.2 D-02 custom matcher). Fixture pattern: `mkdtempSync` + `jj git init --colocate` for jj, `mkdtempSync` + `git init` for git. The existing `__tests__/jj-octopus.test.ts` is the structural template. |
-| Tests — CI matrix | `.github/workflows/*.yml` | Add a new "parallel-path end-to-end" lane per PROJECT.md "CI parallel-path lane" goal; required-blocking on jj-colocated. Reuses the existing jj-colocated lane runner setup (no new tools, no new actions). |
-| Lint allowlists | `lint-vcs-no-raw-git.allow.json` | DELETE the `execute-phase.md` allowlist entry once the lift is complete. The lint's first green run on `execute-phase.md` with zero allowlist entries IS the architectural close-gate proof (v1.2 retrospective Pattern: "Make the lint guard's first green run the architectural proof"). |
-
-## Testing Patterns — vitest fixtures for git + jj parallel scenarios
-
-These are not new deps — they're already-shipped vitest idioms used by `__tests__/jj-octopus.test.ts` and `__tests__/jj-reap.test.ts`. Restating here because the question specifically asked about parallel-scenario test patterns.
-
-1. **`describe.sequential.skipIf(!jjAvailable)`** — Pattern A from Phase 5 plan 05-05. Use on every jj-side `parallel.*` test suite. Prevents within-file concurrent test dispatch which causes jj working-copy contention. The git side does NOT need this (git's `.git/config.lock` is OS-level kernel-enforced and forgiving of within-test sequencing).
-2. **Per-block `mkdtemp` with random prefix** — Pattern B from Phase 5 plan 05-05, also already used at `__tests__/jj-octopus.test.ts:51-55`. Guards against parallel-test-FILE collisions on `/tmp`. Use shape: `mkdtempSync(join(tmpdir(), \`gsd-jj-parallel-${Math.random().toString(36).slice(2, 10)}-\`))`.
-3. **Race-condition tests for `.git/config.lock` contention** — the `execute-phase.md:537` note ("simultaneous `git worktree add` calls race on `.git/config.lock`") is reproducible with two `spawnSync('git', ['worktree', 'add', ...])` calls in a tight loop. Pattern: assert one succeeds, the other returns a documented lock-contention error OR retries. **The new git-backend `parallel.dispatch` body should implement the same one-at-a-time discipline that `execute-phase.md:537` documents** ("CORRECT: one Agent() per message with run_in_background: true") — meaning the adapter takes the serialization responsibility, the orchestrator stops needing to know.
-4. **Under-lock atomicity tests for jj** — Pattern from `jj-workspace.test.ts` / `jj-commit.test.ts` (existing `describe.sequential` suites). Use the existing `acquireJjWriteLock` helper from `sdk/src/vcs/jj/lock.ts` in the new `parallel.fanIn` body and assert lock acquisition + release in tests.
-5. **`toBeIdOf('jj')` / `toBeIdOf('git')`** — v1.2 custom matcher at `tests/__tools__/vitest-matchers.ts`. Assert return-shape of `parallel.dispatch().parentChange` / `.mergeChange` / `.subagentHeads[]` and `parallel.fanIn().mergeRev` without backend-aware hex-vs-k-z regex branching.
-
-## Sources
-
-- `sdk/package.json` — verified deps (`vitest@^3.1.1`, `@types/node@^22.0.0`, `typescript@^5.7.0`) — HIGH confidence (source of truth, read this conversation)
-- `package.json` — verified runtime deps (`@anthropic-ai/claude-agent-sdk@^0.2.84`, `ws@^8.20.0`); no test framework deps at top level — HIGH confidence
-- `sdk/src/vcs/exec.ts` — verified `spawnSync` is the sole subprocess primitive (line 19, 106) — HIGH confidence
-- `sdk/src/vcs/jj/octopus.ts` — verified zero npm imports; pure node + adapter-internal — HIGH confidence
-- `sdk/src/vcs/jj/reap.ts` — verified zero npm imports; uses `node:fs` only — HIGH confidence
-- `sdk/src/vcs/__tests__/jj-octopus.test.ts` lines 45, 51-55 — verified `describe.sequential.skipIf` + `mkdtemp` patterns in active use — HIGH confidence
-- `sdk/src/vcs/backends/git.ts` lines 572, 645, 678, 692, 710 — verified all required `execGit` argv shapes already proven by `workspace.add` / `workspace.reap` / `workspace.merge` / `workspace.remove` — HIGH confidence
-- `sdk/src/vcs/backends/jj.ts` line 33, 1175-1235, 1135-1157 — verified `performJjReap` import shape + `workspace.merge` under-lock RAII template + `workspace.reap` orchestrator-tier wrapper — HIGH confidence
-- `get-shit-done/workflows/execute-phase.md` lines 537, 714-810 — verified the raw-git surface to lift (Agent-dispatch serialization rationale, the cleanup loop) — HIGH confidence
-- `.planning/PROJECT.md` lines 13-29, 83-92 — milestone scope + carry-forwards — HIGH confidence
-- `.planning/MILESTONES.md` lines 36-40 — v1.1 deferred follow-ups confirming this milestone's scope — HIGH confidence
-- `.planning/RETROSPECTIVE.md` lines 20-48 — v1.2 lint-as-architectural-enforcer pattern + hard-rename-no-alias pattern (both apply to new `parallel.*` shape decisions) — HIGH confidence
-- `project_a3_colocated_pre_commit_gap` memory (cited in PROJECT.md) — A3 fix path branches in "Stack Patterns by Variant" — MEDIUM confidence (memory snapshot; verify against Phase 4 LEARNINGS Open Q1 at planning time)
-- `project_no_raw_git` memory — whole-repo default-deny rationale — HIGH confidence
-- `project_test_perf_pain_vitest` memory — vitest is the established SDK runner; perf pain is orthogonal to v1.3 — HIGH confidence
-- v1.2 `tests/__tools__/vitest-matchers.ts` referenced from RETROSPECTIVE line 15 — `toBeIdOf` matcher available — HIGH confidence
-
-**Negative finding (HIGH confidence):** No new npm dependency is needed. I looked specifically for parallel-orchestration libs (`p-limit`, `p-queue`, `p-map`), race-condition libs (`async-mutex`, `proper-lockfile`), test-fixture libs (`tmp`, `tempy`, `@vitest/test-fixtures`), and subprocess-management libs (`execa`, `cross-spawn`). For each, the existing in-repo primitive already covers the use case better — see "What NOT to Use".
-
-**Open question for roadmapper (not a stack question per se):** Final names for the two new verbs (`dispatch` / `fanIn` is the working set per PROJECT.md but explicitly "final names TBD by planner"). Stack-wise this is irrelevant — same imports, same primitives, same tests regardless of name. Flagging in case the planner wants to pre-decide before phase research opens.
+The new workflow call-presence lint is the smallest possible cousin of `scripts/lint-vcs-no-raw-git.cjs` — same `node` + `node:fs` + `node:path` + `scripts/lib/allowlist-parser.cjs` + `scripts/lib/glob-to-regex.cjs` substrate, no new dependencies. The audit-script precedent (`scripts/audit-workflow-raw-git.cjs:39-50,98-130`) provides the fence-aware markdown walker the new lint will mirror.
 
 ---
-*Stack research for: v1.3 cross-backend `vcs.parallel.*` adapter verbs*
-*Researched: 2026-05-15*
+
+## Per-Item Stack Analysis
+
+### Item 1: Workflow call-presence lint (deferred v1.3)
+
+**Goal:** new CI scanner that asserts `vcs.parallel.*` is called in workflow-markdown dispatch sections.
+
+**(a) Net-new dependency:** None.
+
+**(b) Existing-stack pattern to reuse — source of truth:**
+
+| Reuse target | Location | Pattern role |
+|---|---|---|
+| `parseAllowlist`, per-entry schema `{path\|glob, reason, owner}` | `scripts/lib/allowlist-parser.cjs:34-61` | Per-entry allowlist for workflow files that don't need to call `parallel.*` (e.g., `add-todo.md`, `progress.md`). Drop `expires` per `feedback_solo_dev_no_expires`. |
+| `globToRegExp` | `scripts/lib/glob-to-regex.cjs` (consumed transitively via parser) | If a glob is needed for `templates/**` patterns. |
+| Recursive `.md` walker + fence-state machine + `SHELL_GIT_RE` style regex | `scripts/audit-workflow-raw-git.cjs:39-50,98-130` | Walk `get-shit-done/workflows/*.md`, find dispatch fences, regex-match presence of `gsd-sdk query workspace.parallel.dispatch` / `workspace.parallel.fan-in`. |
+| `parseArgv` + `--scan-root` flag shape | `scripts/lint-vcs-no-raw-git.cjs:32-41` | Same fixture-test ergonomics; lets the unit test point at an isolated tmp tree. |
+| CI integration step | `.github/workflows/parallel-e2e.yml` (Phase 13 plan 13-04) | New script slots in as a sibling step to the existing `audit-workflow-raw-git.cjs` CI-06 step. |
+| Inline escape hatch annotation form | `scripts/lint-vcs-no-raw-git.cjs:54` (`vcs-lint:allow-git-here`) | New: `vcs-lint:dispatch-call-absent-here <reason>` annotation for one-off dispatch-omitting fences. |
+
+**(c) Version probes:**
+
+- Node ≥22 already required (`package.json:46-48`). `readdirSync({recursive:true})` (Node 22+) usable as a simplification over the explicit recursion in the audit script — both shapes valid.
+- No external version probe.
+
+**(d) NOT adding (anti-patterns + scope creep):**
+
+- **NOT** a new shared lib module — the new lint script is small enough that it should live in `scripts/lint-vcs-parallel-call-presence.cjs` and consume the existing `scripts/lib/` modules. Do not refactor `audit-workflow-raw-git.cjs` to extract a shared "fence-aware walker" — premature abstraction; two consumers do not justify a third file.
+- **NOT** promoted to `npm pretest`. Goes in `parallel-e2e.yml` only (matches the LINT-04 placement at the same gate; pretest stays at `lint:skill-deps` + `lint-vcs-no-commit-id.cjs` per `package.json:65`).
+- **NOT** an `expires` field per `feedback_solo_dev_no_expires`. Schema is `{path|glob, reason, owner}`, byte-identical to the two existing lints.
+- **NOT** an "ml-style fuzzy match" or AST parser. Plain regex over fence text — the dispatch sections are bash code, not parsed markdown.
+- **NOT** scope-creep into checking that the `fan-in` is also present (paired-call invariant) unless trivially free. Single-verb-presence is the v1.4 deliverable; the paired check belongs to a follow-up if it ever becomes a real bug class.
+
+---
+
+### Item 2: `vcs.workspace.parallel.cancel(handle)` (deferred v1.3)
+
+**Goal:** mid-execution graceful abandonment.
+
+**(a) Net-new dependency:** None.
+
+**(b) Existing-stack pattern to reuse — source of truth:**
+
+| Reuse target | Location | Pattern role |
+|---|---|---|
+| `ParallelDispatchHandle` pure-JSON shape | `sdk/src/vcs/types.ts:493-518` | `cancel(handle)` takes the SAME handle `dispatch` returned; handle carries `phaseRoot`, `phaseNumber`, `mainBookmark`, `workspaces[]` — sufficient for full teardown. |
+| `VcsWorkspaceParallel` interface | `sdk/src/vcs/types.ts:453-456` | Add `cancel(handle: ParallelDispatchHandle): CancelResult` as a third method. |
+| `workspace.remove` + `workspace.forget` + `bookmarks.delete({force:true})` | `sdk/src/vcs/types.ts:387,407,437` | The teardown primitives `cancel` composes. jj side: `forget` + `rm -rf`. Git side: `worktree remove --force`. |
+| Crash-classifier branch | `sdk/src/vcs/jj/reap.ts` (per Phase 9 plan 02 with the 3-branch classifier) | `cancel` does NOT need a new classifier — abandoned-by-user is a clean abandon, no incomplete-work queue entry. |
+| `jj abandon` + `jj bookmark delete` for per-agent slots | `sdk/src/vcs/jj/parallel.ts:464` (existing `for (const a of reapResult.abandoned)` loop pattern) | Same teardown idiom; `cancel` walks `handle.workspaces[]` and abandons each. |
+| `vcsExec` | `sdk/src/vcs/exec.ts:19` (`spawnSync`) | The sole subprocess primitive. Cancel's teardown is a sequence of synchronous shell-outs — `spawnSync` is correct here. |
+
+**(c) Version probes (critical):**
+
+- **AbortController/AbortSignal:** confirmed native on Node ≥22 (`AbortController`, `AbortSignal`, `AbortSignal.timeout`, `AbortSignal.abort` all `function`). Confidence HIGH. No polyfill needed.
+- **`child_process.spawnSync` does NOT support `AbortSignal`** — confirmed via Node.js docs. This is load-bearing. `spawn` and `exec` (async forms) added `signal` support in Node v14.17/v15.5 (HIGH confidence). The existing adapter uses `spawnSync` exclusively (`sdk/src/vcs/exec.ts:19`). **Therefore: `cancel(handle)` cannot interrupt an in-flight subagent's `vcsExec` call**. The cancel semantics MUST be "abandon already-completed scaffolding," not "kill in-flight subprocesses." This matches the existing project posture: the orchestrator awaits all `Agent()` resolutions before fanIn per `sdk/src/vcs/jj/parallel.ts:38-39` (D-01/D-02 carry comment).
+- jj 0.41 floor confirmed (`jj --version` → `jj 0.41.0-…`). No newer jj-native cancel primitive needed; `jj abandon` + `jj workspace forget` are stable since jj 0.30.
+
+**(d) NOT adding (anti-patterns + scope creep):**
+
+- **NOT** an `AbortController` + `AbortSignal`-threaded cancel that promises to interrupt in-flight subprocess calls. The exec layer is `spawnSync` — synchronous, signal-uninterruptible. Promising signal-based interruption is a lie.
+- **NOT** a polling-based watchdog loop. `cancel` is a synchronous batched teardown of the handle's already-materialized workspaces — fits the `dispatch`/`fanIn` synchronous shape.
+- **NOT** a new exec primitive (do not introduce `vcsExecAsync` for the sake of cancel — separate work, separate milestone if ever justified).
+- **NOT** a partial-state recovery enum (`'cancelled' | 'aborted'`) on `IncompleteWorkEntry.reason`. The reason union is closed at 2 values per `sdk/src/vcs/types.ts:259`; user-cancelled abandons leave NO queue entry (clean abandon, not crash-recovery).
+- **NOT** crossing into the "stop a running subagent" problem. The Phase 11 D-01 invariant "orchestrator awaits all `Agent()` resolutions before fanIn" makes mid-flight cancel a non-problem in production. `cancel` is for the "I started a wave, decided not to proceed" scenario, not "kill the spawned Claude session."
+- **NOT** any interaction with `.git/config.lock` race serialization in the git backend — `cancel`'s teardown is per-workspace `git worktree remove --force` calls, which do not contend with new `worktree add` calls (none are issued during cancel). See `sdk/src/vcs/git/parallel.ts:163-193` for the existing serialization concern (write-side only).
+- **NOT** removed `surplusBookmarks` reuse — keep the existing batched cleanup pattern for the per-agent bookmarks.
+
+---
+
+### Item 3: `vcs.refs.matchPrefix(id, prefix)` (deferred v1.2 TEST-13)
+
+**Goal:** alphabet-aware short-prefix matching.
+
+**(a) Net-new dependency:** None.
+
+**(b) Existing-stack pattern to reuse — source of truth:**
+
+| Reuse target | Location | Pattern role |
+|---|---|---|
+| Alphabet probe + disjointness assertion | `sdk/src/vcs/__tests__/jj-id-alphabet-probe.test.ts:49-65,67-75` | Proves jj `change_id` is `^[k-z]+$` (NEVER hex), commit_id is `^[0-9a-f]+$` (NEVER `[g-z]`). The two alphabets are provably disjoint at jj 0.41. |
+| `VcsRefs` interface insertion point | `sdk/src/vcs/types.ts:336-367` | Add `matchPrefix(id: RevisionExpr, prefix: string): boolean` as a sibling to `resolveShort(rev: RevisionExpr): string` at line 361. |
+| Reverse-resolve helpers (boundary-io classification — KEEP) | `sdk/src/vcs/parse/jj-id.ts:36-70` | `commitIdOf` / `changeIdOf` are the only legitimate cross-namespace bridges in the SDK; `matchPrefix` does NOT need to touch this file — it works on the canonical id of the backend's own namespace. |
+| Custom matcher pattern | `tests/__tools__/vitest-matchers.ts` (Phase 8 TEST-12 `toBeIdOf`) | The HIGH-confidence stack-precedent for backend-aware string assertions; `matchPrefix` tests SHOULD use `expect.extend` style matchers (`feedback_vitest_extend_over_free_fn`), not free functions. |
+
+**Implementation note:** `matchPrefix('jj-change-id-here', 'kxyz')` is pure-string `id.startsWith(prefix)` — the alphabet awareness lives in the **caller** (who must know to pass `[k-z]`-shaped prefixes for jj, `[0-9a-f]` for git). The verb itself is a one-liner per backend; the value is the public contract that says "use this verb, never `.slice(0, N)` or hex-regex match." Verified: pure-TS implementation, no jj-native primitive needed.
+
+**(c) Version probes:**
+
+- jj 0.41 alphabet stability — already pinned by `jj-id-alphabet-probe.test.ts`. No new probe needed.
+- No external version probe.
+
+**(d) NOT adding (anti-patterns + scope creep):**
+
+- **NOT** a new `jj` subprocess call. `matchPrefix` is pure-string; calling `jj log -r <prefix>` to do the matching would add latency for zero correctness benefit (and would re-introduce a commit_id/change_id resolution path that the v1.2 unification rules out — `feedback_sdk_commit_jj_safe` posture).
+- **NOT** a `validatePrefix` that errors on hex chars in a jj prefix. The verb returns `false` for non-matches; alphabet-validity is the caller's contract, not the verb's job. (If callers regularly pass invalid-alphabet prefixes, that's a separate hardening pass — not v1.4.)
+- **NOT** a re-export from `parse/jj-id.ts`. The matchPrefix verb belongs in the backend `refs.*` namespace, not the parse layer (which exists for the legitimate boundary-io reverse-resolve only, per `parse/jj-id.ts:7-11`).
+- **NOT** any change to `expr.ts` or `RevisionExpr` branding. Input is `RevisionExpr & string`; output is `boolean`.
+
+---
+
+### Item 4: `vcs.refs.idAlphabet` (deferred v1.2 API-01)
+
+**Goal:** public introspection.
+
+**(a) Net-new dependency:** None.
+
+**(b) Existing-stack pattern to reuse — source of truth:**
+
+| Reuse target | Location | Pattern role |
+|---|---|---|
+| `VcsRefs` interface insertion point | `sdk/src/vcs/types.ts:336-367` | Add `readonly idAlphabet: string` (or `readonly idAlphabet: '0-9a-f' \| 'k-z'`) as a sibling to `readonly head` at line 337. Pure metadata, evaluated once per adapter instance. |
+| Alphabet constants source-of-truth | `sdk/src/vcs/__tests__/jj-id-alphabet-probe.test.ts:61-64` (jj: `/^[k-z]+$/`, NOT `[0-9a-j]`), `:73-74` (git: `/^[0-9a-f]+$/`, NOT `[g-z]`) | The probe test is the empirical source. The string literal `'k-z'` / `'0-9a-f'` is what the field returns. |
+| Adapter-typed branching | `sdk/src/vcs/types.ts:600-610` (`GitVcsAdapter`, `JjVcsAdapter`, `VcsAdapter` discriminated union) | Each backend's `refs.idAlphabet` is statically-known at backend selection time. |
+
+**(c) Version probes:**
+
+- jj 0.41 alphabet probe — already locked. No new probe.
+
+**(d) NOT adding (anti-patterns + scope creep):**
+
+- **NOT** a function — it's `readonly`. The alphabet is backend-constant; computing it dynamically would be cargo-cult.
+- **NOT** a regex shipped with the field. Callers wanting regex shapes use the bare alphabet string and compose `^[${alphabet}]+$` themselves. (Optional alternative: ship a sibling `readonly idShape: RegExp` if a real consumer needs it — but defer until that consumer exists. YAGNI.)
+- **NOT** any cross-backend "normalized" alphabet — the WHOLE point is that the alphabets are different and the field exists to surface that.
+- **NOT** an API.md doc update separately — landing this field implies updating the public surface docs in the same plan.
+
+---
+
+### Item 5: Drift-control tests (`tests/architecture-counts.test.cjs` + `tests/command-count-sync.test.cjs`)
+
+**Goal:** lock prose counts in ARCHITECTURE.md / INVENTORY.md to live filesystem state.
+
+**(a) Net-new dependency:** None.
+
+**(b) Existing-stack pattern to reuse — source of truth:**
+
+| Reuse target | Location | Pattern role |
+|---|---|---|
+| **Test framework decision: `node:test`** | `tests/inventory-counts.test.cjs:19-21` (`require('node:test')`, `require('node:assert/strict')`) | `tests/` uses `node:test` exclusively (verified: `scripts/run-tests.cjs:18` invokes `node --test`). The new drift-control tests MUST be `node:test`. Repo convention is clear and bifurcated: `tests/` → `node:test`; `sdk/` → vitest. |
+| **Framework runner** | `scripts/run-tests.cjs:14-18` | Recursive scan of `tests/**/*.test.cjs`. New tests are auto-discovered; no manifest update needed. |
+| **Drift-control idiom** | `tests/inventory-counts.test.cjs:28-35,52-63` (the `FAMILIES` array + `headlineCount` regex + `fsCount` walker + per-family `test()` block) | Copy this exact shape. `architecture-counts.test.cjs` adds rows for the ARCHITECTURE.md headline counts (`44→68 commands`, `46→89 workflows`, `16→33 agents`, `17→60 lib modules`, `~3000→10,978 install.js LOC`). `command-count-sync.test.cjs` is referenced at `docs/INVENTORY.md:59` — its job is to lock the `## Commands` table row-count (not just headline). |
+| **Cross-language docs** (en + ja-JP + ko-KR + pt-BR) | `docs/ARCHITECTURE.md`, `docs/ja-JP/ARCHITECTURE.md`, `docs/ko-KR/ARCHITECTURE.md`, `docs/pt-BR/ARCHITECTURE.md` (4 file paths verified via `find docs -name ARCHITECTURE.md`) | The drift-test walks ALL 4 paths and asserts each against the same live-FS count. |
+| **Pattern B random-prefix mkdtemp** (if test needs isolated tree) | `tests/scripts/audit-workflow-raw-git.test.cjs:36-41` (TEST-16 / Pitfall 9 idiom) | For tests that materialize synthetic .md files — not needed here since the tests walk real filesystem against real docs. |
+
+**(c) Version probes:**
+
+- Node ≥22 `readdirSync({recursive: true})` already used in `scripts/run-tests.cjs:14`. Same pattern works in the new tests.
+- No external version probe.
+
+**(d) NOT adding (anti-patterns + scope creep):**
+
+- **NOT** vitest. `tests/` is `node:test`-only. Adding a vitest file here would force a parallel test-runner invocation and breaks the `scripts/run-tests.cjs` cross-platform invariant.
+- **NOT** a new lib helper for headline-regex parsing — `tests/inventory-counts.test.cjs:37-42` shows the inline 5-line idiom is preferable to extraction at this volume.
+- **NOT** hardcoded counts. Both sides (documented number, filesystem ls count) are computed at test runtime per `tests/inventory-counts.test.cjs:14`. ARCHITECTURE.md numbers should be parsed from the prose, not constants in the test.
+- **NOT** combined with the existing `tests/inventory-counts.test.cjs` — different doc, different headline shape, different lifetime. Keep them separate (single-responsibility, separate failure messages).
+- **NOT** an attempt to fix the broken ARCHITECTURE.md numbers as part of writing the tests — the tests are what FORCE the fixes. Write tests first; let them red-fail; fix doc numbers in a separate plan (the v1.4 scope distinguishes "drift-control tests" from "ARCHITECTURE.md prose-count fixes" as two workstream items).
+- **NOT** any check that the per-row content of the INVENTORY table matches the filesystem roster — that's `tests/inventory-source-parity.test.cjs` territory and already exists.
+
+---
+
+### Item 6: jj-reap.test.ts flake fix
+
+**Goal:** narrow scope per `v14-jj-reap-test-flake.md` — fix the `> inclusion-filter` 5s timeout under parallel test load.
+
+**(a) Net-new dependency:** None.
+
+**(b) Existing-stack pattern to reuse — source of truth:**
+
+| Reuse target | Location | Pattern role |
+|---|---|---|
+| `vitest` test-level options (`it.timeout`, `concurrent`) | `sdk/vitest.config.ts:7-26` (vitest config with `unit` + `integration` projects); vitest v3.1.1 supports `it.concurrent`, `it.skip`, `testTimeout` per-block. | Per-test timeout extension — `it('inclusion-filter: …', () => {...}, 15_000)` if fix (a) chosen. |
+| Pattern B random-prefix mkdtemp for jj fixtures | `sdk/src/vcs/__tests__/jj-reap.test.ts:54` (`mkdtempSync(join(tmpdir(), 'gsd-jj-reap-'))`) | Already in use. No change. |
+| `integration` project carve-out | `sdk/vitest.config.ts:17-23` (separate `integration` project with `testTimeout: 120_000`) | If fix (a) chosen and the test should NOT run under `unit`'s 5s default, move to `*.integration.test.ts` and let the existing 120_000ms project ceiling cover it. |
+| `concurrent: false` opt-out idiom | vitest v3 supports `describe.concurrent` and `it.sequential` at block/test scope. | If fix (b) chosen: `describe('workspace.reap …', { concurrent: false }, () => {...})`. |
+
+**(c) Version probes:**
+
+- **vitest 3.1.1 → 4.1.7 available** (live npm registry, May 2026). NOT a v1.4 upgrade target — package-pinned `^3.1.1` resolves to latest 3.x; the upgrade is out-of-scope. MEDIUM confidence the test ergonomics needed (`it.timeout`, `concurrent:false`) are stable across 3.x/4.x. Stay on 3.1.1.
+- Node ≥22 — no change.
+- jj 0.41 — no change.
+
+**(d) NOT adding (anti-patterns + scope creep):**
+
+- **NOT** a `retry: N` knob in `sdk/vitest.config.ts`. The v1.3 plan 10-05 success criterion 5 explicitly states "no `retry: N` added to vitest config" — that constraint carries forward.
+- **NOT** `--no-file-parallelism` as the global fix. That punishes the whole suite for one test's flakiness. The flake is per-test; the fix should be per-test (`it.timeout` or `concurrent: false` at the `it`/`describe` block).
+- **NOT** a broader `project_test_perf_pain_vitest` rewrite. The todo (`v14-jj-reap-test-flake.md:35-43`) explicitly narrows scope; the longstanding perf pain is deferred per `PROJECT.md:28`.
+- **NOT** moving the test to `node:test` to "escape vitest." `sdk/` is vitest-only; the bifurcation is by directory, not by test. Changing this test's framework would split the SDK test surface and break the contract-test integration with `toBeIdOf` and the rest of the unit project.
+- **NOT** a vitest 4.x upgrade. Out of scope; v1.4 is cleanup, not framework migration. Defer to v1.5+ or after the next upstream pull (since vitest 4 has breaking config-shape changes per the v4 changelog).
+- **NOT** moving the test to a new `*.serial.test.ts` extension with a third vitest project — the existing `unit`/`integration` two-project split is sufficient; if isolation is needed, the test moves to `*.integration.test.ts` (existing slot).
+
+---
+
+## Composite version-floor matrix (v1.4)
+
+| Tool | Current floor | Verified | Action |
+|------|---------------|----------|--------|
+| Node | ≥22.0.0 | `package.json:46-48`, runtime `v25.9.0` | UNCHANGED. AbortController/AbortSignal native; `spawnSync` lacks `signal` support (load-bearing for Item 2). |
+| pnpm | 11.0.8 | `package.json:49`, runtime `11.0.8` | UNCHANGED. |
+| TypeScript | ^5.7.0 | `sdk/package.json:55` | UNCHANGED. |
+| vitest | ^3.1.1 | `sdk/package.json:56` (latest published is 4.1.7 — out of v1.4 scope) | UNCHANGED. |
+| jj | 0.41 | runtime `jj 0.41.0-…` | UNCHANGED. All v1.4 deferred items use stable jj primitives (`abandon`, `workspace forget`, `bookmark delete`, `log -r`). |
+| @anthropic-ai/claude-agent-sdk | ^0.2.84 | `package.json:51` | UNCHANGED — no v1.4 item touches Agent SDK surface. |
+| `node:test` | Node 22 native | `tests/*.test.cjs`, `scripts/run-tests.cjs:14-18` | UNCHANGED. Drift-control tests use this framework. |
+
+---
+
+## Aggregate "NOT adding" list (consolidated anti-pattern fence)
+
+The cleanup-milestone framing requires this list be visible. Anything below would be scope creep dressed as v1.4 work:
+
+1. **No new npm dependencies.** Period. Six items, zero additions.
+2. **No new dev-dependencies.** All test infrastructure (`node:test`, vitest, c8) already present.
+3. **No vitest 4.x upgrade.** Defer past v1.4 / past the next upstream pull.
+4. **No new shared lib module under `scripts/lib/`.** The two existing modules (`allowlist-parser.cjs`, `glob-to-regex.cjs`) are sufficient.
+5. **No `AbortController`-threaded async exec primitive (`vcsExecAsync`).** Item 2's cancel is synchronous batched teardown; the exec surface stays `spawnSync`.
+6. **No new vitest config knobs** (`retry`, `concurrency`, `pool` changes). Item 6 is per-test fix only.
+7. **No CI lane additions.** New lint slots into existing `parallel-e2e.yml`; new drift tests slot into existing `scripts/run-tests.cjs` invocation.
+8. **No conversion of `tests/` → vitest** or `sdk/` → `node:test`. Bifurcation by directory is the convention.
+9. **No new `RevisionExpr` brand-instance.** `matchPrefix` and `idAlphabet` use the existing brand.
+10. **No new `IncompleteWorkEntry.reason` enum values.** User-cancellation leaves no queue entry.
+11. **No new boundary-io accessor in `parse/jj-id.ts`.** SEED-001 inversion holds; `matchPrefix` is canonical-side only.
+12. **No `expires` field** on the new lint's allowlist schema (per `feedback_solo_dev_no_expires`).
+13. **No prose-pattern AST parser** for the workflow call-presence lint. Plain regex over bash fences is sufficient.
+14. **No promotion of any new lint to `npm pretest`.** All new lints go to `parallel-e2e.yml` only.
+15. **No `--ignore-working-copy` in any new jj invocation** (project-wide standing rule per `project_squash_model`).
+16. **No raw git in any new script** (`project_no_raw_git`); cancel-verb teardown on git side uses adapter primitives only.
+
+---
+
+## Implications for Roadmap
+
+**Phase structure recommendation (STACK lens only):** All six items can run in 1–2 phases without phase-level dependency complications because **none introduce new tooling, so there is no "wire up the new dep" gate**.
+
+Suggested ordering by stack-coupling proximity (items that touch the same files cluster):
+
+- **Cluster A — type-surface additions** (Items 3, 4): `sdk/src/vcs/types.ts:336-367` — `matchPrefix` and `idAlphabet` are sibling field additions. Both backends, both tests. One plan, two-three files per backend.
+- **Cluster B — parallel-namespace addition** (Item 2): `sdk/src/vcs/types.ts:453-456` — `cancel` as third method on `VcsWorkspaceParallel`. Touches both backends (`backends/git.ts` parallel wire-in + `backends/jj.ts` parallel wire-in + `sdk/src/vcs/jj/parallel.ts` + new `sdk/src/vcs/git/parallel.ts` body). One plan.
+- **Cluster C — drift-control + lint tooling** (Items 1, 5): `scripts/` and `tests/` only — no SDK surface touched. Two plans (separate files, separate verification posture).
+- **Cluster D — test-flake fix** (Item 6): `sdk/src/vcs/__tests__/jj-reap.test.ts` only. One micro-plan, lowest priority per todo.
+
+The roadmapper should expect Items 2 + 3 + 4 to share a phase (`vcs.*` surface adds), Items 1 + 5 to share a phase (CI tooling adds), and Item 6 to be a standalone micro-plan that can drop into any wave.
+
+---
+
+## Confidence Assessment
+
+| Area | Level | Reason |
+|------|-------|--------|
+| Existing-stack reuse map (all 6 items) | HIGH | Every cited file:line verified to exist via Read/Bash; no claims made from training data alone. |
+| AbortController native on Node 22 | HIGH | Live `node -e` probe at runtime confirmed. |
+| `spawnSync` lacks signal support | HIGH | Node.js official docs fetched and verified. |
+| jj 0.41 alphabet disjointness | HIGH | Empirical probe test exists at `sdk/src/vcs/__tests__/jj-id-alphabet-probe.test.ts`; user already has the binary. |
+| `tests/` uses `node:test` exclusively | HIGH | Verified `scripts/run-tests.cjs:14-18` + `tests/inventory-counts.test.cjs:19-21`. |
+| vitest 4.1.7 is current upstream | MEDIUM | npm registry fetch confirmed; semver-major upgrade out of v1.4 scope explicitly. |
+| `tests/architecture-counts.test.cjs` and `command-count-sync.test.cjs` do not yet exist | HIGH | `ls` returned "No such file or directory" for both. They are referenced as future surfaces at `docs/INVENTORY.md:9`. |
+
+---
+
+## Open Questions (for requirements-author, NOT v1.4 stack)
+
+- For Item 4 (`idAlphabet`): the field type — string literal (`'k-z'`/`'0-9a-f'`) vs. richer object (`{chars: string, regex: RegExp}`) — is an API-design decision, not a stack decision. Stack lens defaults to the smallest surface (bare string).
+- For Item 2 (`cancel`): the return-shape (`{cancelled: number, workspaces: string[]}` vs `void`) is API design. Stack lens defers to existing `WorkspaceMergeResult`/`FanInResult` shape conventions (return rich result objects).
+
+---
+
+## File Reference Index (all verified live)
+
+Every code reference in this research is `file_path:line_number` form, verified to exist at research time:
+
+- `.planning/PROJECT.md:13-23,100-112` (project state + v1.4 scope)
+- `.planning/MILESTONES.md` (v1.0–v1.3 history)
+- `.planning/todos/pending/v14-jj-reap-test-flake.md:1-51`
+- `.planning/todos/pending/v14-review-followups.md:1-44`
+- `.planning/todos/pending/v14-orphan-jj-workspace-dirs.md`
+- `.planning/todos/pending/v14-transition-md-update-gap.md`
+- `.planning/todos/pending/v14-docs-verify-only-followups.md`
+- `scripts/lint-vcs-no-raw-git.cjs:32-101,114-140`
+- `scripts/lint-vcs-no-commit-id.cjs:30-114`
+- `scripts/audit-workflow-raw-git.cjs:39-50,60-91,98-130,139-167,231-238`
+- `scripts/lib/allowlist-parser.cjs:34-61`
+- `scripts/lib/glob-to-regex.cjs` (referenced via allowlist-parser)
+- `scripts/run-tests.cjs:14-18`
+- `tests/inventory-counts.test.cjs:1-64` (drift-control idiom precedent)
+- `tests/scripts/audit-workflow-raw-git.test.cjs:21-50` (Pattern B mkdtemp precedent)
+- `sdk/src/vcs/types.ts:336-367` (VcsRefs surface — matchPrefix/idAlphabet insertion point)
+- `sdk/src/vcs/types.ts:453-518` (VcsWorkspaceParallel + ParallelDispatchHandle — cancel insertion point)
+- `sdk/src/vcs/types.ts:600-610` (Adapter discriminated union)
+- `sdk/src/vcs/exec.ts:1-54` (spawnSync-based exec surface)
+- `sdk/src/vcs/parse/jj-id.ts:1-70` (boundary-io reverse-resolve helpers)
+- `sdk/src/vcs/__tests__/jj-id-alphabet-probe.test.ts:49-75` (alphabet disjointness probe)
+- `sdk/src/vcs/__tests__/jj-reap.test.ts:46-94` (failing flake test location)
+- `sdk/src/vcs/jj/parallel.ts:1-100,464` (jj-side cancel teardown reuse target)
+- `sdk/src/vcs/git/parallel.ts:163-193,341-393,545-549` (git-side serialization context)
+- `sdk/vitest.config.ts:1-27` (project bifurcation)
+- `package.json:46-49,65` (Node/pnpm floors, pretest content)
+- `sdk/package.json:34-57` (SDK floors)
+- `docs/ARCHITECTURE.md:117-184` (drift-prone prose-count locations)
+- `docs/INVENTORY.md:7-9` (drift-control test family declaration)
+- `get-shit-done/workflows/execute-phase.md:557-561,757-772` (existing `parallel.*` call sites)
+- `get-shit-done/workflows/quick.md:677-683,761-772` (existing `parallel.*` call sites)

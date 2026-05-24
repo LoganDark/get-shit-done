@@ -1,260 +1,211 @@
-# Project Research Summary — v1.3 jj octopus merge for subagents fully functional
+# Project Research Summary
 
-**Project:** GSD jj-port
-**Domain:** Cross-backend (git + jj) VCS adapter — lift parallel-subagent-dispatch into new `vcs.parallel.*` (or `vcs.workspace.parallel.*`) verbs, flip `parallelization: true`, close A3 colocated pre-commit gap
-**Researched:** 2026-05-15
-**Confidence:** HIGH on substrate, integration shape, and pitfalls; MEDIUM on final verb-namespace shape, A3 fix-path choice, and lint-collapse framing (three cross-dimension tensions documented below)
+**Project:** GSD jj-port fork — v1.4 cleanup + deferred-item harvest
+**Domain:** Long-running fork cleanup milestone before next upstream pull (NOT new feature work)
+**Researched:** 2026-05-23
+**Confidence:** HIGH
 
 ## Executive Summary
 
-v1.3 is a **lift-and-collapse** milestone, not a build-from-scratch one. The hard pieces — `sdk/src/vcs/jj/octopus.ts` (createPhaseStructure / createSubagentSlot), `sdk/src/vcs/jj/reap.ts` (performJjReap), `workspace.merge` with atomic main-advance (v1.1 VCS-12), and `worktree-safety.cjs::executeWorktreeWaveCleanupPlan` (v1.1 WAVE-01) — are already shipped and verified. v1.3 promotes the jj-namespaced helpers to a cross-backend verb surface on `VcsAdapter`, lifts the raw-git worktree dispatch block out of `execute-phase.md` into the git backend, deletes the workflow-markdown raw-git shell-fence blocks, and flips `parallelization: true` as the new default. **No new npm dependencies are needed**; every primitive (spawnSync, vitest@3.1.1 `describe.sequential.skipIf`, `toBeIdOf` matcher, the existing `acquireJjWriteLock` RAII helper) already ships.
+v1.4 is a closed-acceptance cleanup milestone whose entire scope is **fork-internal todos, deferred-item harvest, drift-control, and PROJECT.md reconciliation** — not new product features. Across all four research lenses (STACK, FEATURES, ARCHITECTURE, PITFALLS) the dominant finding is the same: **every v1.4 item is pure reuse of existing patterns**. Zero new npm dependencies, zero version-floor bumps, zero new test frameworks, zero new shared lib modules, zero new exec primitives. The work is consuming surfaces the v1.0–v1.3 milestones already built (existing lint scaffolds, existing `node:test` drift-control idiom in `tests/inventory-counts.test.cjs`, existing `parallel.*` adapter namespace, existing alphabet-aware string handling, existing CLI-bridge three-site registration pattern).
 
-The architectural payoff is the v1.2-style **"first green lint run = milestone completeness proof"** pattern applied to `lint-vcs-no-raw-git`: after v1.3, workflow markdown contains zero executable raw-git inside shell fences, and the orchestrator calls one `vcs.parallel.dispatch` + one `vcs.parallel.fanIn` regardless of backend (mirroring v1.2's "workflows never branch on `vcs.kind` for id reasons" invariant — v1.3 extends to "for parallel-dispatch reasons"). Bundled in the same milestone: the A3 colocated pre-commit gap (carried from v1.0 Phase 4) closes via one of three documented fix paths.
+The recommended approach is a **four-phase structure organized by surface-affinity** (adapter surface extensions, workflow/invariant tooling, drift control + reconciliation, tactical v14-* cleanup). Within each phase, plans are sequenced by file-overlap discipline: plans that touch the same files run sequentially, plans on disjoint surfaces run as parallel waves. The single largest risk is **scope creep** — v1.4 has no external user-story to push back against "while we're here" deltas, so the closed acceptance set must be locked at REQUIREMENTS.md write time and enforced at every discuss-phase.
 
-The principal risks are not at the substrate level (proven) but at the **coordination boundary**: concurrent `jj squash` from N workspaces against a shared ancestor can interleave at the operation-log level and silently diverge (Pitfall 1 — requires a new repo-scoped lock distinct from Phase 4's per-workspace lock); in-tree conflicts during fan-in get classified as crashes if `parallel.fanIn` doesn't surface a `conflicted: boolean` field (Pitfall 2); partial-wave failure with one agent still running mid-dispatch needs a liveness gate before reap (Pitfall 3); `parallelization: true` default-flip strands brownfield repos without a pre-flight check + migration command (Pitfall 8); and the dogfood phase risks corrupting this very repo if a dispatcher bug surfaces under N≥3 (Pitfall 10 — must be last, isolated bookmark, synthetic plans only).
+The most consequential design call in the milestone is the **`vcs.workspace.parallel.cancel(handle)` semantics**, where STACK and FEATURES research arrived at OPPOSITE recommendations. STACK says synchronous teardown only (cite: `spawnSync` exec layer cannot accept `AbortSignal`; orchestrator-awaits-Agent invariant makes mid-flight cancel a non-problem in production). FEATURES says mixed SIGTERM-then-SIGKILL with partial-completion enum (cite: GNU parallel `--halt-on-error 1` precedent). PITFALLS adds a third constraint: cancel must NOT signal subagents (Pitfall 5) but MUST publish a non-void result shape with a `leakedPaths`-equivalent field. **The reconciling truth**: the FEATURES recommendation assumes a different exec layer than what ships. Given the current `spawnSync` reality + the Phase 11 D-01 "no orchestrator sidecar state" invariant + the Pitfall 5 cleanup-races analysis, the **STACK lens is correct** and the discuss-phase should adopt it: cancel is synchronous batched teardown of already-materialized workspaces, returns a structured `CancelResult`, does not signal subagents. The FEATURES "interrupt mid-Agent" use case is OUT OF SCOPE for v1.4 and would require a separate `vcsExecAsync` primitive in a future milestone.
 
 ## Key Findings
 
-### Stack additions
+### Recommended Stack
 
-**No new dependencies.** Every primitive needed is already shipped in the repo.
+**Net additions: ZERO.** Every v1.4 item reuses existing dependencies, frameworks, and lib modules already in the repo. The only "version verification" worth recording is that `AbortController`/`AbortSignal` are native on Node ≥22 (already required) and that `child_process.spawnSync` does NOT accept `signal` — load-bearing for the cancel design.
 
-- Node ≥22 + TypeScript ≥5.7 — unchanged
-- `spawnSync` via existing `vcsExec`/`execGit` wrappers — sole subprocess primitive; adapter stays single-threaded by design (`acquireJjWriteLock` invariant)
-- `jj` binary ≥0.41 — N-parent octopus form (`jj new <p1> ... <pN>`) verified; floor may rise only if A3 Path C is chosen (NOT recommended)
-- `vitest@3.1.1` + `describe.sequential.skipIf(!jjAvailable)` (Pattern A) + `toBeIdOf('jj'|'git')` matcher (v1.2) — established test pattern; mirror for new `parallel-*` test files
+**Core technologies (all existing — no changes):**
+- **Node ≥22** + **pnpm 11.0.8** + **TypeScript ^5.7** — UNCHANGED; runtime verified `v25.9.0` / `11.0.8`.
+- **vitest ^3.1.1** (sdk/) — UNCHANGED; vitest 4.x is out of v1.4 scope (defer past next upstream pull due to breaking config-shape changes).
+- **`node:test`** (tests/) — UNCHANGED; this is the framework for both new drift-control tests, matching `tests/inventory-counts.test.cjs` precedent. Bifurcation by directory (`tests/` → `node:test`; `sdk/` → vitest) is the convention.
+- **jj 0.41** — UNCHANGED. All deferred items use stable primitives (`abandon`, `workspace forget`, `bookmark delete`).
+- **`scripts/lib/allowlist-parser.cjs` + `glob-to-regex.cjs`** — reused verbatim for the new call-presence lint; no new shared lib module.
+- **`scripts/lint-vcs-no-raw-git.cjs` + `audit-workflow-raw-git.cjs`** — pattern source for the new call-presence lint (default-deny + per-entry `{path|glob, reason, owner}` allowlist; fence-aware markdown walker).
 
-Rejected explicitly: `p-limit`/`p-queue`/`p-map` (in-adapter parallelism violates per-workspace lock invariant), `worker_threads` (single-threaded adapter is load-bearing), `execa`/`cross-spawn` (sync `spawnSync` suffices), `simple-git`/`isomorphic-git`/libgit2 (would bypass `lint-vcs-no-raw-git`).
+See `.planning/research/STACK.md` for full per-item stack analysis and the consolidated 16-item "NOT adding" anti-pattern fence.
 
-**Locking primitive note:** STACK says "no new primitives"; PITFALLS argues a NEW repo-scoped lock (sentinel `.jj/repo/gsd-parallel-lock`) is required. Reconciled as: "new file-based lock function inside existing `sdk/src/vcs/jj/lock.ts` module, not a new dep." See Tension 5.
+### Expected Features
 
-See `STACK.md` for full detail.
+The 11 v1.4 target items cluster into **four clean categories** (see FEATURES.md §a):
 
-### Feature table stakes
+**Must have (in v1.4 scope):**
+- 5 tactical cleanup todos: `v14-transition-md-update-gap`, `v14-orphan-jj-workspace-dirs`, `v14-review-followups` (5 WR + 5 IN), `v14-jj-reap-test-flake`, `v14-docs-verify-only-followups` (45 failures, 8 themes).
+- 3 deferred API additions: `vcs.refs.idAlphabet`, `vcs.refs.matchPrefix(id, prefix)`, `vcs.workspace.parallel.cancel(handle)`.
+- 2 deferred renames/lints: `rootCommits → rootRevisions` hard rename, workflow call-presence lint.
+- 3 drift-control + reconciliation: `tests/architecture-counts.test.cjs`, `tests/command-count-sync.test.cjs`, ARCHITECTURE.md prose-count fixes (en + 3 translations) + PROJECT.md `### Validated` reconciliation.
 
-Must ship (without these the milestone goal is unmet):
+**Should have (within v1.4 scope but lower priority):**
+- ADR supersession notes for Theme 3 of docs-verify-only-followups (preserves immutability convention).
+- Cleanup-helper extraction (`cleanupSubagentWorkspaces`) consumed by 3 call sites: dispatcher fanIn, recovery script, parallel.cancel — see PITFALLS Pitfall 11.
 
-- `vcs.parallel.dispatch(plan): ParallelDispatchHandle` — cross-backend; jj composes octopus.createPhaseStructure + N×createSubagentSlot; git wraps `git worktree add` with internal serialization (Pitfall 5)
-- `vcs.parallel.fanIn(handle, results): FanInResult` — composes existing `workspace.merge` (jj) + `worktree.cleanup-wave` (git); MUST return `{merged, conflicted, incompleteQueued, failedReaped, surplusBookmarks}` (Pitfalls 2 + 4)
-- Unified backend-opaque types using v1.2 unified-revision model (canonical `id` field, change_id on jj, commit_id on git)
-- WAVE_WORKTREE_MANIFEST schema extension — `plan_id`, `agent_id`, `backend` fields, backwards-compatible
-- Delete raw-git worktree dispatch + cleanup blocks in `execute-phase.md` (~521-810) and `quick.md` (~660-810)
-- Subagent prompt collapse — `gsd-executor.md:412-555` → one cross-backend `workspace.assert-dispatched-cwd` query call; rename + rewrite `references/worktree-path-safety.md` to `dispatch-cwd-safety.md`
-- `parallelization: true` becomes new install-template default
-- A3 colocated pre-commit fix — pick ONE of three documented paths (Tension 3)
-- A3 regression test on colocated fixture
-- CI parallel-path lane — synthetic 2-plan phase E2E both backends; required-blocking on jj-colocated
-- Dogfood phase LAST — 2-3 synthetic plans; metrics to `.planning/intel/v1.3-dogfood-metrics.md`
+**Defer (v1.5+ or post-upstream-pull):**
+- vitest 4.x upgrade (breaking config changes; defer past upstream pull).
+- `vcsExecAsync` async-exec primitive (would enable mid-Agent signal-based cancel; not justified by current use cases).
+- `gsd-sdk query refs.match-prefix` CLI bridge for `matchPrefix` (no production caller in v1.4).
+- A workflow-callable cancel verb (cancel is adapter-facing only in v1.4; future milestones can adopt).
+- Mid-Agent process killing (Pitfall 5 anti-pattern — operator uses Claude Code UI/CLI to kill subagents; cancel only cleans up workspaces post-mortem).
+- Broader test-perf rewrite (`project_test_perf_pain_vitest` deferred per PROJECT.md OOS clause; only the specific `jj-reap.test.ts > inclusion-filter` flake is in scope).
 
-Differentiators (defer if scope tightens):
-- Numeric `maxConcurrency` cap — only if dogfood reveals natural agent-cap insufficient
-- Rebase-stability docs on `ParallelDispatchHandle.workspaces[].baseRev`
-- Lint guard for `vcs.parallel.*` call-presence in workflows
+See `.planning/research/FEATURES.md` for industry precedents (Tokio JoinSet, GNU parallel, GitHub Actions matrix; Git `core.abbrev`, jj prefix index; actionlint, internal lint precedents).
 
-Anti-features (explicit): `GSD_BACKEND_KIND` env var (re-creates vcs.kind branching at agent level), cross-machine dispatch, `vcs.parallel.cancel`, streaming event API, auto-cancel-siblings-on-failure, A3 Path C (no upstream jj fix to gate on).
+### Architecture Approach
 
-See `FEATURES.md` for full detail.
+All items decompose into **three architectural buckets** without crossing the existing v1.3 boundaries (no new layers, no new namespaces, no new sidecar files beyond per-verb CLI bridges). See ARCHITECTURE.md §Per-Item.
 
-### Architecture approach
+**Major components (touched, not created):**
+1. **`sdk/src/vcs/types.ts` — VcsAdapter interface** — sites for new `idAlphabet` property, new `matchPrefix` method, new `cancel` method, and the `rootRevisions` rename. Four plans, sequential within one phase (file-overlap → sequential plans, NOT parallel-safe).
+2. **`sdk/src/vcs/backends/{git,jj}.ts` + sidecars (`jj/parallel.ts`, `git/parallel.ts`)** — per-backend implementations of the new methods. UPSTREAM-02 invariant holds (sidecars never import from backends).
+3. **`sdk/src/query/*` (3-site CLI registration: catalog-domain + manifest.non-family + aliases.generated)** — load-bearing for the new `workspace-parallel-cancel.ts` bridge; missing any one site breaks runtime verb resolution.
+4. **`scripts/lint-vcs-parallel-call-presence.cjs` + `.allow.json`** — new but mirrors `lint-vcs-no-raw-git.cjs` shape exactly; CI lane via `.github/workflows/parallel-e2e.yml` (NOT pretest).
+5. **`tests/architecture-counts.test.cjs` + `command-count-sync.test.cjs`** — new `node:test` drift-control tests scanning live filesystem vs prose counts; verbatim template copy of `tests/inventory-counts.test.cjs`.
+6. **`get-shit-done/workflows/transition.md` (existing) + `scripts/dogfood-restore.sh` (existing)** — extended with `assert_clean_wc` gate and orphan-dir reap respectively.
 
-The verbs land on `VcsAdapterCommon` (cross-backend) backed by **asymmetric sidecars** that mirror existing jj-side convention:
+### Critical Pitfalls
 
-1. `sdk/src/vcs/types.ts` — new `VcsWorkspaceParallel` interface under `VcsWorkspace.parallel` (precedent: `refs.bookmarks.*`)
-2. `sdk/src/vcs/jj/parallel.ts` (NEW) — composition layer; imports octopus.ts + reap.ts + workspace.merge; consumed by `backends/jj.ts`
-3. `sdk/src/vcs/git/parallel.ts` (NEW DIR + FILE) — lifts ~100 LOC `executeWorktreeWaveCleanupPlan` body into TS; consumed by `backends/git.ts`; joins lint allowlist as adapter-internal substrate
-4. `backends/jj.ts` + `backends/git.ts` — mechanical wiring (`workspace = Object.freeze({...parallel: …})`)
-5. `bin/lib/worktree-safety.cjs::executeWorktreeWaveCleanupPlan` — body shrinks to one-line delegation; public export unchanged (ADR-0004 owner stays)
-6. `execute-phase.md` + `quick.md` — raw-git blocks deleted; replaced with single `gsd-sdk query workspace.parallel.dispatch` + `… fan-in` calls
-7. `agents/gsd-executor.md` — 4 worktree-aware blocks → 1 `workspace.assert-dispatched-cwd` call
-8. CI matrix lane + lint close-gate + config flip + dogfood
+The PITFALLS research identifies **6 critical, 6 moderate, 5 integration, plus debt/UX/security/perf surfaces** — see PITFALLS.md for the 21-item "Looks Done But Isn't" checklist. The top 5 to surface to roadmapper:
 
-Build-order critical path: types → sidecars → backends → tests → CJS migration → workflow rewrites → agent rewrites → config flip → CI lane → dogfood. A3 fix is an independent parallel track; joins at CI integration.
+1. **Scope creep (Pitfall 1)** — Lock the closed acceptance set at REQUIREMENTS.md write time. The 5 v14-* todos' `## Acceptance criteria` sections are the spec; do NOT add bullets at plan-phase. Warning sign: any plan PLAN.md whose `must_haves` count exceeds the source todo's acceptance count.
+2. **`rootCommits → rootRevisions` half-rename (Pitfall 3)** — TypeScript compiler protects `.ts` consumers only. The v1.2 retro CR-01 precedent (`commands.cjs:1005` CJS-side miss after `LogEntry.hash → .id` rename) proves the CJS + workflow markdown + `backends.ts:79` capability matrix surfaces are silent failure modes. Mandatory pre-rename grep audit emitted as JSON sidecar; per-extension `grep -c` must exit 0 before commit; treat archived `.planning/` files as historical-prose carve-out.
+3. **Phase 14 false-clean-WC pattern re-introduced (Pitfall 2)** — `v14-transition-md-update-gap` is the highest-risk known recurrence site; fix it FIRST in v1.4 before any new workflow surface lands. Operator-facing caveat: the global install at `~/.claude/get-shit-done/workflows/` still has the OLD workflow until reinstall; document in the milestone close.
+4. **Drift-control tests added BEFORE drift is fixed (Pitfall 4)** — The codebase ALREADY HAS DRIFT in `docs/ja-JP/ARCHITECTURE.md` (コマンド総数: 44 → 68, ワークフロー総数: 46 → 89, etc.). Tests-first ships day-1 red CI. Strict ordering at roadmap: drift FIX (Wave 1) → drift TEST (Wave 2). Or graduate via audit-as-baseline pattern (LINT-04 reframe).
+5. **parallel.cancel partial-state cleanup races (Pitfall 5)** — RESOLVES THE STACK↔FEATURES CONFLICT in this synthesis: cancel does NOT signal subagents; cancel return shape is structured `CancelResult` with backend-opaque `leakedPaths`-equivalent; cancel reuses the shared `cleanupSubagentWorkspaces` helper extracted in Pitfall 11's prevention. The Phase 11 D-01 invariant ("orchestrator awaits all Agent() resolutions before fanIn") + Phase 9 PARALLEL-03 deferral rationale ("orchestrator-awaits-Agent() invariant makes liveness moot in production") combine to make this the architecturally consistent answer.
 
-See `ARCHITECTURE.md` for full detail.
-
-### Watch Out For (Critical Pitfalls)
-
-Top 5 of 10 documented in `PITFALLS.md`:
-
-1. **Concurrent `jj squash` from N workspaces against shared ancestor diverges silently** — Phase 4 `acquireJjWriteLock` is per-workspace NOT per-repo; new repo-scoped lock required (`.jj/repo/gsd-parallel-lock`, distinct sentinel). Detection: `jj log -r 'divergent()' --no-graph` must be empty post-fan-in.
-2. **In-tree conflicts on octopus merge classified as "crash" by reap** — jj's conflict-tolerant return stores conflict markers as tree content; `isEmptyHead` returns non-empty. Fix: `parallel.fanIn` returns explicit `{conflicted: boolean, conflictedPaths: string[]}`; extend `IncompleteWorkEntry.reason` enum from 1 → 3 values.
-3. **Partial-wave failure with one agent still running causes silent data loss** — current reap assumes quiescent post-wave. Fix: liveness probe (jj op log timestamp / git worktree mtime); return `{partial: true, liveWorkspaces: [...]}`; forbid `git worktree remove --force` in standard cross-backend path.
-4. **N-way fan-in must be true octopus + batch bookmark delete** — sequential 2-parent merges defeat parallelism AND race on agent-bookmark cleanup (v1.1 Plan 02 precedent). Use one `jj new <p1>...<pN>` + one batched `jj bookmark delete <n1>...<nN>` under the new repo-scoped lock; mirror with git's octopus `git merge --no-ff` form + batched `git update-ref -d`.
-5. **`.git/config.lock` race on simultaneous `git worktree add`** — currently documented as prompt-text-only serialization rule at `execute-phase.md:535-543`; once that markdown is deleted, the verb's internal loop must enforce serialization. Emit `[checkpoint] worktree N/M created` events. Cross-backend symmetry: serialize on jj side too to avoid behavioral asymmetry tests can't catch.
-
-Plus Pitfalls 6 (A3 path — see Tension 3), 7 (lint regression watch post-collapse), 8 (default-flip strands brownfield — needs pre-flight + migration command), 9 (test flakiness — Pattern B random-prefix mkdtemp; never `retry: N`; never `describe.skip`), 10 (dogfood blast-radius — last phase, isolated bookmark, synthetic plans, pre-snapshot recovery).
-
-## Cross-Dimension Tensions
-
-Five tensions surfaced between the 4 researchers. Each requires a decision; recommendations follow but the roadmapper has final authority.
-
-### Tension 1 — Verb-namespace shape
-
-- **ARCHITECTURE recommends:** `vcs.workspace.parallel.dispatch` / `vcs.workspace.parallel.fanIn` (sub-sub-namespace under `workspace`; precedent `refs.bookmarks.*`)
-- **FEATURES uses (planner-overridable):** `vcs.parallel.dispatch` / `vcs.parallel.fanIn` (top-level)
-- **STACK:** name-agnostic
-
-**Recommended position:** **`vcs.workspace.parallel.*`** (ARCHITECTURE position). The verbs compose `workspace.add/merge/remove/reap` — putting them in a sibling top-level namespace fragments discovery surface and breaks the noun-coherence pattern. Two-level nesting cost paid in exchange for `vcs.workspace.<TAB>` revealing the whole workspace surface in one place. Defensible.
-
-**Classification:** SPEC-level (belongs in roadmap/requirements; not load-bearing for CONTEXT).
-
-### Tension 2 — Phase count + shape
-
-- **FEATURES:** 5 phases (lift verbs / orchestrator rewire / A3 / CI / dogfood)
-- **PITFALLS:** 10 phases (A lock → B jj → C git → D classifier → E orchestrator → F tests → G A3 parallel → H lint close-gate → I default-flip → J dogfood)
-- **ARCHITECTURE:** 14 build-order steps with critical-path dependencies + parallelizable lanes
-
-**Trade-off:** Fewer-larger = narrative cohesion + matches v1.0-v1.2 phase shape but higher per-phase plan density. More-smaller = single architectural concern per phase + clearer verification but multiplies phase-transition ceremony.
-
-**Must-honor sequencing constraints (from ARCHITECTURE):**
-- Types → bodies → backends → tests → CJS migration → workflow → agents → config flip → CI → dogfood
-- `workspace.assert-dispatched-cwd` SDK verb before agent prompt rewrites
-- CI green before dogfood (Pitfall 10 blast-radius)
-- A3 fix independent — parallel track joining at CI
-- Dogfood is ALWAYS last
-
-**Recommended position:** **Surface trade-off, roadmapper picks.** A 6-7-phase shape is defensible middle ground (Phase 1 lock+jj-verbs / 2 git-verbs+classifier / 3 orchestrator+agent-rewire / 4 A3 parallel / 5 CI+lint-close / 6 default-flip+dogfood) but the planner's plan-density preference rules.
-
-**Classification:** SPEC-level (roadmap's decision).
-
-### Tension 3 — A3 fix path
-
-- **FEATURES recommends Path B:** explicit shell of `.git/hooks/pre-commit` in colocated mode; detect via `fs.existsSync('.git')`; matches user mental model; defines `.git/hooks/` vs `.githooks/` precedence
-- **PITFALLS recommends Path 1:** always-fire from adapter regardless of colocation; override env `GSD_HOOK_SKIP_COLOCATED` for future jj-auto-fire case; ~5 LOC delete of D-10 colocated branch; lowest upstream-rebase conflict risk; depends on hook idempotency as documented requirement
-
-These are **different recommendations from the same source material** — both reading Phase 4 LEARNINGS Open Q1 but with different letter/number labeling. Substantive difference: Path B routes colocation-aware (probe `.git`, then shell file), Path 1 always fires + overrides via env. Both agree Path C (version-probe / wait-for-upstream) is rejected.
-
-**Trade-off:**
-- Path B: explicit, matches user mental model, surfaces precedence question, adds colocation-detection branch
-- Path 1: simpler, trades complexity for hook idempotency requirement, override env is clean test seam, dup-fire risk benign per Phase 4 LEARNINGS guidance
-
-**Recommended position:** **Surface to discuss-phase; do NOT pre-decide.** Both defensible. Choice rests on whether user prioritizes (a) explicit colocation-routing or (b) simpler code + hook contract. Phase 4 LEARNINGS Open Q1 source (archived `51ee72a3:.planning/phases/04-…/04-LEARNINGS.md`) should be re-read at discuss-phase.
-
-**Classification:** CONTEXT-level (belongs in discuss-phase decision log; shapes milestone narrative).
-
-### Tension 4 — Raw-git lint allowlist framing
-
-- **PROJECT.md:** "single acknowledged raw-git exception collapses to zero" — implies `lint-vcs-no-raw-git.allow.json` entry count drops by one
-- **ARCHITECTURE correction:** lint's `SCAN_EXT` regex does NOT cover `.md`; raw-git blocks in `execute-phase.md:537-807` + `quick.md:776-789` are NOT in allowlist — they're exception-by-template-substitution. The 23 production allowlist entries stay. Actual collapse target is `.md` shell-fence blocks. Net allowlist change is +0 or +1 (new `sdk/src/vcs/git/parallel.ts` adapter-internal). Recommends NEW one-shot `scripts/audit-workflow-raw-git.cjs` scanning `.md` shell-fence blocks rather than extending CI lint to `.md`.
-
-**Recommended position:** **PROJECT.md framing needs correction before requirements lock.** Current phrasing risks planner interpreting as "delete from allowlist" when actual target is `.md` cleanup. Two corrections:
-1. Reframe bullet: "raw-git in workflow-markdown shell-fence blocks collapses to zero; net change to `lint-vcs-no-raw-git.allow.json` is +0 or +1 (new `sdk/src/vcs/git/parallel.ts` adapter-internal entry)."
-2. Add v1.3 deliverable: one-shot audit script `scripts/audit-workflow-raw-git.cjs` (close-gate evidence; not CI-permanent).
-
-**Classification:** CONTEXT-level (PROJECT.md correction before requirements; affects milestone-completeness proof framing — load-bearing per v1.2 retrospective).
-
-### Tension 5 — Locking primitives
-
-- **STACK:** "no new deps, no new primitives needed"
-- **PITFALLS:** NEW repo-scoped lock required, distinct sentinel `.jj/repo/gsd-parallel-lock`, distinct contract held across entire dispatch→fanIn window
-
-**Recommended position:** **Reconcile — both right at different levels.** STACK is right that no new npm dep / new module is needed (new lock lives inside existing `sdk/src/vcs/jj/lock.ts` as sibling function `acquireJjRepoLock` next to existing `acquireJjWriteLock`, both consuming `node:fs` primitives already in use). PITFALLS is right that the new lock is architecturally distinct — different sentinel path, different scope, different timeout characteristics. Frame as: "new lock function inside existing module; new sentinel path; new contract." Not a stack addition; an architectural primitive.
-
-**Classification:** SPEC-level (lock-function design belongs in jj-verbs phase plan; primitive's existence flagged in CONTEXT but contract/test plan in roadmap).
+Honorable mentions: Pitfall 6 (matchPrefix wrong-alphabet should THROW, not silent-false), Pitfall 11 (orphan-dirs ownership: dispatcher fanIn is single owner, shared helper consumed by 3 sites), Pitfall 12 (45 docs-update fixes need per-theme triage, not bulk-edit), Pitfall 9 (`jj-reap.test.ts` flake-fix narrowly scoped — ≤5 LOC, ≤1 file, vitest.config.ts untouched, check-skip-count green).
 
 ## Implications for Roadmap
 
-### Must-honor sequencing constraints (non-negotiable)
+Based on cross-research synthesis, the suggested phase structure is **four phases** organized by file-disjoint surface affinity. Within each phase, plans are sequenced by file-overlap discipline. Across phases, the recommended canonical order is **15 → 16 → 17 → 18** (each phase parallel-safe across categories; canonical order maximizes narrative coherence in the close-gate commit log).
 
-1. Types before bodies before backends before tests
-2. Backend verbs before CJS consumer migration
-3. CJS migration before workflow rewrites
-4. `workspace.assert-dispatched-cwd` SDK verb before agent prompt rewrites
-5. Workflows + agents updated before config flip
-6. CI parallel-path lane before dogfood
-7. Dogfood ALWAYS last (Pitfall 10)
-8. A3 fix independent parallel track; joins at CI integration
+### Phase 15 — Adapter surface extensions + rename (4 plans, SEQUENTIAL within phase)
 
-### Suggested 6-phase shape (illustrative; roadmapper picks final)
+**Rationale:** All four plans touch `sdk/src/vcs/types.ts` + `backends/git.ts` + `backends/jj.ts`. File-overlap forces sequential plan ordering, NOT parallel waves. Adapter surface is the highest-leverage surface — every other phase consumes the adapter.
 
-**Phase 1: New repo-scoped lock + lift jj parallel verbs**
-- Rationale: Pitfall 1 lock gates everything; jj-side lift is largest single piece
-- Delivers: `acquireJjRepoLock` primitive; `jj/parallel.ts` sidecar; jj backend wiring; types; contract test for cross-workspace squash with `divergent()` revset empty assertion
-- Research flag: **Moderate research recommended** — new lock contract; cross-workspace race not previously characterized
+**Delivers:** `rootRevisions` rename, `vcs.refs.idAlphabet`, `vcs.refs.matchPrefix`, `vcs.workspace.parallel.cancel`.
 
-**Phase 2: Git parallel verbs + reap classifier extension**
-- Rationale: Git lift mechanical; classifier (Pitfall 2) same-PR coupled with jj-side per v1.2 retro
-- Delivers: `git/parallel.ts` sidecar with internal serialization (Pitfall 5); git backend wiring; extended `IncompleteWorkEntry.reason` enum; cross-backend contract tests including N=4 surplus-bookmarks==0
-- Research flag: Skip — well-documented; only git N-parent octopus needs explicit fixture
+- **Plan 15-01 — `rootCommits → rootRevisions` hard rename.** Ships FIRST (smallest diff; clears the namespace; doing it later forces same-file rebase). Addresses Pitfall 3 with mandatory pre-rename grep audit as JSON sidecar (the v1.2 "JSON sidecar as build-pipeline seed" pattern); per-extension `grep -c '\brootCommits\b'` must exit 0 before commit; archived `.planning/` files treated as historical-prose carve-out. No alias (hard rename per v1.2 NAMING-01 precedent).
+- **Plan 15-02 — `vcs.refs.idAlphabet`.** Three-line addition to the refs namespace (`'0-9a-f'` git, `'k-z'` jj) + cross-backend contract test. Addresses ambiguity Flag #1 from FEATURES.md (discuss-phase confirms `string` vs structured object — recommend opaque `string` per ARCHITECTURE.md "treat as raw char-class regex body").
+- **Plan 15-03 — `vcs.refs.matchPrefix`.** Consumes idAlphabet contract. Pure-string per-backend implementation; backend hard-codes its alphabet regex inline (no closures over adapter state; matches `validateRefname` precedent). Addresses Pitfall 6: **throw** on wrong-alphabet (not silent-false), throw on empty prefix, return false on `prefix.length > id.length`, hex case-insensitive, k-z lowercase-only. Test cross-product mandatory.
+- **Plan 15-04 — `vcs.workspace.parallel.cancel`.** Ships LAST (largest, consumes settled types.ts diffs). Resolves the STACK↔FEATURES synthesis conflict via the **synchronous-teardown-only** model (Pitfall 5 + Phase 11 D-01 + Phase 9 PARALLEL-03 invariants). Structured `CancelResult` return shape (NOT void; NOT boolean). Cancel does NOT signal subagents; consumes the shared `cleanupSubagentWorkspaces` helper extracted in Phase 16-02. New CLI bridge at `sdk/src/query/workspace-parallel-cancel.ts` — three-site registration (catalog-domain + manifest.non-family + aliases.generated).
 
-**Phase 3: Orchestrator + CJS-bridge + agent rewire**
-- Rationale: Once verbs exist, consumer migration is mechanical sweep
-- Delivers: `worktree-safety.cjs` body shrunk; `execute-phase.md` + `quick.md` raw-git deleted (~-300 LOC); `gsd-executor.md:412-555` collapsed; `workspace.assert-dispatched-cwd` SDK verb shipped
-- Research flag: Skip — pure mechanical lift
+**Avoids:** Pitfalls 3, 5, 6; Anti-Patterns 1 (no alias) and 3 (no mid-Agent process-killing).
 
-**Phase 4: A3 colocated pre-commit fix (parallel track)**
-- Rationale: Independent of 1-3; touches different files; joins at CI
-- Delivers: chosen fix-path implementation + regression test; hook idempotency audit
-- Research flag: **Re-read Phase 4 LEARNINGS Open Q1 source** at planning time
+### Phase 16 — Workflow + invariant tooling (2 plans, PARALLEL-SAFE)
 
-**Phase 5: CI parallel-path lane + lint close-gate**
-- Rationale: Validates verb in real CI before flipping default; runs lint sweep + audit-regex completeness
-- Delivers: new CI matrix lane; `scripts/audit-workflow-raw-git.cjs`; allowlist `$comment_v1_3_close`; removal sweep recorded
-- Research flag: Skip — established patterns
+**Rationale:** File-disjoint plans (16-01 = `scripts/` + `.github/workflows/`; 16-02 = `sdk/src/vcs/jj/parallel.ts` + `scripts/dogfood-restore.sh`). Independent of Phase 15 unless cancel (15-04) reuses the orphan-dir cleanup contract (it does — soft coupling but file-disjoint).
 
-**Phase 6: Default flip + migration + dogfood**
-- Rationale: Flip needs pre-flight + migration BEFORE dogfood; dogfood always last (Pitfall 10)
-- Delivers: `parallelization: true` default; `gsd-migrate-parallelization` command + brownfield-regression fixture; pre-flight in `parallel.dispatch`; dogfood with synthetic plans on isolated bookmark; metrics; pre-snapshot recovery procedure
-- Research flag: **Moderate research** — brownfield migration patterns (precedent `/gsd-migrate-vcs`)
+**Delivers:** workflow call-presence lint; orphan FS dir reap.
 
-### Research Flags Summary
+- **Plan 16-01 — Workflow call-presence lint.** New `scripts/lint-vcs-parallel-call-presence.cjs` + per-entry allowlist (no `expires` per `feedback_solo_dev_no_expires`) + fixture-based unit test + CI step in `parallel-e2e.yml`. Addresses Pitfall 7 by scoping lint to **shell fences only** (reuse `audit-workflow-raw-git.cjs` fence-aware walker) + default-deny + per-file allowlist for legitimate non-dispatchers like `code-review.md`/`audit-fix.md`. NOT pretest (`audit-workflow-raw-git.cjs` D-07 CI-only precedent). Inline escape: `vcs-lint:allow-parallel-call-absent-here <reason>`. Discuss-phase resolves Flag #3/#5: hard-fail (mirrors `lint-vcs-no-raw-git.cjs`); content-driven scope (literal substring match in bash fences), no heading-based tagging.
+- **Plan 16-02 — Orphan FS dir reap (`v14-orphan-jj-workspace-dirs`).** Extends `performJjParallelFanIn` clean-path branch with per-workspace `rmSync({recursive: true, force: true})` loop (do NOT extend the conflicted branch — preserves W3 (a) inspection contract). Extends `dogfood-restore.sh` with idempotent post-restore `find … -exec rm -rf` step. Pitfall 11 prevention: extract shared `cleanupSubagentWorkspaces(phaseRoot, phaseNumber)` helper as Wave 1 of this plan (single-owner: dispatcher fanIn; recovery script + cancel verb both consume the same helper). Same code path, no drift.
 
-| Phase | Need | Reason |
-|-------|------|--------|
-| 1 | Moderate | New repo-scoped lock contract; cross-workspace race probe on jj 0.41 |
-| 2 | Skip | Mechanical; git N-parent octopus fixture only |
-| 3 | Skip | Established mechanical-sweep pattern |
-| 4 (A3) | Re-read source | Phase 4 LEARNINGS Open Q1 (archived commit `51ee72a3`) for path-choice ground truth |
-| 5 | Skip | v1.0 CI-04 + v1.2 lint-as-enforcer established |
-| 6 | Moderate | Default-flip is contract change; pre-flight + migration test fixture |
+**Avoids:** Pitfalls 7, 11; Anti-Patterns 4 (no pretest) and 5 (no conflicted-branch reap).
+
+### Phase 17 — Drift control + reconciliation (4 plans, MOSTLY PARALLEL with strict 17-01→17-02 ordering)
+
+**Rationale:** Forces fix-then-test ordering to prevent Pitfall 4 day-1-red-CI. PROJECT.md reconciliation runs LAST (IP-4 prevention) so it captures v1.4's own REQ-IDs.
+
+**Delivers:** drift-control tests; ARCHITECTURE.md prose-count fixes (en + 3 translations); PROJECT.md `### Validated` reconciliation; remaining docs-update themes 1-5+7+8.
+
+- **Plan 17-01 — ARCHITECTURE.md prose-count fixes FIRST (Wave 1).** Per-translation fix: `ja-JP/ARCHITECTURE.md` (4 known drift sites: :116, :127, :137, :427), `ko-KR/ARCHITECTURE.md`, `pt-BR/ARCHITECTURE.md`. En source defers to INVENTORY.md per current pattern (audit confirms :121, :143). zh-CN does NOT exist; do not create.
+- **Plan 17-02 — Drift-control tests SECOND (Wave 2, must cite 17-01 completion).** New `tests/architecture-counts.test.cjs` + `tests/command-count-sync.test.cjs`. Verbatim copy of `tests/inventory-counts.test.cjs` shape: `node:test` framework, regex-extract prose claim + `fs.readdirSync().length` actual, `assert.strictEqual`. Both sides computed at runtime — no hardcoded numbers, no snapshots. Discuss-phase resolves Flag #4: keep as TWO files (honor the names INVENTORY.md theme 6 calls out; cross-link via comment). **Tests are GREEN on land** because 17-01 fixed the drift first. Addresses Pitfall 4 + Anti-Pattern 2 (no vitest pollution; `tests/` `node:test` only).
+- **Plan 17-03 — v14-docs-verify-only-followups themes 1-5, 7, 8 (batched plan, per-theme commits within).** Pitfall 12 triage: theme 3 (ADR drift) gets append-only "## Update YYYY-MM-DD" supersession notes (NOT in-place edit); theme 5 (phase-3 archived references) anchored to change_ids/commits (NOT deleted); theme 6 (drift-control tests claimed but missing) RESOLVED by 17-02. Per-theme decisions recorded in `.planning/intel/docs-update-fix-triage.md` BEFORE execute.
+- **Plan 17-04 — PROJECT.md `### Validated` reconciliation (LAST plan of v1.4, IP-4 ordering).** Two-pass approach: machine-generated truth source at `.planning/intel/project-validated-truth.md` (the SoT); human-edited PROJECT.md narrative cites the truth source and preserves hand-curated parentheticals like "(caveat: A3 colocated pre-commit gap remains open, see Active)". Pitfall 8 prevention: NOT a full regenerate-overwrite. Includes v1.4's OWN REQ-IDs (matchPrefix, idAlphabet, cancel, rename, drift-tests) — that's why this runs LAST.
+
+**Avoids:** Pitfalls 4, 8, 12; Anti-Pattern 2; IP-1 (rename ships in Phase 15, before drift-tests in Phase 17 — auto-resolves); IP-4 (reconciliation LAST).
+
+### Phase 18 — Tactical cleanup (3 plans, PARALLEL-SAFE; the cleanup-helper extraction is Wave 1)
+
+**Rationale:** All v14-* todos that didn't fold into earlier phases. Each touches different files; parallel-safe. The `cleanupSubagentWorkspaces` helper extraction (Pitfall 11) happened in Phase 16-02 — Phase 18 plans consume it.
+
+**Delivers:** transition.md gate, WR-NN review-followups, jj-reap flake fix.
+
+- **Plan 18-01 — `v14-transition-md-update-gap` (HIGHEST PRIORITY; Pitfall 2 prevention).** Apply the Phase 14 quick-task pattern (`assert_clean_wc` + reorder mutation/commit pair) to `transition.md:166`. Should land FIRST in any v1.4 wave that touches workflows — otherwise other v1.4 workflow changes risk re-triggering the false-clean pattern.
+- **Plan 18-02 — `v14-review-followups` (WR-01..05 + 5 info items).** Pitfall 10 prevention: **per-WR commits** (or per-WR delimited sections of one commit), each with its own verification test. Order: prod-code fixes (WR-03 `Array.isArray`, WR-04 `Number.isNaN`) FIRST, then script fixes (WR-01 project-root assertion in `dogfood-restore.sh`, WR-02 tar overlay decision), then test fixes (WR-05 `afterEach` rm). Info findings addressed opportunistically when adjacent files are touched (NOT forced into milestone if no adjacent fix lands).
+- **Plan 18-03 — `v14-jj-reap-test-flake`.** Narrow scope per Pitfall 9: per-test fix only (`it.timeout(15_000)` as first try; `concurrent: false` at describe-block only if (a) is verified insufficient via bisection). Diff ≤5 LOC, ≤1 file, vitest.config.ts UNTOUCHED, check-skip-count.cjs green. Out-of-scope reaffirmation in plan CONTEXT.md citing PROJECT.md OOS clause verbatim. No `retry: N`, no broader vitest reorg.
+
+**Avoids:** Pitfalls 2, 9, 10; the `project_test_perf_pain_vitest` scope-creep temptation.
+
+### Phase Ordering Rationale
+
+- **Phase 15 first** because the adapter surface is consumed by every other phase, and Plan 15-01 (rename) auto-resolves IP-1 (rename + drift-test interaction) by landing before Phase 17's drift-control tests.
+- **Phase 16 second** because Plan 16-02 (cleanup-helper extraction) is a soft prerequisite for Plan 15-04 (cancel) — if Phase 15 ships first, cancel inlines the cleanup (refactored out in Phase 16-02); if Phase 16 ships first, cancel consumes the helper directly. Order is flexibility-preserving.
+- **Phase 17 third** because Plan 17-04 (PROJECT.md reconciliation) is IP-4 — must run AFTER all deferred-item-harvest plans complete to capture v1.4's own REQ-IDs.
+- **Phase 18 fourth** because the v14-* todos are file-disjoint and lowest-priority; they can drop into any wave. Phase 18 is the natural "everything else" bucket.
+
+The dependency graph collapses to: **Plan 15-01 (rename) → Plan 15-02 (idAlphabet) → Plan 15-03 (matchPrefix) → Plan 15-04 (cancel) | Plan 17-01 (drift-fix) → Plan 17-02 (drift-tests) | Plan 17-04 (reconciliation) LAST**. Everything else is parallel-safe.
+
+### Research Flags
+
+Phases that likely need deeper research during planning:
+
+- **Phase 15 (especially Plan 15-04 `parallel.cancel`):** The STACK↔FEATURES conflict on cancellation semantics has been synthesized to a recommendation (synchronous-teardown-only), but discuss-phase MUST explicitly adopt this resolution. Specifically: confirm the `CancelResult` shape (`{abandoned: readonly string[], surplusBookmarks: readonly string[], surplusWorkspaces: readonly string[]}`-style, mirroring `FanInResult`), confirm cancel does NOT signal subagents, confirm cancel reuses the shared cleanup helper. PITFALLS Pitfall 5 is the deciding analysis.
+- **Phase 16 (Plan 16-01 lint scope decision):** Discuss-phase must enumerate the closed dispatch-relevant-workflows set (currently only `execute-phase.md` + `quick.md`) and the false-positive-risk workflows (`code-review.md`, `audit-fix.md`). Pitfall 7's "scope by SHELL FENCE not by prose mention" is the architectural recommendation; confirm content-driven detection over heading-based tagging.
+- **Phase 17 (Plan 17-02 drift-test framework + Flag #4 file-count decision):** Discuss-phase resolves whether `command-count-sync.test.cjs` is distinct from `architecture-counts.test.cjs` or should merge. Recommendation: keep TWO files (honor INVENTORY.md theme 6 names; cross-link via comment).
+
+Phases with standard patterns (lighter research needed):
+
+- **Phase 15 Plans 15-01 (rename), 15-02 (idAlphabet)**: mechanical sweeps with HIGH-confidence precedent (v1.2 `LogEntry.hash → .id` rename + existing alphabet probe at `jj-id-alphabet-probe.test.ts`).
+- **Phase 18 all plans:** narrow-scope tactical fixes; each todo's `## Acceptance criteria` is the verbatim spec.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Every primitive verified via live `file:line`; no new deps; negative findings documented |
-| Features | HIGH (substrate); MEDIUM (final verb-name, edge-case result-shape) | Existing surfaces shipped + tested; tension on naming, planner-decisions on cancel/conflict-during-fan-in shape |
-| Architecture | HIGH | Live `file:line` everywhere; pre-emptive corrections (lint-allowlist framing, ADR-0004 ownership) saved cycles; build-order graph documented |
-| Pitfalls | HIGH (codebase-grounded); MEDIUM (Pitfall 3 liveness probe primitive, Pitfall 9 test-flake budget) | Each cites prior incident or jj 0.41 verified behavior |
+| Stack | HIGH | Every cited file:line verified via Read/Bash; AbortController/spawnSync claims verified via runtime probe + Node.js official docs. Zero net-new dependencies eliminates most stack risk. |
+| Features | HIGH | Direct prior art exists for every item (`tests/inventory-counts.test.cjs` is verbatim template for drift-control tests; `lint-vcs-no-raw-git.cjs` is verbatim template for call-presence lint; v1.2 `LogEntry.hash → .id` is verbatim precedent for rename). 3 independent industry precedents per ambiguous item (Tokio/GNU parallel/GitHub Actions for cancel; Git/jj/internal-regex for matchPrefix; actionlint/lint-vcs-no-raw-git/audit-workflow-raw-git for lint). |
+| Architecture | HIGH | Every claim grounded in existing repo state or v1.3 precedent. File counts and call-site enumeration verified via grep. Three-site CLI registration pattern documented at exact file paths. |
+| Pitfalls | HIGH | Every pitfall cites per-incident artifacts in `.planning/` (v1.2 retro CR-01, Phase 14 quick-task audit table, etc.). PITFALLS research's 21-item "Looks Done But Isn't" checklist provides direct milestone-close gating. |
 
-**Overall confidence:** HIGH on what to build; MEDIUM on three cross-dimension tensions needing decisions before requirements lock.
+**Overall confidence:** HIGH. This is a closed-acceptance cleanup milestone with verified prior art for every category of work.
 
 ### Gaps to Address
 
-- **A3 fix-path source re-read** — Phase 4 LEARNINGS Open Q1 (archived `51ee72a3`) at discuss-phase to ground FEATURES vs PITFALLS recommendation disagreement (Tension 3)
-- **PROJECT.md "collapses to zero" framing** — needs correction before requirements lock (Tension 4)
-- **Verb-namespace shape** — recommend `vcs.workspace.parallel.*` (Tension 1); lock at requirements time
-- **Liveness probe primitive** (Pitfall 3) — exact mechanism needs empirical Phase 1/2 probe
-- **Phase count** — synthesizer suggests 6 as middle ground; roadmapper picks (Tension 2)
+The synthesis surfaces three genuine open questions that require discuss-phase decisions (not research gaps — design choices):
+
+- **Cancel semantics (Flag #2, FEATURES.md):** STACK and FEATURES research arrived at OPPOSITE recommendations. **Recommendation: adopt STACK lens (synchronous teardown only)** per Pitfall 5 analysis. Discuss-phase must explicitly affirm this and reject the "mixed SIGTERM/SIGKILL with partial-completion enum" alternative as out-of-scope. The "interrupt mid-Agent" use case requires a separate `vcsExecAsync` primitive — defer to a future milestone if ever justified.
+- **`idAlphabet` return shape (Flag #1, FEATURES.md vs ARCHITECTURE.md):** FEATURES recommends structured `{kind, chars, minLen, maxLen}`; ARCHITECTURE recommends opaque `string`. **Recommendation: opaque `string`** per ARCHITECTURE.md ("matches the JSDoc framing as a `RegExp` character-class body; typed enum would force callers to switch on backend kind, defeating the unified-revision-model invariant"). YAGNI applies: ship the bare alphabet; consumers compose `^[${alphabet}]+$` themselves; widen to structured later if a real consumer needs it.
+- **Drift-test file-count (Flag #4, FEATURES.md):** Whether `architecture-counts.test.cjs` and `command-count-sync.test.cjs` ship as 2 files (honor INVENTORY.md theme 6 names) or 1 merged. **Recommendation: 2 files** (theme 6 specifically names both; single-responsibility; separate failure messages). Cross-link via comment.
+
+Operator-facing caveat to document at milestone close: the global install at `~/.claude/get-shit-done/workflows/` still has the OLD workflow until the operator runs `node bin/install.js --claude --global`. The v1.4 workflow gate fixes only protect FUTURE installs unless the operator reinstalls. Per Pitfall 2 prevention guidance and the `feedback_workflow_assert_clean_wc` memory.
 
 ## Sources
 
-### Primary (HIGH — live `file:line` cited)
+### Primary (HIGH confidence — verified at research time)
 
-- `sdk/src/vcs/types.ts:1-579`
-- `sdk/src/vcs/backends/git.ts:1-945` + `jj.ts:1045-1390`
-- `sdk/src/vcs/jj/octopus.ts:1-324` + `reap.ts:1-198` + `lock.ts:80-152`
-- `sdk/src/vcs/exec.ts`
-- `sdk/src/vcs/__tests__/jj-octopus.test.ts:41-47` (Pattern A)
-- `bin/lib/worktree-safety.cjs:402, 417-516, 559-571`
-- `get-shit-done/workflows/execute-phase.md:521-810` + `quick.md:660-810`
-- `agents/gsd-executor.md:412-555`
-- `scripts/lint-vcs-no-raw-git.cjs:63, 85-91` + `lint-vcs-no-raw-git.allow.json`
-- `.planning/PROJECT.md:1-167` + `RETROSPECTIVE.md:1-83` + `MILESTONES.md` (v1.1 Plan 02) + `STATE.md:79-80`
+- `.planning/research/STACK.md` — 6-item stack analysis with file:line citations; consolidated 16-item "NOT adding" anti-pattern fence; composite version-floor matrix.
+- `.planning/research/FEATURES.md` — 4-category feature breakdown; 3 industry precedents per ambiguous item; 5 ambiguity flags; recommended phase ordering.
+- `.planning/research/ARCHITECTURE.md` — 8-item architecture analysis with file:line file-change tables; 5 anti-patterns; 4-phase recommended build order; per-item data flow diagrams.
+- `.planning/research/PITFALLS.md` — 12 pitfalls (6 critical + 6 moderate) + 5 integration pitfalls + tech-debt table + 21-item "Looks Done But Isn't" checklist + per-pitfall recovery strategies.
+- `.planning/PROJECT.md` (v1.4 scope authority)
+- `.planning/MILESTONES.md` (v1.0–v1.3 closed milestones)
+- `.planning/RETROSPECTIVE.md` (v1.2 + v1.3 retros — direct precedents for Pitfalls 3, 5, 7, 11)
+- `.planning/todos/pending/v14-*.md` (5 todos — the verbatim spec for tactical-cleanup phase)
+- `sdk/src/vcs/types.ts:336-518` (insertion points for all new methods + rename target)
+- `sdk/src/vcs/exec.ts:1-54` (`spawnSync`-only exec surface — load-bearing constraint for cancel)
+- `sdk/src/vcs/__tests__/jj-id-alphabet-probe.test.ts:49-75` (alphabet disjointness empirical probe)
+- `tests/inventory-counts.test.cjs:1-64` (verbatim template for drift-control tests)
+- `scripts/lint-vcs-no-raw-git.cjs:1-165` (verbatim shape source for call-presence lint)
+- `scripts/audit-workflow-raw-git.cjs:39-50,98-130` (fence-aware markdown walker reuse target)
 
-### Secondary (MEDIUM)
+### Secondary (MEDIUM confidence — community/industry precedents)
 
-- jj-vcs.dev (octopus, working-copies, branches)
-- Claude Code worktree-isolation docs
-- Bazel/Buck2/Nx/Turbo fan-out + concurrency-cap patterns
-- Phase 4 LEARNINGS Open Q1 (archived `51ee72a3`)
+- Tokio `JoinSet::abort_all`/`shutdown` docs — cancel API shape precedent
+- GNU `parallel --halt-on-error` tutorial — cancel partial-completion shape (RECOMMENDED AGAINST per Pitfall 5 reconciliation)
+- GitHub Actions matrix `fail-fast` + `cancel-in-progress` — cancel two-stage precedent
+- Git `core.abbrev` + `rev-parse --short` docs — auto-lengthening prefix precedent
+- Jujutsu ID prefix index (Frere blog + jj glossary) — `k-z` reverse-hex alphabet documentation
+- actionlint — "section declares X but never calls Y" lint shape precedent
+- Jest/Vitest snapshot testing docs — drift-control INVERTED shape (RECOMMENDED AGAINST per FEATURES §2.4)
 
-### Tertiary (LOW — flagged)
+### Tertiary (LOW confidence — none in this milestone)
 
-- A3 Path C feasibility (no upstream jj fix; rejected by all relevant researchers)
-- Liveness probe primitive choice (Pitfall 3)
-- Default-flip release-train shape (Pitfall 8)
+No tertiary sources required; every recommendation traces to a HIGH or MEDIUM source. The closed-acceptance cleanup nature of v1.4 means every item has either a verbatim precedent in the repo or a direct industry standard.
 
-### Project memory consulted
-
-`project_no_parallelization_yet`, `project_no_raw_git`, `project_a3_colocated_pre_commit_gap`, `project_squash_model`, `project_unified_revision_model`, `project_test_perf_pain_vitest`, `feedback_baseline_is_correctness_not_perf`, `feedback_solo_dev_no_expires`, `feedback_sdk_commit_jj_safe`, `project_migration_boundary`.
+---
+*Research completed: 2026-05-23*
+*Ready for roadmap: yes*
