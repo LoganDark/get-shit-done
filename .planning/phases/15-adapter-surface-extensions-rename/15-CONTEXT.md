@@ -48,7 +48,7 @@ These were settled by research + roadmap creation; downstream agents MUST NOT re
 
 ### rootCommits Rename Audit JSON Schema
 
-- **D-09:** Audit emitted at **`.planning/phases/15/rootCommits-rename-audit.json`** with **grouped-by-extension** schema:
+- **D-09:** Audit emitted at **`.planning/phases/15-adapter-surface-extensions-rename/rootCommits-rename-audit.json`** with **grouped-by-extension** schema (amended 2026-05-24 from the original `.planning/phases/15/...` numeric-dir form to the slug-matched form per anchor A5 in RESEARCH.md — slug-matched matches the v1.4 phase-directory naming convention and prevents creating a sibling polluting `.planning/phases/`):
 
   ```json
   {

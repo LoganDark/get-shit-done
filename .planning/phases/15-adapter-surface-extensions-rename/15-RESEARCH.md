@@ -21,7 +21,7 @@ Two findings refine numbers stated in CONTEXT.md:
 | `vcs.refs.idAlphabet` (introspection) | SDK adapter surface (`types.ts` + both backends) | — | Pure data; lives where the rest of `refs.*` lives. No CLI bridge (no production caller). |
 | `vcs.refs.matchPrefix(id, prefix)` (alphabet-aware match) | SDK adapter surface (`types.ts` + both backends) | — | Pure function on adapter; per-backend body hard-codes alphabet inline matching `validateRefname` precedent. No CLI bridge (CF-deferred — no production caller in v1.4). |
 | `vcs.workspace.parallel.cancel(handle)` (synchronous teardown) | SDK adapter sidecars (`jj/parallel.ts` + `git/parallel.ts`) + cross-backend type + new CLI bridge | Phase 16 helper consumer | Composition over `workspace.forget` + `rmSync` (jj) / `worktree remove --force` (git) + `bookmarks.delete({force:true})`; the per-workspace teardown lives in a shared sidecar (`jj/workspace-cleanup.ts`) consumed by Phase 16 fanIn clean-path + dogfood-restore.sh. |
-| `cleanupSubagentWorkspaces(phaseRoot, phaseNumber)` (shared helper) | SDK sidecar (`sdk/src/vcs/jj/workspace-cleanup.ts`) | — | jj-only by current scope; v1.3 sidecar pattern (`conflict-paths.ts`, `incomplete-work.ts`); does NOT import from `backends/jj.ts` (UPSTREAM-02). |
+| `cleanupSubagentWorkspaces(mainRepoRoot, phaseNumber)` (shared helper) | SDK sidecar (`sdk/src/vcs/jj/workspace-cleanup.ts`) | — | jj-only by current scope; v1.3 sidecar pattern (`conflict-paths.ts`, `incomplete-work.ts`); does NOT import from `backends/jj.ts` (UPSTREAM-02). First param is `mainRepoRoot` (not `phaseRoot` as in CONTEXT D-05 — OQ2 resolution; subagent workspaces live at `<mainRepoRoot>/.claude/jj-workspaces/...`). |
 | `rootCommits` → `rootRevisions` rename | SDK adapter surface + production callers + tests | Planning prose docs | Cosmetic mechanical sweep — type + 2 impls + 1 CJS + 1 TS query + 5 test sites + 1 capability-matrix string literal + active v1.4 planning docs. |
 | Pre-rename audit emitter | One-shot Node script at `scripts/audit-root-commits-rename.cjs`; stdout-only | — | Mirrors `scripts/audit-id-namespace.cjs` (v1.2 audit precedent); JSON sidecar is written by the *caller* (plan 15.01 task), not the script itself, per `feedback_avoid_jj_auto_tracked_output`. |
 
@@ -1240,27 +1240,41 @@ export const workspaceParallelCancelQuery: QueryHandler = async (args, projectDi
 | A6 | The `phaseRoot` argument to `cleanupSubagentWorkspaces` is actually the **main repo root** (not the phase directory under `.planning/`), because subagent workspaces live at `<mainRepoRoot>/.claude/jj-workspaces/...` | Helper Sidecar Pattern | If interpreted as `.planning/phases/{NN}/` directory, the helper enumerates the wrong filesystem path → 0 workspaces found → silent no-op. Recommend renaming the parameter to `mainRepoRoot` for clarity, OR confirming the path semantics with user. |
 | A7 | `pnpm test` is the appropriate command for the full SDK suite, and the `sdk/` workspace runs via `pnpm --filter sdk` | Validation Architecture / Sampling Rate | Wrong invocation → no tests run → false-positive green CI. Verifier must confirm the exact pnpm invocation pattern. |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+Resolved by planner during /gsd:plan-phase 15. Each question carries an inline `RESOLVED:` marker pointing to the plan-level resolution.
 
 1. **Should active v1.4 `.planning/research/*.md` files have `rootCommits` → `rootRevisions` renamed, or treated as historical-prose like the archive?**
    - What we know: ROADMAP SC1 excludes only `.archive-pre-v1.4/` and `v1.2-research/` explicitly. The active research files contain 28 hits combined (14 ARCHITECTURE + 11 PITFALLS + 3 SUMMARY).
-   - What's unclear: whether 15.01 must drive `.md` count to 0 across all `.md` files, or whether `.planning/` is implicitly a historical-prose carve-out.
-   - Recommendation: planner asks user during 15.01 plan-phase; default policy "rename PROJECT.md + STATE.md active sections + leave research/intel/seeds historical-prose."
+   - What's unclear (was): whether 15.01 must drive `.md` count to 0 across all `.md` files, or whether `.planning/` is implicitly a historical-prose carve-out.
+   - Recommendation (was): planner asks user during 15.01 plan-phase; default policy "rename PROJECT.md + STATE.md active sections + leave research/intel/seeds historical-prose."
+   - **RESOLVED:** Plan 15-01 truth #9 — carve out `.planning/research/`, `.planning/intel/`, `.planning/milestones/`, and `.planning/phases/<prior-numbered>/` as historical-prose; rename only `.planning/PROJECT.md` and `.planning/STATE.md` active sections. SC1's `grep -c` invariant applies to production-code extensions (`.ts` `.cjs` `.js`), not `.md`. See `15-01-PLAN.md` must_haves.truths.
 
 2. **Should `cleanupSubagentWorkspaces` parameter be `phaseRoot` (per CONTEXT D-05) or `mainRepoRoot` (per actual filesystem semantics)?**
    - What we know: subagent workspaces live at `<mainRepoRoot>/.claude/jj-workspaces/...` per `octopus.ts:302`. The CONTEXT D-05 signature names the first param `phaseRoot: string` which is misleading.
-   - What's unclear: whether D-05 anticipated `phaseRoot = .planning/phases/{NN}/` (semantically wrong) or just used the wrong variable name.
-   - Recommendation: rename to `mainRepoRoot` in implementation; flag the divergence from CONTEXT.md in plan 15.04 task description.
+   - What's unclear (was): whether D-05 anticipated `phaseRoot = .planning/phases/{NN}/` (semantically wrong) or just used the wrong variable name.
+   - Recommendation (was): rename to `mainRepoRoot` in implementation; flag the divergence from CONTEXT.md in plan 15.04 task description.
+   - **RESOLVED:** Plan 15-04 truth #7 — signature is `cleanupSubagentWorkspaces(mainRepoRoot: string, phaseNumber: number): CleanupSubagentWorkspacesResult`. The `phaseRoot` name in CONTEXT D-05 was a naming slip; A6 confirms the parameter actually receives the main repo root (`<mainRepoRoot>/.claude/jj-workspaces/phase-${phaseNumber}-subagent-*` enumeration path). JSDoc `@param mainRepoRoot` documents the divergence-from-D-05. The Architectural Responsibility Map row in this file (above) has been updated to match. See `15-04-PLAN.md` must_haves.truths.
 
 3. **Should plan 15.01 use a single commit (audit + rename together) or two commits (audit landed first, rename second)?**
    - What we know: D-12 says audit-generation and rename steps must run in adjacency (no other commits between). This is ambiguous — adjacency could mean "back-to-back" (two commits) or "same commit."
-   - What's unclear: whether the audit JSON is meant to be committed at all, or just generated as a verification artifact and discarded.
-   - Recommendation: plan 15.01 commits the audit JSON to `.planning/phases/15-…/rootCommits-rename-audit.json` then runs rename in the immediate next commit. This gives a recoverable artifact + adjacency guarantee.
+   - What's unclear (was): whether the audit JSON is meant to be committed at all, or just generated as a verification artifact and discarded.
+   - Recommendation (was): plan 15.01 commits the audit JSON to `.planning/phases/15-…/rootCommits-rename-audit.json` then runs rename in the immediate next commit. This gives a recoverable artifact + adjacency guarantee.
+   - **RESOLVED:** Plan 15-01 Task 1 (audit) + Task 2 (rename) — two adjacent commits. Audit JSON committed first to slug-matched path (per OQ4 resolution); rename committed in the immediate next commit. Adjacency verified post-hoc via `jj log -r 'description("audit") | description("rename")' --no-graph -T 'description.first_line()'` returning exactly two adjacent entries. See `15-01-PLAN.md` Task structure.
 
 4. **Does plan 15.02 add `'refs.idAlphabet'` to `BACKENDS_AVAILABLE_FOR_VERB`, or is the verb implicitly always-available (no per-verb gate)?**
    - What we know: existing verbs (e.g., `'refs.rootCommits'`) are explicitly listed. The pattern suggests yes.
-   - What's unclear: is `idAlphabet` a method (verb) or a readonly property (data)? Per CF-03, opaque `readonly string` — it's data, not a method.
-   - Recommendation: planner adds the entry anyway for consistency with the test harness's `ready(verb)` gate.
+   - What's unclear (was): is `idAlphabet` a method (verb) or a readonly property (data)? Per CF-03, opaque `readonly string` — it's data, not a method.
+   - Recommendation (was): planner adds the entry anyway for consistency with the test harness's `ready(verb)` gate.
+   - **RESOLVED:** Plan 15-02 truth #4 — `BACKENDS_AVAILABLE_FOR_VERB['refs.idAlphabet'] = ['git', 'jj-colocated']`. Even though `idAlphabet` is a readonly data property rather than a method, the capability-matrix entry is added for consistency with the `test.skipIf(!ready('refs.idAlphabet'))` gate pattern in `adapter-contract.test.ts`. Plan 15-03 truth #5 applies the same treatment for `'refs.matchPrefix'`; plan 15-04 truth #14 for `'workspace.parallel.cancel'`. See `15-02-PLAN.md` must_haves.truths.
+
+## Anchor-Numbered Resolutions
+
+Two further documentation-cite items surfaced by the plan-checker (Iteration 1) are anchored, but were NOT framed as Open Questions in the original research run:
+
+- **A5 (audit JSON path)** — `RESOLVED:` Plan 15-01 truth #5 + Task 1 emit path. Path is `.planning/phases/15-adapter-surface-extensions-rename/rootCommits-rename-audit.json` (slug-matched). This diverges from CONTEXT.md D-09 which names `.planning/phases/15/...` (numeric-dir). The slug-matched path follows the v1.4 phase-directory naming convention (`{NN}-{slug}`) — the numeric-dir form would create a sibling polluting `.planning/phases/`. The plan flags this as a planner-discretion amendment to D-09; the CONTEXT.md author can affirm via the CONTEXT-amendments mechanism if desired.
+
+- **A6 (helper param semantics)** — `RESOLVED:` see OQ2 above (`mainRepoRoot` chosen). The Architectural Responsibility Map row earlier in this document has been updated to match the resolved signature.
 
 ## Sources
 
