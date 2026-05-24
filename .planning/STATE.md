@@ -226,6 +226,7 @@ All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQU
 | Cleanup | Orphan `jj-workspace` directories left behind by dispatch; see [v14-orphan-jj-workspace-dirs](./todos/pending/v14-orphan-jj-workspace-dirs.md) | **IN-SCOPE for v1.4 Phase 16 plan 16.02** (REQ: CLEANUP-02) | v1.3 close (promoted in v1.4) |
 | Reviews | Phase 14 review followups (CR-01 closed, additional WR-* items pending); see [v14-review-followups](./todos/pending/v14-review-followups.md) | **IN-SCOPE for v1.4 Phase 18 plan 18.02** (REQs: CLEANUP-03..07) | v1.3 close (promoted in v1.4) |
 | Docs | `transition.md` update-gap (`update_roadmap_and_state` step lacks immediate commit); see [v14-transition-md-update-gap](./todos/pending/v14-transition-md-update-gap.md) | **IN-SCOPE for v1.4 Phase 18 plan 18.01** (REQ: CLEANUP-01) | v1.3 close (promoted in v1.4) |
+| API | MERGE-08 `WorkspaceMergeOpts.mainBookmark` revision (paired with PARALLEL-08 strict scope decision; zero non-test production callers) | Filed v1.4 Phase 14.1 (deferred until a real caller emerges; see REQUIREMENTS.md for full rationale) | v1.4 Phase 14.1 |
 
 ## Session Continuity
 

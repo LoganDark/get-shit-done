@@ -456,6 +456,249 @@ describe.sequential.skipIf(!jjAvailable)(
 	},
 );
 
+// ───────────────────────────────────────────────────────────────────────────
+// PARALLEL-08 (Phase 14.1 SC5) scenarios: 3 new describes covering the
+// bookmark-less / empty-mainBookmarks / all-or-nothing-validation surface
+// the type rename + CF-02 fan-in loop landed in this same plan.
+//
+// Pattern reuse:
+//   - setupJjRepo IS bookmark-less by construction (no `jj bookmark create main`
+//     in setup per RESEARCH Pitfall 5) — REUSE AS-IS for scenario 1.
+//   - Pattern A (`describe.sequential.skipIf(!jjAvailable)`) + Pattern B
+//     (`mkdtemp` random suffix) preserved per W2 lifecycle lock-in.
+//   - User preference (per CONTEXT Discretion item): new describes get grep
+//     affordance via `'workspace.parallel — ... (PARALLEL-08 SC5 scenario N)'`
+//     in the describe title.
+// ───────────────────────────────────────────────────────────────────────────
+
+describe.sequential.skipIf(!jjAvailable)(
+	'workspace.parallel — bookmark-less / empty mainBookmarks (PARALLEL-08 SC5 scenario 1)',
+	() => {
+		let dir: string;
+		let vcs: ReturnType<typeof createJjAdapter>;
+
+		beforeAll(() => {
+			// setupJjRepo() is bookmark-less by construction — no `jj bookmark
+			// create main` in the seed (Pitfall 5).
+			dir = setupJjRepo();
+			vcs = createJjAdapter(dir);
+		});
+
+		afterAll(() => {
+			if (dir) rmSync(dir, { recursive: true, force: true });
+		});
+
+		it('empty mainBookmarks: fan-in skips bookmark set, merge lands at @', { timeout: 30000 }, () => {
+			const handle = vcs.workspace.parallel.dispatch({
+				plan: [
+					{ agentId: 'agent-1', planId: 'plan-1' },
+					{ agentId: 'agent-2', planId: 'plan-2' },
+				],
+				phaseNumber: 9,
+				// mainBookmarks intentionally OMITTED — tests the undefined
+				// → frozen([]) default path.
+			});
+			// Pre-fan-in probe: `main` does not exist as a bookmark in this repo.
+			const preProbe = execSync(
+				`jj log -r 'present(main)' --no-graph -T 'change_id ++ "\\n"' --repository ${dir}`,
+				{ encoding: 'utf-8' },
+			).trim();
+			expect(preProbe).toBe('');
+
+			// Simulate clean work in each workspace (mirrors the existing
+			// N=2/3/4 scenarios at lines 153-167 — agent-i edits agent-i.txt).
+			for (let i = 0; i < handle.workspaces.length; i++) {
+				const ws = handle.workspaces[i];
+				writeFileSync(
+					join(ws.path, `agent-${i + 1}.txt`),
+					`clean work ${i + 1}\n`,
+				);
+				execSync(`jj squash -B @ -k -m "subagent ${i + 1} clean"`, {
+					cwd: ws.path,
+					stdio: 'pipe',
+				});
+			}
+
+			// Fan-in with empty mainBookmarks: must succeed and skip the
+			// bookmark advance step entirely.
+			const result = vcs.workspace.parallel.fanIn(
+				handle,
+				handle.workspaces.map((w) => ({
+					agentId: w.agentId,
+					exitCode: 0,
+				})),
+			);
+			expect(result.conflicted).toBe(false);
+			expect(result.merged.length).toBe(1);
+
+			// Post-fan-in probe: `main` STILL does not exist as a bookmark.
+			// The merge landed at @ via the N-parent `jj new`; no `jj bookmark
+			// set main` ever ran. CF-02 contract: "skip the advance entirely
+			// when mainBookmarks is empty/omitted."
+			const postProbe = execSync(
+				`jj log -r 'present(main)' --no-graph -T 'change_id ++ "\\n"' --repository ${dir}`,
+				{ encoding: 'utf-8' },
+			).trim();
+			expect(postProbe).toBe('');
+		});
+	},
+);
+
+describe.sequential.skipIf(!jjAvailable)(
+	'workspace.parallel — non-empty mainBookmarks advance (PARALLEL-08 SC5 scenario 2)',
+	() => {
+		let dir: string;
+		let vcs: ReturnType<typeof createJjAdapter>;
+
+		beforeAll(() => {
+			dir = setupJjRepo();
+			vcs = createJjAdapter(dir);
+		});
+
+		afterAll(() => {
+			if (dir) rmSync(dir, { recursive: true, force: true });
+		});
+
+		it('mainBookmarks: [name1, name2] advances each name to merge head', { timeout: 30000 }, () => {
+			const handle = vcs.workspace.parallel.dispatch({
+				plan: [
+					{ agentId: 'agent-1', planId: 'plan-1' },
+					{ agentId: 'agent-2', planId: 'plan-2' },
+				],
+				phaseNumber: 9,
+				// TWO names — jj `bookmark set` is CREATE-or-UPDATE, so neither
+				// needs to pre-exist. Both advance to the merge head at @
+				// post-fan-in.
+				mainBookmarks: ['release', 'integration'],
+			});
+
+			// Simulate clean work.
+			for (let i = 0; i < handle.workspaces.length; i++) {
+				const ws = handle.workspaces[i];
+				writeFileSync(
+					join(ws.path, `agent-${i + 1}.txt`),
+					`clean work ${i + 1}\n`,
+				);
+				execSync(`jj squash -B @ -k -m "subagent ${i + 1} clean"`, {
+					cwd: ws.path,
+					stdio: 'pipe',
+				});
+			}
+
+			const result = vcs.workspace.parallel.fanIn(
+				handle,
+				handle.workspaces.map((w) => ({
+					agentId: w.agentId,
+					exitCode: 0,
+				})),
+			);
+			expect(result.conflicted).toBe(false);
+			expect(result.merged.length).toBe(1);
+			const mergeChangeId = result.merged[0];
+
+			// Both names resolve to the merge head change_id.
+			const releaseChange = execSync(
+				`jj log -r 'release' --no-graph -T 'change_id ++ "\\n"' --repository ${dir}`,
+				{ encoding: 'utf-8' },
+			).trim();
+			const integrationChange = execSync(
+				`jj log -r 'integration' --no-graph -T 'change_id ++ "\\n"' --repository ${dir}`,
+				{ encoding: 'utf-8' },
+			).trim();
+			expect(releaseChange).toBe(mergeChangeId);
+			expect(integrationChange).toBe(mergeChangeId);
+		});
+	},
+);
+
+describe.sequential.skipIf(!jjAvailable)(
+	'workspace.parallel — all-or-nothing pre-validation (PARALLEL-08 SC5 scenario 3)',
+	() => {
+		let dir: string;
+		let vcs: ReturnType<typeof createJjAdapter>;
+
+		beforeAll(() => {
+			dir = setupJjRepo();
+			vcs = createJjAdapter(dir);
+		});
+
+		afterAll(() => {
+			if (dir) rmSync(dir, { recursive: true, force: true });
+		});
+
+		it('non-empty mainBookmarks with one invalid name throws BEFORE any bookmark set; no partial advance', { timeout: 30000 }, () => {
+			const handle = vcs.workspace.parallel.dispatch({
+				plan: [
+					{ agentId: 'agent-1', planId: 'plan-1' },
+					{ agentId: 'agent-2', planId: 'plan-2' },
+				],
+				phaseNumber: 9,
+				// `bad ref` trips validateMainBookmark's
+				// /^[A-Za-z0-9._/-]+$/ rejection — SPACE is not in the
+				// character class. (Consecutive dots, e.g. `bad..ref`, would
+				// ACTUALLY pass the jj-side validator's class because `.` IS
+				// in the class — the cross-backend git-side `validateRefname`
+				// is the stricter validator that rejects `..`. Use the
+				// jj-rejected `bad ref` here so the throw fires deterministically
+				// on the jj validator.)
+				mainBookmarks: ['valid-name', 'bad ref', 'another-valid'],
+			});
+
+			// Simulate clean work.
+			for (let i = 0; i < handle.workspaces.length; i++) {
+				const ws = handle.workspaces[i];
+				writeFileSync(
+					join(ws.path, `agent-${i + 1}.txt`),
+					`clean work ${i + 1}\n`,
+				);
+				execSync(`jj squash -B @ -k -m "subagent ${i + 1} clean"`, {
+					cwd: ws.path,
+					stdio: 'pipe',
+				});
+			}
+
+			// Snapshot pre-state: neither valid-name nor another-valid exists
+			// as a bookmark.
+			const preValid = execSync(
+				`jj log -r 'present(valid-name)' --no-graph -T 'change_id ++ "\\n"' --repository ${dir}`,
+				{ encoding: 'utf-8' },
+			).trim();
+			const preAnotherValid = execSync(
+				`jj log -r 'present(another-valid)' --no-graph -T 'change_id ++ "\\n"' --repository ${dir}`,
+				{ encoding: 'utf-8' },
+			).trim();
+			expect(preValid).toBe('');
+			expect(preAnotherValid).toBe('');
+
+			// Fan-in throws on validateMainBookmark('bad ref') BEFORE any
+			// `jj bookmark set` runs. CF-02 all-or-nothing contract.
+			expect(() =>
+				vcs.workspace.parallel.fanIn(
+					handle,
+					handle.workspaces.map((w) => ({
+						agentId: w.agentId,
+						exitCode: 0,
+					})),
+				),
+			).toThrow(/parallel: main bookmark name "bad ref"/);
+
+			// Snapshot post-throw: neither valid name was advanced.
+			// All-or-nothing pre-validation rejected the whole batch before
+			// any side effect.
+			const postValid = execSync(
+				`jj log -r 'present(valid-name)' --no-graph -T 'change_id ++ "\\n"' --repository ${dir}`,
+				{ encoding: 'utf-8' },
+			).trim();
+			const postAnotherValid = execSync(
+				`jj log -r 'present(another-valid)' --no-graph -T 'change_id ++ "\\n"' --repository ${dir}`,
+				{ encoding: 'utf-8' },
+			).trim();
+			expect(postValid).toBe('');
+			expect(postAnotherValid).toBe('');
+		});
+	},
+);
+
 
 // ───────────────────────────────────────────────────────────────────────────
 // CONFIG-02 (Phase 14 plan 02 — D-03 mitigation):

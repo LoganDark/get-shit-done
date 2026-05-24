@@ -711,6 +711,254 @@ describe.sequential.skipIf(!gitAvailable)(
 	},
 );
 
+// ───────────────────────────────────────────────────────────────────────────
+// PARALLEL-08 (Phase 14.1 SC5) scenarios: 3 new describes covering the
+// detached-HEAD / empty-mainBookmarks / all-or-nothing-validation surface
+// the type rename + CF-03 fan-in update-ref loop landed in this same plan.
+//
+// Mirrors `cmd-parallel-jj.test.ts` scenario triple structurally — scenario 1
+// uses `setupGitRepoDetached()` so the merge --no-ff lands into the detached
+// HEAD itself with zero branch advances. validateRefname (the stricter git-side
+// validator) is what rejects `bad..ref` in scenario 3 (the `..` consecutive-dot
+// sequence is forbidden by git-check-ref-format(1); jj-side uses the looser
+// /^[A-Za-z0-9._/-]+$/ which ACCEPTS `..`).
+// ───────────────────────────────────────────────────────────────────────────
+
+function setupGitRepoDetached(): string {
+	const dir = setupGitRepo();
+	// Detach HEAD from main. Worktree-add uses HEAD as implicit base, and
+	// `git merge --no-ff` onto detached HEAD lands the merge into HEAD itself
+	// (no branch advance side effect).
+	execSync('git checkout --detach HEAD', { cwd: dir, stdio: 'pipe' });
+	return dir;
+}
+
+describe.sequential.skipIf(!gitAvailable)(
+	'workspace.parallel — detached HEAD / empty mainBookmarks (PARALLEL-08 SC5 scenario 1)',
+	() => {
+		let dir: string;
+		let vcs: ReturnType<typeof createGitAdapter>;
+		let seedSha: string;
+
+		beforeAll(() => {
+			dir = setupGitRepoDetached();
+			vcs = createGitAdapter(dir);
+			seedSha = execSync('git rev-parse HEAD', { cwd: dir, encoding: 'utf-8' }).trim();
+		});
+
+		afterAll(() => {
+			if (dir) rmSync(dir, { recursive: true, force: true });
+		});
+
+		it('empty mainBookmarks + detached HEAD: fan-in merges into HEAD, no branch advances', { timeout: 30000 }, () => {
+			// HEAD is detached before dispatch — sanity check.
+			const preAbbrev = execSync('git rev-parse --abbrev-ref HEAD', {
+				cwd: dir,
+				encoding: 'utf-8',
+			}).trim();
+			expect(preAbbrev).toBe('HEAD');
+
+			const handle = vcs.workspace.parallel.dispatch({
+				plan: [
+					{ agentId: 'agent-1', planId: 'plan-1' },
+					{ agentId: 'agent-2', planId: 'plan-2' },
+				],
+				phaseNumber: 10,
+				// mainBookmarks intentionally OMITTED — tests the undefined
+				// → frozen([]) default + CF-03 skip-when-empty branch.
+			});
+
+			// Simulate clean work in each workspace (mirror existing N=2/3/4
+			// scenarios — agent-i edits agent-i.txt + commits).
+			for (let i = 0; i < handle.workspaces.length; i++) {
+				const ws = handle.workspaces[i];
+				writeFileSync(
+					join(ws.path, `agent-${i + 1}.txt`),
+					`clean work ${i + 1}\n`,
+				);
+				execSync(`git add agent-${i + 1}.txt`, { cwd: ws.path, stdio: 'pipe' });
+				execSync(`git commit -qm "subagent ${i + 1} clean"`, { cwd: ws.path, stdio: 'pipe' });
+			}
+
+			const result = vcs.workspace.parallel.fanIn(
+				handle,
+				handle.workspaces.map((w) => ({
+					agentId: w.agentId,
+					exitCode: 0,
+				})),
+			);
+			expect(result.conflicted).toBe(false);
+			expect(result.merged.length).toBe(2);
+
+			// Post-fan-in HEAD is STILL detached. CF-03 contract: empty
+			// mainBookmarks → SKIP the per-name update-ref advance entirely.
+			const postAbbrev = execSync('git rev-parse --abbrev-ref HEAD', {
+				cwd: dir,
+				encoding: 'utf-8',
+			}).trim();
+			expect(postAbbrev).toBe('HEAD');
+
+			// HEAD has advanced past the seed commit (the merge landed into
+			// the detached HEAD itself).
+			const postSha = execSync('git rev-parse HEAD', {
+				cwd: dir,
+				encoding: 'utf-8',
+			}).trim();
+			expect(postSha).not.toBe(seedSha);
+
+			// The `main` ref STILL points at the seed (`git init -b main`
+			// created it; we detached, dispatched, fan-in'd — `main` was
+			// never advanced because empty mainBookmarks skipped the
+			// update-ref loop).
+			const mainSha = execSync('git rev-parse refs/heads/main', {
+				cwd: dir,
+				encoding: 'utf-8',
+			}).trim();
+			expect(mainSha).toBe(seedSha);
+			expect(mainSha).not.toBe(postSha);
+		});
+	},
+);
+
+describe.sequential.skipIf(!gitAvailable)(
+	'workspace.parallel — non-empty mainBookmarks advance (PARALLEL-08 SC5 scenario 2)',
+	() => {
+		let dir: string;
+		let vcs: ReturnType<typeof createGitAdapter>;
+
+		beforeAll(() => {
+			// NOT detached — we want each ref to advance via update-ref and
+			// then probe each ref's tip vs the post-merge HEAD.
+			dir = setupGitRepo();
+			vcs = createGitAdapter(dir);
+		});
+
+		afterAll(() => {
+			if (dir) rmSync(dir, { recursive: true, force: true });
+		});
+
+		it('mainBookmarks: [name1, name2] advances each via update-ref refs/heads/<name>', { timeout: 30000 }, () => {
+			const handle = vcs.workspace.parallel.dispatch({
+				plan: [
+					{ agentId: 'agent-1', planId: 'plan-1' },
+					{ agentId: 'agent-2', planId: 'plan-2' },
+				],
+				phaseNumber: 10,
+				// Two names — neither pre-exists; `git update-ref refs/heads/<name>
+				// HEAD` is CREATE-or-UPDATE.
+				mainBookmarks: ['release', 'integration'],
+			});
+
+			// Simulate clean work.
+			for (let i = 0; i < handle.workspaces.length; i++) {
+				const ws = handle.workspaces[i];
+				writeFileSync(
+					join(ws.path, `agent-${i + 1}.txt`),
+					`clean work ${i + 1}\n`,
+				);
+				execSync(`git add agent-${i + 1}.txt`, { cwd: ws.path, stdio: 'pipe' });
+				execSync(`git commit -qm "subagent ${i + 1} clean"`, { cwd: ws.path, stdio: 'pipe' });
+			}
+
+			const result = vcs.workspace.parallel.fanIn(
+				handle,
+				handle.workspaces.map((w) => ({
+					agentId: w.agentId,
+					exitCode: 0,
+				})),
+			);
+			expect(result.conflicted).toBe(false);
+
+			// Post-merge HEAD SHA.
+			const postHead = execSync('git rev-parse HEAD', {
+				cwd: dir,
+				encoding: 'utf-8',
+			}).trim();
+
+			// Both refs advanced to HEAD.
+			const releaseSha = execSync('git rev-parse refs/heads/release', {
+				cwd: dir,
+				encoding: 'utf-8',
+			}).trim();
+			const integrationSha = execSync('git rev-parse refs/heads/integration', {
+				cwd: dir,
+				encoding: 'utf-8',
+			}).trim();
+			expect(releaseSha).toBe(postHead);
+			expect(integrationSha).toBe(postHead);
+		});
+	},
+);
+
+describe.sequential.skipIf(!gitAvailable)(
+	'workspace.parallel — all-or-nothing pre-validation (PARALLEL-08 SC5 scenario 3)',
+	() => {
+		let dir: string;
+		let vcs: ReturnType<typeof createGitAdapter>;
+
+		beforeAll(() => {
+			dir = setupGitRepo();
+			vcs = createGitAdapter(dir);
+		});
+
+		afterAll(() => {
+			if (dir) rmSync(dir, { recursive: true, force: true });
+		});
+
+		it('non-empty mainBookmarks with one invalid name throws BEFORE any update-ref; no partial advance', { timeout: 30000 }, () => {
+			const handle = vcs.workspace.parallel.dispatch({
+				plan: [
+					{ agentId: 'agent-1', planId: 'plan-1' },
+					{ agentId: 'agent-2', planId: 'plan-2' },
+				],
+				phaseNumber: 10,
+				// `bad..ref` is rejected by validateRefname's "no `..`
+				// anywhere" rule per git-check-ref-format(1). The git-side
+				// validator is stricter than the jj-side one — exactly the
+				// CF-03 contract.
+				mainBookmarks: ['valid-name', 'bad..ref', 'another-valid'],
+			});
+
+			// Simulate clean work.
+			for (let i = 0; i < handle.workspaces.length; i++) {
+				const ws = handle.workspaces[i];
+				writeFileSync(
+					join(ws.path, `agent-${i + 1}.txt`),
+					`clean work ${i + 1}\n`,
+				);
+				execSync(`git add agent-${i + 1}.txt`, { cwd: ws.path, stdio: 'pipe' });
+				execSync(`git commit -qm "subagent ${i + 1} clean"`, { cwd: ws.path, stdio: 'pipe' });
+			}
+
+			// Pre-state: neither valid name exists as a ref. spawnSync because
+			// rev-parse on a missing ref exits non-zero (execSync would throw).
+			const preValid = spawnSync('git', ['rev-parse', 'refs/heads/valid-name'], { cwd: dir });
+			const preAnotherValid = spawnSync('git', ['rev-parse', 'refs/heads/another-valid'], { cwd: dir });
+			expect(preValid.status).not.toBe(0);
+			expect(preAnotherValid.status).not.toBe(0);
+
+			// validateRefname throws on `bad..ref` BEFORE any update-ref.
+			// The git-side fan-in advance loop runs pass 1 (validate all)
+			// before pass 2 (advance all) — all-or-nothing contract.
+			expect(() =>
+				vcs.workspace.parallel.fanIn(
+					handle,
+					handle.workspaces.map((w) => ({
+						agentId: w.agentId,
+						exitCode: 0,
+					})),
+				),
+			).toThrow();
+
+			// Post-throw: neither valid name was advanced (no partial state).
+			const postValid = spawnSync('git', ['rev-parse', 'refs/heads/valid-name'], { cwd: dir });
+			const postAnotherValid = spawnSync('git', ['rev-parse', 'refs/heads/another-valid'], { cwd: dir });
+			expect(postValid.status).not.toBe(0);
+			expect(postAnotherValid.status).not.toBe(0);
+		});
+	},
+);
+
 
 // ───────────────────────────────────────────────────────────────────────────
 // CONFIG-02 (Phase 14 plan 02 — D-03 mitigation):
