@@ -1577,6 +1577,30 @@ gsd-sdk query commit "docs(phase-{X}): evolve PROJECT.md after phase completion"
 **Skip this step if** `.planning/PROJECT.md` does not exist.
 </step>
 
+<step name="assert_clean_wc">
+**Final-gate check: assert the working copy is clean before declaring phase complete.**
+
+After all mutating verbs (`phase.complete`, `state.*`, `roadmap.*`) have fired and their commits should have landed, verify nothing critical is left uncommitted. This gate catches the class of bug where a workflow step calls a mutating SDK verb (which writes planning files on disk) but forgets to run the follow-up `gsd-sdk query commit`. Without this gate, the orchestrator can declare "PHASE COMPLETE" while ROADMAP.md / STATE.md / SUMMARY.md / VERIFICATION.md sit dirty in the working copy.
+
+```bash
+DIRTY=$(gsd-sdk query diff --name-only 2>/dev/null | jq -r '.nameOnly // [] | join("\n")')
+PLANNING_DIRTY=$(echo "$DIRTY" | grep -E '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
+if [ -n "$PLANNING_DIRTY" ]; then
+	echo "FATAL: planning artifacts uncommitted after phase execution." >&2
+	echo "This is a workflow bug — a mutating verb's commit was skipped." >&2
+	echo "Dirty files:" >&2
+	echo "$PLANNING_DIRTY" >&2
+	echo "" >&2
+	echo "Resolve by committing the listed files before re-running, or report this as a GSD workflow defect." >&2
+	exit 1
+fi
+```
+
+**Scope:** Only `.planning/` paths and `*-SUMMARY.md` / `*-VERIFICATION.md` files trip the gate. Source files outside `.planning/` belong to the executor's per-task commit protocol, not the orchestrator's tracking commits — they are explicitly NOT flagged here. The gate protects orchestrator-owned artifacts only.
+
+**Do not bypass.** If this gate fires, the correct fix is to identify which earlier step (`update_roadmap`, `update_project_md`, `close_phase_todos`, etc.) ran a mutating verb without an immediate commit, and add the missing commit there. Suppressing the gate without fixing the root cause re-introduces the original Phase 14 bug.
+</step>
+
 <step name="offer_next">
 
 **Exception:** If `gaps_found`, the `verify_phase_goal` step already presents the gap-closure path (`/gsd:plan-phase {X} --gaps`). No additional routing needed — skip auto-advance.
