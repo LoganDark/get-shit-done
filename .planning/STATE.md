@@ -169,6 +169,7 @@ None yet for v1.3. Phase 9 discuss/plan steps will surface plan-level todos.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260522-vx2 | test maintenance — triage of npm test failures (probe-only, no fix) | 2026-05-23 | xuxxkkqp | [260522-vx2-test-maintenance-need-to-make-sure-all-p](./quick/260522-vx2-test-maintenance-need-to-make-sure-all-p/) |
+| 260523-ovw | structural fix: workflow assert_clean_wc gate + execute-phase update_roadmap reorder (Phase 14 post-mortem) | 2026-05-23 | swoylprp, plyvlkqt, uxuqqzto | [260523-ovw-investigate-how-that-happened-and-potent](./quick/260523-ovw-investigate-how-that-happened-and-potent/) |
 
 ## Deferred Items
 
