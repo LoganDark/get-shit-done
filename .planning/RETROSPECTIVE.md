@@ -2,6 +2,65 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.3 — jj octopus merge for subagents fully functional
+
+**Shipped:** 2026-05-24
+**Phases:** 6 (Phases 9-14) | **Plans:** 34 | **Tasks:** 56 | **Requirements:** 27/27 verified
+
+### What Was Built
+
+- **`vcs.workspace.parallel.{dispatch, fanIn}` cross-backend verb surface.** jj backend via the new `sdk/src/vcs/jj/parallel.ts` composition layer (lifts `octopus.ts` + `reap.ts` + `workspace.merge` primitives into a single seam, preserves UPSTREAM-02 sidecar discipline). Git backend via `sdk/src/vcs/git/parallel.ts` adapter-internal sidecar (raw-git worktree+merge body localized to one file). Cross-backend `FanInResult` shape `{merged, conflicted, conflictedPaths, incompleteQueued, failedReaped, surplusBookmarks}` is identical on both backends.
+- **Reap classifier extension.** `IncompleteWorkEntry.reason` widened 1 → 2 values (`'crashed-with-uncommitted-work'` + new `'merge-in-tree-conflict'`); jj-side conflict probe via `vcs.refs.conflicts()` revset; git-side producer via merge-exit-code + `git diff --name-only --diff-filter=U`. Parse-time validation rejects unknown values.
+- **Orchestrator + agent rewire.** `execute-phase.md` and `quick.md` raw-git dispatch+cleanup blocks deleted and replaced with the cross-backend SDK verb calls. WAVE_WORKTREE_MANIFEST mktemp variable eliminated (Phase 11 D-01: Handle JSON in shell variable only — no file on disk). `workspace.assert-dispatched-cwd` SDK verb shipped + CLI bridge. `gsd-executor.md` raw-git-free at the read side (`git rev-parse --show-toplevel` retired in favor of `primaryWorkspacePath` from the verb's envelope). `tests/agent-prompts-no-raw-git.test.cjs` pins the agent-prompt-file deny-list with narrow regex that doesn't false-fire on the preserved `<destructive_git_prohibition>` block.
+- **A3 colocated pre-commit fix (closed v1.0 carry-forward).** Path 1 selected at Phase 12 discuss-phase by re-reading Phase 4 LEARNINGS Open Q1 (archived `51ee72a3`). jj backend's `commit()` now always fires `.githooks/<stage>` in colocated mode; `GSD_HOOK_SKIP_COLOCATED` env as opt-out. HOOK-07 fires-exactly-once regression test + SC4 hook-idempotency audit shipped.
+- **CI parallel-path lane.** `.github/workflows/parallel-e2e.yml` runs `scripts/e2e-parallel-phase.sh` (357-line synthetic 2-plan harness) end-to-end on both backends; `parallel-e2e-gate` job (`needs:`-gated, `if: always()`, aggregate-result inspection) enforces required-blocking on jj-colocated while keeping git allow-failure. CI-06 raw-git-audit step wired alongside.
+- **LINT-04 baseline-regression guard.** `scripts/audit-workflow-raw-git.cjs` carries a frozen 127-hit per-file baseline (`Object.freeze`d); exits non-zero only when a file's raw-git count exceeds its baseline; SHELL_GIT_RE byte-identical to `lint-vcs-no-raw-git.cjs`. Reframed from "zero hits" to "no-regression" because zero was unachievable without breaking workflow markdown structure.
+- **Dogfood toolkit (Phase 14).** `scripts/dogfood-restore.sh` (recovery primitive: `bash dogfood-restore.sh <pre-op-id> <tarball-path>`), `scripts/dogfood-rehearse.sh` (synthetic-dirty validation: 3/3 assertions green on `cp -a` clone), `scripts/dogfood-phase-14.sh` (real dogfood orchestrator). Ran end-to-end against THIS repo on isolated bookmark `gsd/phase-14-dogfood`: jj-cell dispatch_ms=6209 / fan_in_ms=780 / conflicts=0; git-cell dispatch_ms=390 / fan_in_ms=1276 / conflicts=0. Main bookmark unchanged (Pitfall 10 blast-radius bounded). Recovery anchor durable in two surfaces.
+- **CONFIG-02 envelope at the CLI bridge.** `parallelization_disabled` validation envelope ships at the `workspace.parallel.dispatch` CLI bridge with strict-equal-`false` brownfield safety (peer to the three pre-existing validation envelopes). 6 D-03 mitigation contract tests across both backend test files.
+- **`parallelization: true` default flip.** Install template's `parallelization` block flattened from nested 6-key object to flat boolean; this repo's `.planning/config.json` permanently flipped `false` → `true` so Phase 14 dogfood could dispatch.
+
+### What Worked
+
+- **Throwing-stub seam for backend-asymmetric ship.** Phase 9 plan 04 shipped a `GitVcsAdapter.workspace.parallel.{dispatch,fanIn}` throwing stub (frozen `Object.freeze({...})` mirroring RESEARCH §Stub pattern) — closed the wave-2 tsc compile gate against the cross-backend `VcsWorkspaceParallel` interface while keeping Phase 10's git implementation a separate, focused deliverable.
+- **Same-PR coupling on `FanInResult` shape (v1.1 retro precedent).** D-09/D-10/D-11 cascade amendments encoded the jj-side+git-side contract delivery as a single same-PR landing — no jj-first / git-later gap that would have let the cross-backend shape drift.
+- **Discuss-phase decisions deferred from roadmap time.** Phase 12 explicitly did NOT pre-decide the A3 fix path at roadmap. The choice happened at discuss-phase by re-reading Phase 4 LEARNINGS Open Q1 (archived `51ee72a3`). Path C (version-probe) ruled out, Path 1 selected. The roadmap doesn't have to make every decision — discuss-phase is where context catches up with codebase reality.
+- **CI parallel-path lane shipped BEFORE default-flip.** CI-05/06 in Phase 13 → CONFIG-01/02 in Phase 14. Real CI validated the new verbs before any user-observable behavioral change. Caught two BLOCKER classes (CR-02/CR-03 in Phase 11, CR-01 in Phase 11 reverify) before they could ship to users.
+- **Dogfood phase LAST (Pitfall 10).** Phase 14 ran the destructive op against the real repo on an isolated `gsd/phase-14-dogfood` bookmark with recovery anchor (`pre_op_id` + `tarball_sha256` + sibling mktemp path) durable in two surfaces. `MAIN_BEFORE` ≡ `MAIN_AFTER` invariant proven. Recovery primitive existed BEFORE the destructive op (validated by rehearsal step).
+- **Pre-close `audit-open` caught what verifier missed.** Phase 13 verifier marked the LINT-04 unit test as `7/7 passes when invoked directly` — green pass, milestone-wave-completion declared. The pre-close `gsd-sdk query audit-open` caught that `scripts/run-tests.cjs:12` does non-recursive `readdirSync('tests')` so the test was actually never collected by `npm test`. The CI-06 regression guard was orphaned; the fix (recursive `readdirSync`) also rescued 3 other long-stranded `tests/scripts/*` files. Closed inline at v1.3 close.
+- **Verifier-found gaps fixed inline as separate plans.** Phase 11 needed plan 11.08 and 11.10 to close VERIFICATION.md CR-01/CR-02/CR-03 BLOCKERs and PROMPT-08 raw-git read-side. Each plan addressed one block of failures with a targeted test that would have caught the original gap. The phase verification process is the integration test for the integration tests.
+
+### What Was Inefficient
+
+- **Phase 11 grew to 11 plans (largest of v1.3).** Five of those were verifier-induced closure plans (CR-01, CR-02, CR-03, PROMPT-08, plus the dispatch-cwd-safety rename). Suggests Phase 11's initial plan-phase under-specified the cross-backend opaque contract; the verifier surfaced gaps faster than the planner anticipated them. Future plan-phase for orchestrator-rewire work should explicitly enumerate every read-side raw-git call site as a plan input.
+- **`tests/scripts/` discovery gap was pre-existing.** Phase 13 propagated the dead-test pattern (`tests/scripts/migr-06-close-gate.test.cjs` from v1.2 had also never been collected) rather than catching it. Phase 13 verification observed the local test pass but didn't probe whether `npm test` ran it. The fix at v1.3 close also rescued allowlist-parser + audit-id-namespace tests that had been silently broken across multiple milestones.
+- **Several SUMMARY.md files lack a `one_liner:` field.** `gsd-sdk query summary-extract --fields one_liner` returned `"One-liner:"` (empty label) or `"Before:"` (different field) for some plans, polluting the MILESTONES.md accomplishments list during archive. The executor's SUMMARY template isn't enforcing the field. Future: gate phase complete on `one_liner` non-empty (lint or pre-commit hook).
+- **Phase 14 latent `jq .ok//"true"` bug.** CR-01 from Phase 14's code review found that the dogfood orchestrator script's envelope guard used `jq .ok // "true"` (defaulting to `"true"` when `.ok` was absent), which would have masked a real `{ok:false}` failure. Didn't fire during the actual dogfood (`parallelization=true` so every dispatch succeeded), but the test pattern broke through code-review's adversarial reading. Lesson: every envelope guard needs an explicit `if-then-else` form, no `//` shortcuts on bool fields.
+
+### Patterns Established
+
+- **Throwing-stub before fill across waves.** When a backend lags behind the cross-backend contract by a phase (jj-first in 9, git-fill in 10), the lagging backend ships a frozen-object throwing stub at the contract boundary. Wave-2 tsc compile gate closes; consumers see a clear `VcsNotImplementedError` until the real verb lands. (Reusable for any future cross-backend interface extension.)
+- **Recovery primitive before destructive op.** Pitfall 10 dogfood pattern: `scripts/dogfood-restore.sh` written + rehearsal-validated BEFORE `scripts/dogfood-phase-14.sh` ran. Recovery anchor (`pre_op_id` + `tarball_sha256` + sibling mktemp path) durable in two surfaces. The safety net exists at commit time, not "we'll write it if something goes wrong."
+- **Audit-as-baseline reframe.** When a "zero violations" goal is structurally unachievable (workflow markdown legitimately needs `git` references in some shell fences for documentation), reframe as "no regression beyond a frozen baseline" with the baseline captured at audit time as an `Object.freeze`d per-file map. LINT-04 ships this way; future similar audits should default to it.
+- **CI lane BEFORE behavioral default-flip.** Validate the new behavior in real CI on real workflows before the user-observable default changes. CI-05/06 → CONFIG-01/02 phase ordering; do not couple the lane addition with the default-flip in a single phase.
+- **Same-PR coupling encoded in plan must-haves.** When two backends ship a contract together (D-09/D-10/D-11), the plan's must_haves explicitly mention both backends; verifier blocks if either is missing. Plan-time enforcement, not commit-time hope.
+
+### Key Lessons
+
+1. **Audit-open must include a test-discovery check, not just "tests pass when invoked."** Phase 13's verifier ran `node --test tests/scripts/audit-workflow-raw-git.test.cjs` and observed green — but `npm test` never collected the file. The implementation-detail-of-the-runner mattered. Future verification protocols need an explicit "is this test reachable from `npm test`?" probe alongside "does it pass when run directly?"
+2. **Recovery primitives are first-class deliverables for any phase touching live state.** Phase 14 paid the cost of writing the recovery script + rehearsal harness BEFORE the destructive op; the cost paid for itself in zero anxiety during the real dogfood run. Generalizes: any phase that touches `.planning/`, the working copy, or bookmarks on `main` should ship a tested recovery primitive in the same phase.
+3. **Cross-backend opacity at the verb surface.** Every `vcs.workspace.parallel.*` consumer (workflows, agents, scripts) treats both backends identically. The `WorkspaceInfo.path` is an fs realpath on git, a workspace name on jj — and the consumer must never know which (CR-01 in Phase 11 was a backend-opaque-contract violation that halted every jj agent). Lesson: cross-backend types must carry no field that the consumer would conditionally branch on; if branching exists, it's a defect.
+4. **The verifier IS the integration test for the integration tests.** Phase 11's 5 verifier-induced closure plans (CR-01/02/03 + PROMPT-08 + dispatch-cwd-safety rename) were each closed by a targeted regression test that would have caught the original gap. The verification loop's value isn't "did we verify correctly" — it's "what test should have caught this." Encode the answer.
+5. **One config knob, one envelope.** CONFIG-02 (`parallelization_disabled` envelope) sits at the CLI bridge with strict-equal-`false` checks (NOT `!== true`) so the envelope is brownfield-safe when older configs have `parallelization` unset. Strict equality on the rejection path; absent = current default. Generalizes to any feature-flag rollout that distinguishes "explicit opt-out" from "default-off legacy."
+
+### Cost Observations
+
+- **Model mix:** ~100% Opus 4.7 (orchestrator + all subagents) — same tier choice as v1.2.
+- **Sessions:** many, spanning 2026-05-15 → 2026-05-23 (~9 days). v1.3 was the first multi-week milestone; v1.2 had been 1 sustained autonomous chain. Phase 11's plan inflation (11 plans, 5 verifier-induced) was the longest single phase.
+- **Notable efficiency:** Phase 14's dogfood ran clean on both backends in one shot. The CI parallel-path lane was already green from Phase 13, so no recovery iterations were needed during the real dogfood. The recovery primitive existed but wasn't called.
+- **Notable cost:** Phase 11's plan inflation. Verifier rework cost roughly 2x the original phase plan because each verifier-found BLOCKER required a separate closure plan with its own discuss/plan/execute/verify cycle. Net-net the rework was correct (BLOCKERs were real), but plan-phase should have surfaced the cross-backend-opaque contract requirements upfront.
+
+---
+
 ## Milestone: v1.2 — jujutsu is change-only — never commit id anywhere
 
 **Shipped:** 2026-05-15
@@ -65,6 +124,7 @@
 | v1.0 MVP | many | 8 (Phases 1–6 + 2.1, 03.1 inserted) | Original GSD adoption; established the phase-research-plan-execute cadence + dual-backend test harness from day one |
 | v1.1 first upstream sync | few | 1 (Phase 7) | First successful weekly upstream rebase; introduced 8 new VcsAdapter verbs in a single phase; PROMPT-04 raw-git deletion pattern |
 | v1.2 unified revision model | 1 sustained autonomous chain | 1 (Phase 8) | Architectural-enforcement-as-lint pattern; audit JSON sidecar as literal allowlist seed; 3-iteration code-review-fix loop closed 12 findings before milestone close |
+| v1.3 jj octopus merge for subagents fully functional | many across 9 days | 6 (Phases 9-14) | Cross-backend parallel verb surface (`vcs.workspace.parallel.{dispatch,fanIn}`) on both backends; orchestrator rewired (raw-git in workflow markdown → zero in execute-phase + quick); A3 colocated pre-commit gap closed (inherited from v1.0); CI parallel-path lane validates verbs before default-flip; dogfood phase LAST with recovery anchor (Pitfall 10) |
 
 ### Cumulative Quality
 
@@ -73,6 +133,7 @@
 | v1.0 | parameterized vitest + node:test on both backends; jj-colocated CI required-blocking from Phase 5 | `lint-vcs-no-raw-git.cjs` (whole-repo default-deny) | tracked from Phase 5 |
 | v1.1 | golden-parity strict-green on both backends for new VCS-08..15 verbs | (no new lint) | preserved |
 | v1.2 | golden-parity re-recorded; new `toBeIdOf` matcher composable across both backends; 1033 files at 0 violations on no-commit-id lint, 1071 at 0 on no-raw-git | **+ `lint-vcs-no-commit-id.cjs`** (commit_id-leak guard) | preserved (18 = 18 baseline check) |
+| v1.3 | new `parallel-e2e` CI lane runs synthetic 2-plan parallel phase end-to-end on both backends, required-blocking on jj-colocated; `tests/scripts/*` now recursively collected by `scripts/run-tests.cjs` (4 previously stranded tests rescued); `tests/agent-prompts-no-raw-git.test.cjs` pins agent-prompt deny-list | **+ `scripts/audit-workflow-raw-git.cjs`** (baseline-regression guard, 127-hit per-file frozen baseline) wired into CI-06 step | +4 carried debt acknowledged (Phase 10/11 SDK files, not Phase-13-caused); LINT-05 allowlist net diff +1 (within budget) |
 
 ### Top Lessons (Verified Across Milestones)
 

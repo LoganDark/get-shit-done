@@ -1,5 +1,46 @@
 # Milestones
 
+## v1.3 jj octopus merge for subagents fully functional (Shipped: 2026-05-24)
+
+**Phases completed:** 6 phases, 34 plans, 56 tasks
+
+**Key accomplishments:**
+
+- Extracted `enumerateConflictedPaths` into the `sdk/src/vcs/jj/conflict-paths.ts` UPSTREAM-02 sidecar, extended `performJjReap`'s classifier from 2 → 3 branches with a new `'merge-in-tree-conflict'` emitter, and tightened `incomplete-work.ts` to reject unknown `reason` values at parse time — closing the wave-2 gate from plan 01 and providing the conflict-paths helper that plan 03's `jj/parallel.ts` will consume.
+- Composition file `sdk/src/vcs/jj/parallel.ts` and JjVcsAdapter wire-in — `workspace.parallel.{dispatch,fanIn}` shipped, UPSTREAM-02 sidecar discipline preserved, W1 (agentId pre-write validation) + W3 (a) (octopus-conflict joint-assertion producer) gates live.
+- GitVcsAdapter satisfies the cross-backend `VcsWorkspaceParallel` interface via a throwing-stub `Object.freeze({dispatch, fanIn})` — both members raise `VcsNotImplementedError` with a Phase 10 breadcrumb, closing the wave-2 compile gate left open by plan 09-01.
+- One-liner:
+- One-liner:
+- 1. [Combined Tasks 1 and 2 into a single commit]
+- 1. [Rule 3 — File-local convention] Preserved 2-space indentation in backends/git.ts despite tabs project preference
+- 1. [Rule 1 - Bug] Fixed git `workspace.add` ignoring the `name` field
+- STEP 1 gate (CR-01/SC2):
+- Before:
+- 1. [Rule 1 - Bug] Plan-suggested filter pattern would never match
+- Ship the new VCS-20 `workspace.assert-dispatched-cwd` SDK verb plus CLI bridges for the existing Phase 9/10 `vcs.workspace.parallel.{dispatch,fanIn}` adapter verbs — three thin handlers mirroring `head-ref.ts`'s shape, registered through both the static catalog and the non-family manifest, surfaced through `gsd-sdk query` with `mutation` and `outputMode: 'json'` set correctly.
+- executeWorktreeWaveCleanupPlan body collapses from a 7-verb per-entry guard loop to a single `vcs.workspace.parallel.fanIn` delegation; ADR-0004 `_deps={}` seam preserved; cmdWorktreeCleanupWave CLI alias retired; tests flipped to the adapter-mock boundary.
+- 1. [Rule 1 - LOC delta target was a planner estimate, not a load-bearing acceptance]
+- Deleted the inline raw-git parallel-dispatch + worktree-cleanup blocks from `get-shit-done/workflows/execute-phase.md` and replaced them with cross-backend `gsd-sdk query workspace.parallel.{dispatch,fan-in}` shell wrappers. WAVE_WORKTREE_MANIFEST mktemp variable eliminated per Phase 11 D-01 (Handle JSON in shell variable only — no file on disk). `<worktree_branch_check>` orchestrator-side templating block removed; per-Agent dispatched-cwd safety now lives entirely in `gsd-executor.md` (per Plan 11.4). Sequential one-Agent-per-message dispatch pattern preserved (Pitfall 5 + D-07). Stall-surveillance probes (#3212) and ORCHESTRATOR RULE preserved untouched.
+- None.
+- Closed VERIFICATION.md CR-01 BLOCKER (the verb halted every jj agent because `safeRealpath(WorkspaceInfo.path)` compared an fs realpath against a workspace NAME on jj), CR-04 WARNING (FATAL branch had no diagnostic dump), and WR-03 INFO (dispatch-cwd-safety.md documented backend asymmetry as a known wart). Backend-opaque cross-backend contract restored. VCS-20 and PROMPT-08 ready to flip BLOCKED → SATISFIED.
+- Closed VERIFICATION.md CR-02 and CR-03 BLOCKERs. The Phase 11 `quick.md` rewire shipped by Plan 11-06 was structurally correct but silently broken in three independent ways at lines 670-675: wrong plan-JSON shape, non-numeric `--phase "quick"`, and a FATAL guard that missed `{ok:false}` payloads. Additionally both `quick.md` and `execute-phase.md` lacked an EXPECTED_BRANCH empty/HEAD pre-check, letting `validateMainBookmark` (jj/parallel.ts:121-125) surface a Node stack trace on detached HEAD. All four invariants are now in place and pinned by `tests/quick-md-parallel-dispatch.test.cjs` (7/7 green). PROMPT-07 advances from BLOCKED → SATISFIED; PARALLEL-06 advances from PARTIAL → SATISFIED at the SC-2b/CR-02 workflow-exercise level.
+- Selected: Option A — case removed entirely.
+- Closed run-1 BLOCKER cluster A: the parallel-dispatch invocation in `get-shit-done/workflows/execute-phase.md` is now structurally functional on both dimensions. Constructed `WAVE_WORKTREE_PLANS_JSON` from the `WAVE_WORKTREE_PLANS` plan-id accumulator via a `printf | jq -R . | jq -sc 'map({agentId, planId})'` pipeline matching the workspace-parallel-dispatch.ts:73 contract. Replaced the literal workflow-substitution placeholder `--phase "{phase_number}"` (which bash does NOT expand inside a fenced bash block — the verb saw the 14-character literal string and returned `{ok:false, reason:'phase_number_required'}`) with the established bash-variable form `--phase "${PHASE_NUMBER}"`. Extended the existing `tests/quick-md-parallel-dispatch.test.cjs` `EXEC` carry-over describe-block with three new assertions (plan-shape, numeric --phase, accumulator-source) that would have caught both BLOCKERs at commit time — verified load-bearing by reverting the fix via `jj restore --from @-- ...` and confirming all three new tests fail. Pre-existing 7 tests stay green; regression net is now symmetric across QUICK and EXEC for all three CR-02 sub-invariants.
+- Closed VERIFICATION.md (re-verification pass 2) PROMPT-08 BLOCKER + class-wide regression-test gap. `agents/gsd-executor.md` is now raw-git-free at the read-side surface — `git rev-parse --show-toplevel` retired from line 431 in favor of a jq read of `primaryWorkspacePath` from the SDK verb's envelope. New `tests/agent-prompts-no-raw-git.test.cjs` pins the READ-ONLY raw-git deny-list at the agent-prompt-file layer with a narrow-by-design regex that does not false-fire on the preserved `<destructive_git_prohibition>` block. PROMPT-08 / VCS-20 ready to flip BLOCKED → SATISFIED on verifier re-run.
+- ROADMAP Phase 12 SC2/SC3 and REQUIREMENTS HOOK-06/HOOK-07 rewritten from git's `.git/hooks/pre-commit` namespace to the GSD-managed `.githooks/pre-commit` convention that the jj adapter's `fireHook` actually shells.
+- HOOK-07 regression test in the jj-colocated block of jj-hooks.test.ts — a counter-hook body proves vcs.commit() fires .githooks/pre-commit exactly once per commit across two independent commits, locking the already-shipped Path 1 fix against a future double-fire.
+- ROADMAP SC2/SC3, CONTEXT.md D-08 + Phase Boundary, and REQUIREMENTS LINT-04/CI-06 re-baselined from a false "zero raw-git hits" assertion to a baseline-regression-guard framing built on the verified 127-hit baseline.
+- `scripts/audit-workflow-raw-git.cjs` ships as the LINT-04 deliverable — a stdout-only baseline-regression guard that scans bash/sh/zsh markdown fences under `workflows/`, `references/`, and `agents/`, carries the frozen per-file 127-hit baseline as an `Object.freeze`d constant, and exits non-zero only when a file's raw-git count exceeds its baseline — backed by a 7-case `node:test` unit test.
+- `scripts/e2e-parallel-phase.sh` — a 357-line bash harness that drives the `workspace.parallel.{dispatch,fan-in}` CLI bridges against a throwaway colocated repo for both `git` and `jj-colocated` backends, asserting 6 per-backend lane criteria including the Phase 12 A3 hook-fire proof, and contains zero raw `git` (LINT-05 +1 budget intact).
+- Standalone `parallel-e2e.yml` CI lane runs the synthetic 2-plan parallel phase end-to-end on git and jj-colocated, runs the CI-06 raw-git-in-markdown audit, and enforces required-blocking on jj-colocated via a `needs:`-gated `parallel-e2e-gate` job; the LINT-05 allowlist +1 diff is recorded for the v1.3 close commit.
+- Install template parallelization block flattened to flat boolean `true` (was nested 6-key object); this repo's `.planning/config.json` flipped permanently from `false` to `true` so Phase 14's dogfood (Plan 05) can dispatch.
+- Fourth validation envelope (`parallelization_disabled`) added to the `workspace.parallel.dispatch` CLI bridge with strict-equal-`false` brownfield safety, plus 6 D-03 mitigation contract tests across both backend test files.
+- Ships the runnable recovery script for Phase 14's dogfood snapshot — `bash scripts/dogfood-restore.sh <pre-op-id> <tarball-path>` converts the Pitfall 10 manual op-restore + tar untar cliff to a single invocation. Empirical rehearsal in Plan 14-04 validates the ordering and default restore-scope choice.
+- `scripts/dogfood-rehearse.sh` exercises `scripts/dogfood-restore.sh` against a synthetic-dirty `cp -a` clone of THIS repo; three assertions green (`diff-summary-matches-baseline`, `bookmark-gone`, `state-md-restored`) prove the recovery primitive is ready for the real Plan 14-05 dogfood.
+- `scripts/dogfood-phase-14.sh` ran end-to-end against THIS repo on isolated bookmark `gsd/phase-14-dogfood`; jj-cell dispatch_ms=6209 / fan_in_ms=780 / conflict_count=0 and git-cell dispatch_ms=390 / fan_in_ms=1276 / conflict_count=0; main bookmark unchanged (`umkprsyvnxwq` ≡ `umkprsyvnxwq`, Pitfall 10 blast-radius bounded); recovery anchor (pre_op_id=`9db977b62aca…`, tarball SHA-256=`873522cf59a7…`) durable in two surfaces.
+
+---
+
 ## v1.2 jujutsu is change-only — never commit id anywhere (Shipped: 2026-05-15)
 
 **Phases completed:** 1 phases, 3 plans, 18 tasks

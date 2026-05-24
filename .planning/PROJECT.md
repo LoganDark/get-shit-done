@@ -12,9 +12,11 @@ A hard fork of [`gsd-build/get-shit-done`](https://github.com/gsd-build/get-shit
 
 **v1.3 SHIPPED (2026-05-24).** v1.0 MVP shipped 2026-05-14 (8/8 phases). v1.1 first upstream sync shipped 2026-05-14 (1 phase, 5 plans). v1.2 (jujutsu is change-only — never commit id anywhere) shipped 2026-05-15 (1 phase, 3 plans, 14 reqs). v1.3 (jj octopus merge for subagents fully functional) shipped 2026-05-24 (6 phases, 32 plans): jj + git backends expose `vcs.workspace.parallel.{dispatch,fanIn}` with uniform `FanInResult` shape, orchestrator + agents rewired through the adapter (zero raw-git in workflow markdown), A3 colocated pre-commit gap closed, CI parallel-path lane + LINT-05 close-gate green on both backends, and Phase 14 (default flip + dogfood) shipped 2026-05-24 (5/5 plans, 18/18 must-haves verified): install-template `parallelization` flattened to flat boolean `true`, CONFIG-02 envelope ships at the CLI bridge with strict-equal-`false` (`{ok:false, reason:'parallelization_disabled'}` peer to the existing three validation envelopes), real dogfood ran end-to-end on this very repo via isolated `gsd/phase-14-dogfood` bookmark (0 conflicts both backends, main untouched per Pitfall 10), durable metrics baseline + recovery anchor committed to `.planning/intel/v1.3-dogfood-metrics.md`, recovery primitive `scripts/dogfood-restore.sh` validated by rehearsal step (3/3 assertions PASS). Code review CR-01 (latent `jq .ok//"true"` envelope-guard bug — didn't fire because parallelization=true during dogfood) fixed inline. One v1.4 follow-up filed: orphan `.claude/jj-workspaces/phase-{N}-subagent-*` FS dirs survive `jj op restore` (cleanup contract gap).
 
-## Current Milestone: v1.3 jj octopus merge for subagents fully functional
+## Most Recent Milestone: v1.3 jj octopus merge for subagents fully functional — SHIPPED 2026-05-24
 
-**Goal:** All subagent dispatch machinery routes through the `VcsAdapter` via new high-level `vcs.parallel.*` verbs. Git backend implements them via raw-git worktree+merge under the hood (the single remaining acknowledged raw-git exception collapses to zero). jj backend implements them via the already-shipped `octopus.ts` + `reap.ts` helpers, promoted from jj-namespaced to backend `parallel.*` verb bodies. `parallelization: true` flips on by default for both backends. Workflows never branch on `vcs.kind` for parallel-dispatch reasons.
+**Goal (achieved):** All subagent dispatch machinery routes through the `VcsAdapter` via new high-level `vcs.parallel.*` verbs. Git backend implements them via raw-git worktree+merge under the hood (the single remaining acknowledged raw-git exception collapses to zero). jj backend implements them via the already-shipped `octopus.ts` + `reap.ts` helpers, promoted from jj-namespaced to backend `parallel.*` verb bodies. `parallelization: true` flips on by default for both backends. Workflows never branch on `vcs.kind` for parallel-dispatch reasons.
+
+**Next milestone:** v1.4 — scope set during `/gsd-new-milestone`. Five v14-* todos already filed for promotion (docs drift cleanup, drift-control tests, `performJjReap` test flake, review followups, orphan workspace dir cleanup, transition.md update gap).
 
 **Target features:**
 
@@ -81,12 +83,14 @@ A hard fork of [`gsd-build/get-shit-done`](https://github.com/gsd-build/get-shit
 - ✓ **TEST-12** Vitest `toBeIdOf(kind)` custom matcher at `tests/__tools__/vitest-matchers.ts` (D-02 `expect.extend` form, NOT free function `expectIdShape`); module augmentation in `vitest.d.ts`; registered via `setupFiles` (D-02a); REQUIREMENTS-12 text updated to reflect actual API (D-02b); golden-parity baselines re-recorded — v1.2
 - ✓ **MIGR-06** Close-gate `.planning/` rewriter pass at `scripts/migr-06-close-gate.cjs`: single B-07-style rewrite scoped to Phase 8 dir only; idempotent; one-time prose hex grep recorded with 10 grandfathered hits — v1.2
 
-### Active (v1.3 — scheduled, requirements TBD)
+### Active (v1.4 — TBD; will be set during `/gsd-new-milestone`)
 
-The two carry-forwards from v1.0/v1.1/v1.2 are now in-scope for v1.3:
+Both v1.0/v1.1/v1.2 carry-forwards closed in v1.3:
 
-- **Orchestrator parallelization rewrite** — `get-shit-done/workflows/execute-phase.md` worktree dispatch + cleanup loop (~lines 714+) currently uses raw-git `worktree add` / `merge --no-ff` / `worktree remove`. v1.3 lifts this into new cross-backend `vcs.parallel.*` adapter verbs (jj uses `octopus.ts` + `reap.ts`; git wraps raw-git worktree+merge inside the backend). `parallelization` config knob flips on by default once v1.3 closes. Tracked in `project_no_parallelization_yet` memory.
+- **Orchestrator parallelization rewrite** — ✓ **CLOSED in v1.3 Phases 9–11 + 14 (2026-05-15 → 2026-05-23).** `vcs.workspace.parallel.{dispatch,fanIn}` shipped on both backends; `execute-phase.md` / `quick.md` raw-git worktree blocks deleted; `parallelization: true` default-flipped in the install template + this repo per Phase 14 plan 01; CONFIG-02 `parallelization_disabled` envelope at the CLI bridge with strict-equal-`false` brownfield safety; dogfood run on this repo (Phase 14 plan 05) clean on both backends (0 conflicts; main bookmark untouched per Pitfall 10).
 - **A3 colocated pre-commit gap** — ✓ **CLOSED in v1.3 Phase 12 (2026-05-21).** jj 0.41 doesn't auto-fire `.git/hooks/pre-commit` after `jj squash` in colocated mode. Path 1 (chosen from the three Phase 4 LEARNINGS Open Q1 fix paths) makes the jj backend's `commit()` always fire the adapter-managed `.githooks/<stage>` hook in colocated mode, with `GSD_HOOK_SKIP_COLOCATED` as the env opt-out. HOOK-06/HOOK-07 validated; HOOK-07 fires-exactly-once regression test + SC4 hook-idempotency audit shipped.
+
+v1.4 requirements get set during `/gsd-new-milestone`. The five v14-* todos already in `.planning/todos/pending/` (docs drift cleanup, drift-control tests, `performJjReap` test flake, review followups, orphan jj-workspace dirs, `transition.md` update gap) are the seed list; `/gsd-new-milestone` will promote them into v1.4 phases.
 
 **Historical seeds (not future candidates):**
 

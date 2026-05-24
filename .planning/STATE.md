@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: jj octopus merge for subagents fully functional
-status: milestone_complete
-stopped_at: v1.3 milestone complete; Phase 14 verified passed
-last_updated: "2026-05-24T00:32:50.076Z"
-last_activity: 2026-05-24
+status: Awaiting next milestone
+stopped_at: Phase 14 context gathered
+last_updated: "2026-05-24T03:02:32.700Z"
+last_activity: 2026-05-24 — Milestone v1.3 completed and archived
 progress:
   total_phases: 6
   completed_phases: 6
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-15 at v1.3 open)
 
 ## Current Position
 
-Phase: 14
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-05-24
+Phase: Milestone v1.3 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-05-24 — Milestone v1.3 completed and archived
 
 ## Performance Metrics
 
@@ -185,6 +185,11 @@ Items acknowledged and carried forward from previous milestone close (status upd
 | API | API-01 public `vcs.refs.idAlphabet` introspection | Still deferred (no consumer) | v1.2 |
 | API | `vcs.workspace.parallel.cancel(handle)` mid-execution graceful abandonment | Deferred to v1.4+; surfaces if dogfood (Phase 14) reveals need | v1.3 open |
 | Lint | Workflow call-presence lint (`vcs.parallel.*` must be called in dispatch sections) | Deferred to v1.4 | v1.3 open |
+| Docs | 45 docs failures across 8 themes from `/gsd-docs-update --verify-only` — author-machine path leaks, split-workspace-command translations, ADR drift, renamed hooks, archived planning refs, missing drift-control tests, translation date mismatches; see [v14-docs-verify-only-followups](./todos/pending/v14-docs-verify-only-followups.md) | Acknowledged for v1.4 coordinated cleanup pass | v1.3 close (2026-05-24) |
+| Tests | `performJjReap` test flake (Phase 14 dogfood observation); see [v14-jj-reap-test-flake](./todos/pending/v14-jj-reap-test-flake.md) | Acknowledged for v1.4 | v1.3 close (2026-05-24) |
+| Cleanup | Orphan `jj-workspace` directories left behind by dispatch; see [v14-orphan-jj-workspace-dirs](./todos/pending/v14-orphan-jj-workspace-dirs.md) | Acknowledged for v1.4 | v1.3 close (2026-05-24) |
+| Reviews | Phase 14 review followups (CR-01 closed, additional WR-* items pending); see [v14-review-followups](./todos/pending/v14-review-followups.md) | Acknowledged for v1.4 | v1.3 close (2026-05-24) |
+| Docs | `transition.md` update-gap (`update_roadmap_and_state` step lacks immediate commit); see [v14-transition-md-update-gap](./todos/pending/v14-transition-md-update-gap.md) | Acknowledged for v1.4 | v1.3 close (2026-05-24) |
 
 ## Session Continuity
 
@@ -195,3 +200,7 @@ Resume file:
 None
 
 - Phase 12 (A3 fix) is an independent parallel track — may be planned/executed in parallel with Phases 9/10/11; joins at Phase 13 CI integration.
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
