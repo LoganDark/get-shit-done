@@ -1035,8 +1035,8 @@ export function cleanupSubagentWorkspaces(
         failedReaped.push(ws.name);
       }
     } else {
-      // Dir already gone — count as abandoned (idempotent re-call case)
-      abandoned.push(ws.name);
+      // Dir already gone — D-06 idempotent skip; do NOT push to abandoned[]
+      // (would violate D-03 empty-arrays-on-re-call invariant — see 15-04-PLAN.md L52, L255, L299).
     }
   }
 
