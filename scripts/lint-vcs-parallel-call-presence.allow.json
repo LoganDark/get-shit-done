@@ -1,0 +1,6 @@
+{
+	"$schema_version": 2,
+	"$migration_note": "Phase 8 Plan 1 D-03 + D-04: per-entry { path|glob, reason, owner }; expires field dropped per solo-dev override.",
+	"$comment_ip2_cancel_exclusion": "This lint enforces dispatch <-> fan-in pairing presence; cancel and fanIn-only workflows are NOT in scope today — when a real consumer emerges, the lint scope rule is revisited then. See .planning/research/PITFALLS.md IP-2.",
+	"entries": []
+}
