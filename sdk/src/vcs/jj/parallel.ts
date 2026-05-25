@@ -392,6 +392,14 @@ export function performJjParallelFanIn(
 	const failedReaped: string[] = [];
 
 	if (conflicted) {
+		// W3 (a) / CF-03 / AP-5 (Phase 16.02 lock-in): workspaces are PRESERVED
+		// on disk here for human inspection of the conflicted state. NO call to
+		// cleanupSubagentWorkspaces — the joint-assertion contract (ROADMAP SC4)
+		// makes this divergence from the clean-path branch load-bearing. DO NOT
+		// add reap here; the cleanup-omission is intentional and tested by the
+		// inverse assertion in cmd-parallel-jj.test.ts conflicted describe.
+		// See .planning/phases/16-workflow-invariant-tooling/16-CONTEXT.md
+		// CF-03 + Success Criterion 4.
 		// W3 (a): enqueue a merge-in-tree-conflict entry for the merge HEAD.
 		// The on-disk dir + workspace tracking for each agent are LEFT intact
 		// (no main-bookmark advance) so the user can inspect the conflicted
@@ -458,6 +466,21 @@ export function performJjParallelFanIn(
 		// `FanInResult` (default-initialized above) for cross-backend symmetry.
 
 		merged.push(mergeChangeId);
+
+		// CLEANUP-02 / Phase 16.02 (D-07): tear down materialized subagent
+		// workspaces on the clean path. Handle.workspaces is the authoritative
+		// source-of-truth (Pitfall 4 mitigation per Phase 15 N1 — custom
+		// workspacePath overrides MUST be honored). Direct TS-side call (NOT via
+		// the CLI bridge — bridge is for bash consumers only per D-07). The
+		// helper returns {abandoned, failedReaped}; only failedReaped is merged
+		// into FanInResult (no `abandoned` field on FanInResult — that's
+		// CancelResult-only shape per parallel.ts:557-561 self-precedent).
+		const { failedReaped: cleanupFailedReaped } = cleanupSubagentWorkspaces(
+			mainRepoRoot,
+			handle.phaseNumber,
+			handle.workspaces,
+		);
+		for (const name of cleanupFailedReaped) failedReaped.push(name);
 	}
 
 	// 4. Reap crashed agents — those with exitCode !== 0 in the results array.
