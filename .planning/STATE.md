@@ -4,8 +4,8 @@ milestone: v1.4
 milestone_name: Clean, consistent state for next upstream pull
 status: executing
 stopped_at: Phase 14.1 context gathered
-last_updated: "2026-05-25T00:27:27.887Z"
-last_activity: 2026-05-25 -- Phase 15 planning complete
+last_updated: "2026-05-25T00:32:07.697Z"
+last_activity: 2026-05-25 -- Phase 15 execution started
 progress:
   total_phases: 2
   completed_phases: 1
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 14.1 — drop-mandatory-bookmark-on-parallel-dispatch-fan-in-emergenc
+**Current focus:** Phase 15 — Adapter surface extensions + rename
 
 ## Current Position
 
-Phase: 15
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-25 -- Phase 15 planning complete
+Phase: 15 (Adapter surface extensions + rename) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 15
+Last activity: 2026-05-25 -- Phase 15 execution started
 
 ## Performance Metrics
 
