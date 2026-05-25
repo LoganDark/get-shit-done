@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseAllowlist, REQUIRED_FIELDS } = require('../../scripts/lib/allowlist-parser.cjs');
+const { parseAllowlist, REQUIRED_FIELDS, FORBIDDEN_FIELDS } = require('../../scripts/lib/allowlist-parser.cjs');
 
 test('parseAllowlist: missing reason throws', () => {
 	assert.throws(
@@ -71,4 +71,25 @@ test('parseAllowlist: empty whitespace-only reason throws', () => {
 test('REQUIRED_FIELDS exports as exactly [reason, owner] (D-04)', () => {
 	assert.deepEqual(REQUIRED_FIELDS, ['reason', 'owner']);
 	assert.equal(REQUIRED_FIELDS.includes('expires'), false);
+});
+
+test('parseAllowlist: expires field FORBIDDEN — entry containing expires throws (Phase 16 plan 16.01 / feedback_solo_dev_no_expires)', () => {
+	assert.throws(
+		() => parseAllowlist(
+			{
+				entries: [{
+					path: 'foo.ts',
+					reason: 'r',
+					owner: '@x',
+					expires: '2026-01-01',
+				}],
+			},
+			'test',
+		),
+		/forbidden "expires" field/,
+	);
+});
+
+test('FORBIDDEN_FIELDS exports as exactly [expires] (Phase 16 plan 16.01)', () => {
+	assert.deepEqual(FORBIDDEN_FIELDS, ['expires']);
 });
