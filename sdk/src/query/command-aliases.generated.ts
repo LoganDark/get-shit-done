@@ -109,6 +109,7 @@ export const NON_FAMILY_COMMAND_ALIASES: readonly NonFamilyCommandAlias[] = [
   { canonical: 'check-commit', aliases: [], mutation: true },
   { canonical: 'check.decision-coverage-plan', aliases: ['check decision-coverage-plan'], mutation: false },
   { canonical: 'check.decision-coverage-verify', aliases: ['check decision-coverage-verify'], mutation: false },
+  { canonical: 'cleanup-subagent-workspaces', aliases: [], mutation: true },
   { canonical: 'commit', aliases: [], mutation: true },
   { canonical: 'commit-to-subrepo', aliases: [], mutation: true },
   { canonical: 'config-ensure-section', aliases: [], mutation: true },

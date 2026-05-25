@@ -586,6 +586,11 @@ const NON_FAMILY_COMMAND_ALIASES = [
     "mutation": false
   },
   {
+    "canonical": "cleanup-subagent-workspaces",
+    "aliases": [],
+    "mutation": true
+  },
+  {
     "canonical": "commit",
     "aliases": [],
     "mutation": true
@@ -843,6 +848,13 @@ const NON_FAMILY_COMMAND_ALIASES = [
       "workspace assert-dispatched-cwd"
     ],
     "mutation": false
+  },
+  {
+    "canonical": "workspace.parallel.cancel",
+    "aliases": [
+      "workspace parallel.cancel"
+    ],
+    "mutation": true
   },
   {
     "canonical": "workspace.parallel.dispatch",
