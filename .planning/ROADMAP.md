@@ -272,10 +272,10 @@ Plans:
 
 **Plans**: 4 plans (sequential within phase — file-overlap on `sdk/src/vcs/types.ts` + `backends/git.ts` + `backends/jj.ts` forces sequential plan ordering, NOT parallel waves)
 
-  - [ ] 15-01-PLAN.md — `rootCommits` → `rootRevisions` hard rename (NAMING-01). Ships FIRST: smallest diff, clears namespace, doing it later forces same-file rebase. Pre-rename JSON sidecar audit per Pitfall 3 (the v1.2 "JSON sidecar as build-pipeline seed" pattern); per-extension `grep -c '\brootCommits\b'` must exit 0 before commit; archived `.planning/research/.archive-pre-v1.4/` + `.planning/milestones/v1.2-research/` treated as historical-prose carve-out. No alias (v1.2 NAMING-01 precedent).
-  - [ ] 15-02-PLAN.md — `vcs.refs.idAlphabet` (VCS-21). Three-line addition to refs namespace on both backends (`'0-9a-f'` git, `'k-z'` jj); JSDoc frames as opaque char-class regex body; cross-backend contract test asserts non-empty + matches backend's known alphabet.
-  - [ ] 15-03-PLAN.md — `vcs.refs.matchPrefix` (VCS-22). Consumes VCS-21 idAlphabet contract; pure-string per-backend implementation (no closures over adapter state, hard-codes alphabet regex inline matching `validateRefname` precedent); throws on wrong-alphabet + empty prefix; returns false on `prefix.length > id.length`; hex case-insensitive, k-z lower-only; test cross-product mandatory.
-  - [ ] 15-04-PLAN.md — `vcs.workspace.parallel.cancel` (PARALLEL-07). Ships LAST: largest plan, consumes settled types.ts diffs. **Wave 1 = extract `cleanupSubagentWorkspaces` helper** (Pitfall 11; single owner per IP-5). **Wave 2 = cancel verb body** using helper; synchronous teardown only (no signal handling per STACK lens + Phase 11 D-01 + Phase 9 PARALLEL-03 invariants); structured `CancelResult` (NOT void/boolean); new CLI bridge `workspace-parallel-cancel.ts` with three-site registration; per-backend test files cover cancel-clean-abandon, cancel-idempotent-recall, cancel-partial-state-recovery.
+  - [x] 15-01-PLAN.md — `rootCommits` → `rootRevisions` hard rename (NAMING-01). Ships FIRST: smallest diff, clears namespace, doing it later forces same-file rebase. Pre-rename JSON sidecar audit per Pitfall 3 (the v1.2 "JSON sidecar as build-pipeline seed" pattern); per-extension `grep -c '\brootCommits\b'` must exit 0 before commit; archived `.planning/research/.archive-pre-v1.4/` + `.planning/milestones/v1.2-research/` treated as historical-prose carve-out. No alias (v1.2 NAMING-01 precedent).
+  - [x] 15-02-PLAN.md — `vcs.refs.idAlphabet` (VCS-21). Three-line addition to refs namespace on both backends (`'0-9a-f'` git, `'k-z'` jj); JSDoc frames as opaque char-class regex body; cross-backend contract test asserts non-empty + matches backend's known alphabet.
+  - [x] 15-03-PLAN.md — `vcs.refs.matchPrefix` (VCS-22). Consumes VCS-21 idAlphabet contract; pure-string per-backend implementation (no closures over adapter state, hard-codes alphabet regex inline matching `validateRefname` precedent); throws on wrong-alphabet + empty prefix; returns false on `prefix.length > id.length`; hex case-insensitive, k-z lower-only; test cross-product mandatory.
+  - [x] 15-04-PLAN.md — `vcs.workspace.parallel.cancel` (PARALLEL-07). Ships LAST: largest plan, consumes settled types.ts diffs. **Wave 1 = extract `cleanupSubagentWorkspaces` helper** (Pitfall 11; single owner per IP-5). **Wave 2 = cancel verb body** using helper; synchronous teardown only (no signal handling per STACK lens + Phase 11 D-01 + Phase 9 PARALLEL-03 invariants); structured `CancelResult` (NOT void/boolean); new CLI bridge `workspace-parallel-cancel.ts` with three-site registration; per-backend test files cover cancel-clean-abandon, cancel-idempotent-recall, cancel-partial-state-recovery.
 
 ### Phase 16: Workflow + invariant tooling
 
@@ -293,7 +293,7 @@ Plans:
 **Plans**: 2 plans (parallel-safe — file-disjoint)
 
   - [ ] 16.01-PLAN.md — LINT-06 workflow call-presence lint. New `scripts/lint-vcs-parallel-call-presence.cjs` + per-entry `.allow.json` + fixture-based unit test (Pattern B mkdtemp) + new step in `parallel-e2e.yml`. Pitfall 7 prevention: scope by SHELL FENCE not by prose mention (reuse `audit-workflow-raw-git.cjs` fence-aware walker shape); content-driven literal substring detection; per-file allowlist for legitimate non-dispatchers.
-  - [ ] 16.02-PLAN.md — CLEANUP-02 orphan FS dir reap. Extend `performJjParallelFanIn` clean-path branch with per-workspace `rmSync({recursive: true, force: true})` loop (do NOT touch conflicted branch per Pitfall Anti-Pattern 5); extend `scripts/dogfood-restore.sh` with idempotent `find … -exec rm -rf` post-restore step; consume `cleanupSubagentWorkspaces` helper from Phase 15 PARALLEL-07; new cross-backend test covers both jj-cell and git-cell fanIn-success-no-orphan-dirs + dogfood-restore-survival-cleanup scenarios.
+  - [x] 16.02-PLAN.md — CLEANUP-02 orphan FS dir reap. Extend `performJjParallelFanIn` clean-path branch with per-workspace `rmSync({recursive: true, force: true})` loop (do NOT touch conflicted branch per Pitfall Anti-Pattern 5); extend `scripts/dogfood-restore.sh` with idempotent `find … -exec rm -rf` post-restore step; consume `cleanupSubagentWorkspaces` helper from Phase 15 PARALLEL-07; new cross-backend test covers both jj-cell and git-cell fanIn-success-no-orphan-dirs + dogfood-restore-survival-cleanup scenarios. (completed 2026-05-25)
 
 ### Phase 17: Drift control + reconciliation
 
@@ -360,7 +360,7 @@ v1.4 phase ordering: Phase 15 ships first (adapter surface highest-leverage; ext
 | 12. A3 colocated pre-commit fix (parallel track) | 3/3 | Complete    | 2026-05-21 |
 | 13. CI parallel-path lane + lint close-gate | 4/4 | Complete   | 2026-05-22 |
 | 14. Default flip + dogfood validation | 5/5 | Complete    | 2026-05-24 |
-| 15. Adapter surface extensions + rename | 0/4 | Not started | — |
+| 15. Adapter surface extensions + rename | 4/4 | Complete    | 2026-05-25 |
 | 16. Workflow + invariant tooling | 0/2 | Not started | — |
 | 17. Drift control + reconciliation | 0/4 | Not started | — |
 | 18. Tactical cleanup + test-flake | 0/3 | Not started | — |
