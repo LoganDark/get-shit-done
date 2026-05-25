@@ -4,13 +4,13 @@ milestone: v1.4
 milestone_name: Clean, consistent state for next upstream pull
 status: executing
 stopped_at: Phase 17 context gathered
-last_updated: "2026-05-25T22:06:29.949Z"
+last_updated: "2026-05-25T22:22:49.339Z"
 last_activity: 2026-05-25
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
   percent: 75
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 ## Current Position
 
 Phase: 17 (drift-control-reconciliation) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-05-25
 
@@ -84,6 +84,7 @@ Last activity: 2026-05-25
 | Phase 14.1 P01 | 14min | 3 tasks | 16 files |
 | Phase 17 P17.01 | 2min | 2 tasks | 4 files |
 | Phase 17 P17.02 | 8min | 2 tasks | 3 files |
+| Phase 17 P17.03 | 22min | 8 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -168,6 +169,9 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase 17]: Plan 17.01 (DOCS-08): Aligned ARCHITECTURE.md prose counts across en + ja-JP + ko-KR + INVENTORY.md Commands/Workflows headlines with live filesystem. pt-BR carve-out preserved. D-04 all-strict locale lockstep satisfied; Wave 2 drift-test gate open for day-1 GREEN.
 - [Phase ?]: Rule 3 deviation in 17.02: added /gsd-migrate-vcs row to INVENTORY.md so command-count-sync drift guard lands Day-1 GREEN per Pitfall 4 same-PR coupling.
 - [Phase ?]: D-10 honored in 17.02: Tests is NOT added as an INVENTORY.md family; the two new drift-test files auto-resolve the INVENTORY L9/L59 self-references.
+- [Phase ?]: Phase 17 Plan 17.03: 7 atomic per-theme commits + 1 close-gate (Pitfall 12 + CF-05) closed DOCS-01..07 + DOCS-09; 45/45 original failing claims resolved (100.0% pass rate); ADR immutability above-the-line preserved
+- [Phase ?]: RESEARCH function-name claim corrected during execute: ADR 0009 supersession-note cites projectShellCommandText (live) instead of projectShellCommand (RESEARCH placeholder)
+- [Phase ?]: Theme 7 path (b) fallback applied: en source docs/superpowers/specs/... does not exist; pt-BR specs L4 dangling self-reference removed instead of being rewritten to en target
 
 ### Pending Todos
 
@@ -238,7 +242,7 @@ All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQU
 
 ## Session Continuity
 
-Last session: 2026-05-25T22:06:13.932Z
+Last session: 2026-05-25T22:22:17.679Z
 Stopped at: Phase 17 context gathered
 Resume file: 
 

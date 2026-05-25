@@ -57,15 +57,15 @@ Lock prose claims in ARCHITECTURE.md / INVENTORY.md to live filesystem state. Te
 
 Eight themes from `/gsd:docs-update --verify-only` audit captured in `v14-docs-verify-only-followups`. Wave 1 = prose fixes (DOCS-08) before Wave 2 = drift tests (DRIFT-01/02) per Pitfall 4 ordering.
 
-- [ ] **DOCS-01**: Replace 14 author-machine path leaks `node /Users/diego/Dev/get-shit-done/get-shit-done/bin/gsd-tools.cjs` → `$HOME/.claude/get-shit-done/bin/gsd-tools.cjs` (or relative `get-shit-done/bin/gsd-tools.cjs`) in `docs/{ja-JP,ko-KR}/superpowers/plans/2026-03-18-materialize-new-project-config.md` (theme 1)
-- [ ] **DOCS-02**: Update 3 translation specs (`docs/{ja-JP,ko-KR,pt-BR}/superpowers/specs/2026-03-20-multi-project-workspaces-design.md`) to reference single `commands/gsd/workspace.md` with appropriate subcommands instead of the 3 non-existent split files (theme 2; 7 sites)
-- [ ] **DOCS-03**: Reconcile ADR 0009 (`docs/adr/0009-shell-command-projection-module.md`) + ADR 0010 (`docs/adr/0010-file-operation-engine-module.md`) drift from current code — update OR add "Superseded by" notes per ADR convention (theme 3; 7 issues)
-- [ ] **DOCS-04**: Fix 5 renamed-hook / missing-helper references — `gsd-read-before-edit.js` → `hooks/gsd-read-guard.js`; remove `gsd-commit-docs.js` hook claim; fix `doc-conflict-engine.md` path prefix; decide on `verify-reapply-patches.cjs` (rebuild or remove claim); fix `npm run build` (no top-level `build` script) in `docs/USER-GUIDE.md`, `docs/FEATURES.md`, `docs/AGENTS.md`, `docs/CONTRIBUTING.md`, `CHANGELOG.md` (theme 4)
-- [ ] **DOCS-05**: Resolve `docs/test-triage/jj-bugs.md` references to archived phase-3 planning artifacts (`03-07-PLAN.md`, `03-RESEARCH.md`, `03-06-PLAN.md`) — either rehydrate into archive subdirectory or update doc to reference closure commits (theme 5; 3 sites)
-- [ ] **DOCS-06**: Fix 3 translation date/link mismatches in pt-BR superpowers docs — rename `docs/pt-BR/superpowers/plans/2026-03-23-materialize-new-project-config.md` to `2026-03-18` (or fix link target); fix `docs/pt-BR/superpowers/README.md` L7 03-18 vs 03-23 mismatch; fix circular ref in `docs/pt-BR/superpowers/specs/2026-03-20-multi-project-workspaces-design.md` (theme 7)
-- [ ] **DOCS-07**: Fix 3 singleton failures — `CHANGELOG.md:389` `mutation-subprocess.integration.test.ts` (renamed/moved); `CONTEXT.md:610` `tests/lint-no-source-grep.cjs` → `scripts/lint-no-source-grep.cjs`; `docs/ja-JP/AGENTS.md:389` `USER-PROFILE.md` qualified path (theme 8)
+- [x] **DOCS-01**: Replace 14 author-machine path leaks `node /Users/diego/Dev/get-shit-done/get-shit-done/bin/gsd-tools.cjs` → `$HOME/.claude/get-shit-done/bin/gsd-tools.cjs` (or relative `get-shit-done/bin/gsd-tools.cjs`) in `docs/{ja-JP,ko-KR}/superpowers/plans/2026-03-18-materialize-new-project-config.md` (theme 1)
+- [x] **DOCS-02**: Update 3 translation specs (`docs/{ja-JP,ko-KR,pt-BR}/superpowers/specs/2026-03-20-multi-project-workspaces-design.md`) to reference single `commands/gsd/workspace.md` with appropriate subcommands instead of the 3 non-existent split files (theme 2; 7 sites)
+- [x] **DOCS-03**: Reconcile ADR 0009 (`docs/adr/0009-shell-command-projection-module.md`) + ADR 0010 (`docs/adr/0010-file-operation-engine-module.md`) drift from current code — update OR add "Superseded by" notes per ADR convention (theme 3; 7 issues)
+- [x] **DOCS-04**: Fix 5 renamed-hook / missing-helper references — `gsd-read-before-edit.js` → `hooks/gsd-read-guard.js`; remove `gsd-commit-docs.js` hook claim; fix `doc-conflict-engine.md` path prefix; decide on `verify-reapply-patches.cjs` (rebuild or remove claim); fix `npm run build` (no top-level `build` script) in `docs/USER-GUIDE.md`, `docs/FEATURES.md`, `docs/AGENTS.md`, `docs/CONTRIBUTING.md`, `CHANGELOG.md` (theme 4)
+- [x] **DOCS-05**: Resolve `docs/test-triage/jj-bugs.md` references to archived phase-3 planning artifacts (`03-07-PLAN.md`, `03-RESEARCH.md`, `03-06-PLAN.md`) — either rehydrate into archive subdirectory or update doc to reference closure commits (theme 5; 3 sites)
+- [x] **DOCS-06**: Fix 3 translation date/link mismatches in pt-BR superpowers docs — rename `docs/pt-BR/superpowers/plans/2026-03-23-materialize-new-project-config.md` to `2026-03-18` (or fix link target); fix `docs/pt-BR/superpowers/README.md` L7 03-18 vs 03-23 mismatch; fix circular ref in `docs/pt-BR/superpowers/specs/2026-03-20-multi-project-workspaces-design.md` (theme 7)
+- [x] **DOCS-07**: Fix 3 singleton failures — `CHANGELOG.md:389` `mutation-subprocess.integration.test.ts` (renamed/moved); `CONTEXT.md:610` `tests/lint-no-source-grep.cjs` → `scripts/lint-no-source-grep.cjs`; `docs/ja-JP/AGENTS.md:389` `USER-PROFILE.md` qualified path (theme 8)
 - [x] **DOCS-08**: Fix ARCHITECTURE.md prose-count drift across en + 4 translations (44→68 commands, 46→89 workflows, 16→33 agents, 17→60 lib modules, ~3000→10,978 install.js LOC) — forced by DRIFT-01, ships in Wave 1 before the tests RED
-- [ ] **DOCS-09**: Close-gate — re-run `/gsd:docs-update --verify-only` after Wave 1+2 land and confirm pass rate ≥ 99% (allowing legitimate skip-but-flag cases)
+- [x] **DOCS-09**: Close-gate — re-run `/gsd:docs-update --verify-only` after Wave 1+2 land and confirm pass rate ≥ 99% (allowing legitimate skip-but-flag cases)
 
 ### PROJECT.md Reconciliation
 
@@ -112,14 +112,14 @@ Which phases cover which requirements. Updated during roadmap creation 2026-05-2
 | DOCS-08 | Phase 17 (plan 17.01) | Complete |
 | DRIFT-01 | Phase 17 (plan 17.02) | Complete |
 | DRIFT-02 | Phase 17 (plan 17.02) | Complete |
-| DOCS-01 | Phase 17 (plan 17.03) | Pending |
-| DOCS-02 | Phase 17 (plan 17.03) | Pending |
-| DOCS-03 | Phase 17 (plan 17.03) | Pending |
-| DOCS-04 | Phase 17 (plan 17.03) | Pending |
-| DOCS-05 | Phase 17 (plan 17.03) | Pending |
-| DOCS-06 | Phase 17 (plan 17.03) | Pending |
-| DOCS-07 | Phase 17 (plan 17.03) | Pending |
-| DOCS-09 | Phase 17 (plan 17.03) | Pending |
+| DOCS-01 | Phase 17 (plan 17.03) | Complete |
+| DOCS-02 | Phase 17 (plan 17.03) | Complete |
+| DOCS-03 | Phase 17 (plan 17.03) | Complete |
+| DOCS-04 | Phase 17 (plan 17.03) | Complete |
+| DOCS-05 | Phase 17 (plan 17.03) | Complete |
+| DOCS-06 | Phase 17 (plan 17.03) | Complete |
+| DOCS-07 | Phase 17 (plan 17.03) | Complete |
+| DOCS-09 | Phase 17 (plan 17.03) | Complete |
 | PROJECT-01 | Phase 17 (plan 17.04) | Pending |
 | CLEANUP-01 | Phase 18 (plan 18.01) | Pending |
 | CLEANUP-03 | Phase 18 (plan 18.02) | Pending |
