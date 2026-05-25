@@ -75,6 +75,16 @@ exports.BACKENDS_AVAILABLE_FOR_VERB = Object.freeze({
     'refs.resolveShort': Object.freeze(['git', 'jj-colocated']),
     'refs.countCommits': Object.freeze(['git', 'jj-colocated']),
     'refs.rootRevisions': Object.freeze(['git', 'jj-colocated']),
+    // Phase 15.02 (VCS-21): per-backend canonical id alphabet substring.
+    // Capability matrix string-key add — TSC does NOT catch object-key
+    // omissions on the runtime lookup path; backends.test.ts regression-asserts
+    // presence (Pitfall 1 / Pitfall 3 mitigation per v1.2 retro CR-01 precedent).
+    'refs.idAlphabet': Object.freeze(['git', 'jj-colocated']),
+    // Phase 15.03 (VCS-22): alphabet-aware short-prefix matcher. Throws on
+    // wrong-alphabet (Pitfall 6 — silent-false would mask caller bugs) and on
+    // empty prefix. Capability matrix string-key add — TSC blind on object-key
+    // lookup; backends.test.ts regression-asserts presence.
+    'refs.matchPrefix': Object.freeze(['git', 'jj-colocated']),
     'refs.exists': Object.freeze(['git', 'jj-colocated']),
     'refs.isIgnored': Object.freeze(['git']), // jj-side: VcsNotImplementedError (audit-confirmed no jj caller)
     'refs.remotes': Object.freeze(['git', 'jj-colocated']),
@@ -123,6 +133,12 @@ exports.BACKENDS_AVAILABLE_FOR_VERB = Object.freeze({
     'status.cwd': Object.freeze(['git', 'jj-colocated']),
     'workspace.merge': Object.freeze(['git', 'jj-colocated']),
     'workspace.remove': Object.freeze(['git', 'jj-colocated']),
+    // Phase 15.04 (PARALLEL-07): synchronous teardown of materialized subagent
+    // workspaces (CF-05 STACK-lens — `spawnSync` cannot accept `AbortSignal`).
+    // Capability matrix string-key add — TSC does NOT catch object-key omissions
+    // on the runtime lookup path (Pitfall 1 / Pitfall 3 / v1.2 retro CR-01
+    // precedent); backends.test.ts regression-asserts presence.
+    'workspace.parallel.cancel': Object.freeze(['git', 'jj-colocated']),
     'refs.bookmarks.delete.force': Object.freeze(['git', 'jj-colocated']),
     // Test-only snapshot/restore (gated separately so per-test fixture
     // setup can probe verb availability before invoking them — see

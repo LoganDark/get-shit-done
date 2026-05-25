@@ -288,6 +288,15 @@ export interface VcsAdapterCommon {
 export interface VcsRefs {
     readonly head: RevisionExpr;
     readonly parent: RevisionExpr;
+    /**
+     * 15.02 (VCS-21): per-backend canonical id alphabet substring.
+     * Git: '0-9a-f' (hex commit_id). Jj: 'k-z' (reverse-base32 change_id).
+     * Consumers compose into regex patterns:
+     *   new RegExp('^[' + vcs.refs.idAlphabet + ']+$')
+     * Replaces three ad-hoc duplications in expr.ts:41, format-migration/rewrite.ts:53,63.
+     * Opaque-string per CF-03 — structured {kind,chars,minLen,maxLen} alternative rejected (YAGNI).
+     */
+    readonly idAlphabet: string;
     bookmarks: VcsBookmarks;
     /**
      * Phase 2.1 D-15: renamed (and retyped) from the prior single-string
@@ -310,6 +319,33 @@ export interface VcsRefs {
         rev?: RevisionExpr;
     }): string[];
     exists(rev: RevisionExpr): boolean;
+    /**
+     * 15.03 (VCS-22): alphabet-aware short-prefix matcher — Pitfall 6 closes
+     * by THROWING (not silent-false) when the caller supplies a prefix outside
+     * the backend's canonical alphabet.
+     *
+     * Five rules (mandatory per CF-04, cross-product tested 5 rules × 2 backends):
+     *   1. canonical-alphabet prefix → returns true when the id starts with it.
+     *   2. wrong-alphabet prefix → THROWS Error containing "outside <kind> alphabet".
+     *      Hex prefix against a jj-backed adapter is a caller bug. Silent-false
+     *      would mask the bug (Pitfall 6: a hex `'abc'` passed to k-z matchPrefix
+     *      would return `false` because 'a' is outside [k-z] — caller would
+     *      interpret as "no match" rather than "wrong-API-call").
+     *   3. empty prefix → THROWS Error containing "empty prefix" (caller bug).
+     *   4. `prefix.length > id.length` → returns false (well-defined no-match,
+     *      not a caller bug — too-long prefixes are a definite no-match).
+     *   5. case-handling matches backend:
+     *      - git: case-insensitive (matches git `core.abbrev` / `rev-parse`).
+     *      - jj: lower-only (uppercase k-z trips wrong-alphabet — matches jj
+     *        prefix index which only indexes lower-case k-z).
+     *
+     * Composes with idAlphabet: consumers MAY build their own validation regex
+     * via `new RegExp('^[' + vcs.refs.idAlphabet + ']+$')` before invoking
+     * matchPrefix; the matchPrefix bodies themselves hard-code their alphabet
+     * regex inline (per Pattern S3 — no closure over idAlphabet, matches the
+     * existing `rootRevisions` body shape).
+     */
+    matchPrefix(id: RevisionExpr, prefix: string): boolean;
     isIgnored(path: string): boolean;
     remotes(): string[];
 }
@@ -399,10 +435,37 @@ export interface VcsWorkspace {
  *
  * Signature locked at `fanIn(handle, results): FanInResult` (two args — D-04;
  * rejects the v1.2-era one-arg `fanIn(wave)` ARCHITECTURE.md draft).
+ *
+ * Phase 15.04 (PARALLEL-07): extended with `cancel(handle): CancelResult` —
+ * synchronous teardown of materialized workspaces. The `cancel` method does
+ * NOT signal subagent processes (`sdk/src/vcs/exec.ts:19` `spawnSync` STACK
+ * layer cannot accept `AbortSignal`; Phase 9 D-01 orchestrator-awaits-
+ * `Agent()` invariant + Phase 11 D-01 no-orchestrator-sidecar-state invariant
+ * make mid-flight cancel a non-problem in production). Mid-Agent process-kill
+ * cancellation is OUT-OF-SCOPE per PROJECT.md; operator kills subagents via
+ * Claude Code UI/CLI and cancel cleans up the materialized workspaces
+ * post-mortem.
  */
 export interface VcsWorkspaceParallel {
     dispatch(opts: ParallelDispatchOpts): ParallelDispatchHandle;
     fanIn(handle: ParallelDispatchHandle, results: readonly ParallelAgentResult[]): FanInResult;
+    /**
+     * Phase 15.04 (PARALLEL-07): synchronous teardown of materialized
+     * subagent workspaces. CF-05 STACK-lens enforcement — `spawnSync` at
+     * `sdk/src/vcs/exec.ts:19` cannot accept `AbortSignal`, so this verb is
+     * **synchronous teardown only**. Does NOT signal subagent processes;
+     * mid-Agent process-kill cancellation is OUT-OF-SCOPE per PROJECT.md
+     * (operator handles process termination via Claude Code UI/CLI).
+     *
+     * The handle's `workspaces[]` array is the source of truth at call time
+     * (Phase 11 D-01 no-orchestrator-sidecar-state). Cancel is **idempotent**
+     * per D-03 — re-calling on an already-cancelled handle returns
+     * `CancelResult` with all-empty arrays (no error).
+     *
+     * Returns `CancelResult` (4-field envelope mirroring `FanInResult` field
+     * naming). See `CancelResult` JSDoc below for field semantics.
+     */
+    cancel(handle: ParallelDispatchHandle): CancelResult;
 }
 /**
  * Phase 9 (VCS-16): dispatch options. `plan` enumerates the per-agent slots
@@ -507,6 +570,41 @@ export interface FanInResult {
     incompleteQueued: number;
     failedReaped: readonly string[];
     surplusBookmarks: readonly string[];
+}
+/**
+ * Phase 15.04 (PARALLEL-07, D-01): result of
+ * `vcs.workspace.parallel.cancel(handle)`. **4-field envelope** mirroring
+ * `FanInResult.failedReaped` + `surplusBookmarks` naming verbatim (see lines
+ * 594-595 above for the v1.3 precedent). Pure-JSON; survives
+ * `JSON.stringify` → `JSON.parse` round-trip with no semantic loss (Phase 9
+ * D-05 frozen-pure-JSON invariant for parallel-domain return shapes — no
+ * closures, methods, Symbols, or class instances).
+ *
+ * Field semantics (D-02):
+ *   - `abandoned`: workspace identifiers fully torn down (agentId form per
+ *     orchestrator-identifier consistency, planner-picked).
+ *   - `failedReaped`: workspace identifiers that resisted teardown (the
+ *     caller can grep the filesystem to confirm leakage). On clean cancel,
+ *     length is 0.
+ *   - `surplusBookmarks`: bookmark/branch names that needed force-delete
+ *     (per `FanInResult.surplusBookmarks` precedent at line 595 above).
+ *     Typically `[]` on jj clean branch by Phase 11 D-02 octopus
+ *     construction; git side may carry `worktree-agent-*` entries.
+ *   - `surplusWorkspaces`: workspace paths still on disk pre-cancel
+ *     (counted at entry, regardless of cleanup outcome — D-02).
+ *
+ * Idempotency invariant (D-03 — load-bearing for cancel-idempotent-recall
+ * scenario): re-calling `cancel` on an already-cancelled handle returns
+ * `CancelResult` with all-empty arrays (no error). Matches Phase 11 D-01
+ * no-orchestrator-sidecar-state — the handle's `workspaces[]` array is the
+ * source of truth at call time, and once each requested workspace is gone
+ * from disk the second call enumerates zero teardown work.
+ */
+export interface CancelResult {
+    abandoned: readonly string[];
+    failedReaped: readonly string[];
+    surplusBookmarks: readonly string[];
+    surplusWorkspaces: readonly string[];
 }
 export interface GitOnlyOps {
     createAnnotatedTag(name: string, message: string, rev: RevisionExpr): void;

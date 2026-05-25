@@ -704,6 +704,11 @@ function createJjAdapter(cwd) {
     const refs = Object.freeze({
         head: expr_js_1.expr.head(),
         parent: expr_js_1.expr.parent(),
+        // Phase 15.02 (VCS-21): canonical id alphabet for jj change_id —
+        // empirically verified k-z reverse-base32 alphabet (see
+        // jj-id-alphabet-probe.test.ts:49-75 / format-migration/rewrite.ts:63).
+        // Opaque string per CF-03; consumers compose into regex patterns.
+        idAlphabet: 'k-z',
         bookmarks,
         currentBookmarks: () => {
             // jj's "current bookmark" semantics map to bookmarks at @- (the parent
@@ -856,6 +861,27 @@ function createJjAdapter(cwd) {
                 .split('\n')
                 .map((s) => s.trim())
                 .filter(Boolean);
+        },
+        // Phase 15.03 (VCS-22): alphabet-aware short-prefix matcher. Throws on
+        // wrong-alphabet (Pitfall 6: silent-false would mask caller bugs e.g. a
+        // hex prefix passed to a jj-backed adapter). Throws on empty prefix
+        // (caller bug per CF-04). Returns false on prefix.length > rawId.length
+        // (well-defined no-match, NOT a caller bug). jj prefix index is
+        // lower-only k-z; uppercase k-z is outside [k-z] and trips the
+        // wrong-alphabet gate. No closure over vcs.refs.idAlphabet — alphabet
+        // regex is inlined per Pattern S3 / validateRefname precedent.
+        matchPrefix: (id, prefix) => {
+            if (prefix.length === 0) {
+                throw new Error('vcs.refs.matchPrefix: empty prefix is a caller bug');
+            }
+            const rawId = (0, jj_rev_js_1.toJjRev)(id);
+            if (prefix.length > rawId.length) {
+                return false;
+            }
+            if (!/^[k-z]+$/.test(prefix)) {
+                throw new Error(`vcs.refs.matchPrefix: prefix '${prefix}' contains chars outside jj alphabet [k-z]`);
+            }
+            return rawId.startsWith(prefix);
         },
         exists: (rev) => {
             const args = jjArgv('log', '-r', (0, jj_rev_js_1.toJjRev)(rev), '-T', '"x"', '--no-graph', '-n', '1');
@@ -1102,9 +1128,15 @@ function createJjAdapter(cwd) {
         },
         // Phase 9 (VCS-16, PARALLEL-01/02): cross-backend parallel namespace.
         // Delegates to UPSTREAM-02 sidecar in sdk/src/vcs/jj/parallel.ts.
+        //
+        // Phase 15.04 (PARALLEL-07): `cancel` added as third entry. CF-05
+        // STACK-lens — synchronous teardown only (spawnSync at exec.ts:19 cannot
+        // accept AbortSignal); per-workspace teardown delegates to the
+        // `cleanupSubagentWorkspaces` helper sidecar at jj/workspace-cleanup.ts.
         parallel: Object.freeze({
             dispatch: (opts) => (0, parallel_js_1.performJjParallelDispatch)({ mainRepoRoot: cwd, vcs: { workspace }, ...opts }),
             fanIn: (handle, results) => (0, parallel_js_1.performJjParallelFanIn)(cwd, handle, results),
+            cancel: (handle) => (0, parallel_js_1.performJjParallelCancel)(cwd, handle),
         }),
     });
     /**

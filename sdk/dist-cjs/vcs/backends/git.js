@@ -505,6 +505,26 @@ function createGitAdapter(cwd) {
             return [];
         return r.stdout.split('\n').filter(Boolean).map((s) => s.trim());
     };
+    // Phase 15.03 (VCS-22): alphabet-aware short-prefix matcher. Throws on
+    // wrong-alphabet (Pitfall 6: silent-false would mask caller bugs e.g. a
+    // k-z prefix passed to a git-backed adapter). Throws on empty prefix
+    // (caller bug per CF-04). Returns false on prefix.length > rawId.length
+    // (well-defined no-match, NOT a caller bug). Hex is case-insensitive
+    // (matches git core.abbrev / rev-parse behavior). No closure over
+    // vcs.refs.idAlphabet — alphabet regex is inlined per Pattern S3.
+    const matchPrefix = (id, prefix) => {
+        if (prefix.length === 0) {
+            throw new Error('vcs.refs.matchPrefix: empty prefix is a caller bug');
+        }
+        const rawId = (0, git_rev_js_1.toGitRev)(id);
+        if (prefix.length > rawId.length) {
+            return false;
+        }
+        if (!/^[0-9a-fA-F]+$/.test(prefix)) {
+            throw new Error(`vcs.refs.matchPrefix: prefix '${prefix}' contains chars outside git alphabet [0-9a-fA-F]`);
+        }
+        return rawId.toLowerCase().startsWith(prefix.toLowerCase());
+    };
     const refExists = (rev) => {
         // `cat-file -t <rev>` exits 0 with the type when the object exists,
         // non-zero otherwise. Both outcomes are valid completions; we only need
@@ -527,6 +547,11 @@ function createGitAdapter(cwd) {
     const refs = Object.freeze({
         head: expr_js_1.expr.head(),
         parent: expr_js_1.expr.parent(),
+        // Phase 15.02 (VCS-21): canonical id alphabet for git commit_id —
+        // hex [0-9a-f] (case-insensitive at consumer layer; matches
+        // expr.ts:35 SHA_OR_CHANGE_ID_RE / format-migration/rewrite.ts:53).
+        // Opaque string per CF-03; consumers compose into regex patterns.
+        idAlphabet: '0-9a-f',
         bookmarks,
         currentBookmarks,
         currentBookmarksIn,
@@ -536,6 +561,7 @@ function createGitAdapter(cwd) {
         countCommits,
         rootRevisions,
         exists: refExists,
+        matchPrefix,
         isIgnored,
         remotes,
     });
@@ -697,9 +723,16 @@ function createGitAdapter(cwd) {
         },
         // Phase 10 (VCS-18, PARALLEL-01/02): cross-backend parallel namespace.
         // Delegates to adapter-internal sidecar in sdk/src/vcs/git/parallel.ts.
+        //
+        // Phase 15.04 (PARALLEL-07): `cancel` added as third entry. CF-05
+        // STACK-lens — synchronous teardown only (spawnSync at exec.ts:19 cannot
+        // accept AbortSignal). Inline teardown — git's `worktree remove --force`
+        // already handles tree cleanup; no shared helper because orphan-dirs are
+        // a jj-only problem per PROJECT.md OOS.
         parallel: Object.freeze({
             dispatch: (opts) => (0, parallel_js_1.performGitParallelDispatch)({ mainRepoRoot: cwd, vcs: { workspace }, ...opts }),
             fanIn: (handle, results) => (0, parallel_js_1.performGitParallelFanIn)(cwd, handle, results),
+            cancel: (handle) => (0, parallel_js_1.performGitParallelCancel)(cwd, handle),
         }),
     });
     // Phase 4 D-19: kernel-enforced via .git/index.lock; the adapter primitive is
