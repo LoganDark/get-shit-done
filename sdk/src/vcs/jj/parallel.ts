@@ -475,10 +475,28 @@ export function performJjParallelFanIn(
 		// helper returns {abandoned, failedReaped}; only failedReaped is merged
 		// into FanInResult (no `abandoned` field on FanInResult — that's
 		// CancelResult-only shape per parallel.ts:557-561 self-precedent).
+		//
+		// Phase 16 REVIEW CR-01 fix: EXCLUDE crashed-agent workspaces from the
+		// cleanup list. The reap loop below (lines 499-523) writes an
+		// IncompleteWorkEntry whose `workspacePath` field points to the
+		// crashed agent's on-disk workspace dir — that path must remain LIVE
+		// so the human reviewer can recover partial work. This mirrors the
+		// W3(a) forensic-preservation contract that the conflicted-branch
+		// path explicitly upholds (parallel.ts:394-402 + cmd-parallel-jj.test.ts
+		// :333-343 inverse assertion). Without this filter, a mixed
+		// clean-merge-with-crashed-agent scenario would tear down the crashed
+		// agent's dir before the queue entry surfaces — pointing the recovery
+		// surface at a deleted path.
+		const crashedAgentIds = new Set(
+			results.filter((r) => r.exitCode !== 0).map((r) => r.agentId),
+		);
+		const workspacesToReap = handle.workspaces.filter(
+			(ws) => !crashedAgentIds.has(ws.agentId),
+		);
 		const { failedReaped: cleanupFailedReaped } = cleanupSubagentWorkspaces(
 			mainRepoRoot,
 			handle.phaseNumber,
-			handle.workspaces,
+			workspacesToReap,
 		);
 		for (const name of cleanupFailedReaped) failedReaped.push(name);
 	}

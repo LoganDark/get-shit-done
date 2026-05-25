@@ -403,6 +403,18 @@ describe.sequential.skipIf(!jjAvailable)(
 			expect(
 				queue.some((e) => e.reason === 'crashed-with-uncommitted-work'),
 			).toBe(true);
+
+			// Phase 16 REVIEW WR-01 / CR-01 regression guard: forensic-
+			// preservation guard (mirrors the conflicted-branch guard at
+			// lines 333-343). The IncompleteWorkEntry's `workspacePath` field
+			// must point to a LIVE on-disk directory so the human reviewer
+			// can recover partial work. The crashed agent (agent-2 → index 1)
+			// must be excluded from the clean-path cleanupSubagentWorkspaces
+			// call in performJjParallelFanIn — see CR-01 fix at parallel.ts
+			// :478-489. The clean agent (agent-1 → index 0) is fanned-in and
+			// its workspace IS reaped on the clean path, so we only assert
+			// preservation for index 1.
+			expect(existsSync(handle.workspaces[1].path)).toBe(true);
 		});
 	},
 );
