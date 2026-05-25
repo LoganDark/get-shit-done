@@ -386,7 +386,7 @@ If you use GSD **as a workflow**—milestones, phases, `.planning/` artifacts, b
 ### Added
 
 - **`gsd-sdk query check auto-mode`** — Decision-routing audit Tier 2: one JSON blob for `workflow.auto_advance` + `workflow._auto_chain_active` with `active`, `source`, and per-flag fields; workflows use `--pick active` or `--pick auto_chain_active` instead of paired `config-get` calls (#2302).
-- **SDK Phase 3 — parity and regression guardrails** — Behind the scenes, exhaustive tests ensure the **workflow-facing query commands** stay aligned with the legacy CLI (including write paths and multi-step init). *Contributors:* policy coverage, read-only JSON parity, mutation sandboxes, `init.*` composition tests; `verifyGoldenPolicyComplete()`, `read-only-golden-rows`, `mutation-subprocess.integration.test.ts` (#2302).
+- **SDK Phase 3 — parity and regression guardrails** — Behind the scenes, exhaustive tests ensure the **workflow-facing query commands** stay aligned with the legacy CLI (including write paths and multi-step init). *Contributors:* policy coverage, read-only JSON parity, mutation sandboxes, `init.*` composition tests; `verifyGoldenPolicyComplete()`, `read-only-golden-rows` (#2302).
 
 ### Changed
 

@@ -401,7 +401,7 @@ runs its default whole-repo scan.
 | **Tools** | Read |
 | **Model (balanced)** | Sonnet |
 | **Color** | Magenta |
-| **Produces** | `USER-PROFILE.md`, `CLAUDE.md` profile section |
+| **Produces** | `$HOME/.claude/USER-PROFILE.md`, `CLAUDE.md` profile section |
 
 **Behavioral Dimensions:**
 Communication style, decision patterns, debugging approach, UX preferences, vendor choices, frustration triggers, learning style, explanation depth.

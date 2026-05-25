@@ -607,7 +607,7 @@ After stripping prose @-refs, some command `<process>` blocks retained bolded "*
 `DEFECT.DEFAULT-FLIP-DOCUMENTATION.fix-forward=template — "new default takes effect when .planning/config.json is rewritten (config-set, fresh project, regenerated config); existing artifacts continue to work; opt-back-in: gsd config-set <key> <old-value>"`
 
 `DEFECT.SOURCE-GREP-IN-NEW-TESTS.symptom=new test file uses readFileSync + .includes() / .match() against source code (CONTEXT.md L82); contradicts the test rule lint script`
-`DEFECT.SOURCE-GREP-IN-NEW-TESTS.detect=tests/lint-no-source-grep.cjs (npm run lint:tests) fails with line-number-precise violation; or test reads sdk/dist/* artifacts in CI where dist may not exist`
+`DEFECT.SOURCE-GREP-IN-NEW-TESTS.detect=scripts/lint-no-source-grep.cjs (npm run lint:tests) fails with line-number-precise violation; or test reads sdk/dist/* artifacts in CI where dist may not exist`
 `DEFECT.SOURCE-GREP-IN-NEW-TESTS.fix-forward=replace with runGsdTools(...) behavioral test capturing JSON; if asserting agent .md content (which IS the runtime contract) add // allow-test-rule: source-text-is-the-product with one-line justification`
 
 `DEFECT.GENERATIVE-PRIORITY=these defect classes share a common root: parallel implementations diverge silently because no parity test enforces equality at the test layer`
