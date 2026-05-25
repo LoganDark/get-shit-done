@@ -1,7 +1,6 @@
 # Especificação: Design de Multi-Project Workspaces (pt-BR)
 
-Data original: 2026-03-20  
-Fonte canônica: `docs/superpowers/specs/2026-03-20-multi-project-workspaces-design.md`
+Data original: 2026-03-20
 
 ---
 
