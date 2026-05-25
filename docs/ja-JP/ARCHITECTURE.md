@@ -113,7 +113,7 @@ GSDは、ユーザーとAIコーディングエージェント（Claude Code、G
 - **Copilot:** スラッシュコマンド（`/gsd-command-name`）
 - **Antigravity:** スキル
 
-**コマンド総数:** 44
+**コマンド総数:** 68
 
 ### ワークフロー（`get-shit-done/workflows/*.md`）
 
@@ -124,7 +124,7 @@ GSDは、ユーザーとAIコーディングエージェント（Claude Code、G
 - 状態更新パターン
 - エラーハンドリングとリカバリー
 
-**ワークフロー総数:** 46
+**ワークフロー総数:** 89
 
 ### エージェント（`agents/*.md`）
 
@@ -134,7 +134,7 @@ GSDは、ユーザーとAIコーディングエージェント（Claude Code、G
 - `tools` — 許可されたツールアクセス（Read、Write、Edit、Bash、Grep、Glob、WebSearchなど）
 - `color` — 視覚的な区別のためのターミナル出力色
 
-**エージェント総数:** 16
+**エージェント総数:** 33
 
 ### リファレンス（`get-shit-done/references/*.md`）
 
@@ -424,7 +424,7 @@ UI-SPEC.md (per phase) ───────────────────
 
 ## インストーラーアーキテクチャ
 
-インストーラー（`bin/install.js`、約3,000行）は以下を処理します：
+インストーラー（`bin/install.js`、約11,000行）は以下を処理します：
 
 1. **ランタイム検出** — インタラクティブプロンプトまたはCLIフラグ（`--claude`、`--opencode`、`--gemini`、`--kilo`、`--codex`、`--copilot`、`--antigravity`、`--all`）
 2. **インストール先の選択** — グローバル（`--global`）またはローカル（`--local`）

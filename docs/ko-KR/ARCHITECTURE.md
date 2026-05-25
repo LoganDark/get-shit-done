@@ -113,7 +113,7 @@ GSD는 사용자와 AI 코딩 에이전트(Claude Code, Gemini CLI, OpenCode, Ki
 - **Copilot:** 슬래시 명령어 (`/gsd-command-name`)
 - **Antigravity:** Skills
 
-**전체 명령어 수:** 44개
+**전체 명령어 수:** 68개
 
 ### Workflows (`get-shit-done/workflows/*.md`)
 
@@ -124,7 +124,7 @@ GSD는 사용자와 AI 코딩 에이전트(Claude Code, Gemini CLI, OpenCode, Ki
 - 상태 업데이트 패턴
 - 오류 처리 및 복구
 
-**전체 워크플로우 수:** 46개
+**전체 워크플로우 수:** 89개
 
 ### Agents (`agents/*.md`)
 
@@ -134,7 +134,7 @@ GSD는 사용자와 AI 코딩 에이전트(Claude Code, Gemini CLI, OpenCode, Ki
 - `tools` — 허용된 도구 접근 권한 (Read, Write, Edit, Bash, Grep, Glob, WebSearch 등)
 - `color` — 시각적 구분을 위한 터미널 출력 색상
 
-**전체 에이전트 수:** 16개
+**전체 에이전트 수:** 33개
 
 ### References (`get-shit-done/references/*.md`)
 
@@ -424,7 +424,7 @@ UI-SPEC.md (per phase) ───────────────────
 
 ## 인스톨러 아키텍처
 
-인스톨러(`bin/install.js`, ~3,000줄)는 다음을 처리합니다.
+인스톨러(`bin/install.js`, ~11,000줄)는 다음을 처리합니다.
 
 1. **런타임 감지** — 대화형 프롬프트 또는 CLI 플래그 (`--claude`, `--opencode`, `--gemini`, `--kilo`, `--codex`, `--copilot`, `--antigravity`, `--all`)
 2. **위치 선택** — 전역(`--global`) 또는 로컬(`--local`)
