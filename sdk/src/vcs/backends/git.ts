@@ -30,7 +30,7 @@ import {
   VcsIncompleteSubagentsError,
 } from '../types.js';
 import { readIncomplete } from '../jj/incomplete-work.js';
-import { performGitParallelDispatch, performGitParallelFanIn } from '../git/parallel.js';
+import { performGitParallelDispatch, performGitParallelFanIn, performGitParallelCancel } from '../git/parallel.js';
 import { validateRefname } from '../refs-validator.js';
 import type {
   GitVcsAdapter,
@@ -59,6 +59,7 @@ import type {
   ParallelDispatchHandle,
   ParallelAgentResult,
   FanInResult,
+  CancelResult,
 } from '../types.js';
 // Phase 2.1 D-07: hook-bridge import removed — the helper is now module-private
 // to hook-bridge.ts; Phase 4 wires internal invocation from inside this
@@ -764,6 +765,12 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     },
     // Phase 10 (VCS-18, PARALLEL-01/02): cross-backend parallel namespace.
     // Delegates to adapter-internal sidecar in sdk/src/vcs/git/parallel.ts.
+    //
+    // Phase 15.04 (PARALLEL-07): `cancel` added as third entry. CF-05
+    // STACK-lens — synchronous teardown only (spawnSync at exec.ts:19 cannot
+    // accept AbortSignal). Inline teardown — git's `worktree remove --force`
+    // already handles tree cleanup; no shared helper because orphan-dirs are
+    // a jj-only problem per PROJECT.md OOS.
     parallel: Object.freeze({
       dispatch: (opts: ParallelDispatchOpts): ParallelDispatchHandle =>
         performGitParallelDispatch({ mainRepoRoot: cwd, vcs: { workspace }, ...opts }),
@@ -771,6 +778,8 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         handle: ParallelDispatchHandle,
         results: readonly ParallelAgentResult[],
       ): FanInResult => performGitParallelFanIn(cwd, handle, results),
+      cancel: (handle: ParallelDispatchHandle): CancelResult =>
+        performGitParallelCancel(cwd, handle),
     }),
   });
 

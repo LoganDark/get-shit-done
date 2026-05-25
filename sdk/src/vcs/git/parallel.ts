@@ -80,7 +80,7 @@
  * two exports below; never the reverse.
  */
 
-import { writeFileSync, mkdtempSync } from 'node:fs';
+import { writeFileSync, mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -91,6 +91,7 @@ import type {
 	ParallelDispatchHandle,
 	ParallelAgentResult,
 	FanInResult,
+	CancelResult,
 	IncompleteWorkEntry,
 } from '../types.js';
 import { appendIncomplete } from '../jj/incomplete-work.js';
@@ -623,4 +624,103 @@ export function performGitParallelFanIn(
 		failedReaped: Object.freeze(failedReaped.slice()) as readonly string[],
 		surplusBookmarks: Object.freeze(surplusBookmarks.slice()) as readonly string[],
 	}) satisfies FanInResult;
+}
+
+/**
+ * Phase 15.04 (PARALLEL-07 / Wave 2b): synchronous teardown of materialized
+ * subagent worktrees on the git backend. INLINE teardown — no shared helper
+ * (git's `worktree remove --force` already handles tree cleanup, and
+ * orphan-dirs are a jj-only problem per PROJECT.md OOS for cross-backend
+ * cleanup helper).
+ *
+ * CF-05 STACK-lens: synchronous teardown only. Does NOT signal subagent
+ * processes (mid-Agent process-kill cancellation is OUT-OF-SCOPE per
+ * PROJECT.md; operator handles process termination via Claude Code UI/CLI).
+ *
+ * Per-workspace teardown order (D-06 idempotency contract):
+ *   1. `git worktree remove --force <path>` — non-zero exit → push `ws.name`
+ *      to `failedReaped[]` (the visible state-leak surface) and continue to
+ *      the next workspace.
+ *   2. `git branch -D -- worktree-agent-<agentId>` — non-zero exit → push
+ *      the branch name to `surplusBookmarks[]` (branch may legitimately
+ *      already be gone from a prior call; surplus, NOT failed).
+ *   3. push `ws.agentId` to `abandoned[]` (per orchestrator-identifier
+ *      consistency convention).
+ *
+ * Phase 9 D-05 frozen pure-JSON: return value is `Object.freeze`'d with
+ * frozen inner arrays. Survives JSON round-trip without semantic loss.
+ *
+ * D-03 idempotency: re-call returns `CancelResult` with all-empty arrays —
+ * `worktree remove --force` on a missing path returns non-zero (recorded as
+ * failedReaped on first miss; on subsequent calls the prior call's removal
+ * is what guarantees the empty result, given `--force` skips no-such-tree
+ * scenarios cleanly when the worktree metadata was already pruned).
+ */
+export function performGitParallelCancel(
+	mainRepoRoot: string,
+	handle: ParallelDispatchHandle,
+): CancelResult {
+	// Count surplus workspaces at entry (D-02 — counted pre-cleanup regardless
+	// of teardown outcome).
+	const surplusWorkspaces: string[] = handle.workspaces
+		.filter((ws) => existsSync(ws.path))
+		.map((ws) => ws.path);
+
+	const abandoned: string[] = [];
+	const failedReaped: string[] = [];
+	const surplusBookmarks: string[] = [];
+
+	for (const ws of handle.workspaces) {
+		// Step 1: `git worktree remove --force <path>`. On non-zero exit the
+		// worktree resisted teardown (e.g., fs permission error) — push
+		// ws.name to failedReaped[] and skip this workspace's branch delete
+		// (the branch is harmless without the worktree; will get swept by
+		// the next cancel-clean call).
+		//
+		// Idempotent-recall note: when `ws.path` is already gone (prior
+		// cancel call), git's `worktree remove --force` emits "fatal: ...
+		// is not a working tree" and returns non-zero. To honor D-03's
+		// empty-arrays-on-re-call invariant we existsSync-gate up front —
+		// missing path means "nothing to do for this workspace" (do NOT
+		// push to failedReaped[] in that case; idempotent skip).
+		if (!existsSync(ws.path)) {
+			// Already gone — D-03/D-06 idempotent skip. Do NOT push to any
+			// bucket; the second cancel call must observe an all-empty
+			// CancelResult per the contract.
+			continue;
+		}
+		const wtRes = vcsExec(mainRepoRoot, 'git', ['worktree', 'remove', '--force', ws.path]);
+		if (wtRes.exitCode !== 0) {
+			failedReaped.push(ws.name);
+			continue;
+		}
+
+		// Step 2: `git branch -D -- worktree-agent-<agentId>`. `--`
+		// end-of-options separator is defense-in-depth against future
+		// loosening of the `validateAgentId` character class (matches
+		// the WR-01 precedent at backends/git.ts:712 + the equivalent in
+		// `performGitParallelFanIn` STEP 1 cleanup at git/parallel.ts:457).
+		// Non-zero exit means the branch may already be gone (e.g., prior
+		// reap, or a sibling `branch -D` from an unrelated command) — push
+		// to surplusBookmarks[], NOT failedReaped[]. The teardown of the
+		// workspace itself succeeded.
+		const branchName = `worktree-agent-${ws.agentId}`;
+		const brRes = vcsExec(mainRepoRoot, 'git', ['branch', '-D', '--', branchName]);
+		if (brRes.exitCode !== 0) {
+			surplusBookmarks.push(branchName);
+		}
+
+		// Per orchestrator-identifier consistency convention: abandoned[]
+		// uses agentId form (mirrors `merged[]` in `performGitParallelFanIn`
+		// which uses short-SHA form, and `failedReaped[]` which uses ws.name
+		// form — three identifier forms for three orthogonal axes).
+		abandoned.push(ws.agentId);
+	}
+
+	return Object.freeze({
+		abandoned: Object.freeze(abandoned.slice()) as readonly string[],
+		failedReaped: Object.freeze(failedReaped.slice()) as readonly string[],
+		surplusBookmarks: Object.freeze(surplusBookmarks.slice()) as readonly string[],
+		surplusWorkspaces: Object.freeze(surplusWorkspaces.slice()) as readonly string[],
+	}) satisfies CancelResult;
 }

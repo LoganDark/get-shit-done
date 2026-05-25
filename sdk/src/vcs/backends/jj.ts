@@ -31,7 +31,7 @@ import { validateRefname } from '../refs-validator.js';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { acquireJjWriteLock } from '../jj/lock.js';
 import { performJjReap } from '../jj/reap.js';
-import { performJjParallelDispatch, performJjParallelFanIn } from '../jj/parallel.js';
+import { performJjParallelDispatch, performJjParallelFanIn, performJjParallelCancel } from '../jj/parallel.js';
 import { readIncomplete } from '../jj/incomplete-work.js';
 import { enumerateConflictedPaths as _enumerateConflictedPaths } from '../jj/conflict-paths.js';
 import { fireHook } from '../hook-bridge.js';
@@ -74,6 +74,7 @@ import type {
   ParallelDispatchHandle,
   ParallelAgentResult,
   FanInResult,
+  CancelResult,
 } from '../types.js';
 
 export function createJjAdapter(cwd: string): JjVcsAdapter {
@@ -1283,6 +1284,11 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     },
     // Phase 9 (VCS-16, PARALLEL-01/02): cross-backend parallel namespace.
     // Delegates to UPSTREAM-02 sidecar in sdk/src/vcs/jj/parallel.ts.
+    //
+    // Phase 15.04 (PARALLEL-07): `cancel` added as third entry. CF-05
+    // STACK-lens — synchronous teardown only (spawnSync at exec.ts:19 cannot
+    // accept AbortSignal); per-workspace teardown delegates to the
+    // `cleanupSubagentWorkspaces` helper sidecar at jj/workspace-cleanup.ts.
     parallel: Object.freeze({
       dispatch: (opts: ParallelDispatchOpts): ParallelDispatchHandle =>
         performJjParallelDispatch({ mainRepoRoot: cwd, vcs: { workspace }, ...opts }),
@@ -1290,6 +1296,8 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
         handle: ParallelDispatchHandle,
         results: readonly ParallelAgentResult[],
       ): FanInResult => performJjParallelFanIn(cwd, handle, results),
+      cancel: (handle: ParallelDispatchHandle): CancelResult =>
+        performJjParallelCancel(cwd, handle),
     }),
   });
 

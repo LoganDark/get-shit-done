@@ -485,10 +485,37 @@ export interface VcsWorkspace {
  *
  * Signature locked at `fanIn(handle, results): FanInResult` (two args — D-04;
  * rejects the v1.2-era one-arg `fanIn(wave)` ARCHITECTURE.md draft).
+ *
+ * Phase 15.04 (PARALLEL-07): extended with `cancel(handle): CancelResult` —
+ * synchronous teardown of materialized workspaces. The `cancel` method does
+ * NOT signal subagent processes (`sdk/src/vcs/exec.ts:19` `spawnSync` STACK
+ * layer cannot accept `AbortSignal`; Phase 9 D-01 orchestrator-awaits-
+ * `Agent()` invariant + Phase 11 D-01 no-orchestrator-sidecar-state invariant
+ * make mid-flight cancel a non-problem in production). Mid-Agent process-kill
+ * cancellation is OUT-OF-SCOPE per PROJECT.md; operator kills subagents via
+ * Claude Code UI/CLI and cancel cleans up the materialized workspaces
+ * post-mortem.
  */
 export interface VcsWorkspaceParallel {
   dispatch(opts: ParallelDispatchOpts): ParallelDispatchHandle;
   fanIn(handle: ParallelDispatchHandle, results: readonly ParallelAgentResult[]): FanInResult;
+  /**
+   * Phase 15.04 (PARALLEL-07): synchronous teardown of materialized
+   * subagent workspaces. CF-05 STACK-lens enforcement — `spawnSync` at
+   * `sdk/src/vcs/exec.ts:19` cannot accept `AbortSignal`, so this verb is
+   * **synchronous teardown only**. Does NOT signal subagent processes;
+   * mid-Agent process-kill cancellation is OUT-OF-SCOPE per PROJECT.md
+   * (operator handles process termination via Claude Code UI/CLI).
+   *
+   * The handle's `workspaces[]` array is the source of truth at call time
+   * (Phase 11 D-01 no-orchestrator-sidecar-state). Cancel is **idempotent**
+   * per D-03 — re-calling on an already-cancelled handle returns
+   * `CancelResult` with all-empty arrays (no error).
+   *
+   * Returns `CancelResult` (4-field envelope mirroring `FanInResult` field
+   * naming). See `CancelResult` JSDoc below for field semantics.
+   */
+  cancel(handle: ParallelDispatchHandle): CancelResult;
 }
 
 /**
@@ -593,6 +620,42 @@ export interface FanInResult {
   incompleteQueued: number;
   failedReaped: readonly string[];
   surplusBookmarks: readonly string[];
+}
+
+/**
+ * Phase 15.04 (PARALLEL-07, D-01): result of
+ * `vcs.workspace.parallel.cancel(handle)`. **4-field envelope** mirroring
+ * `FanInResult.failedReaped` + `surplusBookmarks` naming verbatim (see lines
+ * 594-595 above for the v1.3 precedent). Pure-JSON; survives
+ * `JSON.stringify` → `JSON.parse` round-trip with no semantic loss (Phase 9
+ * D-05 frozen-pure-JSON invariant for parallel-domain return shapes — no
+ * closures, methods, Symbols, or class instances).
+ *
+ * Field semantics (D-02):
+ *   - `abandoned`: workspace identifiers fully torn down (agentId form per
+ *     orchestrator-identifier consistency, planner-picked).
+ *   - `failedReaped`: workspace identifiers that resisted teardown (the
+ *     caller can grep the filesystem to confirm leakage). On clean cancel,
+ *     length is 0.
+ *   - `surplusBookmarks`: bookmark/branch names that needed force-delete
+ *     (per `FanInResult.surplusBookmarks` precedent at line 595 above).
+ *     Typically `[]` on jj clean branch by Phase 11 D-02 octopus
+ *     construction; git side may carry `worktree-agent-*` entries.
+ *   - `surplusWorkspaces`: workspace paths still on disk pre-cancel
+ *     (counted at entry, regardless of cleanup outcome — D-02).
+ *
+ * Idempotency invariant (D-03 — load-bearing for cancel-idempotent-recall
+ * scenario): re-calling `cancel` on an already-cancelled handle returns
+ * `CancelResult` with all-empty arrays (no error). Matches Phase 11 D-01
+ * no-orchestrator-sidecar-state — the handle's `workspaces[]` array is the
+ * source of truth at call time, and once each requested workspace is gone
+ * from disk the second call enumerates zero teardown work.
+ */
+export interface CancelResult {
+  abandoned: readonly string[];
+  failedReaped: readonly string[];
+  surplusBookmarks: readonly string[];
+  surplusWorkspaces: readonly string[];
 }
 
 // Phase 2.1 D-07: the public hooks namespace interface has been DELETED.

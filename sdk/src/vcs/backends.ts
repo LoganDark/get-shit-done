@@ -135,6 +135,12 @@ export const BACKENDS_AVAILABLE_FOR_VERB: Readonly<
   'status.cwd': Object.freeze(['git', 'jj-colocated'] as const),
   'workspace.merge': Object.freeze(['git', 'jj-colocated'] as const),
   'workspace.remove': Object.freeze(['git', 'jj-colocated'] as const),
+  // Phase 15.04 (PARALLEL-07): synchronous teardown of materialized subagent
+  // workspaces (CF-05 STACK-lens — `spawnSync` cannot accept `AbortSignal`).
+  // Capability matrix string-key add — TSC does NOT catch object-key omissions
+  // on the runtime lookup path (Pitfall 1 / Pitfall 3 / v1.2 retro CR-01
+  // precedent); backends.test.ts regression-asserts presence.
+  'workspace.parallel.cancel': Object.freeze(['git', 'jj-colocated'] as const),
   'refs.bookmarks.delete.force': Object.freeze(['git', 'jj-colocated'] as const),
   // Test-only snapshot/restore (gated separately so per-test fixture
   // setup can probe verb availability before invoking them — see

@@ -56,6 +56,7 @@ import type {
 	ParallelDispatchHandle,
 	ParallelAgentResult,
 	FanInResult,
+	CancelResult,
 	IncompleteWorkEntry,
 } from '../types.js';
 import { createPhaseStructure, createSubagentSlot } from './octopus.js';
@@ -63,6 +64,7 @@ import { performJjReap } from './reap.js';
 import { enumerateConflictedPaths } from './conflict-paths.js';
 import { appendIncomplete } from './incomplete-work.js';
 import { parseJjWorkspaceList } from '../parse/jj-workspace-list.js';
+import { cleanupSubagentWorkspaces } from './workspace-cleanup.js';
 
 /**
  * Inline mandatory jj-flags prefix. UPSTREAM-02 sidecar discipline: this
@@ -505,4 +507,68 @@ export function performJjParallelFanIn(
 		failedReaped: Object.freeze(failedReaped.slice()) as readonly string[],
 		surplusBookmarks: Object.freeze(surplusBookmarks.slice()) as readonly string[],
 	}) satisfies FanInResult;
+}
+
+/**
+ * Phase 15.04 (PARALLEL-07 / Wave 2b): synchronous teardown of materialized
+ * subagent workspaces. Delegates per-workspace cleanup to the
+ * `cleanupSubagentWorkspaces` helper (Wave 1 sidecar at
+ * `./workspace-cleanup.js`) and wraps the partial result into the full
+ * 4-field `CancelResult` envelope (D-01).
+ *
+ * CF-05 STACK-lens (synchronous teardown only): `spawnSync` at
+ * `sdk/src/vcs/exec.ts:19` cannot accept `AbortSignal`. Does NOT signal
+ * subagent processes. Phase 9 D-01 orchestrator-awaits-`Agent()` invariant +
+ * Phase 11 D-01 no-orchestrator-sidecar-state make mid-flight cancel a
+ * non-problem in production.
+ *
+ * D-04 file-boundary helper extraction: the per-workspace
+ * `jj workspace forget + rmSync` body lives in `./workspace-cleanup.js`, NOT
+ * in `./reap.js`. `reap.ts` preserves W3(a) "leave conflicted workspaces for
+ * inspection"; this verb tears down everything explicitly requested. The
+ * file split makes the contract divergence enforceable.
+ *
+ * D-03 idempotency: re-call returns `CancelResult` with all-empty arrays —
+ * the helper's existsSync gate + already-gone-skip closes the second call.
+ *
+ * Pattern S3 frozen pure-JSON: return value is `Object.freeze(...)`'d with
+ * frozen inner arrays. Survives JSON round-trip without semantic loss (Phase
+ * 9 D-05 invariant).
+ *
+ * Phase 11 D-02: jj-side `surplusBookmarks` is `[]` by construction — the
+ * per-subagent `gsd/phase-{NN}-subagent-{idx}` bookmarks retired with the
+ * dispatcher's eager-bookmark-create loop. The type-contract field stays for
+ * cross-backend symmetry (git keeps `worktree-agent-*` branches).
+ */
+export function performJjParallelCancel(
+	mainRepoRoot: string,
+	handle: ParallelDispatchHandle,
+): CancelResult {
+	// Count surplus workspaces at entry (D-02 — counted pre-cleanup regardless
+	// of teardown outcome). Filter Handle's workspaces by existsSync so the
+	// metric reflects on-disk reality at call time.
+	const surplusWorkspaces: string[] = handle.workspaces
+		.filter((ws) => existsSync(ws.path))
+		.map((ws) => ws.path);
+
+	// Delegate per-workspace teardown to the helper. Pass `handle.workspaces`
+	// as the authoritative list (Pitfall 4 mitigation per N1 — custom
+	// `workspacePath` overrides MUST be honored).
+	const { abandoned, failedReaped } = cleanupSubagentWorkspaces(
+		mainRepoRoot,
+		handle.phaseNumber,
+		handle.workspaces,
+	);
+
+	// jj-side surplus-bookmark sweep is a no-op: Phase 11 D-02 retired the
+	// per-subagent agent-bookmark creation loop in `performJjParallelDispatch`,
+	// so there are no `gsd/phase-{NN}-subagent-*` bookmarks to force-delete.
+	const surplusBookmarks: readonly string[] = [];
+
+	return Object.freeze({
+		abandoned: Object.freeze(abandoned.slice()) as readonly string[],
+		failedReaped: Object.freeze(failedReaped.slice()) as readonly string[],
+		surplusBookmarks: Object.freeze(surplusBookmarks.slice()) as readonly string[],
+		surplusWorkspaces: Object.freeze(surplusWorkspaces.slice()) as readonly string[],
+	}) satisfies CancelResult;
 }
