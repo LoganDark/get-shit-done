@@ -227,7 +227,7 @@ describe('config-new-project command', () => {
 - [ ] **ステップ 1.2: 失敗するテストを実行して失敗を確認する**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 node --test tests/config.test.cjs 2>&1 | grep -E "config-new-project|FAIL|Error"
 ```
 
@@ -367,7 +367,7 @@ function cmdConfigNewProject(cwd, choicesJson, raw) {
 - [ ] **ステップ 1.4: テストを実行してパスすることを確認する**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 node --test tests/config.test.cjs 2>&1 | tail -20
 ```
 
@@ -376,7 +376,7 @@ node --test tests/config.test.cjs 2>&1 | tail -20
 - [ ] **ステップ 1.5: コミット**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 git add get-shit-done/bin/lib/config.cjs tests/config.test.cjs
 git commit -m "feat: add config-new-project command for full config materialization"
 ```
@@ -408,7 +408,7 @@ git commit -m "feat: add config-new-project command for full config materializat
 - [ ] **ステップ 2.2: CLI 登録のスモークテスト**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 node get-shit-done/bin/gsd-tools.cjs config-new-project '{"mode":"interactive","granularity":"standard"}' --cwd /tmp/gsd-smoke-$(date +%s)
 ```
 
@@ -419,7 +419,7 @@ node get-shit-done/bin/gsd-tools.cjs config-new-project '{"mode":"interactive","
 - [ ] **ステップ 2.3: フルテストスイートを実行する**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 node --test tests/config.test.cjs 2>&1 | tail -10
 ```
 
@@ -428,7 +428,7 @@ node --test tests/config.test.cjs 2>&1 | tail -10
 - [ ] **ステップ 2.4: コミット**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 git add get-shit-done/bin/gsd-tools.cjs
 git commit -m "feat: register config-new-project in gsd-tools CLI router"
 ```
@@ -541,7 +541,7 @@ CHOICES
 - [ ] **ステップ 3.3: ワークフローファイルが正しく読めることを確認する**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 grep -n "config-new-project\|config\.json\|CHOICES" get-shit-done/workflows/new-project.md
 ```
 
@@ -550,7 +550,7 @@ grep -n "config-new-project\|config\.json\|CHOICES" get-shit-done/workflows/new-
 - [ ] **ステップ 3.4: コミット**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 git add get-shit-done/workflows/new-project.md
 git commit -m "feat: use config-new-project in new-project workflow for full config materialization"
 ```
@@ -562,7 +562,7 @@ git commit -m "feat: use config-new-project in new-project workflow for full con
 - [ ] **ステップ 4.1: フルテストスイートを実行する**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 node --test tests/ 2>&1 | tail -30
 ```
 
@@ -578,10 +578,10 @@ TMP=$(mktemp -d)
 cd "$TMP"
 
 # ステップ 1 のシミュレーション: init new-project の実行結果
-node /Users/diego/Dev/get-shit-done/get-shit-done/bin/gsd-tools.cjs init new-project --cwd "$TMP"
+node $HOME/.claude/get-shit-done/bin/gsd-tools.cjs init new-project --cwd "$TMP"
 
 # ステップ 5 のシミュレーション: 完全な設定を作成
-node /Users/diego/Dev/get-shit-done/get-shit-done/bin/gsd-tools.cjs config-new-project '{
+node $HOME/.claude/get-shit-done/bin/gsd-tools.cjs config-new-project '{
   "mode": "interactive",
   "granularity": "standard",
   "parallelization": true,
@@ -611,11 +611,11 @@ rm -rf "$TMP"
 TMP=$(mktemp -d)
 CHOICES='{"mode":"yolo","granularity":"coarse"}'
 
-node /Users/diego/Dev/get-shit-done/get-shit-done/bin/gsd-tools.cjs config-new-project "$CHOICES" --cwd "$TMP"
+node $HOME/.claude/get-shit-done/bin/gsd-tools.cjs config-new-project "$CHOICES" --cwd "$TMP"
 FIRST=$(cat "$TMP/.planning/config.json")
 
 # 2回目の呼び出しは何も変更しないはず
-node /Users/diego/Dev/get-shit-done/get-shit-done/bin/gsd-tools.cjs config-new-project "$CHOICES" --cwd "$TMP"
+node $HOME/.claude/get-shit-done/bin/gsd-tools.cjs config-new-project "$CHOICES" --cwd "$TMP"
 SECOND=$(cat "$TMP/.planning/config.json")
 
 [ "$FIRST" = "$SECOND" ] && echo "IDEMPOTENT: OK" || echo "IDEMPOTENT: FAIL"
@@ -628,17 +628,17 @@ rm -rf "$TMP"
 
 ```bash
 TMP=$(mktemp -d)
-node /Users/diego/Dev/get-shit-done/get-shit-done/bin/gsd-tools.cjs config-new-project '{
+node $HOME/.claude/get-shit-done/bin/gsd-tools.cjs config-new-project '{
   "mode":"yolo","granularity":"standard","parallelization":true,"commit_docs":true,
   "model_profile":"balanced",
   "workflow":{"research":true,"plan_check":false,"verifier":true,"nyquist_validation":true}
 }' --cwd "$TMP"
 
 # loadConfig が正しく plan_check（workflow.plan_check としてネスト）を読み取るか
-node /Users/diego/Dev/get-shit-done/get-shit-done/bin/gsd-tools.cjs config-get workflow.plan_check --cwd "$TMP"
+node $HOME/.claude/get-shit-done/bin/gsd-tools.cjs config-get workflow.plan_check --cwd "$TMP"
 # 期待値: false
 
-node /Users/diego/Dev/get-shit-done/get-shit-done/bin/gsd-tools.cjs config-get git.branching_strategy --cwd "$TMP"
+node $HOME/.claude/get-shit-done/bin/gsd-tools.cjs config-get git.branching_strategy --cwd "$TMP"
 # 期待値: "none"
 
 rm -rf "$TMP"
@@ -647,7 +647,7 @@ rm -rf "$TMP"
 - [ ] **ステップ 4.5: 最終フルテストスイート + コミット**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 node --test tests/ 2>&1 | grep -E "pass|fail|error" | tail -5
 ```
 

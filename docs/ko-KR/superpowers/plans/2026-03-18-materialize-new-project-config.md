@@ -227,7 +227,7 @@ describe('config-new-project command', () => {
 - [ ] **Step 1.2: 실패하는 테스트 실행하여 실패 확인**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 node --test tests/config.test.cjs 2>&1 | grep -E "config-new-project|FAIL|Error"
 ```
 
@@ -366,7 +366,7 @@ function cmdConfigNewProject(cwd, choicesJson, raw) {
 - [ ] **Step 1.4: 테스트 실행하여 통과 확인**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 node --test tests/config.test.cjs 2>&1 | tail -20
 ```
 
@@ -375,7 +375,7 @@ node --test tests/config.test.cjs 2>&1 | tail -20
 - [ ] **Step 1.5: 커밋**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 git add get-shit-done/bin/lib/config.cjs tests/config.test.cjs
 git commit -m "feat: add config-new-project command for full config materialization"
 ```
@@ -407,7 +407,7 @@ git commit -m "feat: add config-new-project command for full config materializat
 - [ ] **Step 2.2: CLI 등록 스모크 테스트**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 node get-shit-done/bin/gsd-tools.cjs config-new-project '{"mode":"interactive","granularity":"standard"}' --cwd /tmp/gsd-smoke-$(date +%s)
 ```
 
@@ -418,7 +418,7 @@ node get-shit-done/bin/gsd-tools.cjs config-new-project '{"mode":"interactive","
 - [ ] **Step 2.3: 전체 테스트 스위트 실행**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 node --test tests/config.test.cjs 2>&1 | tail -10
 ```
 
@@ -427,7 +427,7 @@ node --test tests/config.test.cjs 2>&1 | tail -10
 - [ ] **Step 2.4: 커밋**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 git add get-shit-done/bin/gsd-tools.cjs
 git commit -m "feat: register config-new-project in gsd-tools CLI router"
 ```
@@ -540,7 +540,7 @@ The command merges your selections with all runtime defaults (`search_gitignored
 - [ ] **Step 3.3: 워크플로우 파일이 올바르게 읽히는지 확인**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 grep -n "config-new-project\|config\.json\|CHOICES" get-shit-done/workflows/new-project.md
 ```
 
@@ -549,7 +549,7 @@ grep -n "config-new-project\|config\.json\|CHOICES" get-shit-done/workflows/new-
 - [ ] **Step 3.4: 커밋**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 git add get-shit-done/workflows/new-project.md
 git commit -m "feat: use config-new-project in new-project workflow for full config materialization"
 ```
@@ -561,7 +561,7 @@ git commit -m "feat: use config-new-project in new-project workflow for full con
 - [ ] **Step 4.1: 전체 테스트 스위트 실행**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 node --test tests/ 2>&1 | tail -30
 ```
 
@@ -577,10 +577,10 @@ TMP=$(mktemp -d)
 cd "$TMP"
 
 # Step 1 시뮬레이션: init new-project가 반환하는 내용
-node /Users/diego/Dev/get-shit-done/get-shit-done/bin/gsd-tools.cjs init new-project --cwd "$TMP"
+node $HOME/.claude/get-shit-done/bin/gsd-tools.cjs init new-project --cwd "$TMP"
 
 # Step 5 시뮬레이션: 전체 config 생성
-node /Users/diego/Dev/get-shit-done/get-shit-done/bin/gsd-tools.cjs config-new-project '{
+node $HOME/.claude/get-shit-done/bin/gsd-tools.cjs config-new-project '{
   "mode": "interactive",
   "granularity": "standard",
   "parallelization": true,
@@ -610,11 +610,11 @@ rm -rf "$TMP"
 TMP=$(mktemp -d)
 CHOICES='{"mode":"yolo","granularity":"coarse"}'
 
-node /Users/diego/Dev/get-shit-done/get-shit-done/bin/gsd-tools.cjs config-new-project "$CHOICES" --cwd "$TMP"
+node $HOME/.claude/get-shit-done/bin/gsd-tools.cjs config-new-project "$CHOICES" --cwd "$TMP"
 FIRST=$(cat "$TMP/.planning/config.json")
 
 # 두 번째 호출은 no-op이어야 함
-node /Users/diego/Dev/get-shit-done/get-shit-done/bin/gsd-tools.cjs config-new-project "$CHOICES" --cwd "$TMP"
+node $HOME/.claude/get-shit-done/bin/gsd-tools.cjs config-new-project "$CHOICES" --cwd "$TMP"
 SECOND=$(cat "$TMP/.planning/config.json")
 
 [ "$FIRST" = "$SECOND" ] && echo "IDEMPOTENT: OK" || echo "IDEMPOTENT: FAIL"
@@ -627,17 +627,17 @@ rm -rf "$TMP"
 
 ```bash
 TMP=$(mktemp -d)
-node /Users/diego/Dev/get-shit-done/get-shit-done/bin/gsd-tools.cjs config-new-project '{
+node $HOME/.claude/get-shit-done/bin/gsd-tools.cjs config-new-project '{
   "mode":"yolo","granularity":"standard","parallelization":true,"commit_docs":true,
   "model_profile":"balanced",
   "workflow":{"research":true,"plan_check":false,"verifier":true,"nyquist_validation":true}
 }' --cwd "$TMP"
 
 # loadConfig는 plan_check(중첩된 workflow.plan_check로)를 올바르게 읽어야 함
-node /Users/diego/Dev/get-shit-done/get-shit-done/bin/gsd-tools.cjs config-get workflow.plan_check --cwd "$TMP"
+node $HOME/.claude/get-shit-done/bin/gsd-tools.cjs config-get workflow.plan_check --cwd "$TMP"
 # 예상: false
 
-node /Users/diego/Dev/get-shit-done/get-shit-done/bin/gsd-tools.cjs config-get git.branching_strategy --cwd "$TMP"
+node $HOME/.claude/get-shit-done/bin/gsd-tools.cjs config-get git.branching_strategy --cwd "$TMP"
 # 예상: "none"
 
 rm -rf "$TMP"
@@ -646,7 +646,7 @@ rm -rf "$TMP"
 - [ ] **Step 4.5: 최종 전체 테스트 스위트 + 커밋**
 
 ```bash
-cd /Users/diego/Dev/get-shit-done
+cd "$HOME/.claude/get-shit-done"
 node --test tests/ 2>&1 | grep -E "pass|fail|error" | tail -5
 ```
 
