@@ -4,14 +4,14 @@ milestone: v1.4
 milestone_name: Clean, consistent state for next upstream pull
 status: executing
 stopped_at: Phase 17 context gathered
-last_updated: "2026-05-25T21:54:51.857Z"
-last_activity: 2026-05-25 -- Phase 17 execution started
+last_updated: "2026-05-25T22:00:18.930Z"
+last_activity: 2026-05-25
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 11
-  completed_plans: 7
-  percent: 64
+  completed_plans: 8
+  percent: 73
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 ## Current Position
 
 Phase: 17 (drift-control-reconciliation) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 17
-Last activity: 2026-05-25 -- Phase 17 execution started
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-05-25
 
 ## Performance Metrics
 
@@ -82,6 +82,7 @@ Last activity: 2026-05-25 -- Phase 17 execution started
 | Phase 14 P03 | 2min | 1 tasks | 1 files |
 | Phase 14 P05 | 8min | 3 tasks | 3 files |
 | Phase 14.1 P01 | 14min | 3 tasks | 16 files |
+| Phase 17 P17.01 | 2min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -163,6 +164,7 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase 14]: Phase 14 Plan 05 — post-dogfood, the WC sat on the synthetic octopus merge node; jj op restore to the recorded pre_op_id (9db977b62aca) reverted the dogfood scaffolding cleanly and the deliverables landed on a clean line of history. Net empirical validation of the recovery primitive in production.
 - [Phase 14]: Phase 14 Plan 05 — pre-snapshot dir intentionally NOT trap-cleaned on EXIT (D-12 durability); rehearsal dirs ARE trap-cleaned in Plan 14-04. Dogfood anchor lives until OS GC of /tmp; rehearsal artifacts are ephemera.
 - [Phase 14.1]: Phase 14.1 Plan 01: ParallelDispatch{Opts,Handle}.mainBookmark hard-renamed to mainBookmarks?: readonly string[] (CF-01 no-alias); jj fan-in two-pass all-or-nothing (CF-02); git fan-in adds STEP 1.5 update-ref loop guarded on !conflicted (CF-03); workflow current-branch FATAL preflight dropped from both execute-phase.md AND quick.md (D-01 symmetric); MERGE-08 deferred-item REQ-ID filed (D-03 STRICT OOS for WorkspaceMergeOpts.mainBookmark)
+- [Phase 17]: Plan 17.01 (DOCS-08): Aligned ARCHITECTURE.md prose counts across en + ja-JP + ko-KR + INVENTORY.md Commands/Workflows headlines with live filesystem. pt-BR carve-out preserved. D-04 all-strict locale lockstep satisfied; Wave 2 drift-test gate open for day-1 GREEN.
 
 ### Pending Todos
 
@@ -233,11 +235,11 @@ All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQU
 
 ## Session Continuity
 
-Last session: 2026-05-25T11:39:33.012Z
+Last session: 2026-05-25T21:59:47.279Z
 Stopped at: Phase 17 context gathered
 Resume file: 
 
-.planning/phases/17-drift-control-reconciliation/17-CONTEXT.md
+None
 
 - Phase 12 (A3 fix) is an independent parallel track — may be planned/executed in parallel with Phases 9/10/11; joins at Phase 13 CI integration. (v1.3 closed.)
 - v1.4 phases (15-18) execute in canonical order; Phase 15 plan 15.04 (PARALLEL-07) extracts `cleanupSubagentWorkspaces` helper as Wave 1, consumed by Phase 16 plan 16.02 (CLEANUP-02) — single-owner per IP-5.

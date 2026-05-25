@@ -64,7 +64,7 @@ Eight themes from `/gsd:docs-update --verify-only` audit captured in `v14-docs-v
 - [ ] **DOCS-05**: Resolve `docs/test-triage/jj-bugs.md` references to archived phase-3 planning artifacts (`03-07-PLAN.md`, `03-RESEARCH.md`, `03-06-PLAN.md`) — either rehydrate into archive subdirectory or update doc to reference closure commits (theme 5; 3 sites)
 - [ ] **DOCS-06**: Fix 3 translation date/link mismatches in pt-BR superpowers docs — rename `docs/pt-BR/superpowers/plans/2026-03-23-materialize-new-project-config.md` to `2026-03-18` (or fix link target); fix `docs/pt-BR/superpowers/README.md` L7 03-18 vs 03-23 mismatch; fix circular ref in `docs/pt-BR/superpowers/specs/2026-03-20-multi-project-workspaces-design.md` (theme 7)
 - [ ] **DOCS-07**: Fix 3 singleton failures — `CHANGELOG.md:389` `mutation-subprocess.integration.test.ts` (renamed/moved); `CONTEXT.md:610` `tests/lint-no-source-grep.cjs` → `scripts/lint-no-source-grep.cjs`; `docs/ja-JP/AGENTS.md:389` `USER-PROFILE.md` qualified path (theme 8)
-- [ ] **DOCS-08**: Fix ARCHITECTURE.md prose-count drift across en + 4 translations (44→68 commands, 46→89 workflows, 16→33 agents, 17→60 lib modules, ~3000→10,978 install.js LOC) — forced by DRIFT-01, ships in Wave 1 before the tests RED
+- [x] **DOCS-08**: Fix ARCHITECTURE.md prose-count drift across en + 4 translations (44→68 commands, 46→89 workflows, 16→33 agents, 17→60 lib modules, ~3000→10,978 install.js LOC) — forced by DRIFT-01, ships in Wave 1 before the tests RED
 - [ ] **DOCS-09**: Close-gate — re-run `/gsd:docs-update --verify-only` after Wave 1+2 land and confirm pass rate ≥ 99% (allowing legitimate skip-but-flag cases)
 
 ### PROJECT.md Reconciliation
@@ -109,7 +109,7 @@ Which phases cover which requirements. Updated during roadmap creation 2026-05-2
 | PARALLEL-07 | Phase 15 (plan 15.04) | Pending |
 | LINT-06 | Phase 16 (plan 16.01) | Pending |
 | CLEANUP-02 | Phase 16 (plan 16.02) | Pending |
-| DOCS-08 | Phase 17 (plan 17.01) | Pending |
+| DOCS-08 | Phase 17 (plan 17.01) | Complete |
 | DRIFT-01 | Phase 17 (plan 17.02) | Pending |
 | DRIFT-02 | Phase 17 (plan 17.02) | Pending |
 | DOCS-01 | Phase 17 (plan 17.03) | Pending |
