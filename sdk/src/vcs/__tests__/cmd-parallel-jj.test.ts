@@ -34,7 +34,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -190,15 +190,24 @@ for (const N of [2, 3, 4] as const) {
 				// the octopus.ts:300 workspace-name shape `phase-${phaseTag}-subagent-{idx}`
 				// (parseJjWorkspaceList projects jj's `name` field into
 				// `WorkspaceInfo.path`, so `path` is the workspace NAME not an fs
-				// path). On the clean branch fanIn does not abandon clean-agent
-				// workspaces (cleanup wiring belongs to downstream Phase 11 plans),
-				// so all N dispatched workspaces are still present and accounted
-				// for.
+				// path). On the clean branch fanIn now reaps all dispatched
+				// workspaces (cleanup is wired by Phase 16.02 CLEANUP-02 — clean
+				// fanIn reaps all dispatched workspaces via the locked helper),
+				// so the post-fanIn count is 0.
 				const phaseTag = String(9).padStart(2, '0');
 				const remainingWorkspaces = vcs.workspace.list().filter((w) =>
 					w.path.startsWith(`phase-${phaseTag}-subagent-`),
 				);
-				expect(remainingWorkspaces.length).toBe(handle.workspaces.length);
+				expect(remainingWorkspaces.length).toBe(0);
+
+				// CLEANUP-02 D-15: every dispatched workspace dir is gone post-
+				// clean-fanIn (mirror cmd-parallel-cancel-jj.test.ts:118-121
+				// shape). The clean-path branch in performJjParallelFanIn calls
+				// cleanupSubagentWorkspaces(mainRepoRoot, phaseNumber, workspaces)
+				// directly per D-07 TS-direct call — bypasses the CLI bridge.
+				for (const ws of handle.workspaces) {
+					expect(existsSync(ws.path)).toBe(false);
+				}
 
 				// TEST-14 topology assertion: post-fanIn `divergent()` is empty.
 				// Runs against the same post-fanIn state the scenario just
@@ -320,6 +329,18 @@ describe.sequential.skipIf(!jjAvailable)(
 				w.path.startsWith(`phase-${phaseTag}-subagent-`),
 			);
 			expect(remainingWorkspaces.length).toBe(handle.workspaces.length);
+
+			// CLEANUP-02 D-15 / CF-03 / AP-5 (W3 (a) joint-assertion lock-in):
+			// conflicted-branch workspaces MUST persist on disk for human
+			// inspection. This is the INVERSE polarity of the clean-path
+			// assertion (which expects existsSync === false). If any code in
+			// performJjParallelFanIn's `if (conflicted)` block ever starts
+			// calling cleanupSubagentWorkspaces (or inlines rmSync), this
+			// regression guard will trip — preserving the W3 (a) contract
+			// that workspaces must persist on the conflicted branch.
+			for (const ws of handle.workspaces) {
+				expect(existsSync(ws.path)).toBe(true);
+			}
 		});
 	},
 );

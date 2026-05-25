@@ -196,6 +196,19 @@ for (const N of [2, 3, 4] as const) {
 				expect(result.surplusBookmarks.length).toBe(0);
 				expect(result.incompleteQueued).toBe(0);
 				expect(result.failedReaped.length).toBe(0);
+
+				// CLEANUP-02 D-15 git-cell regression guard: git's existing
+				// worktree remove --force already produces this invariant
+				// (no orphan-dirs on git per Phase 15 deferred-ideas note);
+				// this test prevents future regressions if anyone touches
+				// the git fanIn path. The helper at workspace-cleanup.ts is
+				// jj-specific (backend-isolation invariant — importing it
+				// from a git-side code path would violate UPSTREAM-02
+				// sidecar discipline); git's worktree-remove is the
+				// cross-backend equivalent.
+				for (const ws of handle.workspaces) {
+					expect(existsSync(ws.path)).toBe(false);
+				}
 			});
 		},
 	);

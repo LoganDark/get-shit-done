@@ -21,6 +21,7 @@ import { workspaceAssertDispatchedCwdQuery } from './workspace-assert-dispatched
 import { workspaceParallelDispatchQuery } from './workspace-parallel-dispatch.js';
 import { workspaceParallelFanInQuery } from './workspace-parallel-fan-in.js';
 import { workspaceParallelCancelQuery } from './workspace-parallel-cancel.js';
+import { cleanupSubagentWorkspacesQuery } from './cleanup-subagent-workspaces.js';
 
 export const DOMAIN_STATIC_CATALOG: ReadonlyArray<readonly [string, QueryHandler]> = [
   ['agent-skills', agentSkills],
@@ -77,6 +78,8 @@ export const DOMAIN_STATIC_CATALOG: ReadonlyArray<readonly [string, QueryHandler
   // materialized subagent workspaces.
   ['workspace.parallel.cancel', workspaceParallelCancelQuery],
   ['workspace parallel.cancel', workspaceParallelCancelQuery],
+  // Phase 16.02 (CLEANUP-02): cleanup verb — orphan jj-workspace dir reap.
+  ['cleanup-subagent-workspaces', cleanupSubagentWorkspacesQuery],
   ['docs-init', docsInit],
   ['websearch', websearch],
   ['learnings.copy', learningsCopy],

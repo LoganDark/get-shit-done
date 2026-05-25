@@ -123,6 +123,11 @@ export interface CleanupSubagentWorkspacesResult {
  *      the second cancel call sees every dir already gone and MUST return
  *      `{abandoned: [], failedReaped: []}` per the idempotency contract).
  *
+ * Consumer-completion record (Phase 16.02): see
+ * .planning/phases/16-workflow-invariant-tooling/16-CONTEXT.md §"Cleanup-
+ * Contract Documentation Site" — all 3 consumers (cancel verb, fanIn
+ * clean-path, dogfood-restore.sh) are wired post-Phase-16.
+ *
  * @param mainRepoRoot Colocated jj repo root (NOT the phase-dir path).
  * @param phaseNumber  Phase number used for both the workspaces-dir glob in
  *                     the readdirSync fallback and the per-workspace name
