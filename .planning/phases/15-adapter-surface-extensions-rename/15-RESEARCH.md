@@ -410,6 +410,8 @@ function jjArgvFlags(repo: string): string[] {
 
 **Verify:** After registering, `gsd-sdk query workspace.parallel.cancel --help` should resolve (not error "unknown verb"). The Phase 11 plan 02 audit established this pattern.
 
+> [!NOTE] Updated 2026-05-24: CLI bridge does not implement `--help`; smoke uses structured-envelope assertion (no-handle → `{ok:false, reason:'handle_required'}`) + UNKNOWN_VERB negative control. See 15-04-PLAN.md Task 4.
+
 ### Pattern 7: Two-pass all-or-nothing validate-then-mutate (CF-02 / 14.1 idiom)
 
 **What:** When iterating over a non-empty list of inputs that triggers side effects, run a validation pass FIRST (throws on first invalid input; zero side effects); only then run the mutation pass.
@@ -595,6 +597,8 @@ return Object.freeze({
 **How to avoid:** Audit-confirm all three sites are touched in the 15.04 commit diff. Add the verb to all three files in the same Task (atomic).
 
 **Warning signs:** Test calling `gsd-sdk query workspace.parallel.cancel --help` returns "unknown verb" error.
+
+> [!NOTE] Updated 2026-05-24: CLI bridge does not implement `--help`; smoke uses structured-envelope assertion (no-handle → `{ok:false, reason:'handle_required'}`) + UNKNOWN_VERB negative control. See 15-04-PLAN.md Task 4.
 
 ### Pitfall 7: Stale `mainBookmark` references in 15.04 plan documentation
 
@@ -1384,6 +1388,8 @@ describe.sequential.skipIf(!jjAvailable)(
 | PARALLEL-07 (15.04) | `cancel(handle)` returns within ≤2s for ≤8 workspaces (performance smoke) | unit + perf assert | `cd sdk && pnpm vitest run src/vcs/__tests__/cmd-parallel-jj.test.ts -t "cancel"` (vitest's `it('...', {timeout: 2000}, () => ...)` form) | ❌ — Wave 0 (new describe block in existing cmd-parallel-{jj,git}.test.ts) |
 | PARALLEL-07 (15.04) | `cancel(handle)` is idempotent (second call returns empty arrays) | unit | same as above | ❌ — Wave 0 |
 | PARALLEL-07 (15.04) | Three-site CLI bridge resolves: `gsd-sdk query workspace.parallel.cancel --help` exits 0 | integration | `gsd-sdk query workspace.parallel.cancel --help` | ❌ — Wave 0 (integration smoke test) |
+
+> [!NOTE] Updated 2026-05-24: CLI bridge does not implement `--help`; smoke uses structured-envelope assertion (no-handle → `{ok:false, reason:'handle_required'}`) + UNKNOWN_VERB negative control. See 15-04-PLAN.md Task 4.
 | PARALLEL-07 (15.04) | Helper `cleanupSubagentWorkspaces` is idempotent + UPSTREAM-02 clean | unit | `cd sdk && pnpm vitest run src/vcs/__tests__/jj-workspace-cleanup.test.ts` (NEW file) | ❌ — Wave 0 (new test file) |
 
 ### Sampling Rate

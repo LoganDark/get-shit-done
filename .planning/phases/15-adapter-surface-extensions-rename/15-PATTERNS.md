@@ -825,6 +825,8 @@ function jjArgvFlags(repo: string): string[] {
 
 **Verification gate** (per Pitfall 6): after registration, `gsd-sdk query workspace.parallel.cancel --help` must NOT error "unknown verb".
 
+> [!NOTE] Updated 2026-05-24: CLI bridge does not implement `--help`; smoke uses structured-envelope assertion (no-handle → `{ok:false, reason:'handle_required'}`) + UNKNOWN_VERB negative control. See 15-04-PLAN.md Task 4.
+
 ---
 
 ### Pattern S3: Frozen Pure-JSON Return Shape (Phase 9 D-05 invariant)
@@ -945,6 +947,8 @@ CONTEXT D-09 cites `totalCount: 26`. Live grep (verified 2026-05-24, code extens
 3. Update CONTEXT/RESEARCH if drift is real (rather than rewriting the audit shape to match the old number).
 
 ### N4: `gsd-sdk query workspace.parallel.cancel --help` integration smoke
+
+> [!NOTE] Updated 2026-05-24: CLI bridge does not implement `--help`; smoke uses structured-envelope assertion (no-handle → `{ok:false, reason:'handle_required'}`) + UNKNOWN_VERB negative control. See 15-04-PLAN.md Task 4.
 
 RESEARCH Wave 0 Gaps notes "Integration smoke for CLI bridge" at `tests/cli-workspace-parallel-cancel.test.cjs` (node --test). This new repo-side test file is not classified above because it lives under `tests/` (repo-level node-test domain), not `sdk/src/vcs/__tests__/` (SDK-level vitest domain). Planner should decide whether to ship the smoke as a new `.cjs` file or fold it into an existing `tests/cli-*.test.cjs` family.
 
