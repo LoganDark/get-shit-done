@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Clean, consistent state for next upstream pull
-status: verifying
+status: milestone_complete
 stopped_at: Phase 17 context gathered
 last_updated: "2026-05-25T22:31:11.369Z"
 last_activity: 2026-05-25
 progress:
   total_phases: 4
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 11
   completed_plans: 11
-  percent: 100
+  percent: 125
 ---
 
 # Project State
@@ -25,16 +25,16 @@ See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 
 ## Current Position
 
-Phase: 17 (drift-control-reconciliation) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
+Phase: 17
+Plan: Not started
+Status: Milestone complete
 Last activity: 2026-05-25
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 105 (v1.0: 56 + v1.1: 5 + v1.2: 3 + v1.3: 34)
+- Total plans completed: 109 (v1.0: 56 + v1.1: 5 + v1.2: 3 + v1.3: 34)
 - Average duration: see per-milestone table
 - Total execution time: 4 milestones shipped (v1.0, v1.1, v1.2, v1.3)
 
