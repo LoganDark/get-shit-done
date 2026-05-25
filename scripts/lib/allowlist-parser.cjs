@@ -35,10 +35,25 @@ const { globToRegExp } = require('./glob-to-regex.cjs');
 
 const REQUIRED_FIELDS = ['reason', 'owner'];
 const FORBIDDEN_FIELDS = ['expires'];
+// Phase 16 REVIEW WR-02: lock the schema version this parser knows how to
+// read. Pre-fix, the parser silently ignored the $schema_version field
+// (production allow.json carries "$schema_version": 2 but the parser
+// neither read nor validated it) — a forward-compat hazard. If a future
+// schema migration ships a v3 parser that requires entries to carry a
+// new field, an old v2 allow.json file should be REJECTED by the v3
+// parser rather than silently treated as "missing the field" and given
+// unexpected behavior. Conversely, a v3 file accidentally consumed by a
+// still-shipping v2 parser should fail loudly here so the operator
+// upgrades rather than misreads. Allow `undefined` (legacy files without
+// the field) for backward compatibility — only mismatched versions fail.
+const CURRENT_SCHEMA_VERSION = 2;
 
 function parseAllowlist(json, scriptName) {
 	if (!json || typeof json !== 'object') {
 		throw new Error(`${scriptName}: allow.json must be a JSON object`);
+	}
+	if (json.$schema_version !== undefined && json.$schema_version !== CURRENT_SCHEMA_VERSION) {
+		throw new Error(`${scriptName}: allow.json $schema_version is ${JSON.stringify(json.$schema_version)}, parser supports ${CURRENT_SCHEMA_VERSION} (Phase 16 REVIEW WR-02 — forward-compat guard)`);
 	}
 	if (!Array.isArray(json.entries)) {
 		throw new Error(`${scriptName}: allow.json missing top-level "entries" array (per Phase 8 D-03 per-entry schema)`);
@@ -70,4 +85,4 @@ function parseAllowlist(json, scriptName) {
 	return { files, globRegexes };
 }
 
-module.exports = { parseAllowlist, REQUIRED_FIELDS, FORBIDDEN_FIELDS };
+module.exports = { parseAllowlist, REQUIRED_FIELDS, FORBIDDEN_FIELDS, CURRENT_SCHEMA_VERSION };

@@ -2,7 +2,12 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseAllowlist, REQUIRED_FIELDS, FORBIDDEN_FIELDS } = require('../../scripts/lib/allowlist-parser.cjs');
+const {
+	parseAllowlist,
+	REQUIRED_FIELDS,
+	FORBIDDEN_FIELDS,
+	CURRENT_SCHEMA_VERSION,
+} = require('../../scripts/lib/allowlist-parser.cjs');
 
 test('parseAllowlist: missing reason throws', () => {
 	assert.throws(
@@ -92,4 +97,56 @@ test('parseAllowlist: expires field FORBIDDEN — entry containing expires throw
 
 test('FORBIDDEN_FIELDS exports as exactly [expires] (Phase 16 plan 16.01)', () => {
 	assert.deepEqual(FORBIDDEN_FIELDS, ['expires']);
+});
+
+// Phase 16 REVIEW WR-02: $schema_version validation (forward-compat guard).
+// Pre-fix the field was silently ignored.
+
+test('parseAllowlist: $schema_version matching CURRENT_SCHEMA_VERSION parses (Phase 16 REVIEW WR-02)', () => {
+	const result = parseAllowlist(
+		{
+			$schema_version: CURRENT_SCHEMA_VERSION,
+			entries: [{ path: 'foo.ts', reason: 'r', owner: '@x' }],
+		},
+		'test',
+	);
+	assert.equal(result.files.has('foo.ts'), true);
+});
+
+test('parseAllowlist: $schema_version omitted parses (back-compat for legacy files)', () => {
+	const result = parseAllowlist(
+		{ entries: [{ path: 'foo.ts', reason: 'r', owner: '@x' }] },
+		'test',
+	);
+	assert.equal(result.files.has('foo.ts'), true);
+});
+
+test('parseAllowlist: $schema_version newer than CURRENT throws (Phase 16 REVIEW WR-02)', () => {
+	assert.throws(
+		() => parseAllowlist(
+			{
+				$schema_version: 99,
+				entries: [{ path: 'foo.ts', reason: 'r', owner: '@x' }],
+			},
+			'test',
+		),
+		/\$schema_version is 99, parser supports 2/,
+	);
+});
+
+test('parseAllowlist: $schema_version older than CURRENT throws (Phase 16 REVIEW WR-02)', () => {
+	assert.throws(
+		() => parseAllowlist(
+			{
+				$schema_version: 1,
+				entries: [{ path: 'foo.ts', reason: 'r', owner: '@x' }],
+			},
+			'test',
+		),
+		/\$schema_version is 1, parser supports 2/,
+	);
+});
+
+test('CURRENT_SCHEMA_VERSION exports as 2 (Phase 16 REVIEW WR-02)', () => {
+	assert.equal(CURRENT_SCHEMA_VERSION, 2);
 });
