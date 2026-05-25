@@ -554,6 +554,11 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
   const refs = Object.freeze({
     head: expr.head(),
     parent: expr.parent(),
+    // Phase 15.02 (VCS-21): canonical id alphabet for git commit_id —
+    // hex [0-9a-f] (case-insensitive at consumer layer; matches
+    // expr.ts:35 SHA_OR_CHANGE_ID_RE / format-migration/rewrite.ts:53).
+    // Opaque string per CF-03; consumers compose into regex patterns.
+    idAlphabet: '0-9a-f',
     bookmarks,
     currentBookmarks,
     currentBookmarksIn,

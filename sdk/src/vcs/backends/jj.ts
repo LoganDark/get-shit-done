@@ -776,6 +776,11 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
   const refs: VcsRefs = Object.freeze({
     head: expr.head(),
     parent: expr.parent(),
+    // Phase 15.02 (VCS-21): canonical id alphabet for jj change_id —
+    // empirically verified k-z reverse-base32 alphabet (see
+    // jj-id-alphabet-probe.test.ts:49-75 / format-migration/rewrite.ts:63).
+    // Opaque string per CF-03; consumers compose into regex patterns.
+    idAlphabet: 'k-z',
     bookmarks,
 
     currentBookmarks: (): string[] => {

@@ -336,6 +336,15 @@ export interface VcsAdapterCommon {
 export interface VcsRefs {
   readonly head: RevisionExpr;
   readonly parent: RevisionExpr;
+  /**
+   * 15.02 (VCS-21): per-backend canonical id alphabet substring.
+   * Git: '0-9a-f' (hex commit_id). Jj: 'k-z' (reverse-base32 change_id).
+   * Consumers compose into regex patterns:
+   *   new RegExp('^[' + vcs.refs.idAlphabet + ']+$')
+   * Replaces three ad-hoc duplications in expr.ts:41, format-migration/rewrite.ts:53,63.
+   * Opaque-string per CF-03 — structured {kind,chars,minLen,maxLen} alternative rejected (YAGNI).
+   */
+  readonly idAlphabet: string;
   bookmarks: VcsBookmarks;
   /**
    * Phase 2.1 D-15: renamed (and retyped) from the prior single-string

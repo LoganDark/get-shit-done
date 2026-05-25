@@ -77,6 +77,12 @@ export const BACKENDS_AVAILABLE_FOR_VERB: Readonly<
   'refs.resolveShort': Object.freeze(['git', 'jj-colocated'] as const),
   'refs.countCommits': Object.freeze(['git', 'jj-colocated'] as const),
   'refs.rootRevisions': Object.freeze(['git', 'jj-colocated'] as const),
+  // Phase 15.02 (VCS-21): per-backend canonical id alphabet substring.
+  // Capability matrix string-key add — TSC does NOT catch object-key
+  // omissions on `BACKENDS_AVAILABLE_FOR_VERB['refs.idAlphabet']` access;
+  // backends.test.ts regression-asserts presence (Pitfall 1 / Pitfall 3
+  // mitigation per v1.2 retro CR-01 precedent).
+  'refs.idAlphabet': Object.freeze(['git', 'jj-colocated'] as const),
   'refs.exists': Object.freeze(['git', 'jj-colocated'] as const),
   'refs.isIgnored': Object.freeze(['git'] as const), // jj-side: VcsNotImplementedError (audit-confirmed no jj caller)
   'refs.remotes': Object.freeze(['git', 'jj-colocated'] as const),
