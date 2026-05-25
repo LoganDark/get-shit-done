@@ -60,6 +60,7 @@ export const NON_FAMILY_COMMAND_MANIFEST: readonly NonFamilyCommandManifestEntry
   { canonical: 'workspace.assert-dispatched-cwd', aliases: ['workspace assert-dispatched-cwd'], mutation: false, outputMode: 'json' },
   { canonical: 'workspace.parallel.dispatch',     aliases: ['workspace parallel.dispatch'],     mutation: true,  outputMode: 'json' },
   { canonical: 'workspace.parallel.fan-in',       aliases: ['workspace parallel.fan-in'],       mutation: true,  outputMode: 'json' },
+  { canonical: 'workspace.parallel.cancel',       aliases: ['workspace parallel.cancel'],       mutation: true,  outputMode: 'json' },
   { canonical: 'current-branch', aliases: [], mutation: false, outputMode: 'json' },
   { canonical: 'merge',          aliases: [], mutation: true,  outputMode: 'json' },
   { canonical: 'restore',        aliases: [], mutation: true,  outputMode: 'json' },

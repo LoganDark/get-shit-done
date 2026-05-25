@@ -20,6 +20,7 @@ import { worktreeCleanupWave } from './worktree.js';
 import { workspaceAssertDispatchedCwdQuery } from './workspace-assert-dispatched-cwd.js';
 import { workspaceParallelDispatchQuery } from './workspace-parallel-dispatch.js';
 import { workspaceParallelFanInQuery } from './workspace-parallel-fan-in.js';
+import { workspaceParallelCancelQuery } from './workspace-parallel-cancel.js';
 
 export const DOMAIN_STATIC_CATALOG: ReadonlyArray<readonly [string, QueryHandler]> = [
   ['agent-skills', agentSkills],
@@ -72,6 +73,10 @@ export const DOMAIN_STATIC_CATALOG: ReadonlyArray<readonly [string, QueryHandler
   ['workspace parallel.dispatch', workspaceParallelDispatchQuery],
   ['workspace.parallel.fan-in', workspaceParallelFanInQuery],
   ['workspace parallel.fan-in', workspaceParallelFanInQuery],
+  // Phase 15.04 (PARALLEL-07): cancel verb — synchronous teardown of
+  // materialized subagent workspaces.
+  ['workspace.parallel.cancel', workspaceParallelCancelQuery],
+  ['workspace parallel.cancel', workspaceParallelCancelQuery],
   ['docs-init', docsInit],
   ['websearch', websearch],
   ['learnings.copy', learningsCopy],

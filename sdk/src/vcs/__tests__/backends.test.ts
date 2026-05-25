@@ -152,6 +152,25 @@ describe('BACKENDS_AVAILABLE_FOR_VERB capability matrix — Phase 15.03 refs.mat
   });
 });
 
+describe('BACKENDS_AVAILABLE_FOR_VERB capability matrix — Phase 15.04 workspace.parallel.cancel (PARALLEL-07)', () => {
+  // Pitfall 3 / Pitfall 1 regression mirror — same string-key blind spot
+  // as 15.01/15.02/15.03 above. If the 'workspace.parallel.cancel'
+  // capability-matrix entry is dropped (partial revert, refactor mistake),
+  // TSC stays silent on the object-key lookup path and any consumer that
+  // queries `BACKENDS_AVAILABLE_FOR_VERB['workspace.parallel.cancel']`
+  // would silently receive `undefined` — making the verb appear
+  // unavailable on both backends despite the structural method being
+  // wired. This test is the load-bearing line of defense against that
+  // mode (sibling of the 15.01/15.02/15.03 capability-matrix regressions).
+  it('exposes workspace.parallel.cancel for both backends', () => {
+    expect(BACKENDS_AVAILABLE_FOR_VERB['workspace.parallel.cancel']).toBeDefined();
+    expect([...BACKENDS_AVAILABLE_FOR_VERB['workspace.parallel.cancel']]).toEqual([
+      'git',
+      'jj-colocated',
+    ]);
+  });
+});
+
 describe('parseBackendsEnv', () => {
   it('undefined → all-available + empty requested', () => {
     expect(parseBackendsEnv(undefined)).toEqual({
