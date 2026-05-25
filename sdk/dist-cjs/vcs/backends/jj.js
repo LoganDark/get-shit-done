@@ -846,7 +846,7 @@ function createJjAdapter(cwd) {
                 return 0;
             return r.stdout.split('\n').filter(Boolean).length;
         },
-        rootCommits: ({ rev }) => {
+        rootRevisions: ({ rev }) => {
             const target = rev ? (0, jj_rev_js_1.toJjRev)(rev) : '@';
             const args = jjArgv('log', '-r', `root() & ::${target}`, '-T', 'change_id ++ "\\n"', '--no-graph');
             const r = (0, exec_js_1.vcsExec)(cwd, 'jj', args);

@@ -74,7 +74,7 @@ exports.BACKENDS_AVAILABLE_FOR_VERB = Object.freeze({
     'refs.currentBookmarks': Object.freeze(['git', 'jj-colocated']),
     'refs.resolveShort': Object.freeze(['git', 'jj-colocated']),
     'refs.countCommits': Object.freeze(['git', 'jj-colocated']),
-    'refs.rootCommits': Object.freeze(['git', 'jj-colocated']),
+    'refs.rootRevisions': Object.freeze(['git', 'jj-colocated']),
     'refs.exists': Object.freeze(['git', 'jj-colocated']),
     'refs.isIgnored': Object.freeze(['git']), // jj-side: VcsNotImplementedError (audit-confirmed no jj caller)
     'refs.remotes': Object.freeze(['git', 'jj-colocated']),

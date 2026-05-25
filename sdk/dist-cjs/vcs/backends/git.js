@@ -498,7 +498,7 @@ function createGitAdapter(cwd) {
         const n = parseInt(r.stdout.trim(), 10);
         return Number.isNaN(n) ? 0 : n;
     };
-    const rootCommits = (opts) => {
+    const rootRevisions = (opts) => {
         const target = opts.rev ? (0, git_rev_js_1.toGitRev)(opts.rev) : 'HEAD';
         const r = (0, exec_js_1.execGit)(cwd, ['rev-list', '--max-parents=0', target]);
         if (r.exitCode !== 0)
@@ -534,7 +534,7 @@ function createGitAdapter(cwd) {
         readBlob,
         resolveShort,
         countCommits,
-        rootCommits,
+        rootRevisions,
         exists: refExists,
         isIgnored,
         remotes,

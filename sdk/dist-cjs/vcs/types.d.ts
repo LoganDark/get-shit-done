@@ -306,7 +306,7 @@ export interface VcsRefs {
     countCommits(opts: {
         rev?: RevisionExpr;
     }): number;
-    rootCommits(opts: {
+    rootRevisions(opts: {
         rev?: RevisionExpr;
     }): string[];
     exists(rev: RevisionExpr): boolean;
