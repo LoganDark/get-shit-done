@@ -212,14 +212,34 @@ test('script run: byExtension has all 5 extension keys', () => {
 	}
 });
 
-test('script run: specialCases includes backends.ts:79 (Pitfall 3 anchor)', () => {
+test('script run: specialCases capability-matrix entry reflects live state', () => {
+	// This test is INTENTIONALLY tolerant of pre- vs post-rename state. The
+	// audit script is a one-shot pre-rename gate, but we want the test suite
+	// to stay green AFTER the rename lands too (the audit script is still
+	// useful for re-verification of the post-rename namespace cleanliness).
+	//
+	// Pre-rename: capability matrix hit at backends.ts:79 MUST surface as a
+	// specialCase entry (D-11 enforcement).
+	// Post-rename: backends.ts no longer has a `rootCommits` hit at line 79,
+	// so the specialCase entry SHOULD NOT appear (no false-positive).
+	//
+	// The pure-function test 'buildSpecialCases surfaces backends.ts:79
+	// capability-matrix-string-literal' covers the synthetic-input contract;
+	// this test asserts the live-state contract is consistent.
 	const envelope = runAudit();
 	const matrix = envelope.specialCases.find(
 		(c) => c.kind === 'capability-matrix-string-literal',
 	);
-	assert.ok(matrix, 'specialCases must include capability-matrix-string-literal entry');
-	assert.equal(matrix.line, 79);
-	assert.ok(matrix.file.endsWith('backends.ts'));
+	const liveHasMatrixHit = envelope.byExtension.ts.some(
+		(h) => h.file.endsWith('sdk/src/vcs/backends.ts') && h.line === 79,
+	);
+	if (liveHasMatrixHit) {
+		assert.ok(matrix, 'specialCases must include capability-matrix-string-literal entry when backends.ts:79 still has a hit');
+		assert.equal(matrix.line, 79);
+		assert.ok(matrix.file.endsWith('backends.ts'));
+	} else {
+		assert.equal(matrix, undefined, 'specialCases must NOT include capability-matrix-string-literal entry when backends.ts:79 has no hit (post-rename)');
+	}
 });
 
 test('script run: carveOuts include both ROADMAP carve-out paths', () => {
