@@ -59,3 +59,13 @@ echo "dogfood-restore: extracting ${TARBALL_PATH}" >&2
 tar -xf "$TARBALL_PATH" -C .
 
 echo "dogfood-restore: complete. Verify with: jj diff --summary && jj log -r '@-..@' --no-graph" >&2
+
+# Phase 16.02 (CLEANUP-02 / D-11/D-12/D-13): post-restore orphan-workspace
+# cleanup. Idempotent — re-invoking on a clean tree returns
+# {abandoned:[], failedReaped:[]}. Trap with WARN so a cleanup-only miss
+# does NOT flag "restore failed" (op-restore + tar both succeeded).
+CLEANUP_JSON=$(gsd-sdk query cleanup-subagent-workspaces --all-phases 2>&1 \
+	|| { echo "WARN: orphan cleanup failed" >&2; echo '{"abandoned":[],"failedReaped":[]}'; })
+ABANDONED_COUNT=$(echo "$CLEANUP_JSON" | jq -r '.abandoned | length' 2>/dev/null || echo "?")
+FAILED_COUNT=$(echo "$CLEANUP_JSON" | jq -r '.failedReaped | length' 2>/dev/null || echo "?")
+echo "dogfood-restore: orphan-workspace cleanup complete (abandoned=${ABANDONED_COUNT}, failedReaped=${FAILED_COUNT})" >&2
