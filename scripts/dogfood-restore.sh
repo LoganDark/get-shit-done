@@ -64,8 +64,43 @@ echo "dogfood-restore: complete. Verify with: jj diff --summary && jj log -r '@-
 # cleanup. Idempotent — re-invoking on a clean tree returns
 # {abandoned:[], failedReaped:[]}. Trap with WARN so a cleanup-only miss
 # does NOT flag "restore failed" (op-restore + tar both succeeded).
-CLEANUP_JSON=$(gsd-sdk query cleanup-subagent-workspaces --all-phases 2>&1 \
-	|| { echo "WARN: orphan cleanup failed" >&2; echo '{"abandoned":[],"failedReaped":[]}'; })
-ABANDONED_COUNT=$(echo "$CLEANUP_JSON" | jq -r '.abandoned | length' 2>/dev/null || echo "?")
-FAILED_COUNT=$(echo "$CLEANUP_JSON" | jq -r '.failedReaped | length' 2>/dev/null || echo "?")
+#
+# Phase 16 REVIEW CR-02 fix: stdout and stderr are captured SEPARATELY so
+# jq only ever parses pristine JSON. Prior `2>&1`-into-CLEANUP_JSON form
+# corrupted the JSON payload as soon as gsd-sdk emitted ANY stderr noise
+# (e.g. the "not in native registry; falling back to gsd-tools.cjs"
+# fallback warning documented in tests/cli-cleanup-subagent-workspaces
+# .test.cjs:97-101) — concatenated warning+JSON failed jq parse, both
+# counts silently flipped to "?", and the WARN trap never fired because
+# the gsd-sdk exit code was still 0.
+#
+# Note on `set -e` interaction (Phase 16 REVIEW IN-01): `set -e` is in
+# effect from line 29. The if/else form below makes the gsd-sdk exit
+# code observable to the script without tripping `set -e`'s
+# unguarded-failure trap — `if cmd` is `set -e`-safe.
+CLEANUP_STDERR_FILE=$(mktemp -t dogfood-restore-cleanup-stderr.XXXXXX)
+if CLEANUP_JSON=$(gsd-sdk query cleanup-subagent-workspaces --all-phases 2>"$CLEANUP_STDERR_FILE"); then
+	:
+else
+	echo "WARN: orphan cleanup failed (stderr follows):" >&2
+	cat "$CLEANUP_STDERR_FILE" >&2
+	CLEANUP_JSON='{"abandoned":[],"failedReaped":[]}'
+fi
+rm -f "$CLEANUP_STDERR_FILE"
+
+# Phase 16 REVIEW WR-04 fix: promote the bare `|| echo "?"` parse-failure
+# fallback to an explicit WARN so the user can distinguish a clean run
+# (counts are real integers) from a parse-failure run (counts are "?").
+# Pre-fix, the diagnostic on the final line always said "complete
+# (abandoned=N, failedReaped=M)" even when one or both counts had fallen
+# back to "?", obscuring the failure mode. After this fix, the only path
+# to "?" is jq absent or jq-rejected stdin — both deserve a WARN.
+if ! ABANDONED_COUNT=$(printf '%s' "$CLEANUP_JSON" | jq -r '.abandoned | length' 2>/dev/null); then
+	echo "WARN: jq failed to parse cleanup JSON for .abandoned count (jq missing or invalid JSON?)" >&2
+	ABANDONED_COUNT="?"
+fi
+if ! FAILED_COUNT=$(printf '%s' "$CLEANUP_JSON" | jq -r '.failedReaped | length' 2>/dev/null); then
+	echo "WARN: jq failed to parse cleanup JSON for .failedReaped count (jq missing or invalid JSON?)" >&2
+	FAILED_COUNT="?"
+fi
 echo "dogfood-restore: orphan-workspace cleanup complete (abandoned=${ABANDONED_COUNT}, failedReaped=${FAILED_COUNT})" >&2

@@ -215,3 +215,123 @@ test('D-16: dogfood-restore.sh reaps orphan workspace dirs from 2 distinct phase
 		}
 	}
 });
+
+// Phase 16 REVIEW CR-02 regression guard: lock in the stderr-handling
+// contract added to scripts/dogfood-restore.sh. The fix captures stdout
+// and stderr SEPARATELY so jq only ever parses pristine JSON — pre-fix,
+// the `2>&1`-into-CLEANUP_JSON form would concatenate gsd-sdk's stderr
+// (e.g. the "not in native registry; falling back to gsd-tools.cjs"
+// warning) with the JSON payload, silently flipping both counts to "?"
+// even though gsd-sdk exited 0. This test uses a NOISY-stderr shim that
+// emits a fake warning BEFORE the JSON to stdout, then asserts the
+// abandoned count is the real integer (1), not "?" — proving the
+// production script's stderr-tee + stdout-only-to-jq path is correct.
+test('CR-02 regression: dogfood-restore.sh tolerates non-empty gsd-sdk stderr (parses stdout-only JSON)', (t) => {
+	if (!JJ_AVAILABLE) {
+		t.skip('jj binary not on PATH');
+		return;
+	}
+	const fixDir = mkdtempSync(path.join(tmpdir(), '__dogfood-restore-cleanup-stderr-'));
+	let tarBundle;
+	let shimDir;
+	try {
+		seedJjRepo(fixDir);
+		// Seed a single orphan workspace so the cleanup has something real
+		// to reap — the assertion below pivots on abandoned===1.
+		const ws16 = seedWorkspace(fixDir, 16, 1);
+		assert.ok(existsSync(ws16), 'seed: ws16 dir must exist before script run');
+
+		const opId = currentJjOpId(fixDir);
+		tarBundle = seedFakeTarball();
+
+		const restoreScript = path.resolve(
+			__dirname,
+			'..',
+			'..',
+			'scripts',
+			'dogfood-restore.sh',
+		);
+		const workspaceCli = path.resolve(__dirname, '..', '..', 'sdk', 'dist', 'cli.js');
+		shimDir = mkdtempSync(path.join(tmpdir(), '__dogfood-test-shim-stderr-'));
+		const shimPath = path.join(shimDir, 'gsd-sdk');
+		// NOISY shim: emit a fake stderr warning BEFORE delegating to the
+		// real cli.js. Mirrors the production gsd-sdk wrapper's
+		// "not in native registry; falling back to gsd-tools.cjs" path
+		// that surfaces on real installs but is suppressed in the clean
+		// PATH-shim used by the D-16 test above. Without the CR-02 fix
+		// this stderr line would get merged into CLEANUP_JSON via `2>&1`
+		// and corrupt jq parse, flipping abandoned to "?".
+		writeFileSync(
+			shimPath,
+			`#!/bin/sh\necho "WARN: simulated gsd-sdk stderr noise (CR-02 regression fixture)" >&2\nexec "${process.execPath}" "${workspaceCli}" "$@"\n`,
+			{ mode: 0o755 },
+		);
+		const env = {
+			...process.env,
+			PATH: `${shimDir}${path.delimiter}${process.env.PATH || ''}`,
+		};
+		const r = spawnSync('bash', [restoreScript, opId, tarBundle.tarPath], {
+			cwd: fixDir,
+			encoding: 'utf-8',
+			timeout: 60000,
+			env,
+		});
+
+		assert.strictEqual(
+			r.status,
+			0,
+			`dogfood-restore.sh must exit 0; got status=${r.status}, stderr=${r.stderr}`,
+		);
+
+		// CR-02 core assertion: the cleanup count must be the REAL integer
+		// (1 — one orphan was seeded and reaped), NOT "?". Pre-fix this
+		// would say `abandoned=?` because the shim's stderr line
+		// "WARN: simulated gsd-sdk stderr noise..." got concatenated with
+		// the JSON payload and broke jq parse.
+		//
+		// Match the canonical diagnostic line in stderr and extract the
+		// abandoned= field. `jq` may not be on PATH in CI; in that case
+		// even the post-fix code falls back to "?". When jq IS present
+		// (the common case), we assert abandoned=1.
+		const completeLine = r.stderr
+			.split('\n')
+			.find((l) => l.includes('orphan-workspace cleanup complete'));
+		assert.ok(completeLine, `complete diagnostic missing; stderr=${r.stderr}`);
+		const jqAvailable = commandExists('jq');
+		if (jqAvailable) {
+			assert.match(
+				completeLine,
+				/abandoned=1\b/,
+				`CR-02 fix should yield abandoned=1 (not "?") with jq present; line was: ${completeLine}; full stderr=${r.stderr}`,
+			);
+		}
+
+		// The CR-02 fix captures gsd-sdk stderr to a tempfile and only
+		// dumps it to the script's stderr if gsd-sdk EXITS NONZERO. The
+		// shim returns the gsd-sdk exit code (0 on success), so the
+		// simulated warning is correctly SUPPRESSED — proves the
+		// stderr-tee contract isolates noisy lines from the operator's
+		// view on the happy path. (Pre-fix the warning would have been
+		// concatenated into CLEANUP_JSON; post-fix it's tee'd to a
+		// tempfile that we discard on success.)
+		assert.ok(
+			!r.stderr.includes('CR-02 regression fixture'),
+			`CR-02 stderr-tee contract: shim's stderr warning must be SUPPRESSED on success-path (got passed through; stderr=${r.stderr})`,
+		);
+
+		// The seeded orphan must be reaped — even with noisy stderr in
+		// the pipeline, the actual cleanup work still succeeds.
+		assert.ok(
+			!existsSync(ws16),
+			`ws16 must be reaped even with noisy gsd-sdk stderr; still exists: ${ws16}; stderr=${r.stderr}`,
+		);
+	} finally {
+		rmSync(fixDir, { recursive: true, force: true });
+		if (tarBundle && tarBundle.tarDir) {
+			rmSync(tarBundle.tarDir, { recursive: true, force: true });
+		}
+		if (shimDir) {
+			rmSync(shimDir, { recursive: true, force: true });
+		}
+	}
+});
