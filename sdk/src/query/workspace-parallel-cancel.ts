@@ -55,10 +55,16 @@ export const workspaceParallelCancelQuery: QueryHandler = async (args, projectDi
   let cwd = projectDir;
   let handleRaw: string | undefined;
 
+  // Phase 16 REVIEW WR-03: argv loop uses `i + 1 < args.length` rather than
+  // `args[i + 1]` truthiness. Pre-fix the empty string '' was treated as
+  // missing (falsy), so `--handle ''` and `--cwd ''` silently fell through
+  // to the absent-flag envelope rather than surfacing a more precise error.
+  // After the fix, empty-string values are routed to the downstream
+  // validator (e.g. `handle_json_parse_failed` for an empty handle).
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--cwd' && args[i + 1]) {
+    if (args[i] === '--cwd' && i + 1 < args.length) {
       cwd = args[++i];
-    } else if (args[i] === '--handle' && args[i + 1]) {
+    } else if (args[i] === '--handle' && i + 1 < args.length) {
       handleRaw = args[++i];
     }
   }

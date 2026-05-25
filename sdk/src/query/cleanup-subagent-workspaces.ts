@@ -66,10 +66,22 @@ export const cleanupSubagentWorkspacesQuery: QueryHandler = async (args, project
 	let phase: number | undefined;
 	let allPhases = false;
 
+	// Phase 16 REVIEW WR-03: argv loop uses an explicit `i + 1 < args.length`
+	// guard rather than `args[i + 1]` truthiness. The pre-fix truthy-check
+	// treated the empty string '' as missing (falsy), so
+	// `gsd-sdk query cleanup-subagent-workspaces --phase ''` silently fell
+	// through to the `phase_or_all_phases_required` envelope rather than
+	// surfacing the more specific `invalid_phase_number` reason for an
+	// empty-string phase. After the fix, an empty-string value is accepted
+	// at the argv layer and routed to the downstream validator, which gives
+	// the caller a precise diagnostic (Number('') === 0; phase 0 is legal
+	// per the workspace-parallel-dispatch precedent, so empty-string phase
+	// is treated as phase 0 — caller bug surfaces in the user's tooling,
+	// not in this parser).
 	for (let i = 0; i < args.length; i++) {
-		if (args[i] === '--cwd' && args[i + 1]) {
+		if (args[i] === '--cwd' && i + 1 < args.length) {
 			cwd = args[++i];
-		} else if (args[i] === '--phase' && args[i + 1]) {
+		} else if (args[i] === '--phase' && i + 1 < args.length) {
 			phase = Number(args[++i]);
 		} else if (args[i] === '--all-phases') {
 			allPhases = true;
