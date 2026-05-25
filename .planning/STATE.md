@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 
 ## Current Position
 
-Phase: 16
+Phase: 17
 Plan: Not started
-Status: Milestone complete
-Last activity: 2026-05-25
+Status: Phase 17 context gathered + B1 quick task complete
+Last activity: 2026-05-25 — Completed quick task 260525-6iq: fix the 2 raw-git prose mentions (B1 closure)
 
 ## Performance Metrics
 
@@ -208,6 +208,7 @@ v1.4 todos all promoted to REQ-IDs in `.planning/REQUIREMENTS.md` and mapped to 
 |---|-------------|------|--------|-----------|
 | 260522-vx2 | test maintenance — triage of npm test failures (probe-only, no fix) | 2026-05-23 | xuxxkkqp | [260522-vx2-test-maintenance-need-to-make-sure-all-p](./quick/260522-vx2-test-maintenance-need-to-make-sure-all-p/) |
 | 260523-ovw | structural fix: workflow assert_clean_wc gate + execute-phase update_roadmap reorder (Phase 14 post-mortem) | 2026-05-23 | swoylprp, plyvlkqt, uxuqqzto | [260523-ovw-investigate-how-that-happened-and-potent](./quick/260523-ovw-investigate-how-that-happened-and-potent/) |
+| 260525-6iq | fix the 2 raw-git prose mentions (B1 closure — Phase 17 precondition Q-01) | 2026-05-25 | ryo | [260525-6iq-fix-the-2-raw-git-prose-mentions](./quick/260525-6iq-fix-the-2-raw-git-prose-mentions/) |
 
 ## Deferred Items
 
