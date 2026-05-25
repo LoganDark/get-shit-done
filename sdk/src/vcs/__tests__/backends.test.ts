@@ -92,6 +92,32 @@ describe('BACKENDS_AVAILABLE_FOR_VERB (Phase 3 D-12 per-verb allowlist)', () => 
   });
 });
 
+describe('BACKENDS_AVAILABLE_FOR_VERB capability matrix — Phase 15.01 rootCommits → rootRevisions flip (Pitfall 3 / v1.2 retro CR-01)', () => {
+  // Pitfall 3 / v1.2 retro CR-01 regression: the capability matrix at
+  // sdk/src/vcs/backends.ts:79 stores availability as a string-keyed object.
+  // TSC does NOT validate `obj['string-literal']` access — a future
+  // contributor could re-introduce the old `'refs.rootCommits'` key (e.g. via
+  // copy-paste from a stale ADR or a partial revert) and TSC would stay
+  // silent. These tests guard the string-literal flip so the regression
+  // surfaces at test time instead of in production.
+  it('exposes refs.rootRevisions for both backends', () => {
+    expect(BACKENDS_AVAILABLE_FOR_VERB['refs.rootRevisions']).toBeDefined();
+    expect([...BACKENDS_AVAILABLE_FOR_VERB['refs.rootRevisions']]).toEqual([
+      'git',
+      'jj-colocated',
+    ]);
+  });
+
+  it('removes the prior refs.rootCommits string-literal key (anti-assertion)', () => {
+    // Anti-assertion: the load-bearing test in this block. TSC cannot
+    // catch a re-introduction of the old key (string-keyed object access);
+    // this assertion is the only line of defense.
+    expect(
+      (BACKENDS_AVAILABLE_FOR_VERB as Record<string, unknown>)['refs.rootCommits'],
+    ).toBeUndefined();
+  });
+});
+
 describe('parseBackendsEnv', () => {
   it('undefined → all-available + empty requested', () => {
     expect(parseBackendsEnv(undefined)).toEqual({
