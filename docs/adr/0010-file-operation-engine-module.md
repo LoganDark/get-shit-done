@@ -105,3 +105,15 @@ isManagedHookCommand(commandText, { surface, configDir })
 - ADR-0008: `0008-installer-migration-module.md`
 - ADR-0009: `0009-shell-command-projection-module.md`
 - Related bug history: `#1755`, `#2866`, `#2979`, `#3002`, `#3017`, `#3439`
+
+## Update — 2026-05-25 (Phase 17, DOCS-03)
+
+Drift items surfaced by `/gsd:docs-update --verify-only` against current code:
+
+- **L7 `normalizeMd`:** Still defined at `get-shit-done/bin/lib/core.cjs:637`, exported at `:1958`. The Phase 4 (`#3468`) removal listed in the supersession header above refers to the `core.cjs` `atomicWriteFileSync` + `safeReadFile` wrappers, not `normalizeMd`. `normalizeMd` remains a `core.cjs` export.
+- **L36 `isGsdHookCommand`:** Migrated into `shell-command-projection.cjs::isManagedHookBasename` (verified at `get-shit-done/bin/lib/shell-command-projection.cjs:144`) per the ADR-0009 supersession path; the original ADR-0010 location at `bin/install.js` was superseded.
+- **L37 `STALE_HOOK_BASENAMES`:** Same migration path as L36 — the basename set now lives alongside `isManagedHookBasename` in `shell-command-projection.cjs`, not in `bin/install.js`.
+- **L50 internal contradiction:** L50 mentioning `core.cjs::atomicWriteFileSync` was correct AT TIME OF ADR (2026-05-12); L7's predicted removal is what the Phase 4 supersession (`#3468`) actually shipped. Both sentences are accurate as snapshots of different points in time; the apparent contradiction is the artifact of two different temporal vantages.
+- **L52 `writeFileAtomicSync` rename:** Actual function name in `installer-migrations.cjs` is `atomicWriteInstallState` (verified at `get-shit-done/bin/lib/installer-migrations.cjs:78`). The original ADR's `writeFileAtomicSync` name was a draft that did not ship.
+
+The body of this ADR above this line records the original 2026-05-12 decision and the 2026-05-13 supersession verbatim. Subsequent drift is captured here per ADR-supersession convention.

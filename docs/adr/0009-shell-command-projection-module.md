@@ -129,3 +129,12 @@ The seam grew beyond the original "rendering only" scope. The "does not become a
 - Q1, Q2, Q3 (`hooks.shell_preference`, Windows Git Bash modeling, shim/script builder migration timing): unresolved, carried forward as projection-design concerns independent of the I/O expansion.
 
 See CONTEXT.md "Shell Command Projection Module" entry for the canonical current-state description.
+
+## Update — 2026-05-25 (Phase 17, DOCS-03)
+
+This update reconciles ADR 0009 with the post-Phase-1–4 expansion state of `shell-command-projection.cjs` and resolves audit findings from the `/gsd:docs-update --verify-only` Theme 3 sweep.
+
+- **L14 `settings.json` qualifier:** Context refers to `.claude/settings.json` (Claude Code runtime), not a project-level `settings.json`. Runtime-specific config locations are enumerated in `bin/install.js` runtime-detection logic.
+- **L41 `formatHookCommandForShell()` rename:** The function listed under `bin/install.js:605-608` was absorbed during the Phase 1–4 expansion. The equivalent surface today is the `projectShellCommandText(...)` projection helper exported from `get-shit-done/bin/lib/shell-command-projection.cjs:71` (with `isManagedHookBasename` at `:144` carrying the related basename-classification logic). The original `formatHookCommandForShell` name no longer exists in `bin/install.js`.
+
+The body of this ADR above this line records the original 2026-05-12 decision and the 2026-05-13 expansion verbatim. Subsequent drift is captured here per ADR-supersession convention.
