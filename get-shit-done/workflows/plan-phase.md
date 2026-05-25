@@ -1693,7 +1693,7 @@ if [ -n "$DIRTY" ]; then
 	echo "  - commit the listed files with a descriptive message" >&2
 	echo "  - if commit_docs is false but §13b/§13c ran: flip it on, or commit STATE.md/ROADMAP.md manually" >&2
 	echo "  - if planning artifacts dirty: find the workflow step that produced them and add its missing commit (do not just paper over here)" >&2
-	echo "  - if unrelated WIP: jj abandon @ / git stash before re-running plan-phase" >&2
+	echo "  - if unrelated WIP: jj abandon @ (or stash via git, then re-run plan-phase)" >&2
 	exit 1
 fi
 ```

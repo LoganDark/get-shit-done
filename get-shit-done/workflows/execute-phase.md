@@ -555,7 +555,7 @@ increases monotonically across waves. `{status}` is `complete` (success),
    WAVE_WORKTREE_PLANS_JSON=$(printf '%s\n' $WAVE_WORKTREE_PLANS | jq -R . | jq -sc 'map({agentId: ., planId: .})')
    # Phase 14.1 (PARALLEL-08, D-02): no --main-bookmark flag — zero flags
    # yields empty mainBookmarks → fan-in skips the bookmark/ref advance step.
-   # Bookmark-less jj `@` and detached-HEAD git working copies pass cleanly.
+   # Bookmark-less jj `@` and detached-HEAD (on git) working copies pass cleanly.
    HANDLE_JSON=$(printf '%s' "$WAVE_WORKTREE_PLANS_JSON" \
      | gsd-sdk query workspace.parallel.dispatch \
          --phase "${PHASE_NUMBER}" --plan @-)
@@ -1610,7 +1610,7 @@ if [ -n "$DIRTY" ]; then
 	echo "Phase completion requires a clean working copy. Resolve via one of:" >&2
 	echo "  - commit the listed files with a descriptive message" >&2
 	echo "  - if planning artifacts: identify the workflow step that produced them and add its missing commit (do not just paper over here)" >&2
-	echo "  - if unrelated WIP: jj abandon @ / git stash before re-running phase execution" >&2
+	echo "  - if unrelated WIP: jj abandon @ (or stash via git, then re-run phase execution)" >&2
 	exit 1
 fi
 ```
