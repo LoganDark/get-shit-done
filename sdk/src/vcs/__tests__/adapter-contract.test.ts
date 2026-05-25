@@ -36,6 +36,16 @@ describe.for(selectedBackends())('VcsAdapter contract — backend=%s', (kind) =>
     else expect(vcs.kind).toBe('jj');
   });
 
+  // Phase 15.02 (VCS-21): per-backend canonical id alphabet substring.
+  // Opaque-string per CF-03 — git returns '0-9a-f' (hex commit_id),
+  // jj returns 'k-z' (reverse-base32 change_id; empirically verified via
+  // jj-id-alphabet-probe.test.ts:49-75). Consumers compose into regex
+  // patterns: new RegExp('^[' + vcs.refs.idAlphabet + ']+$').
+  test.skipIf(!ready('refs.idAlphabet'))('vcs.refs.idAlphabet returns expected per-backend literal', ({ vcs }) => {
+    if (kind === 'git') expect(vcs.refs.idAlphabet).toBe('0-9a-f');
+    else expect(vcs.refs.idAlphabet).toBe('k-z');
+  });
+
   test.skipIf(!ready('commit'))('vcs.commit({files,message}) produces an id', ({ vcs, cwd }) => {
     writeFileSync(join(cwd, 'a.txt'), 'a');
     const r = vcs.commit({ files: ['a.txt'], message: 'add a' });

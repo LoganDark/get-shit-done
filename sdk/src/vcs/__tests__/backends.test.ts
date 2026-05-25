@@ -118,6 +118,24 @@ describe('BACKENDS_AVAILABLE_FOR_VERB capability matrix — Phase 15.01 rootComm
   });
 });
 
+describe('BACKENDS_AVAILABLE_FOR_VERB capability matrix — Phase 15.02 refs.idAlphabet (VCS-21)', () => {
+  // Pitfall 3 / Pitfall 1 regression: the capability matrix at
+  // sdk/src/vcs/backends.ts stores availability as a string-keyed object.
+  // TSC does NOT validate `obj['string-literal']` access — if a future
+  // contributor (or a partial revert) drops the new `'refs.idAlphabet'`
+  // key, TSC would stay silent and the adapter-contract.test.ts skipIf
+  // would silently no-op the per-backend literal assertion (both
+  // backends skipped → false-green). This test surfaces the regression
+  // at test time instead of in production.
+  it('exposes refs.idAlphabet for both backends', () => {
+    expect(BACKENDS_AVAILABLE_FOR_VERB['refs.idAlphabet']).toBeDefined();
+    expect([...BACKENDS_AVAILABLE_FOR_VERB['refs.idAlphabet']]).toEqual([
+      'git',
+      'jj-colocated',
+    ]);
+  });
+});
+
 describe('parseBackendsEnv', () => {
   it('undefined → all-available + empty requested', () => {
     expect(parseBackendsEnv(undefined)).toEqual({
