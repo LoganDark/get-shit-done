@@ -50,8 +50,8 @@ Three v1.2/v1.3 deferred items pulled in. New public verbs on `VcsAdapter`. Stri
 
 Lock prose claims in ARCHITECTURE.md / INVENTORY.md to live filesystem state. Tests use `node:test` (per `tests/` convention), live-scan style (no snapshots, no hardcoded counts), copy `tests/inventory-counts.test.cjs` shape verbatim.
 
-- [ ] **DRIFT-01**: `tests/architecture-counts.test.cjs` exists and asserts ARCHITECTURE.md headline counts (commands, workflows, agents, lib modules, install.js LOC) match live filesystem `readdirSync` results across en + 4 translations (`docs/ARCHITECTURE.md`, `docs/ja-JP/ARCHITECTURE.md`, `docs/ko-KR/ARCHITECTURE.md`, `docs/pt-BR/ARCHITECTURE.md`, `docs/zh-CN/ARCHITECTURE.md`)
-- [ ] **DRIFT-02**: `tests/command-count-sync.test.cjs` exists and asserts INVENTORY.md `## Commands` table row-count matches live `commands/gsd/*.md` filesystem count
+- [x] **DRIFT-01**: `tests/architecture-counts.test.cjs` exists and asserts ARCHITECTURE.md headline counts (commands, workflows, agents, lib modules, install.js LOC) match live filesystem `readdirSync` results across en + 4 translations (`docs/ARCHITECTURE.md`, `docs/ja-JP/ARCHITECTURE.md`, `docs/ko-KR/ARCHITECTURE.md`, `docs/pt-BR/ARCHITECTURE.md`, `docs/zh-CN/ARCHITECTURE.md`)
+- [x] **DRIFT-02**: `tests/command-count-sync.test.cjs` exists and asserts INVENTORY.md `## Commands` table row-count matches live `commands/gsd/*.md` filesystem count
 
 ### Docs Drift Cleanup (45 verify-only failures, 8 themes)
 
@@ -110,8 +110,8 @@ Which phases cover which requirements. Updated during roadmap creation 2026-05-2
 | LINT-06 | Phase 16 (plan 16.01) | Pending |
 | CLEANUP-02 | Phase 16 (plan 16.02) | Pending |
 | DOCS-08 | Phase 17 (plan 17.01) | Complete |
-| DRIFT-01 | Phase 17 (plan 17.02) | Pending |
-| DRIFT-02 | Phase 17 (plan 17.02) | Pending |
+| DRIFT-01 | Phase 17 (plan 17.02) | Complete |
+| DRIFT-02 | Phase 17 (plan 17.02) | Complete |
 | DOCS-01 | Phase 17 (plan 17.03) | Pending |
 | DOCS-02 | Phase 17 (plan 17.03) | Pending |
 | DOCS-03 | Phase 17 (plan 17.03) | Pending |

@@ -4,14 +4,14 @@ milestone: v1.4
 milestone_name: Clean, consistent state for next upstream pull
 status: executing
 stopped_at: Phase 17 context gathered
-last_updated: "2026-05-25T22:00:18.930Z"
+last_updated: "2026-05-25T22:06:29.949Z"
 last_activity: 2026-05-25
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 11
-  completed_plans: 8
-  percent: 73
+  completed_plans: 9
+  percent: 75
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 ## Current Position
 
 Phase: 17 (drift-control-reconciliation) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-05-25
 
@@ -83,6 +83,7 @@ Last activity: 2026-05-25
 | Phase 14 P05 | 8min | 3 tasks | 3 files |
 | Phase 14.1 P01 | 14min | 3 tasks | 16 files |
 | Phase 17 P17.01 | 2min | 2 tasks | 4 files |
+| Phase 17 P17.02 | 8min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -165,6 +166,8 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase 14]: Phase 14 Plan 05 — pre-snapshot dir intentionally NOT trap-cleaned on EXIT (D-12 durability); rehearsal dirs ARE trap-cleaned in Plan 14-04. Dogfood anchor lives until OS GC of /tmp; rehearsal artifacts are ephemera.
 - [Phase 14.1]: Phase 14.1 Plan 01: ParallelDispatch{Opts,Handle}.mainBookmark hard-renamed to mainBookmarks?: readonly string[] (CF-01 no-alias); jj fan-in two-pass all-or-nothing (CF-02); git fan-in adds STEP 1.5 update-ref loop guarded on !conflicted (CF-03); workflow current-branch FATAL preflight dropped from both execute-phase.md AND quick.md (D-01 symmetric); MERGE-08 deferred-item REQ-ID filed (D-03 STRICT OOS for WorkspaceMergeOpts.mainBookmark)
 - [Phase 17]: Plan 17.01 (DOCS-08): Aligned ARCHITECTURE.md prose counts across en + ja-JP + ko-KR + INVENTORY.md Commands/Workflows headlines with live filesystem. pt-BR carve-out preserved. D-04 all-strict locale lockstep satisfied; Wave 2 drift-test gate open for day-1 GREEN.
+- [Phase ?]: Rule 3 deviation in 17.02: added /gsd-migrate-vcs row to INVENTORY.md so command-count-sync drift guard lands Day-1 GREEN per Pitfall 4 same-PR coupling.
+- [Phase ?]: D-10 honored in 17.02: Tests is NOT added as an INVENTORY.md family; the two new drift-test files auto-resolve the INVENTORY L9/L59 self-references.
 
 ### Pending Todos
 
@@ -235,7 +238,7 @@ All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQU
 
 ## Session Continuity
 
-Last session: 2026-05-25T21:59:47.279Z
+Last session: 2026-05-25T22:06:13.932Z
 Stopped at: Phase 17 context gathered
 Resume file: 
 
