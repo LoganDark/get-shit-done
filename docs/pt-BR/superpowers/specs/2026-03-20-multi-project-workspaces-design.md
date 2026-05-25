@@ -20,7 +20,7 @@ Introduzir workspaces multi-projeto com:
 ## Objetivos de design
 
 - isolamento forte de estado
-- operação simples via comandos (`new/list/remove workspace`)
+- operação simples via comando unificado `commands/gsd/workspace.md` (`--new` / `--list` / `--remove`)
 - baixo acoplamento com o workflow padrão
 - fácil observabilidade do que está ativo
 
