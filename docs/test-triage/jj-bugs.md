@@ -2,10 +2,10 @@
 
 **Purpose:** Per-test verdicts recorded **as tests surface under the
 `jj-colocated` matrix lane**, not upfront (D-16). The wrap-up plan
-(`03-07-PLAN.md`) asserts every row has a non-TODO verdict before phase
+(Phase 3 plan 03-07 closure commit `41db442f` — docs(03-07): phase-close finalization, 2026-05-12) asserts every row has a non-TODO verdict before phase
 close.
 
-**Verdict rubric** (per `03-RESEARCH.md` §"Bug-Test Triage Table"):
+**Verdict rubric** (per Phase 3 research synthesis archived; see closure commit `41db442f` 2026-05-12 §"Bug-Test Triage Table"):
 - `jj-mapped` — test premise translates cleanly to jj equivalents; the
   test was updated to assert the jj-side protocol.
 - `git-only` — test premise is git-specific (e.g., refs/HEAD-attachment
@@ -24,13 +24,13 @@ close.
 | 2015 | `tests/bug-2015-worktree-base-branch.test.cjs` | 4/4 pass under jj-colocated; asserts the worktree_branch_check block in execute-phase.md / quick.md uses `git reset --hard` (not `--soft`) when the worktree was created from the wrong base | carries-verbatim | Pure markdown-pattern assertion. The git-only `reset --hard` recovery is a git-specific recipe (jj-native would use `jj abandon` + `jj edit @-` or similar), but the TEST itself is parsing workflow markdown that targets git-colocated workspaces (the only worktree backend supported in Phase 3). Phase 4 owns the jj-native equivalent workflow text — a parallel test would assert the jj-side recipe at that point. | Phase 4 WS-13 (jj-native equivalent of branch-base recovery) |
 | 2388 | `tests/bug-2388-plan-phase-no-branch-rename.test.cjs` | 4/4 pass under jj-colocated; asserts plan-phase.md does NOT include a silent `git branch -m` rename of the feature branch | carries-verbatim | Markdown-structural pattern assertion. The "no silent branch rename" invariant is policy-level (planner prompts must not mutate naming behind the user's back), backend-agnostic. A jj-side analog ("planner must not silently `jj bookmark move main`") would be a parallel Phase 4 test if/when jj-native planner integration lands. | Phase 4 WS-13 (jj-side analog: no silent `jj bookmark move`) |
 
-## Research-Time Hypothesis (per 03-RESEARCH.md §"Bug-Test Triage Table")
+## Research-Time Hypothesis (per Phase 3 research synthesis archived; see closure commit `41db442f` 2026-05-12 §"Bug-Test Triage Table")
 
 All 7 files are hypothesized as **`carries-verbatim`** — they parse
 workflow-markdown files for structural protocols, with no `git ` shell-out
 in their assertion bodies. The jj-side analog tests (e.g., "bookmark didn't
 auto-advance" for the 2388-inverted case) are Phase 4 WS-13's job, not
-Phase 3 TEST-08's. Plan `03-06-PLAN.md` runs each test under the
+Phase 3 TEST-08's. Plan (Phase 3 plan 03-06 closure commit `2fbcd590` — docs(03-06): complete push/fetch + workspace + TEST-08 triage plan) runs each test under the
 jj-colocated matrix lane and updates the corresponding row with verdict
 + rationale.
 
