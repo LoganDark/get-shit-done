@@ -961,7 +961,7 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       return r.stdout.split('\n').filter(Boolean).length;
     },
 
-    rootCommits: ({ rev }: { rev?: RevisionExpr }): string[] => {
+    rootRevisions: ({ rev }: { rev?: RevisionExpr }): string[] => {
       const target = rev ? toJjRev(rev) : '@';
       const args = jjArgv(
         'log',

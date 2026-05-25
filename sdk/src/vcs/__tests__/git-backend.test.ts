@@ -411,12 +411,12 @@ describe('createGitAdapter — refs.countCommits (02-03 Task 1)', () => {
   });
 });
 
-describe('createGitAdapter — refs.rootCommits (02-03 Task 1)', () => {
+describe('createGitAdapter — refs.rootRevisions (02-03 Task 1)', () => {
   it('returns exactly one SHA in a linear-history repo', () => {
     const vcs = createGitAdapter(tmpDir);
     writeFileSync(join(tmpDir, 'a.txt'), 'a\n');
     vcs.commit({ files: ['a.txt'], message: 'add a' });
-    const roots = vcs.refs.rootCommits({ rev: vcs.refs.head });
+    const roots = vcs.refs.rootRevisions({ rev: vcs.refs.head });
     expect(roots.length).toBe(1);
     expect(roots[0]).toMatch(/^[0-9a-f]{40}$/);
   });

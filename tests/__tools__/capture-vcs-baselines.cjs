@@ -411,7 +411,7 @@ const baselines = [
     source: 'get-shit-done/bin/lib/commands.cjs:921',
     // cmdStats: `execGit(cwd, ['rev-list', '--max-parents=0', 'HEAD'])`
     // resolves the root commit SHA(s) for the first-commit-date probe.
-    // Adapter equivalent: vcs.refs.rootCommits({rev: vcs.refs.head}).
+    // Adapter equivalent: vcs.refs.rootRevisions({rev: vcs.refs.head}).
     fixture: ['echo a > a.txt', 'git add a.txt', 'git commit -m c1'],
     args: ['rev-list', '--max-parents=0', 'HEAD'],
   },

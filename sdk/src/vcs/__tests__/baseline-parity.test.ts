@@ -231,11 +231,11 @@ describe('GIT-02 byte-identity baselines (B-1)', () => {
           args[0] === 'rev-list' &&
           args.some((a) => a.startsWith('--max-parents='))
         ) {
-          // Plan 02-06 Task 3: vcs.refs.rootCommits({rev}) wraps
+          // Plan 02-06 Task 3: vcs.refs.rootRevisions({rev}) wraps
           // `git rev-list --max-parents=0 <rev>`. Returns a string[] of root
           // SHAs. Compare the joined newline output against the captured
           // baseline (or against the regex match for non-deterministic SHAs).
-          const roots = vcs.refs.rootCommits({ rev: vcs.refs.head });
+          const roots = vcs.refs.rootRevisions({ rev: vcs.refs.head });
           const joined = roots.join('\n');
           if (baseline.match?.stdout?.startsWith('regex:')) {
             const re = new RegExp(baseline.match.stdout.slice('regex:'.length));

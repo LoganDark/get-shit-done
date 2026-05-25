@@ -360,7 +360,7 @@ export interface VcsRefs {
   readBlob(rev: RevisionExpr, path: string): string;
   resolveShort(rev: RevisionExpr): string;
   countCommits(opts: { rev?: RevisionExpr }): number;
-  rootCommits(opts: { rev?: RevisionExpr }): string[];
+  rootRevisions(opts: { rev?: RevisionExpr }): string[];
   exists(rev: RevisionExpr): boolean;
   isIgnored(path: string): boolean;
   remotes(): string[];

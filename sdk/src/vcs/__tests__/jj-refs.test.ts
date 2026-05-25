@@ -159,7 +159,7 @@ describe.skipIf(!jjAvailable)(
         stdio: 'pipe',
       });
       // Seed: write a file and squash it into a commit so refs.head /
-      // refs.parent / refs.exists / refs.rootCommits all have meaningful state.
+      // refs.parent / refs.exists / refs.rootRevisions all have meaningful state.
       writeFileSync(join(dir, 'seed.txt'), 'seed\n');
       execSync(`jj squash -B @ -k -m "seed commit"`, {
         cwd: dir,
@@ -212,12 +212,12 @@ describe.skipIf(!jjAvailable)(
       expect(n).toBeGreaterThanOrEqual(1);
     });
 
-    // ─── refs.rootCommits ────────────────────────────────────────────────
-    it('refs.rootCommits({}) returns at least one root revision id', () => {
-      // Phase 8 FLIP-01: rootCommits emits change_id (k-z alphabet) per the
+    // ─── refs.rootRevisions ────────────────────────────────────────────────
+    it('refs.rootRevisions({}) returns at least one root revision id', () => {
+      // Phase 8 FLIP-01: rootRevisions emits change_id (k-z alphabet) per the
       // unified revision contract (D-05). The jj root commit's change_id is
       // the all-z sentinel "zzzzzzzz..." (legitimate k-z form).
-      const roots = vcs.refs.rootCommits({});
+      const roots = vcs.refs.rootRevisions({});
       expect(roots.length).toBeGreaterThanOrEqual(1);
       expect(roots[0]).toMatch(/^[k-z]+$/);
     });

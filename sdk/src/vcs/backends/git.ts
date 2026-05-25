@@ -523,7 +523,7 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     return Number.isNaN(n) ? 0 : n;
   };
 
-  const rootCommits = (opts: { rev?: RevisionExpr }): string[] => {
+  const rootRevisions = (opts: { rev?: RevisionExpr }): string[] => {
     const target = opts.rev ? toGitRev(opts.rev) : 'HEAD';
     const r = execGit(cwd, ['rev-list', '--max-parents=0', target]);
     if (r.exitCode !== 0) return [];
@@ -561,7 +561,7 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     readBlob,
     resolveShort,
     countCommits,
-    rootCommits,
+    rootRevisions,
     exists: refExists,
     isIgnored,
     remotes,

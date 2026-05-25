@@ -995,14 +995,14 @@ function cmdStats(cwd, format, raw) {
   // Git stats
   // Plan 02-09: cmdStats's git-touching block migrates to vcs.refs adapter.
   // Mirrors plan 02-06 progress.ts:285-303 shape (the canonical cookbook for
-  // countCommits / rootCommits / log({rev: expr.rev(<runtime-sha>)}) —
+  // countCommits / rootRevisions / log({rev: expr.rev(<runtime-sha>)}) —
   // first production consumer of expr.commit per Blocker 3 from iteration 1).
   let gitCommits = 0;
   let gitFirstCommitDate = null;
   try {
     const statsVcs = createVcsAdapter(cwd, { kind: 'git' });
     gitCommits = statsVcs.refs.countCommits({ rev: statsVcs.refs.head });              // line 917 (was: rev-list --count HEAD)
-    const roots = statsVcs.refs.rootCommits({ rev: statsVcs.refs.head });              // line 921 (was: rev-list --max-parents=0 HEAD)
+    const roots = statsVcs.refs.rootRevisions({ rev: statsVcs.refs.head });              // line 921 (was: rev-list --max-parents=0 HEAD)
     if (roots.length > 0) {
       const firstCommit = roots[0];
       // Plan 02-09 / Blocker-3 closure: wrap the runtime SHA via expr.rev()

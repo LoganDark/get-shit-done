@@ -144,8 +144,8 @@ describe('Phase 3 plan 03-01: jj.ts skeleton', () => {
   it('refs.countCommits() does not throw VcsNotImplementedError (wired in plan 03-03)', () => {
     expect(() => vcs.refs.countCommits({})).not.toThrow(VcsNotImplementedError);
   });
-  it('refs.rootCommits() does not throw VcsNotImplementedError (wired in plan 03-03)', () => {
-    expect(() => vcs.refs.rootCommits({})).not.toThrow(VcsNotImplementedError);
+  it('refs.rootRevisions() does not throw VcsNotImplementedError (wired in plan 03-03)', () => {
+    expect(() => vcs.refs.rootRevisions({})).not.toThrow(VcsNotImplementedError);
   });
   it('refs.exists() does not throw VcsNotImplementedError (wired in plan 03-03)', () => {
     expect(() => vcs.refs.exists(expr.head())).not.toThrow(VcsNotImplementedError);
