@@ -136,6 +136,22 @@ describe('BACKENDS_AVAILABLE_FOR_VERB capability matrix — Phase 15.02 refs.idA
   });
 });
 
+describe('BACKENDS_AVAILABLE_FOR_VERB capability matrix — Phase 15.03 refs.matchPrefix (VCS-22)', () => {
+  // Pitfall 3 / Pitfall 1 regression mirror — same string-key blind spot
+  // as 15.02 above. If the 'refs.matchPrefix' capability-matrix entry is
+  // dropped (partial revert, refactor mistake), TSC stays silent and the
+  // cross-product test's skipIf gates silently no-op on both backends
+  // (false-green: 10 cases skipped, suite reports 0/0 for the rules).
+  // This test is the load-bearing line of defense against that mode.
+  it('exposes refs.matchPrefix for both backends', () => {
+    expect(BACKENDS_AVAILABLE_FOR_VERB['refs.matchPrefix']).toBeDefined();
+    expect([...BACKENDS_AVAILABLE_FOR_VERB['refs.matchPrefix']]).toEqual([
+      'git',
+      'jj-colocated',
+    ]);
+  });
+});
+
 describe('parseBackendsEnv', () => {
   it('undefined → all-available + empty requested', () => {
     expect(parseBackendsEnv(undefined)).toEqual({

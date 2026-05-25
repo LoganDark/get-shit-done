@@ -205,3 +205,88 @@ describe('GSD_TEST_BACKENDS filter sanity', () => {
     });
   });
 });
+
+/**
+ * Phase 15.03 (VCS-22): matchPrefix 5-rule × 2-backend cross-product (10 cases
+ * minimum per CF-04 + Pitfall 6 enforcement).
+ *
+ * Lives at end-of-file (sibling of the cross-backend `describe.for` block)
+ * because the per-backend sampleId fixtures are pre-known constants — they
+ * don't need the live adapter fixture to derive an id, and the cross-product
+ * shape via `describe.each` is cleaner than threading two adapter fixtures
+ * through the existing `describe.for` block.
+ *
+ * Per CF-04 + RESEARCH §Pattern 3, the matchPrefix bodies are PURE per-input
+ * compute — no jj/git shell-out. They decode RevisionExpr via toJjRev/toGitRev
+ * (which just unwraps the brand) then do `startsWith` + a regex test. This
+ * means the test does not need a live workspace — it can drive each backend
+ * adapter from a tmp dir with no init.
+ *
+ * Five rules per backend:
+ *   1. canonical-alphabet prefix → returns true
+ *   2. wrong-alphabet prefix → THROWS (Pitfall 6 — NOT silent-false)
+ *   3. empty prefix → THROWS (caller bug)
+ *   4. prefix longer than id → returns false (well-defined no-match)
+ *   5. case-discipline: git case-insensitive accepts uppercase, jj uppercase
+ *      trips wrong-alphabet (uppercase k-z is outside [k-z])
+ *
+ * Wrong-alphabet fixture chars per RESEARCH line 767: 'k' is outside hex
+ * [0-9a-fA-F]; '5' is outside jj [k-z]. Alphabet-disjointness verified
+ * empirically by jj-id-alphabet-probe.test.ts.
+ */
+describe.each([
+  ['git', 'abc1234deadbeef'] as const,
+  ['jj-colocated', 'klmnopqrstuv'] as const,
+])('matchPrefix cross-product (VCS-22) — backend=%s', (backend, sampleId) => {
+  const kind = backend === 'git' ? 'git' : 'jj-colocated';
+  const { test, setupHooks } = makeBackendFixture(kind);
+  setupHooks();
+  const ready = (verb: string): boolean => verbReady(verb, kind);
+
+  // Decode the sampleId into a RevisionExpr that matches the backend's
+  // canonical brand. For git, expr.rev(...) takes the raw hex string; for jj,
+  // expr.rev(...) accepts the change_id string equally. Both backend decoders
+  // (toGitRev / toJjRev) just unwrap the brand.
+  const sampleRev = expr.rev(sampleId);
+
+  test.skipIf(!ready('refs.matchPrefix'))('rule 1: canonical-alphabet prefix → true', ({ vcs }) => {
+    // First 4 chars of the sampleId are guaranteed in-alphabet (hex for git,
+    // k-z for jj). Should match the id and return true.
+    const prefix = sampleId.slice(0, 4);
+    expect(vcs.refs.matchPrefix(sampleRev, prefix)).toBe(true);
+  });
+
+  test.skipIf(!ready('refs.matchPrefix'))('rule 2: wrong-alphabet prefix → throws (Pitfall 6 silent-false guard)', ({ vcs }) => {
+    // 'k' is outside hex [0-9a-fA-F]; '5' is outside jj [k-z]. Both choices
+    // are decisive — they CANNOT be in the canonical alphabet of the other
+    // backend. Per RESEARCH line 767.
+    const wrongChar = backend === 'git' ? 'k' : '5';
+    expect(() => vcs.refs.matchPrefix(sampleRev, wrongChar)).toThrow(/outside .* alphabet/);
+  });
+
+  test.skipIf(!ready('refs.matchPrefix'))('rule 3: empty prefix → throws (caller bug)', ({ vcs }) => {
+    expect(() => vcs.refs.matchPrefix(sampleRev, '')).toThrow(/empty prefix/);
+  });
+
+  test.skipIf(!ready('refs.matchPrefix'))('rule 4: prefix longer than id → false (well-defined no-match)', ({ vcs }) => {
+    // Concatenation guarantees prefix.length > id.length. Even though the
+    // chars are all in-alphabet, the length check short-circuits to false
+    // BEFORE the alphabet check, so no throw.
+    const tooLong = sampleId + sampleId;
+    expect(vcs.refs.matchPrefix(sampleRev, tooLong)).toBe(false);
+  });
+
+  test.skipIf(!ready('refs.matchPrefix'))('rule 5: case-discipline matches backend', ({ vcs }) => {
+    const upperPrefix = sampleId.slice(0, 4).toUpperCase();
+    if (backend === 'git') {
+      // Git is case-insensitive (matches core.abbrev / rev-parse behavior).
+      // Uppercase hex prefix should still match the lower-case sampleId.
+      expect(vcs.refs.matchPrefix(sampleRev, upperPrefix)).toBe(true);
+    } else {
+      // Jj is lower-only — uppercase k-z is outside [k-z] and trips the
+      // wrong-alphabet gate (matches jj prefix index behavior, which only
+      // indexes lower-case k-z chars).
+      expect(() => vcs.refs.matchPrefix(sampleRev, upperPrefix)).toThrow(/outside .* alphabet/);
+    }
+  });
+});
