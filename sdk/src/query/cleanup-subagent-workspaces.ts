@@ -48,18 +48,22 @@
 
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { cleanupSubagentWorkspaces } from '../vcs/jj/workspace-cleanup.js';
+import {
+	cleanupSubagentWorkspaces,
+	WORKSPACE_NAME_RE,
+} from '../vcs/jj/workspace-cleanup.js';
 import type { QueryHandler } from './utils.js';
 
-/**
- * Anchored regex matching the canonical workspace-name format from
- * `sdk/src/vcs/jj/octopus.ts:300` (`phase-${phaseTag}-subagent-${idx}` with
- * `phaseTag = String(phaseNumber).padStart(2, '0')`). Both anchors (`^` and
- * `$`) are mandatory — prevents path-injection via crafted dir names like
- * `phase-99-subagent-../etc/passwd` (the literal `/` is not in the digit
- * character class so the anchor fails). ASVS V12 / threat_model T-16.02-01.
- */
-const WORKSPACE_NAME_RE = /^phase-(\d+)-subagent-\d+$/;
+// Phase 16 REVIEW WR-05: WORKSPACE_NAME_RE moved to workspace-cleanup.ts as
+// the single source of truth for "what counts as a subagent workspace dir".
+// Pre-fix this file owned a local copy with `(\d+)` (unpadded match) and the
+// per-phase helper at workspace-cleanup.ts:159 owned a separate
+// `^phase-${phaseTag}-subagent-\d+$` regex (padded form). The two regexes
+// had subtly different semantics — see the cross-file divergence narrative
+// at workspace-cleanup.ts:WORKSPACE_NAME_RE for details. The bridge now
+// imports the shared regex AND passes the discovered workspaces directly to
+// the helper (bypassing the helper's per-phase readdirSync fallback), so
+// the helper's padded regex never runs from this code path.
 
 export const cleanupSubagentWorkspacesQuery: QueryHandler = async (args, projectDir) => {
 	let cwd = projectDir;
@@ -117,7 +121,7 @@ export const cleanupSubagentWorkspacesQuery: QueryHandler = async (args, project
 	}
 
 	// --all-phases mode (D-05/D-06): enumerate .claude/jj-workspaces/, filter
-	// by the anchored regex, collect unique phase numbers, iterate ascending.
+	// by the anchored regex, group entries BY phase, iterate ascending.
 	const workspacesDir = join(cwd, '.claude', 'jj-workspaces');
 	if (!existsSync(workspacesDir)) {
 		// Helper-equivalent idempotent no-op for missing dir (D-06 contract:
@@ -125,22 +129,44 @@ export const cleanupSubagentWorkspacesQuery: QueryHandler = async (args, project
 		return { data: { abandoned: [], failedReaped: [] } };
 	}
 
+	// Phase 16 REVIEW WR-05: bucket discovered workspace dirs BY phase using
+	// the shared regex. Pass each bucket directly to the helper as the
+	// `workspaces` parameter, bypassing the helper's per-phase readdirSync
+	// fallback. This eliminates the divergence between this enumerator's
+	// regex (which accepts any digit-count phase number) and the helper's
+	// padded-form regex (which builds `^phase-${phaseTag}-subagent-\d+$`).
+	// If an unpadded-form dir like `phase-1-subagent-1` ever materialized
+	// on disk, the pre-fix code would have discovered phase=1, then called
+	// the helper with phase=1, which would have built a regex matching
+	// `phase-01-subagent-N` and silently NOT matched the on-disk dir. With
+	// the explicit-list path, the unpadded dir is teardown-eligible end-to-
+	// end, no silent skip.
 	const entries = readdirSync(workspacesDir);
-	const phases = new Set<number>();
+	const workspacesByPhase = new Map<number, { name: string; path: string }[]>();
 	for (const e of entries) {
 		const m = WORKSPACE_NAME_RE.exec(e);
-		if (m) phases.add(Number(m[1]));
+		if (!m) continue;
+		const p = Number(m[1]);
+		let bucket = workspacesByPhase.get(p);
+		if (!bucket) {
+			bucket = [];
+			workspacesByPhase.set(p, bucket);
+		}
+		bucket.push({ name: e, path: join(workspacesDir, e) });
 	}
 
 	// Order-preserving — ascending phase number for deterministic output.
-	const sortedPhases = [...phases].sort((a, b) => a - b);
+	const sortedPhases = [...workspacesByPhase.keys()].sort((a, b) => a - b);
 
 	const merged: { abandoned: string[]; failedReaped: string[] } = {
 		abandoned: [],
 		failedReaped: [],
 	};
 	for (const p of sortedPhases) {
-		const r = cleanupSubagentWorkspaces(cwd, p);
+		// Pass the discovered workspaces directly — `workspaces.length > 0`
+		// trips the helper's authoritative-list branch (workspace-cleanup.ts
+		// :150-151), bypassing the per-phase regex fallback entirely.
+		const r = cleanupSubagentWorkspaces(cwd, p, workspacesByPhase.get(p));
 		merged.abandoned.push(...r.abandoned);
 		merged.failedReaped.push(...r.failedReaped);
 	}

@@ -79,6 +79,26 @@ function jjArgvFlags(repo: string): string[] {
 }
 
 /**
+ * Phase 16 REVIEW WR-05: shared anchored regex for the canonical workspace-
+ * name format from `octopus.ts:300` (`phase-${phaseTag}-subagent-${idx}` with
+ * `phaseTag = String(phaseNumber).padStart(2, '0')`). Both `^` and `$` are
+ * mandatory — prevents path-injection via crafted dir names like
+ * `phase-99-subagent-../etc/passwd` (the literal `/` is not in the digit
+ * character class so the anchor fails). ASVS V12 / threat_model T-16.02-01.
+ *
+ * The capture group `(\d+)` accepts the unpadded form too (e.g.
+ * `phase-1-subagent-1`) — the per-phase helper below uses the SAME pattern
+ * (no re-padding), so the cross-phase enumerator in
+ * `sdk/src/query/cleanup-subagent-workspaces.ts` and the per-phase helper
+ * agree on what counts as a subagent-workspace dir. Pre-fix the helper used
+ * `^phase-${phaseTag}-subagent-\d+$` (padded form derived from the caller's
+ * `phaseNumber`); if an unpadded dir ever appeared on disk, the cross-phase
+ * enumerator would discover it but the helper would silently skip on the
+ * re-enumeration. Single source of truth here avoids that divergence.
+ */
+export const WORKSPACE_NAME_RE = /^phase-(\d+)-subagent-\d+$/;
+
+/**
  * Partial-`CancelResult` shape (D-05): `{abandoned, failedReaped}` so the
  * cancel verb body (`performJjParallelCancel`) AND the 16.02 fanIn clean-path
  * branch AND the 16.02 dogfood-restore.sh consumer all unify the helper
