@@ -182,7 +182,7 @@ Specialized agent definitions with frontmatter specifying:
 
 ### References (`get-shit-done/references/*.md`)
 
-Shared knowledge documents that workflows and agents `@-reference` (see [`docs/INVENTORY.md`](INVENTORY.md#references-41-shipped) for the authoritative count and full roster):
+Shared knowledge documents that workflows and agents `@-reference` (see [`docs/INVENTORY.md`](INVENTORY.md#references-60-shipped) for the authoritative count and full roster):
 
 **Core references:**
 
@@ -264,7 +264,7 @@ Runtime hooks that integrate with the host AI agent:
 | `gsd-validate-commit.sh` | `PostToolUse` | Commit validation for conventional commit enforcement |
 | `gsd-phase-boundary.sh` | `PostToolUse` | Phase boundary detection for workflow transitions |
 
-See [`docs/INVENTORY.md`](INVENTORY.md#hooks-11-shipped) for the authoritative 11-hook roster.
+See [`docs/INVENTORY.md`](INVENTORY.md#hooks-12-shipped) for the authoritative 12-hook roster.
 
 ### SDK Runtime Bridge Module (`sdk/src/query-runtime-bridge.ts`)
 
@@ -279,7 +279,7 @@ This keeps callers thin adapters and centralizes transport decisions for SDK pub
 
 ### CLI Tools (`get-shit-done/bin/`)
 
-Node.js CLI utility (`gsd-tools.cjs`) with domain modules split across `get-shit-done/bin/lib/` (see [`docs/INVENTORY.md`](INVENTORY.md#cli-modules-33-shipped) for the authoritative roster):
+Node.js CLI utility (`gsd-tools.cjs`) with domain modules split across `get-shit-done/bin/lib/` (see [`docs/INVENTORY.md`](INVENTORY.md#cli-modules-59-shipped) for the authoritative roster):
 
 
 | Module                 | Responsibility                                                                                      |
@@ -334,7 +334,7 @@ Orchestrator (workflow .md)
 
 ### Primary Agent Spawn Categories
 
-Conceptual spawn-pattern taxonomy for the 21 primary agents. For the authoritative 31-agent roster (including the 10 advanced/specialized agents such as `gsd-pattern-mapper`, `gsd-code-reviewer`, `gsd-code-fixer`, `gsd-ai-researcher`, `gsd-domain-researcher`, `gsd-eval-planner`, `gsd-eval-auditor`, `gsd-framework-selector`, `gsd-debug-session-manager`, `gsd-intel-updater`), see [`docs/INVENTORY.md`](INVENTORY.md#agents-31-shipped).
+Conceptual spawn-pattern taxonomy for the 21 primary agents. For the authoritative 33-agent roster (including the 12 advanced/specialized agents such as `gsd-pattern-mapper`, `gsd-code-reviewer`, `gsd-code-fixer`, `gsd-ai-researcher`, `gsd-domain-researcher`, `gsd-eval-planner`, `gsd-eval-auditor`, `gsd-framework-selector`, `gsd-debug-session-manager`, `gsd-intel-updater`), see [`docs/INVENTORY.md`](INVENTORY.md#agents-33-shipped).
 
 
 | Category         | Agents                                                                                  | Parallelism                                                                               |
@@ -596,7 +596,7 @@ verification.
 
 ## Installer Architecture
 
-The installer (`bin/install.js`, ~10,700 lines) handles:
+The installer (`bin/install.js`, ~11,000 lines) handles:
 
 1. **Runtime detection** — Interactive prompt or CLI flags (`--claude`, `--opencode`, `--gemini`, `--kilo`, `--codex`, `--copilot`, `--antigravity`, `--cursor`, `--windsurf`, `--augment`, `--trae`, `--qwen`, `--hermes`, `--codebuddy`, `--cline`, `--all`)
 2. **Location selection** — Global (`--global`) or local (`--local`)
