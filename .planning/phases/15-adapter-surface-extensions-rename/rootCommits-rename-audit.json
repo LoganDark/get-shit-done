@@ -1,0 +1,234 @@
+{
+  "generatedAt": "2026-05-25T00:38:09.236Z",
+  "totalCount": 35,
+  "byExtension": {
+    "ts": [
+      {
+        "file": "./sdk/src/query/progress.ts",
+        "line": 288,
+        "snippet": "// countCommits/rootCommits read from the configured backend."
+      },
+      {
+        "file": "./sdk/src/query/progress.ts",
+        "line": 293,
+        "snippet": "const roots = vcs.refs.rootCommits({ rev: vcs.refs.head });"
+      },
+      {
+        "file": "./sdk/src/vcs/__tests__/baseline-parity.test.ts",
+        "line": 234,
+        "snippet": "// Plan 02-06 Task 3: vcs.refs.rootCommits({rev}) wraps"
+      },
+      {
+        "file": "./sdk/src/vcs/__tests__/baseline-parity.test.ts",
+        "line": 238,
+        "snippet": "const roots = vcs.refs.rootCommits({ rev: vcs.refs.head });"
+      },
+      {
+        "file": "./sdk/src/vcs/__tests__/git-backend.test.ts",
+        "line": 414,
+        "snippet": "describe('createGitAdapter — refs.rootCommits (02-03 Task 1)', () => {"
+      },
+      {
+        "file": "./sdk/src/vcs/__tests__/git-backend.test.ts",
+        "line": 419,
+        "snippet": "const roots = vcs.refs.rootCommits({ rev: vcs.refs.head });"
+      },
+      {
+        "file": "./sdk/src/vcs/__tests__/jj-refs.test.ts",
+        "line": 162,
+        "snippet": "// refs.parent / refs.exists / refs.rootCommits all have meaningful state."
+      },
+      {
+        "file": "./sdk/src/vcs/__tests__/jj-refs.test.ts",
+        "line": 215,
+        "snippet": "// ─── refs.rootCommits ────────────────────────────────────────────────"
+      },
+      {
+        "file": "./sdk/src/vcs/__tests__/jj-refs.test.ts",
+        "line": 216,
+        "snippet": "it('refs.rootCommits({}) returns at least one root revision id', () => {"
+      },
+      {
+        "file": "./sdk/src/vcs/__tests__/jj-refs.test.ts",
+        "line": 217,
+        "snippet": "// Phase 8 FLIP-01: rootCommits emits change_id (k-z alphabet) per the"
+      },
+      {
+        "file": "./sdk/src/vcs/__tests__/jj-refs.test.ts",
+        "line": 220,
+        "snippet": "const roots = vcs.refs.rootCommits({});"
+      },
+      {
+        "file": "./sdk/src/vcs/__tests__/jj-skeleton.test.ts",
+        "line": 147,
+        "snippet": "it('refs.rootCommits() does not throw VcsNotImplementedError (wired in plan 03-03)', () => {"
+      },
+      {
+        "file": "./sdk/src/vcs/__tests__/jj-skeleton.test.ts",
+        "line": 148,
+        "snippet": "expect(() => vcs.refs.rootCommits({})).not.toThrow(VcsNotImplementedError);"
+      },
+      {
+        "file": "./sdk/src/vcs/backends.ts",
+        "line": 79,
+        "snippet": "'refs.rootCommits': Object.freeze(['git', 'jj-colocated'] as const),"
+      },
+      {
+        "file": "./sdk/src/vcs/backends/git.ts",
+        "line": 526,
+        "snippet": "const rootCommits = (opts: { rev?: RevisionExpr }): string[] => {"
+      },
+      {
+        "file": "./sdk/src/vcs/backends/git.ts",
+        "line": 564,
+        "snippet": "rootCommits,"
+      },
+      {
+        "file": "./sdk/src/vcs/backends/jj.ts",
+        "line": 964,
+        "snippet": "rootCommits: ({ rev }: { rev?: RevisionExpr }): string[] => {"
+      },
+      {
+        "file": "./sdk/src/vcs/types.ts",
+        "line": 363,
+        "snippet": "rootCommits(opts: { rev?: RevisionExpr }): string[];"
+      }
+    ],
+    "cjs": [
+      {
+        "file": "./get-shit-done/bin/lib/commands.cjs",
+        "line": 998,
+        "snippet": "// countCommits / rootCommits / log({rev: expr.rev(<runtime-sha>)}) —"
+      },
+      {
+        "file": "./get-shit-done/bin/lib/commands.cjs",
+        "line": 1005,
+        "snippet": "const roots = statsVcs.refs.rootCommits({ rev: statsVcs.refs.head });              // line 921 (was: rev-list --max-parents=0 HEAD)"
+      },
+      {
+        "file": "./tests/__tools__/capture-vcs-baselines.cjs",
+        "line": 414,
+        "snippet": "// Adapter equivalent: vcs.refs.rootCommits({rev: vcs.refs.head})."
+      }
+    ],
+    "js": [],
+    "md": [
+      {
+        "file": "./.planning/PROJECT.md",
+        "line": 22,
+        "snippet": "- **5 deferred items pulled in** — `vcs.refs.matchPrefix(id, prefix)` alphabet-aware short-prefix matching (v1.2 TEST-13 deferred); `rootCommits` → `rootRevisions` cosmetic rename (v1.2 NAMING-01); `vcs.refs.idAlphabet` public introspection (v1.2 API-01, first consumer is `matchPrefix`); `vcs.workspace.parallel.cancel(handle)` mid-execution graceful abandonment (v1.3 open deferral); workflow call-presence lint that `vcs.parallel.*` is called in dispatch sections (v1.3 open deferral, mirrors `lint-vcs-no-raw-git.cjs` shape)."
+      },
+      {
+        "file": "./.planning/PROJECT.md",
+        "line": 110,
+        "snippet": "2. **Deferred-item harvest** — five v1.2/v1.3 deferred items pulled in: `vcs.refs.matchPrefix` (alphabet-aware short-prefix matching), `vcs.refs.idAlphabet` (public introspection), `rootCommits` → `rootRevisions` rename, `vcs.workspace.parallel.cancel(handle)` mid-execution graceful abandonment, workflow call-presence lint (`vcs.parallel.*` must be called in dispatch sections)."
+      },
+      {
+        "file": "./.planning/PROJECT.md",
+        "line": 195,
+        "snippet": "*Last updated: 2026-05-24 — Phase 14.1 emergency gap-closure shipped (1/1 plans, 12/12 must-haves verified) — PARALLEL-08 satisfied (optional `mainBookmarks?: readonly string[]` replaces required `mainBookmark: string` on parallel dispatch + fan-in; bookmark-less jj `@` and detached-HEAD git become first-class parallel-dispatch working states; symmetric `current-branch` FATAL preflight removed from `execute-phase.md` + `quick.md`); MERGE-08 filed as Deferred (D-03 STRICT OOS asymmetry on `WorkspaceMergeOpts.mainBookmark`). v1.4 opened via `/gsd-new-milestone v1.4`. Scope: drive every outstanding fork-internal todo, deferred item, and known drift to zero so the next upstream rebase lands on a clean, fully-tested, fully-documented baseline. Three themes: (1) 5 v14-* todos from pending/ queue; (2) 5 v1.2/v1.3 deferred items pulled in (matchPrefix, idAlphabet, rootCommits→rootRevisions, parallel.cancel, workflow call-presence lint); (3) drift-control tests + ARCHITECTURE.md prose-count fixes + PROJECT.md `### Validated` reconciliation. Upstream pull itself is OUT OF SCOPE — v1.4 ends in clean state, operator performs the pull as a separate action. v1.3 shipped 2026-05-24: 6 phases (9–14), 34 plans, 27 requirements. NOTE: `### Validated` carries pre-Phase-11 drift, addressed in v1.4 by the PROJECT.md reconciliation workstream.*"
+      },
+      {
+        "file": "./.planning/REQUIREMENTS.md",
+        "line": 43,
+        "snippet": "- [ ] **NAMING-01**: `rootCommits` → `rootRevisions` cosmetic rename across SDK adapter surface (`sdk/src/vcs/types.ts`, both backends), production callers (`get-shit-done/bin/lib/progress.ts`, `commands.cjs`), tests (5 files), baseline helper, and any `backends.ts:79`-style capability matrix string literal. Hard rename, no deprecation alias (per v1.2 `LogEntry.hash` → `LogEntry.id` precedent). Pre-rename JSON sidecar audit per Pitfall 3 to avoid v1.2 retro CR-01 (CJS-side miss after TS hard rename) repeat. (Continues v1.2 NAMING-01 deferral)"
+      },
+      {
+        "file": "./.planning/REQUIREMENTS.md",
+        "line": 94,
+        "snippet": "| `countCommits` → `countRevisions` rename | NAMING-01 covers `rootCommits` only; `countCommits` is semantically different concept (counts vs identifies); leave as-is |"
+      },
+      {
+        "file": "./.planning/ROADMAP.md",
+        "line": 65,
+        "snippet": "- [ ] **Phase 15: Adapter surface extensions + rename** — Hard-rename `rootCommits` → `rootRevisions` across 13+ call sites (with pre-rename JSON sidecar audit per Pitfall 3); add `vcs.refs.idAlphabet` introspection (`'0-9a-f'` git, `'k-z'` jj); add `vcs.refs.matchPrefix(id, prefix): boolean` alphabet-aware short-prefix matching (throws on wrong-alphabet per Pitfall 6); add `vcs.workspace.parallel.cancel(handle): CancelResult` synchronous teardown of materialized workspaces (no signal handling — STACK-lens semantics per Pitfall 5; extracts `cleanupSubagentWorkspaces` helper as Wave 1). Sequential plans within phase (file-overlap on `types.ts`). Requirements: NAMING-01, VCS-21, VCS-22, PARALLEL-07. (4 plans)"
+      },
+      {
+        "file": "./.planning/ROADMAP.md",
+        "line": 262,
+        "snippet": "**Goal**: Three new public verbs ship on the cross-backend `VcsAdapter` surface (`vcs.refs.idAlphabet`, `vcs.refs.matchPrefix`, `vcs.workspace.parallel.cancel`) and the v1.2 NAMING-01 deferred `rootCommits` → `rootRevisions` rename completes across 13+ call sites. Pure adapter-surface work; no workflow markdown change. The `cleanupSubagentWorkspaces` shared helper extracted by PARALLEL-07 (Wave 1 of its plan) is consumed by Phase 16's CLEANUP-02 — single owner, three call sites per IP-5."
+      },
+      {
+        "file": "./.planning/ROADMAP.md",
+        "line": 267,
+        "snippet": "1. `grep -rn '\\brootCommits\\b' --include='*.ts' --include='*.cjs' --include='*.js' --include='*.md' --include='*.json'` (excluding `node_modules`, `.git`, `.jj`, `dist-cjs/`, `.planning/research/.archive-pre-v1.4/`, `.planning/milestones/v1.2-research/`) returns 0 hits AFTER the rename; pre-rename JSON sidecar audit at `.planning/phases/15/rootCommits-rename-audit.json` documents the full closed call-site set including `sdk/src/vcs/backends.ts:79` capability matrix string literal (Pitfall 3)."
+      },
+      {
+        "file": "./.planning/ROADMAP.md",
+        "line": 275,
+        "snippet": "- [ ] 15-01-PLAN.md — `rootCommits` → `rootRevisions` hard rename (NAMING-01). Ships FIRST: smallest diff, clears namespace, doing it later forces same-file rebase. Pre-rename JSON sidecar audit per Pitfall 3 (the v1.2 \"JSON sidecar as build-pipeline seed\" pattern); per-extension `grep -c '\\brootCommits\\b'` must exit 0 before commit; archived `.planning/research/.archive-pre-v1.4/` + `.planning/milestones/v1.2-research/` treated as historical-prose carve-out. No alias (v1.2 NAMING-01 precedent)."
+      },
+      {
+        "file": "./.planning/ROADMAP.md",
+        "line": 370,
+        "snippet": "v1.4 roadmap created 2026-05-24 — 4 phases, 13 plans, 25 requirements mapped 100%. Next: `/gsd:plan-phase 15` to decompose Phase 15 (Adapter surface extensions + rename) into executable plans, starting with the `rootCommits` → `rootRevisions` pre-rename JSON sidecar audit (Plan 15.01 Wave 1 per Pitfall 3)."
+      },
+      {
+        "file": "./.planning/STATE.md",
+        "line": 177,
+        "snippet": "- **Pitfall 3 (Phase 15 plan 15.01, rootCommits rename):** 13+ call sites including `backends.ts:79` capability matrix string literal. TypeScript compiler protects `.ts` only; CJS + workflow markdown + capability matrix surfaces are silent failure modes. Mandatory pre-rename JSON sidecar audit; per-extension `grep -c` exit 0 before commit."
+      },
+      {
+        "file": "./.planning/STATE.md",
+        "line": 222,
+        "snippet": "| Naming | NAMING-01 cosmetic rename `rootCommits` → `rootRevisions` | **IN-SCOPE for v1.4 Phase 15 plan 15.01** (REQ: NAMING-01) | v1.2 → v1.3 (promoted in v1.4) |"
+      },
+      {
+        "file": "./.planning/STATE.md",
+        "line": 248,
+        "snippet": "- Plan 15.01 (rootCommits → rootRevisions hard rename) ships FIRST per Pitfall 3 sequencing — pre-rename JSON sidecar audit is Wave 1 of that plan"
+      },
+      {
+        "file": "./.planning/phases/14.1-drop-mandatory-bookmark-on-parallel-dispatch-fan-in-emergenc/14.1-01-SUMMARY.md",
+        "line": 186,
+        "snippet": "- **Phase 15.01 (NAMING-01 rootCommits→rootRevisions):** Orthogonal — different rename surface; no overlap with this plan."
+      }
+    ],
+    "json": []
+  },
+  "specialCases": [
+    {
+      "file": "./sdk/src/vcs/backends.ts",
+      "line": 79,
+      "kind": "capability-matrix-string-literal",
+      "snippet": "'refs.rootCommits': Object.freeze(['git', 'jj-colocated'] as const),",
+      "reason": "TSC does NOT validate string-key object access (Pitfall 3 / v1.2 retro CR-01). Manual flip required; guarded by the new backends.test.ts regression test added in Task 3."
+    },
+    {
+      "file": "./.planning/REQUIREMENTS.md",
+      "kind": "historical-prose-carve-out",
+      "reason": "NAMING-01 spec text + cross-reference prose naming the rename target — defines and bounds the work"
+    },
+    {
+      "file": "./.planning/PROJECT.md",
+      "kind": "historical-prose-carve-out",
+      "reason": "milestone narrative naming the rename target — describes the work, does not consume the API"
+    },
+    {
+      "file": "./.planning/STATE.md",
+      "kind": "historical-prose-carve-out",
+      "reason": "status-tracking prose naming the rename target — describes the work, does not consume the API"
+    },
+    {
+      "file": "./.planning/ROADMAP.md",
+      "kind": "historical-prose-carve-out",
+      "reason": "roadmap phase narrative + SC1 gate-definition backtick literal — describes the work and defines the verification gate"
+    },
+    {
+      "file": "./.planning/phases/14.1-drop-mandatory-bookmark-on-parallel-dispatch-fan-in-emergenc/14.1-01-SUMMARY.md",
+      "kind": "historical-prose-carve-out",
+      "reason": "closed-phase summary historical narrative naming Phase 15.01 — modifying it would falsify the historical record"
+    }
+  ],
+  "carveOuts": [
+    {
+      "path": ".planning/research/.archive-pre-v1.4/",
+      "reason": "historical-prose, pre-rename research artifacts (ROADMAP Phase 15 SC1 carve-out)"
+    },
+    {
+      "path": ".planning/milestones/v1.2-research/",
+      "reason": "historical-prose, v1.2 deferred-item research (ROADMAP Phase 15 SC1 carve-out)"
+    }
+  ],
+  "idempotencyHash": "5d8d3fdb84048732ccf90ecfe843534d"
+}
