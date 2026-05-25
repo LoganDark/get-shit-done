@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Clean, consistent state for next upstream pull
-status: executing
+status: milestone_complete
 stopped_at: Phase 16 context gathered
 last_updated: "2026-05-25T05:00:19.295Z"
 last_activity: 2026-05-25 -- Phase 16 execution started
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 7
   completed_plans: 5
-  percent: 67
+  percent: 100
 ---
 
 # Project State
@@ -25,16 +25,16 @@ See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 
 ## Current Position
 
-Phase: 16 (workflow-invariant-tooling) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 16
-Last activity: 2026-05-25 -- Phase 16 execution started
+Phase: 16
+Plan: Not started
+Status: Milestone complete
+Last activity: 2026-05-25
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 103 (v1.0: 56 + v1.1: 5 + v1.2: 3 + v1.3: 34)
+- Total plans completed: 105 (v1.0: 56 + v1.1: 5 + v1.2: 3 + v1.3: 34)
 - Average duration: see per-milestone table
 - Total execution time: 4 milestones shipped (v1.0, v1.1, v1.2, v1.3)
 

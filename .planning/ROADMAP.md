@@ -361,7 +361,7 @@ v1.4 phase ordering: Phase 15 ships first (adapter surface highest-leverage; ext
 | 13. CI parallel-path lane + lint close-gate | 4/4 | Complete   | 2026-05-22 |
 | 14. Default flip + dogfood validation | 5/5 | Complete    | 2026-05-24 |
 | 15. Adapter surface extensions + rename | 4/4 | Complete    | 2026-05-25 |
-| 16. Workflow + invariant tooling | 2/2 | Complete   | 2026-05-25 |
+| 16. Workflow + invariant tooling | 2/2 | Complete    | 2026-05-25 |
 | 17. Drift control + reconciliation | 0/4 | Not started | — |
 | 18. Tactical cleanup + test-flake | 0/3 | Not started | — |
 
