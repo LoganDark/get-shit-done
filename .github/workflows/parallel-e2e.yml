@@ -38,6 +38,8 @@ on:
       - 'sdk/src/query/workspace-parallel-*.ts'
       - 'get-shit-done/workflows/**'
       - 'scripts/audit-workflow-raw-git.cjs'
+      - 'scripts/lint-vcs-parallel-call-presence.cjs'
+      - 'scripts/lint-vcs-parallel-call-presence.allow.json'
       - 'scripts/e2e-parallel-phase.sh'
       - '.github/workflows/parallel-e2e.yml'
   workflow_dispatch:
@@ -125,6 +127,14 @@ jobs:
       - name: Audit — raw git in workflow markdown (CI-06)
         shell: bash
         run: node scripts/audit-workflow-raw-git.cjs
+
+      # LINT-06 / Phase 16.01: enforce dispatch <-> fan-in pairing presence in
+      # bash/sh/zsh fences under get-shit-done/workflows/. FILE-level scope per
+      # D-01; default-deny + per-entry allowlist via scripts/lib/allowlist-parser.cjs.
+      # CI-only (NOT promoted to npm pretest per CF-05).
+      - name: Lint — workflow call-presence (LINT-06)
+        shell: bash
+        run: node scripts/lint-vcs-parallel-call-presence.cjs
 
   # D-04 blocking guarantee. GitHub counts `continue-on-error: true` and
   # skipped matrix cells as PASSING for branch protection — so registering the
