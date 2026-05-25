@@ -1088,7 +1088,7 @@ These commands are new in v1.32 and replace manual STATE.md editing.
 
 ### Read-Before-Edit Infinite Retry Loop
 
-Some non-Claude runtimes (Cline, Augment Code) may enter an infinite retry loop when an agent attempts to edit a file it hasn't read. The `gsd-read-before-edit.js` hook (v1.32) detects this pattern and advises reading the file first. If your runtime doesn't support PreToolUse hooks, add this to your project's `CLAUDE.md`:
+Some non-Claude runtimes (Cline, Augment Code) may enter an infinite retry loop when an agent attempts to edit a file it hasn't read. The `hooks/gsd-read-guard.js` hook (v1.32) detects this pattern and advises reading the file first. If your runtime doesn't support PreToolUse hooks, add this to your project's `CLAUDE.md`:
 
 ```markdown
 ## Edit Safety Rule

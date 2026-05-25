@@ -1997,16 +1997,16 @@ Test suite that scans all agent, workflow, and command files for embedded inject
 
 ---
 
-### 87. Commit-Docs Guard Hook
+### 87. Commit-Docs Guard Behavior
 
-**Hook:** `gsd-commit-docs.js`
+**Test coverage:** `tests/bug-2399-commit-docs-plan-phase.test.cjs` + `tests/commit-docs-bypass.test.cjs` (no dedicated hook file — the guard lives at the workflow + SDK layer, not as a PreToolUse hook).
 
-**Purpose:** PreToolUse hook that enforces the `commit_docs` configuration, preventing `.planning/` files from being committed when `planning.commit_docs` is `false`.
+**Purpose:** Enforces the `commit_docs` configuration, preventing `.planning/` files from being committed when `planning.commit_docs` is `false`.
 
 **Requirements:**
-- REQ-COMMITDOCS-01: Hook MUST intercept git commit commands that stage `.planning/` files
-- REQ-COMMITDOCS-02: Hook MUST block commits containing `.planning/` files when `commit_docs` is `false`
-- REQ-COMMITDOCS-03: Hook MUST be advisory — does not block when `commit_docs` is `true` or absent
+- REQ-COMMITDOCS-01: Guard MUST intercept commit attempts that stage `.planning/` files
+- REQ-COMMITDOCS-02: Guard MUST block commits containing `.planning/` files when `commit_docs` is `false`
+- REQ-COMMITDOCS-03: Guard MUST be advisory — does not block when `commit_docs` is `true` or absent
 
 ---
 

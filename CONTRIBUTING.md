@@ -400,7 +400,7 @@ Concretely: for any system-under-test that produces text output (a file renderer
 
 `buildWindowsShimTriple(shimSrc)` in `bin/install.js` is the canonical IR pattern: pure function, no I/O, returns `{ invocation, eol, fileNames, render }`. `trySelfLinkGsdSdkWindows` calls it and writes `triple.render[kind]()` to disk. Tests assert on `triple.invocation.target`, `triple.eol.cmd`, `Object.keys(triple).sort()` — never on the rendered text. Filesystem-level tests assert `fs.statSync(target).size === Buffer.byteLength(triple.render.cmd())` to prove the writer writes what the renderer produces, **without comparing content**.
 
-`scripts/verify-reapply-patches.cjs` exposes a frozen `REASON` enum and emits it through `--json`. Tests assert `report.results[0].reason === REASON.FAIL_USER_LINES_MISSING`. The human formatter exists for operator console output only — tests must not depend on its prose. Adding a new reason code requires updating the `REASON` enum, the `--json` output, AND the test that locks `Object.keys(REASON).sort()` — three coordinated changes that prevent the code surface from drifting from the test surface.
+`get-shit-done/bin/verify-reapply-patches.cjs` exposes a frozen `REASON` enum and emits it through `--json`. Tests assert `report.results[0].reason === REASON.FAIL_USER_LINES_MISSING`. The human formatter exists for operator console output only — tests must not depend on its prose. Adding a new reason code requires updating the `REASON` enum, the `--json` output, AND the test that locks `Object.keys(REASON).sort()` — three coordinated changes that prevent the code surface from drifting from the test surface.
 
 #### Hiding grep behind a function is still grep
 
@@ -567,7 +567,7 @@ The required tests differ depending on what you are contributing:
 
 Reviewers do not rely solely on CI to verify correctness. Before approving a PR, reviewers:
 
-- Build locally (`npm run build` if applicable)
+- Build locally (`npm run build:hooks && npm run build:sdk` if applicable — no top-level `build` script; per-target invocation is the supported form)
 - Run the full test suite locally (`npm test`)
 - Confirm regression tests exist for bug fixes and that they would fail without the fix
 - Validate that the implementation matches what the linked issue described — green CI on the wrong implementation is not an approval signal

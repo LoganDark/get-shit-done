@@ -716,7 +716,7 @@ Twelve additional agents ship under `agents/gsd-*.md` and are used by specialty 
 
 **Key behaviors:**
 - Hard-blocks on LOCKED-vs-LOCKED ADR contradictions instead of silently picking a winner
-- Follows the `references/doc-conflict-engine.md` contract so `/gsd-import` and `/gsd-ingest-docs` produce consistent conflict reports
+- Follows the `get-shit-done/references/doc-conflict-engine.md` contract so `/gsd-import` and `/gsd-ingest-docs` produce consistent conflict reports
 
 ---
 
