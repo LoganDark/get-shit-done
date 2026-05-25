@@ -169,7 +169,7 @@ test('computeIdempotencyHash changes when a new hit is added', () => {
 test('computeIdempotencyHash is 32-char lowercase hex MD5', () => {
 	const hits = [{ file: './a.ts', line: 1, snippet: 'x' }];
 	const hash = computeIdempotencyHash(hits, groupByExtension(hits));
-	assert.match(hash, /^[0-9a-f]{32}$/);
+	assert.match(hash, /^[0-9a-f]{32}$/); // vcs-lint:allow-commit-id-here MD5 idempotency hash check, not a commit_id
 });
 
 test('buildAuditEnvelope produces all 6 D-09 schema fields', () => {
@@ -201,7 +201,7 @@ test('script run: stdout is valid JSON with all D-09 fields populated', () => {
 	}
 	assert.ok(envelope.totalCount > 0, 'pre-rename totalCount must be > 0');
 	assert.match(envelope.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
-	assert.match(envelope.idempotencyHash, /^[0-9a-f]{32}$/);
+	assert.match(envelope.idempotencyHash, /^[0-9a-f]{32}$/); // vcs-lint:allow-commit-id-here MD5 idempotency hash check, not a commit_id
 });
 
 test('script run: byExtension has all 5 extension keys', () => {
