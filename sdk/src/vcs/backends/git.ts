@@ -530,6 +530,29 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     return r.stdout.split('\n').filter(Boolean).map((s) => s.trim());
   };
 
+  // Phase 15.03 (VCS-22): alphabet-aware short-prefix matcher. Throws on
+  // wrong-alphabet (Pitfall 6: silent-false would mask caller bugs e.g. a
+  // k-z prefix passed to a git-backed adapter). Throws on empty prefix
+  // (caller bug per CF-04). Returns false on prefix.length > rawId.length
+  // (well-defined no-match, NOT a caller bug). Hex is case-insensitive
+  // (matches git core.abbrev / rev-parse behavior). No closure over
+  // vcs.refs.idAlphabet — alphabet regex is inlined per Pattern S3.
+  const matchPrefix = (id: RevisionExpr, prefix: string): boolean => {
+    if (prefix.length === 0) {
+      throw new Error('vcs.refs.matchPrefix: empty prefix is a caller bug');
+    }
+    const rawId = toGitRev(id);
+    if (prefix.length > rawId.length) {
+      return false;
+    }
+    if (!/^[0-9a-fA-F]+$/.test(prefix)) {
+      throw new Error(
+        `vcs.refs.matchPrefix: prefix '${prefix}' contains chars outside git alphabet [0-9a-fA-F]`,
+      );
+    }
+    return rawId.toLowerCase().startsWith(prefix.toLowerCase());
+  };
+
   const refExists = (rev: RevisionExpr): boolean => {
     // `cat-file -t <rev>` exits 0 with the type when the object exists,
     // non-zero otherwise. Both outcomes are valid completions; we only need
@@ -568,6 +591,7 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     countCommits,
     rootRevisions,
     exists: refExists,
+    matchPrefix,
     isIgnored,
     remotes,
   });

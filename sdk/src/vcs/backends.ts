@@ -82,6 +82,11 @@ export const BACKENDS_AVAILABLE_FOR_VERB: Readonly<
   // omissions on the runtime lookup path; backends.test.ts regression-asserts
   // presence (Pitfall 1 / Pitfall 3 mitigation per v1.2 retro CR-01 precedent).
   'refs.idAlphabet': Object.freeze(['git', 'jj-colocated'] as const),
+  // Phase 15.03 (VCS-22): alphabet-aware short-prefix matcher. Throws on
+  // wrong-alphabet (Pitfall 6 — silent-false would mask caller bugs) and on
+  // empty prefix. Capability matrix string-key add — TSC blind on object-key
+  // lookup; backends.test.ts regression-asserts presence.
+  'refs.matchPrefix': Object.freeze(['git', 'jj-colocated'] as const),
   'refs.exists': Object.freeze(['git', 'jj-colocated'] as const),
   'refs.isIgnored': Object.freeze(['git'] as const), // jj-side: VcsNotImplementedError (audit-confirmed no jj caller)
   'refs.remotes': Object.freeze(['git', 'jj-colocated'] as const),

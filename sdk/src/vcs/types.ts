@@ -371,6 +371,33 @@ export interface VcsRefs {
   countCommits(opts: { rev?: RevisionExpr }): number;
   rootRevisions(opts: { rev?: RevisionExpr }): string[];
   exists(rev: RevisionExpr): boolean;
+  /**
+   * 15.03 (VCS-22): alphabet-aware short-prefix matcher — Pitfall 6 closes
+   * by THROWING (not silent-false) when the caller supplies a prefix outside
+   * the backend's canonical alphabet.
+   *
+   * Five rules (mandatory per CF-04, cross-product tested 5 rules × 2 backends):
+   *   1. canonical-alphabet prefix → returns true when the id starts with it.
+   *   2. wrong-alphabet prefix → THROWS Error containing "outside <kind> alphabet".
+   *      Hex prefix against a jj-backed adapter is a caller bug. Silent-false
+   *      would mask the bug (Pitfall 6: a hex `'abc'` passed to k-z matchPrefix
+   *      would return `false` because 'a' is outside [k-z] — caller would
+   *      interpret as "no match" rather than "wrong-API-call").
+   *   3. empty prefix → THROWS Error containing "empty prefix" (caller bug).
+   *   4. `prefix.length > id.length` → returns false (well-defined no-match,
+   *      not a caller bug — too-long prefixes are a definite no-match).
+   *   5. case-handling matches backend:
+   *      - git: case-insensitive (matches git `core.abbrev` / `rev-parse`).
+   *      - jj: lower-only (uppercase k-z trips wrong-alphabet — matches jj
+   *        prefix index which only indexes lower-case k-z).
+   *
+   * Composes with idAlphabet: consumers MAY build their own validation regex
+   * via `new RegExp('^[' + vcs.refs.idAlphabet + ']+$')` before invoking
+   * matchPrefix; the matchPrefix bodies themselves hard-code their alphabet
+   * regex inline (per Pattern S3 — no closure over idAlphabet, matches the
+   * existing `rootRevisions` body shape).
+   */
+  matchPrefix(id: RevisionExpr, prefix: string): boolean;
   isIgnored(path: string): boolean;
   remotes(): string[];
 }

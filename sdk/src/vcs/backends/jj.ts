@@ -984,6 +984,30 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
         .filter(Boolean);
     },
 
+    // Phase 15.03 (VCS-22): alphabet-aware short-prefix matcher. Throws on
+    // wrong-alphabet (Pitfall 6: silent-false would mask caller bugs e.g. a
+    // hex prefix passed to a jj-backed adapter). Throws on empty prefix
+    // (caller bug per CF-04). Returns false on prefix.length > rawId.length
+    // (well-defined no-match, NOT a caller bug). jj prefix index is
+    // lower-only k-z; uppercase k-z is outside [k-z] and trips the
+    // wrong-alphabet gate. No closure over vcs.refs.idAlphabet — alphabet
+    // regex is inlined per Pattern S3 / validateRefname precedent.
+    matchPrefix: (id: RevisionExpr, prefix: string): boolean => {
+      if (prefix.length === 0) {
+        throw new Error('vcs.refs.matchPrefix: empty prefix is a caller bug');
+      }
+      const rawId = toJjRev(id);
+      if (prefix.length > rawId.length) {
+        return false;
+      }
+      if (!/^[k-z]+$/.test(prefix)) {
+        throw new Error(
+          `vcs.refs.matchPrefix: prefix '${prefix}' contains chars outside jj alphabet [k-z]`,
+        );
+      }
+      return rawId.startsWith(prefix);
+    },
+
     exists: (rev: RevisionExpr): boolean => {
       const args = jjArgv(
         'log',
