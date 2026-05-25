@@ -4,8 +4,8 @@ milestone: v1.4
 milestone_name: Clean, consistent state for next upstream pull
 status: executing
 stopped_at: Phase 16 context gathered
-last_updated: "2026-05-25T04:57:09.936Z"
-last_activity: 2026-05-25 -- Phase 16 planning complete
+last_updated: "2026-05-25T05:00:19.295Z"
+last_activity: 2026-05-25 -- Phase 16 execution started
 progress:
   total_phases: 3
   completed_phases: 2
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 15 — Adapter surface extensions + rename
+**Current focus:** Phase 16 — workflow-invariant-tooling
 
 ## Current Position
 
-Phase: 15
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-25 -- Phase 16 planning complete
+Phase: 16 (workflow-invariant-tooling) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 16
+Last activity: 2026-05-25 -- Phase 16 execution started
 
 ## Performance Metrics
 
