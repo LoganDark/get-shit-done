@@ -293,7 +293,7 @@ Plans:
 **Plans**: 2 plans (parallel-safe — file-disjoint)
 
   - [ ] 16.01-PLAN.md — LINT-06 workflow call-presence lint. New `scripts/lint-vcs-parallel-call-presence.cjs` + per-entry `.allow.json` + fixture-based unit test (Pattern B mkdtemp) + new step in `parallel-e2e.yml`. Pitfall 7 prevention: scope by SHELL FENCE not by prose mention (reuse `audit-workflow-raw-git.cjs` fence-aware walker shape); content-driven literal substring detection; per-file allowlist for legitimate non-dispatchers.
-  - [x] 16.02-PLAN.md — CLEANUP-02 orphan FS dir reap. Extend `performJjParallelFanIn` clean-path branch with per-workspace `rmSync({recursive: true, force: true})` loop (do NOT touch conflicted branch per Pitfall Anti-Pattern 5); extend `scripts/dogfood-restore.sh` with idempotent `find … -exec rm -rf` post-restore step; consume `cleanupSubagentWorkspaces` helper from Phase 15 PARALLEL-07; new cross-backend test covers both jj-cell and git-cell fanIn-success-no-orphan-dirs + dogfood-restore-survival-cleanup scenarios. (completed 2026-05-25)
+  - [ ] 16.02-PLAN.md — CLEANUP-02 orphan FS dir reap. Extend `performJjParallelFanIn` clean-path branch with a direct call to the `cleanupSubagentWorkspaces` helper (do NOT touch conflicted branch per Pitfall Anti-Pattern 5); extend `scripts/dogfood-restore.sh` with idempotent post-restore step via the new CLI bridge `sdk/src/query/cleanup-subagent-workspaces.ts` (three-site registration per CF-02); consume `cleanupSubagentWorkspaces` helper from Phase 15 PARALLEL-07; new cross-backend test covers both jj-cell and git-cell fanIn-success-no-orphan-dirs + dogfood-restore-survival-cleanup scenarios.
 
 ### Phase 17: Drift control + reconciliation
 
