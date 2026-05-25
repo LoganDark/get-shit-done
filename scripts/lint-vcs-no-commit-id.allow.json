@@ -143,6 +143,16 @@
       "path": "tests/scripts/audit-id-namespace.test.cjs",
       "reason": "Scan-script test — audit-id-namespace test fixtures literally embed `\"commit_id\"` strings in temp files to verify the audit pattern detection (test fixture mirroring scan-script behavior).",
       "owner": "@LoganDark"
+    },
+    {
+      "path": "tests/graphify-auto-update.test.cjs",
+      "reason": "Test fixtures — graphify auto-update test asserts on git-side commit-sha regex shape; graphify continues to read git HEAD even in jj-colocated mode (jj commit_ids ARE git commit_ids).",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "tests/graphify-visualization.test.cjs",
+      "reason": "Test fixtures — graphify visualization test uses ghost-hash placeholders + commit-sha regex shape; same reasoning as graphify-auto-update.",
+      "owner": "@LoganDark"
     }
   ]
 }

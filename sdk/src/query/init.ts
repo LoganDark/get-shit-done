@@ -22,6 +22,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { execSync } from 'node:child_process';
 import { join, relative, basename } from 'node:path';
 import { homedir } from 'node:os';
+import { GSDError, ErrorClassification } from '../errors.js';
 
 import { createVcsAdapter } from '../vcs/index.js';
 
@@ -29,7 +30,9 @@ import { loadConfig, type GSDConfig } from '../config.js';
 import { resolveModel, MODEL_PROFILES } from './config-query.js';
 import { maskIfSecret } from './secrets.js';
 import { findPhase } from './phase.js';
+import { getMilestonePhaseFilter } from './state.js';
 import { roadmapGetPhase, getMilestoneInfo, extractCurrentMilestone, extractPhasesFromSection } from './roadmap.js';
+import { determinePhaseStatus } from './progress.js';
 import { planningPaths, normalizePhaseName, toPosixPath, resolveAgentsDir, detectRuntime } from './helpers.js';
 import { generatePhaseSlug, assertSafeProjectCode } from './phase-lifecycle-policy.js';
 import type { QueryHandler } from './utils.js';
@@ -81,6 +84,65 @@ function pathExists(base: string, relPath: string): boolean {
 }
 
 /**
+ * Bug #3491: detect whether `base` is inside any git worktree, and if so,
+ * return the absolute worktree root. Mirrors the CJS `gitWorktreeInfoInternal`
+ * in get-shit-done/bin/lib/core.cjs — keep these two implementations behaviour-
+ * identical so the SDK and CJS init handlers emit the same has_git semantics.
+ *
+ * Returns { inside, worktreeRoot } — both fall back to false/null on any error
+ * (git unavailable, not a repo, timeout) so callers see the conservative
+ * default that preserves pre-fix behaviour for non-git environments.
+ */
+function gitWorktreeInfo(base: string): { inside: boolean; worktreeRoot: string | null } {
+  try {
+    const inside = execSync('git rev-parse --is-inside-work-tree', { // vcs-lint:allow-git-here #3491 git-presence probe
+      cwd: base,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf-8',
+      timeout: 5000,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    }).trim();
+    if (inside !== 'true') return { inside: false, worktreeRoot: null };
+    try {
+      const root = execSync('git rev-parse --show-toplevel', { // vcs-lint:allow-git-here #3491 git-presence probe
+        cwd: base,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        encoding: 'utf-8',
+        timeout: 5000,
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      }).trim();
+      return { inside: true, worktreeRoot: root || null };
+    } catch {
+      return { inside: true, worktreeRoot: null };
+    }
+  } catch {
+    return { inside: false, worktreeRoot: null };
+  }
+}
+
+function detectNestedSubdir(base: string, info: { inside: boolean; worktreeRoot: string | null }): boolean {
+  if (!info.inside) return false;
+  try {
+    const prefix = execSync('git rev-parse --show-prefix', { // vcs-lint:allow-git-here #3491 git-presence probe
+      cwd: base,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf-8',
+      timeout: 5000,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    }).trim().replace(/\\/g, '/');
+    if (prefix.length > 0) return prefix !== '.' && prefix !== './';
+    return false;
+  } catch {}
+
+  if (!info.worktreeRoot) return false;
+  const normalize = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/g, '').toLowerCase();
+  const root = normalize(info.worktreeRoot);
+  const cwd = normalize(base);
+  return root !== cwd;
+}
+
+
+/**
  * Compute the canonical phase directory name for a known phase entry from the
  * roadmap when no directory exists yet.  Applies the project_code prefix so
  * the first-touch creation path used by /gsd-discuss-phase and /gsd-plan-phase
@@ -107,10 +169,31 @@ async function shouldDropArchivedPhaseMatch(
   projectDir: string,
   workstream?: string,
 ): Promise<boolean> {
-  if (!phaseInfo?.archived || !roadmapPhase || !roadmapPhase.found) return false;
-  const archivedTag = String(phaseInfo.archived ?? '');
-  const milestone = await getMilestoneInfo(projectDir, workstream);
-  if (milestone?.version && archivedTag === milestone.version) return false;
+  // Matches CJS cmdInitPlanPhase / cmdInitExecutePhase / cmdInitVerifyWork:
+  //   if (phaseInfo?.archived && roadmapPhase?.found) phaseInfo = null;
+  // ROADMAP is authoritative for the current milestone, regardless of what
+  // archived milestone the on-disk match came from — BUT see #3469 exception.
+  if (!phaseInfo?.archived) return false;
+  if (!roadmapPhase || !roadmapPhase.found) return false;
+
+  // #3469: If the archived phase belongs to the CURRENT milestone (e.g. phases
+  // were cleared via `phases clear` into .planning/milestones/<version>-phases/
+  // but the workflow is still on that same milestone), preserve the archived dir
+  // as the canonical phase location. Only drop when the archived version is from
+  // a PRIOR milestone (the original anti-ghost-phase guard).
+  // Note: the milestone-version equality check here does NOT regress #2391
+  // because in the #2391 scenario archived.version != current milestone.
+  const pp = planningPaths(projectDir, workstream);
+  try {
+    const stateContent = readFileSync(pp.state, 'utf-8');
+    const milestoneMatch = stateContent.match(/^milestone:\s*(.+)$/m);
+    const currentMilestone = milestoneMatch ? milestoneMatch[1].trim() : null;
+    if (currentMilestone && phaseInfo.archived === currentMilestone) {
+      // Same milestone — archived dir is the canonical location. Keep it.
+      return false;
+    }
+  } catch { /* STATE.md unreadable — fall through to default drop */ }
+
   return true;
 }
 
@@ -139,11 +222,14 @@ function getLatestCompletedMilestone(projectDir: string): { version: string; nam
  * (`GSD_RUNTIME` → `config.runtime` → 'claude') and probes that runtime's
  * canonical `agents/` directory. `GSD_AGENTS_DIR` still short-circuits.
  *
+ * The optional `projectDir` parameter enables the repo-local `.claude/agents`
+ * fallback for Claude `--local` installs (bug #3751).
+ *
  * Port of checkAgentsInstalled from core.cjs lines 1274-1306.
  */
-function checkAgentsInstalled(config?: { runtime?: unknown }): { agents_installed: boolean; missing_agents: string[] } {
+function checkAgentsInstalled(config?: { runtime?: unknown }, projectDir?: string): { agents_installed: boolean; missing_agents: string[] } {
   const runtime = detectRuntime(config);
-  const agentsDir = resolveAgentsDir(runtime);
+  const agentsDir = resolveAgentsDir(runtime, projectDir);
   const expectedAgents = Object.keys(MODEL_PROFILES);
 
   if (!existsSync(agentsDir)) {
@@ -288,7 +374,7 @@ export function withProjectRoot(
 ): Record<string, unknown> {
   result.project_root = projectDir;
 
-  const agentStatus = checkAgentsInstalled(config);
+  const agentStatus = checkAgentsInstalled(config, projectDir);
   result.agents_installed = agentStatus.agents_installed;
   result.missing_agents = agentStatus.missing_agents;
 
@@ -330,6 +416,13 @@ export const initExecutePhase: QueryHandler = async (args, projectDir, workstrea
     return { data: { error: 'phase required for init execute-phase' } };
   }
 
+  // --tdd is a boolean override of config.workflow.tdd_mode — matches the CJS
+  // path's parseNamedArgs(args, [], ['validate', 'tdd']) projection
+  // (bin/lib/init-command-router.cjs handler block) which passes options.tdd
+  // through to cmdInitExecutePhase. Without parsing here, `gsd-tools init
+  // execute-phase 1 --tdd` would never override a false config value.
+  const tddFlag = args.includes('--tdd');
+
   const config = await loadConfig(projectDir);
   const paths = planningPaths(projectDir, workstream);
   const planningDir = paths.planning;
@@ -357,7 +450,7 @@ export const initExecutePhase: QueryHandler = async (args, projectDir, workstrea
   const result: Record<string, unknown> = {
     executor_model: executorModel,
     verifier_model: verifierModel,
-    tdd_mode: config.workflow.tdd_mode ?? false,
+    tdd_mode: tddFlag || (config.workflow.tdd_mode ?? false),
     commit_docs: config.commit_docs,
     sub_repos: (config as Record<string, unknown>).sub_repos ?? [],
     parallelization: config.parallelization,
@@ -413,6 +506,10 @@ export const initPlanPhase: QueryHandler = async (args, projectDir, workstream) 
     return { data: { error: 'phase required for init plan-phase' } };
   }
 
+  // --tdd boolean override (parity with CJS router's parseNamedArgs + the
+  // legacy cmdInitPlanPhase `options.tdd || config.tdd_mode || false`).
+  const tddFlag = args.includes('--tdd');
+
   const config = await loadConfig(projectDir);
   const paths = planningPaths(projectDir, workstream);
   const planningDir = paths.planning;
@@ -433,6 +530,17 @@ export const initPlanPhase: QueryHandler = async (args, projectDir, workstream) 
   const phaseName = (phaseInfo?.phase_name as string) ?? null;
   const phaseDir = (phaseInfo?.directory as string) ?? null;
   const plans = (phaseInfo?.plans || []) as string[];
+  const summaries = (phaseInfo?.summaries || []) as string[];
+
+  // #3569: surface phase lifecycle status so /gsd-plan-phase can short-circuit
+  // on closed (Complete) phases instead of silently replanning over shipped
+  // code. Reuses determinePhaseStatus — the project-wide vocabulary used by
+  // `progress` (Pending | Planned | In Progress | Executed | Complete |
+  // Needs Review). When the phase has no directory on disk yet, treat it as
+  // Pending (it has not been started).
+  const phaseStatus = phaseDir
+    ? await determinePhaseStatus(plans.length, summaries.length, join(projectDir, phaseDir))
+    : 'Pending';
 
   // #3287: compute the canonical directory name with project_code prefix so
   // the first-touch mkdir in /gsd-plan-phase stays consistent with phase.add.
@@ -450,7 +558,7 @@ export const initPlanPhase: QueryHandler = async (args, projectDir, workstream) 
     researcher_model: researcherModel,
     planner_model: plannerModel,
     checker_model: checkerModel,
-    tdd_mode: config.workflow.tdd_mode ?? false,
+    tdd_mode: tddFlag || (config.workflow.tdd_mode ?? false),
     research_enabled: config.workflow.research,
     plan_checker_enabled: config.workflow.plan_check,
     nyquist_validation_enabled: config.workflow.nyquist_validation,
@@ -467,6 +575,7 @@ export const initPlanPhase: QueryHandler = async (args, projectDir, workstream) 
     phase_slug: (phaseInfo?.phase_slug as string) ?? null,
     padded_phase: phaseNumber ? normalizePhaseName(phaseNumber) : null,
     phase_req_ids,
+    phase_status: phaseStatus,
     has_research: (phaseInfo?.has_research as boolean) || false,
     has_context: (phaseInfo?.has_context as boolean) || false,
     has_reviews: (phaseInfo?.has_reviews as boolean) || false,
@@ -519,8 +628,14 @@ export const initNewMilestone: QueryHandler = async (_args, projectDir) => {
   let phaseDirCount = 0;
   try {
     if (existsSync(phasesDir)) {
+      // Bug #2445 parity with CJS `cmdInitNewMilestone`: filter phase dirs
+      // to the current milestone so stale dirs from a prior milestone that
+      // weren't archived don't inflate the count. Without this filter the
+      // SDK returns the full directory count, which the new-milestone
+      // workflow then uses to gate "is this a fresh start" decisions.
+      const isDirInMilestone = await getMilestonePhaseFilter(projectDir);
       phaseDirCount = readdirSync(phasesDir, { withFileTypes: true })
-        .filter(entry => entry.isDirectory())
+        .filter(entry => entry.isDirectory() && isDirInMilestone(entry.name))
         .length;
     }
   } catch { /* intentionally empty */ }
@@ -1003,7 +1118,12 @@ export const initMapCodebase: QueryHandler = async (_args, projectDir) => {
     commit_docs: config.commit_docs,
     search_gitignored: config.search_gitignored,
     parallelization: config.parallelization,
-    subagent_timeout: (config as Record<string, unknown>).subagent_timeout ?? undefined,
+    // subagent_timeout lives at workflow.subagent_timeout per the canonical
+    // Configuration manifest (sdk/shared/config-defaults.manifest.json). Reading
+    // the top-level config.subagent_timeout returned undefined, so the workflow
+    // step that consumes this value had to invent its own fallback. Default to
+    // 300000 (5 min) per the manifest. (#1472)
+    subagent_timeout: (((config as Record<string, unknown>).workflow as Record<string, unknown> | undefined)?.subagent_timeout as number | undefined) ?? 300000,
     date: now.toISOString().split('T')[0],
     timestamp: now.toISOString(),
     codebase_dir: '.planning/codebase',
@@ -1139,12 +1259,18 @@ export const initListWorkspaces: QueryHandler = async (_args, _projectDir) => {
 export const initRemoveWorkspace: QueryHandler = async (args, _projectDir) => {
   const name = args[0];
   if (!name) {
-    return { data: { error: 'workspace name required for init remove-workspace' } };
+    // Throw so the CLI dispatcher projects a non-zero exit + writes the message
+    // to stderr — returning `{ data: { error } }` was treated as success by
+    // the CLI output path, hiding the validation failure from callers.
+    throw new GSDError('workspace name required for init remove-workspace', ErrorClassification.Validation);
   }
 
   // T-14-01: Reject path traversal attempts
   if (name.includes('/') || name.includes('\\') || name.includes('..')) {
-    return { data: { error: `Invalid workspace name: ${name} (path separators not allowed)` } };
+    throw new GSDError(
+      `Invalid workspace name: ${name} (path separators not allowed)`,
+      ErrorClassification.Validation,
+    );
   }
 
   const home = process.env.HOME || homedir();
@@ -1153,7 +1279,7 @@ export const initRemoveWorkspace: QueryHandler = async (args, _projectDir) => {
   const manifestPath = join(wsPath, 'WORKSPACE.md');
 
   if (!existsSync(wsPath)) {
-    return { data: { error: `Workspace not found: ${wsPath}` } };
+    throw new GSDError(`Workspace not found: ${wsPath}`, ErrorClassification.Validation);
   }
 
   const repos: Array<Record<string, unknown>> = [];
@@ -1213,10 +1339,14 @@ export const initRemoveWorkspace: QueryHandler = async (args, _projectDir) => {
  */
 export const initIngestDocs: QueryHandler = async (_args, projectDir) => {
   const config = await loadConfig(projectDir);
+  const gitInfo = gitWorktreeInfo(projectDir);
   const result: Record<string, unknown> = {
     project_exists: pathExists(projectDir, '.planning/PROJECT.md'),
     planning_exists: pathExists(projectDir, '.planning'),
-    has_git: pathExists(projectDir, '.git'),
+    // Bug #3491: detect parent worktree to avoid nested .git init.
+    has_git: gitInfo.inside,
+    git_worktree_root: gitInfo.worktreeRoot,
+    in_nested_subdir: detectNestedSubdir(projectDir, gitInfo),
     has_jj: pathExists(projectDir, '.jj'),    // Phase 6 plan 06-01 — parity with initNewProject
     project_path: '.planning/PROJECT.md',
     commit_docs: config.commit_docs,

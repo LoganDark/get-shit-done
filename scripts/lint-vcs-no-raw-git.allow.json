@@ -26,6 +26,8 @@
 		{ "glob": ".github/workflows/**", "reason": "Hooks/CI — CI workflows orchestrate the adapter, not consume it; raw `git` is the substrate.", "owner": "@LoganDark" },
 		{ "glob": ".githooks/**", "reason": "Hooks/CI — pre-commit/pre-push shell hooks predate the adapter and serve as the substrate.", "owner": "@LoganDark" },
 		{ "glob": "docs/**", "reason": "Documentation — markdown content references `git` as English text; never executed.", "owner": "@LoganDark" },
-		{ "glob": ".planning/**", "reason": "Documentation — planning markdown references `git` as English text; never executed.", "owner": "@LoganDark" }
+		{ "glob": ".planning/**", "reason": "Documentation — planning markdown references `git` as English text; never executed.", "owner": "@LoganDark" },
+		{ "path": "hooks/gsd-graphify-update.sh", "reason": "Hooks/CI — shell hook reads git HEAD for graphify cache invalidation; runs in both git and jj-colocated mode since `git rev-parse HEAD` returns the underlying commit jj also tracks.", "owner": "@LoganDark" },
+		{ "path": "tests/helpers/graphify.cjs", "reason": "Test fixtures — graphify test helper needs raw git to construct deterministic commit graphs.", "owner": "@LoganDark" }
 	]
 }

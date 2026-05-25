@@ -174,6 +174,15 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
         'amend: not yet supported on jj backend (deferred per Phase 3 RESEARCH §Q5)',
       );
     }
+    // #3522: `respectStaged` is a git-index-specific concept. jj has no
+    // separate index — the working copy IS the staged state — so honoring
+    // the flag would be a lie. Per-hunk commits on jj go through `jj split`,
+    // which is a different operation than what this flag describes.
+    if (input.respectStaged) {
+      throw new VcsNotImplementedError(
+        'respectStaged: not supported on jj backend — jj has no separate index. Use `jj split` for per-hunk commits.',
+      );
+    }
     // WR-07: D-01 (`bookmark`, prefixed via addPrefix) and D-04
     // (`bookmarkRaw`, no prefix) are mutually exclusive — they advance
     // the same bookmark slot under different prefix discipline. Today

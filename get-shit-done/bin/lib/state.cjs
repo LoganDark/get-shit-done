@@ -913,46 +913,69 @@ function syncStateFrontmatter(content, cwd) {
   return `---\n${yamlStr}\n---\n\n${body}`;
 }
 
+// Transient errno codes that indicate a temporary filesystem condition under
+// concurrent O_EXCL races — Docker overlay-fs (ENOENT/EINVAL/EIO), NFS
+// (ESTALE), and OS-level interrupt/retry signals (EAGAIN/EINTR).  These are
+// recoverable; acquireStateLock retries instead of propagating them.
+// Truly fatal codes (EMFILE, ENOSPC, EROFS, EACCES) are NOT in this set and
+// will still throw immediately.
+const ACQUIRE_LOCK_RETRY_ERRNOS = new Set([
+  'EPERM',   // Windows / macOS AV scanner holds the file open during delete
+  'EBUSY',   // Windows: file in use by another process
+  'EAGAIN',  // POSIX: resource temporarily unavailable
+  'EINTR',   // POSIX: syscall interrupted by signal
+  'EINVAL',  // Docker overlay-fs: transient during concurrent O_EXCL creation
+  'EIO',     // Docker overlay-fs / NFS: transient I/O error
+  'ENOENT',  // Docker overlay-fs: parent dir transiently missing during race
+  'ESTALE',  // NFS: stale file handle (self-resolves on retry)
+]);
+
 /**
  * Acquire a lockfile for STATE.md operations.
  * Returns the lock path for later release.
  */
 function acquireStateLock(statePath) {
   const lockPath = statePath + '.lock';
-  const maxRetries = 10;
   const retryDelay = 200; // ms
+  const staleThresholdMs = 10000;
+  const maxWaitMs = 30000;
+  const startedAt = Date.now();
 
-  for (let i = 0; i < maxRetries; i++) {
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
     try {
       const fd = fs.openSync(lockPath, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY);
       fs.writeSync(fd, String(process.pid));
       fs.closeSync(fd);
-      // Register for exit-time cleanup so process.exit(1) inside a locked region
-      // cannot leave a stale lock file (#1916).
+      // Exit-time cleanup keeps a crashed locked region from leaving a stale file (#1916).
       _heldStateLocks.add(lockPath);
       return lockPath;
     } catch (err) {
-      if (err.code === 'EEXIST') {
-        try {
-          const stat = fs.statSync(lockPath);
-          if (Date.now() - stat.mtimeMs > 10000) {
-            fs.unlinkSync(lockPath);
-            continue;
-          }
-        } catch { /* lock was released between check — retry */ }
-
-        if (i === maxRetries - 1) {
-          try { fs.unlinkSync(lockPath); } catch {}
-          return lockPath;
+      // Transient filesystem errors (Docker overlay-fs, NFS, OS signals, AV scanners)
+      // are recoverable — retry the acquisition loop rather than propagating.
+      // See ACQUIRE_LOCK_RETRY_ERRNOS for the full list and rationale.
+      if (ACQUIRE_LOCK_RETRY_ERRNOS.has(err.code)) { continue; }
+      if (err.code !== 'EEXIST') throw err; // propagate — silent bypass causes lost updates
+      // Only unlink a lock we did not place when it has crossed the staleness
+      // threshold (crashed holder). Nuking a fresh lock held by a slow-but-live
+      // writer causes lost updates (#3711 regression).
+      try {
+        const stat = fs.statSync(lockPath);
+        if (Date.now() - stat.mtimeMs > staleThresholdMs) {
+          try { fs.unlinkSync(lockPath); } catch { /* already gone */ }
+          continue;
         }
-        const jitter = Math.floor(Math.random() * 50);
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, retryDelay + jitter);
-        continue;
+      } catch { continue; /* released between EEXIST and stat */ }
+      if (Date.now() - startedAt >= maxWaitMs) {
+        throw new Error(
+          'acquireStateLock: ' + lockPath + ' held by live process for ' +
+          (Date.now() - startedAt) + 'ms (exceeded ' + maxWaitMs + 'ms budget)'
+        );
       }
-      return lockPath; // non-EEXIST error — proceed without lock
+      const jitter = Math.floor(Math.random() * 50);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, retryDelay + jitter);
     }
   }
-  return statePath + '.lock';
 }
 
 function releaseStateLock(lockPath) {
@@ -1802,6 +1825,27 @@ function cmdStateCompletePhase(cwd, raw, overridePhase) {
   const resolvedPhase = resolvePhaseIdForCompletePhase(content, overridePhase);
   if (!resolvedPhase || /^phase$/i.test(resolvedPhase)) {
     output({ error: 'Unable to resolve current phase. Pass an explicit phase: state complete-phase --phase <N>' }, raw);
+    return;
+  }
+
+  // Idempotency guard (#3489). If STATE.md's canonical `Current Phase` field
+  // already names a phase distinct from the one we are being asked to mark
+  // complete, the project has advanced past the requested phase (e.g. a
+  // follow-up phase was inserted, or the next phase began). Re-running
+  // `state complete-phase --phase <N>` in that situation previously rolled
+  // STATE.md back to <N>'s moment-of-completion — silently clobbering Status,
+  // Last Activity, Last Activity Description, and the Current Position body.
+  // The handler is now a no-op in that case so re-invocation from downstream
+  // workflows cannot regress the project state.
+  const existingCurrentPhaseRaw = stateExtractField(content, 'Current Phase') || '';
+  const existingCurrentPhaseMatch = String(existingCurrentPhaseRaw).match(/(\d+[A-Z]?(?:\.\d+)*)/i);
+  const existingCurrentPhase = existingCurrentPhaseMatch ? existingCurrentPhaseMatch[1] : null;
+  if (existingCurrentPhase && existingCurrentPhase !== resolvedPhase) {
+    output(
+      { updated: [], phase: resolvedPhase, idempotent: true, note: 'phase already superseded; no-op' },
+      raw,
+      'false',
+    );
     return;
   }
 

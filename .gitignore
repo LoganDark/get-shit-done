@@ -75,3 +75,11 @@ tmp/
 # fixtures normally live under os.tmpdir() but if a future test mistakenly
 # creates them in the repo root, this prevents accidental tracking.
 __lint-fixture-vcs-*
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json
+
+# Local scratch + Claude-test artifacts
+.scratch/
+claude-test-command.md

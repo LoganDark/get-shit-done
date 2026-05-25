@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { platformWriteSync, platformReadSync, platformEnsureDir } = require('./shell-command-projection.cjs');
-const { loadConfig, isGitIgnored, normalizePhaseName, comparePhaseNum, getArchivedPhaseDirs, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, resolveModelInternal, stripShippedMilestones, extractCurrentMilestone, toPosixPath, output, error, findPhaseInternal, extractOneLinerFromBody, getRoadmapPhaseInternal } = require('./core.cjs');
+const { loadConfig, isGitIgnored, normalizePhaseName, comparePhaseNum, getArchivedPhaseDirs, generateSlugInternal, getMilestoneInfo, getMilestonePhaseFilter, resolveModelInternal, resolveReasoningEffortInternal, stripShippedMilestones, extractCurrentMilestone, toPosixPath, output, error, findPhaseInternal, extractOneLinerFromBody, getRoadmapPhaseInternal } = require('./core.cjs');
 // Plan 02-09 (W5 prescriptive imports — pattern from 02-08): consume only the
 // high-level adapter API. createVcsAdapter lands the cwd-via-factory pattern;
 // expr is the structured RevisionExpr namespace (D-12 — no raw escape hatch).
@@ -14,6 +14,7 @@ const { createVcsAdapter, expr } = require('../../../sdk/dist-cjs/vcs/index.js')
 const { planningDir, planningPaths } = require('./planning-workspace.cjs');
 const { extractFrontmatter } = require('./frontmatter.cjs');
 const { MODEL_PROFILES } = require('./model-profiles.cjs');
+const { formatGsdSlash, resolveRuntime } = require('./runtime-slash.cjs');
 
 /**
  * Determine phase status by checking plan/summary counts AND verification state.
@@ -246,15 +247,17 @@ function cmdResolveModel(cwd, agentType, raw) {
   const config = loadConfig(cwd);
   const profile = config.model_profile || 'balanced';
   const model = resolveModelInternal(cwd, agentType);
+  const reasoningEffort = resolveReasoningEffortInternal(cwd, agentType);
 
   const agentModels = MODEL_PROFILES[agentType];
   const result = agentModels
     ? { model, profile }
     : { model, profile, unknown_agent: true };
+  if (reasoningEffort) result.reasoning_effort = reasoningEffort;
   output(result, raw, model);
 }
 
-function cmdCommit(cwd, message, files, raw, amend, noVerify) {
+function cmdCommit(cwd, message, files, raw, amend, noVerify, respectStaged) {
   if (!message && !amend) {
     error('commit message required');
   }
@@ -269,15 +272,18 @@ function cmdCommit(cwd, message, files, raw, amend, noVerify) {
   const config = loadConfig(cwd);
 
   // Check commit_docs config
+  // `skipped: true` is explicit so agent prompts can match on a first-class
+  // success signal rather than inferring "skip" from "committed is missing"
+  // and improvising raw git fallbacks (#3678).
   if (!config.commit_docs) {
-    const result = { committed: false, id: null, reason: 'skipped_commit_docs_false' };
+    const result = { committed: false, skipped: true, id: null, reason: 'skipped_commit_docs_false' };
     output(result, raw, 'skipped');
     return;
   }
 
   // Check if .planning is gitignored
   if (isGitIgnored(cwd, '.planning')) {
-    const result = { committed: false, id: null, reason: 'skipped_gitignored' };
+    const result = { committed: false, skipped: true, id: null, reason: 'skipped_gitignored' };
     output(result, raw, 'skipped');
     return;
   }
@@ -368,13 +374,34 @@ function cmdCommit(cwd, message, files, raw, amend, noVerify) {
     return;
   }
 
-  // D-06 #2014 caller-side pre-probe via vcs.status (replaces vcs.diff
-  // staged-name-only). The scope is the path-prefix set in filesToCommit;
-  // any WC entry whose path starts with one of those prefixes counts as a
-  // change to commit. Skipped for amend (amend rewrites HEAD with any
-  // currently-staged content — the prior code had no pre-probe in the amend
-  // branch either, so we preserve that exit shape).
-  if (!amend) {
+  // #3522 (--respect-staged): use the staged-content surface (vcs.diff with
+  // staged:true) rather than WC status. Scoped staged set is what the commit
+  // will capture; empty-staged short-circuits to `nothing_staged` (NOT
+  // `nothing_to_commit`).
+  //
+  // Default (WC-state-capture): use vcs.status — the commit re-stages the
+  // listed paths so the WC IS the source of truth.
+  let respectStagedFiles = null;
+  if (respectStaged && !amend) {
+    const diff = vcs.diff({ staged: true, nameOnly: true });
+    const normalize = (p) => p.replace(/\\/g, '/').replace(/\/+$/, '');
+    const normalizedSpecs = filesToCommit.map(normalize);
+    respectStagedFiles = diff.nameOnly.filter((file) => {
+      const nf = normalize(file);
+      return normalizedSpecs.some((spec) => nf === spec || nf.startsWith(`${spec}/`));
+    });
+    if (respectStagedFiles.length === 0) {
+      const result = { committed: false, id: null, reason: 'nothing_staged' };
+      output(result, raw, 'nothing');
+      return;
+    }
+  } else if (!amend) {
+    // D-06 #2014 caller-side pre-probe via vcs.status (replaces vcs.diff
+    // staged-name-only). The scope is the path-prefix set in filesToCommit;
+    // any WC entry whose path starts with one of those prefixes counts as a
+    // change to commit. Skipped for amend (amend rewrites HEAD with any
+    // currently-staged content — the prior code had no pre-probe in the amend
+    // branch either, so we preserve that exit shape).
     const status = vcs.status({ porcelain: true });
     // Bidirectional path-containment (see sdk/src/query/commit.ts for full
     // rationale): scope ↔ entry containment in either direction counts as a
@@ -395,9 +422,16 @@ function cmdCommit(cwd, message, files, raw, amend, noVerify) {
   // `git add -A -- <files>` then `git commit -m <msg>` (no -a). For amend
   // mode, the adapter emits `commit --amend --no-edit` (message field is
   // ignored; `files` is irrelevant under amend's index-rewrite semantics).
+  //
+  // #3522 (respectStaged): the adapter skips the read-tree + git add and
+  // appends `-- <files>` to scope. Pass the resolved in-scope staged file
+  // set as `files` so the trailing pathspec never names paths git doesn't
+  // know about.
   const commitResult = amend
     ? vcs.commit({ message, amend: true, noVerify })                                   // line 339 (was: commit --amend --no-edit [+ --no-verify])
-    : vcs.commit({ message, files: filesToCommit, noVerify });                         // line 339 (was: commit -m <msg> [+ --no-verify])
+    : respectStaged
+      ? vcs.commit({ message, files: respectStagedFiles, noVerify, respectStaged: true })
+      : vcs.commit({ message, files: filesToCommit, noVerify });                       // line 339 (was: commit -m <msg> [+ --no-verify])
   if (commitResult.exitCode !== 0) {
     if (commitResult.stdout.includes('nothing to commit') || commitResult.stderr.includes('nothing to commit')) {
       const result = { committed: false, id: null, reason: 'nothing_to_commit' };
@@ -857,7 +891,7 @@ function cmdScaffold(cwd, type, options, raw) {
   switch (type) {
     case 'context': {
       filePath = path.join(phaseDir, `${padded}-CONTEXT.md`);
-      content = `---\nphase: "${padded}"\nname: "${name || phaseInfo?.phase_name || 'Unnamed'}"\ncreated: ${today}\n---\n\n# Phase ${phase}: ${name || phaseInfo?.phase_name || 'Unnamed'} — Context\n\n## Decisions\n\n_Decisions will be captured during /gsd:discuss-phase ${phase}_\n\n## Discretion Areas\n\n_Areas where the executor can use judgment_\n\n## Deferred Ideas\n\n_Ideas to consider later_\n`;
+      content = `---\nphase: "${padded}"\nname: "${name || phaseInfo?.phase_name || 'Unnamed'}"\ncreated: ${today}\n---\n\n# Phase ${phase}: ${name || phaseInfo?.phase_name || 'Unnamed'} — Context\n\n## Decisions\n\n_Decisions will be captured during ${formatGsdSlash('discuss-phase', resolveRuntime(cwd))} ${phase}_\n\n## Discretion Areas\n\n_Areas where the executor can use judgment_\n\n## Deferred Ideas\n\n_Ideas to consider later_\n`;
       break;
     }
     case 'uat': {
@@ -1106,6 +1140,7 @@ function cmdCheckCommit(cwd, raw) {
 }
 
 module.exports = {
+  determinePhaseStatus,
   cmdGenerateSlug,
   cmdCurrentTimestamp,
   cmdListTodos,

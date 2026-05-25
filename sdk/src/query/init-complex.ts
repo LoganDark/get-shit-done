@@ -19,6 +19,7 @@
  */
 
 import { existsSync, readdirSync, statSync, type Dirent } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { homedir } from 'node:os';
@@ -60,6 +61,65 @@ async function getModelAlias(agentType: string, projectDir: string): Promise<str
 function pathExists(base: string, relPath: string): boolean {
   return existsSync(join(base, relPath));
 }
+
+/**
+ * Bug #3491: detect whether `base` is inside any git worktree, and if so,
+ * return the absolute worktree root. Mirrors the CJS `gitWorktreeInfoInternal`
+ * in get-shit-done/bin/lib/core.cjs — keep these two implementations behaviour-
+ * identical so the SDK and CJS init handlers emit the same has_git semantics.
+ *
+ * Returns { inside, worktreeRoot } — both fall back to false/null on any error
+ * (git unavailable, not a repo, timeout) so callers see the conservative
+ * default that preserves pre-fix behaviour for non-git environments.
+ */
+function gitWorktreeInfo(base: string): { inside: boolean; worktreeRoot: string | null } {
+  try {
+    const inside = execSync('git rev-parse --is-inside-work-tree', { // vcs-lint:allow-git-here #3491 git-presence probe
+      cwd: base,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf-8',
+      timeout: 5000,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    }).trim();
+    if (inside !== 'true') return { inside: false, worktreeRoot: null };
+    try {
+      const root = execSync('git rev-parse --show-toplevel', { // vcs-lint:allow-git-here #3491 git-presence probe
+        cwd: base,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        encoding: 'utf-8',
+        timeout: 5000,
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      }).trim();
+      return { inside: true, worktreeRoot: root || null };
+    } catch {
+      return { inside: true, worktreeRoot: null };
+    }
+  } catch {
+    return { inside: false, worktreeRoot: null };
+  }
+}
+
+function detectNestedSubdir(base: string, info: { inside: boolean; worktreeRoot: string | null }): boolean {
+  if (!info.inside) return false;
+  try {
+    const prefix = execSync('git rev-parse --show-prefix', { // vcs-lint:allow-git-here #3491 git-presence probe
+      cwd: base,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf-8',
+      timeout: 5000,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    }).trim().replace(/\\/g, '/');
+    if (prefix.length > 0) return prefix !== '.' && prefix !== './';
+    return false;
+  } catch {}
+
+  if (!info.worktreeRoot) return false;
+  const normalize = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/g, '').toLowerCase();
+  const root = normalize(info.worktreeRoot);
+  const cwd = normalize(base);
+  return root !== cwd;
+}
+
 
 const NEW_PROJECT_REQUIRED_AGENTS = [
   'gsd-project-researcher',
@@ -243,7 +303,8 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
     getModelAlias('gsd-roadmapper', projectDir),
   ]);
   const runtime = detectRuntime(config as { runtime?: unknown });
-  const agentsDir = resolveAgentsDir(runtime);
+  const agentsDir = resolveAgentsDir(runtime, projectDir);
+  const gitInfo = gitWorktreeInfo(projectDir);
   const missingRequiredAgents = NEW_PROJECT_REQUIRED_AGENTS.filter(
     agent => !hasAgentDefinition(agentsDir, agent),
   );
@@ -269,7 +330,10 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
     needs_codebase_map:
       (hasExistingCode || hasPackageFile) && !pathExists(projectDir, '.planning/codebase'),
 
-    has_git: pathExists(projectDir, '.git'),
+    // Bug #3491: detect parent worktree to avoid nested .git init.
+    has_git: gitInfo.inside,
+    git_worktree_root: gitInfo.worktreeRoot,
+    in_nested_subdir: detectNestedSubdir(projectDir, gitInfo),
     has_jj: pathExists(projectDir, '.jj'),    // Phase 6 plan 06-01 — greenfield gate signal (plan 06-03 consumer)
 
     brave_search_available: hasBraveSearch,
@@ -598,16 +662,13 @@ export const initManager: QueryHandler = async (_args, projectDir, workstream) =
     }
   }
 
-  // Sliding window: only first undiscussed phase is available to discuss
-  let foundNextToDiscuss = false;
+  // Bug #2268: mark EVERY undiscussed phase as is_next_to_discuss, not just
+  // the first one.  Multiple independent phases can be discussed in parallel
+  // — the sliding-window pattern made the manager only recommend one
+  // discuss action even when callers had free capacity to discuss several.
   for (const phase of phases) {
     const status = phase.disk_status as string;
-    if (!foundNextToDiscuss && (status === 'empty' || status === 'no_directory')) {
-      phase.is_next_to_discuss = true;
-      foundNextToDiscuss = true;
-    } else {
-      phase.is_next_to_discuss = false;
-    }
+    phase.is_next_to_discuss = (status === 'empty' || status === 'no_directory');
   }
 
   // Check WAITING.json signal

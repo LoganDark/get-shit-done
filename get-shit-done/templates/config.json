@@ -28,6 +28,9 @@
     "search_gitignored": false,
     "sub_repos": []
   },
+  "git": {
+    "create_tag": true
+  },
   "parallelization": true,
   "gates": {
     "confirm_project": true,

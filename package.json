@@ -49,7 +49,7 @@
   "packageManager": "pnpm@11.0.8",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.84",
-    "ws": "^8.20.0"
+    "ws": "8.20.1"
   },
   "devDependencies": {
     "c8": "^11.0.0"
@@ -61,16 +61,35 @@
     "build:hooks": "node scripts/build-hooks.js",
     "build:sdk": "pnpm --filter @gsd-build/sdk build",
     "check:alias-drift": "pnpm --filter @gsd-build/sdk check:alias-drift",
+    "check:state-document-fresh": "cd sdk && npm run check:state-document-fresh",
+    "check:configuration-fresh": "cd sdk && npm run check:configuration-fresh",
+    "check:workstream-inventory-builder-fresh": "cd sdk && npm run check:workstream-inventory-builder-fresh",
+    "check:project-root-fresh": "cd sdk && npm run check:project-root-fresh",
+    "check:plan-scan-fresh": "cd sdk && npm run check:plan-scan-fresh",
+    "check:secrets-fresh": "cd sdk && npm run check:secrets-fresh",
+    "check:schema-detect-fresh": "cd sdk && npm run check:schema-detect-fresh",
+    "check:decisions-fresh": "cd sdk && npm run check:decisions-fresh",
+    "check:workstream-name-policy-fresh": "cd sdk && npm run check:workstream-name-policy-fresh",
     "prepublishOnly": "pnpm run build:hooks && pnpm run build:sdk",
     "pretest": "pnpm run build:sdk && pnpm run lint:skill-deps && node scripts/lint-vcs-no-commit-id.cjs",
     "pretest:coverage": "pnpm run build:sdk",
     "lint:descriptions": "node scripts/lint-descriptions.cjs",
     "lint:skill-deps": "node scripts/lint-skill-deps.cjs",
     "lint:tests": "node scripts/lint-no-source-grep.cjs",
+    "lint:test-file-count": "node scripts/lint-test-file-count.cjs",
+    "lint:pr-checks": "node scripts/lint-pr-check-project-dir.cjs",
     "lint:changeset": "node scripts/changeset/lint.cjs",
+    "lint:docs": "node scripts/lint-docs-required.cjs",
     "changeset": "node scripts/changeset/new.cjs",
     "changelog:render": "node scripts/changeset/cli.cjs render",
     "test": "node scripts/run-tests.cjs",
-    "test:coverage": "c8 --check-coverage --lines 70 --reporter text --include 'get-shit-done/bin/lib/*.cjs' --exclude 'tests/**' --all node scripts/run-tests.cjs"
+    "test:unit": "node scripts/run-tests.cjs --suite unit",
+    "test:integration": "node scripts/run-tests.cjs --suite integration",
+    "test:install": "node scripts/run-tests.cjs --suite install",
+    "test:security": "node scripts/run-tests.cjs --suite security",
+    "test:slow": "node scripts/run-tests.cjs --suite slow",
+    "test:coverage": "c8 --check-coverage --lines 70 --reporter text --include 'get-shit-done/bin/lib/*.cjs' --exclude 'tests/**' --all node scripts/run-tests.cjs",
+    "test:coverage:unit": "c8 --check-coverage --lines 70 --reporter text --include 'get-shit-done/bin/lib/*.cjs' --exclude 'tests/**' --all node scripts/run-tests.cjs --suite unit",
+    "test:coverage:all": "npm run test:coverage"
   }
 }

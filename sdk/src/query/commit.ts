@@ -73,7 +73,15 @@ export function sanitizeCommitMessage(text: string): string {
  * Checks commit_docs config (unless --force), sanitizes message,
  * stages specified files (or all .planning/), and commits.
  *
- * @param args - args[0]=message, remaining=file paths or flags (--force, --amend, --no-verify)
+ * `--respect-staged` (#3522, git backend only): skip the implicit re-stage
+ * so per-hunk content set up via `git add -p` is preserved. The handler
+ * commits only what is already staged within the requested `--files`
+ * pathspec; `{committed: false, reason: 'nothing staged'}` when empty.
+ * Rejected with VcsNotImplementedError on the jj backend (jj has no
+ * separate index — use `jj split` for per-hunk commits).
+ *
+ * @param args - args[0]=message, remaining=file paths or flags
+ *               (--force, --amend, --no-verify, --respect-staged)
  * @param projectDir - Project root directory
  * @returns QueryResult with commit result
  */
@@ -84,10 +92,11 @@ export const commit: QueryHandler = async (args, projectDir, workstream) => {
   const hasForce = allArgs.includes('--force');
   const hasAmend = allArgs.includes('--amend');
   const hasNoVerify = allArgs.includes('--no-verify');
+  const hasRespectStaged = allArgs.includes('--respect-staged');
   const filesIndex = allArgs.indexOf('--files');
   const endIndex = filesIndex !== -1 ? filesIndex : allArgs.length;
   // CodeRabbit #6: don't strip arbitrary `--foo` tokens from commit messages
-  const knownFlags = new Set(['--force', '--amend', '--no-verify']);
+  const knownFlags = new Set(['--force', '--amend', '--no-verify', '--respect-staged']);
   const messageArgs = allArgs.slice(0, endIndex).filter(a => !knownFlags.has(a));
   const message = messageArgs.join(' ') || undefined;
   const filePaths =
@@ -145,31 +154,63 @@ export const commit: QueryHandler = async (args, projectDir, workstream) => {
   // from 'nothing staged' to 'nothing to commit' to reflect the new
   // WC-state-capture semantic (there is no "staged but uncommitted"
   // distinction from the handler's perspective).
-  const status = vcs.status({ porcelain: true });
-  // Bidirectional path-containment: a status entry overlaps the requested
-  // scope when either (a) the entry is INSIDE one of the requested paths
-  // (entry.startsWith(scope)) — e.g. scope=".planning/", entry=".planning/
-  // STATE.md" — or (b) the entry IS a directory that CONTAINS one of the
-  // requested paths (scope.startsWith(entry)) — e.g. entry=".planning/" (the
-  // un-recursed untracked-directory summary git emits in default mode) and
-  // scope=".planning/STATE.md". The latter form is required because `git
-  // status --porcelain` collapses fully-untracked directories to a single
-  // `?? <dir>/` entry rather than enumerating their files.
-  const surviving = status.entries.filter(e => pathsToCommit.some(p => e.path.startsWith(p) || p.startsWith(e.path)));
-  if (surviving.length === 0) {
-    return { data: { committed: false, reason: 'nothing to commit' } };
+  // #3522 (--respect-staged): use the staged-content surface (vcs.diff with
+  // staged:true) rather than working-copy status. The staged set is what the
+  // commit will actually capture, and the empty-staged short-circuit needs
+  // to fire with `reason: 'nothing staged'` (NOT 'nothing to commit') to
+  // match the documented #3522 contract.
+  //
+  // Default path (WC-state-capture): use vcs.status({porcelain:true}) — the
+  // commit re-stages the listed paths, so the WC IS the source of truth.
+  let stagedFiles: string[];
+  if (hasRespectStaged) {
+    // Bypass the path-scope filter on the diff side and filter in TS instead:
+    // the caller may have listed paths git doesn't know about yet (skipped
+    // hunks from `git add -p` on untracked files), and passing those as a
+    // git pathspec causes "pathspec did not match" failures (#3522 fix).
+    const diff = vcs.diff({ staged: true, nameOnly: true });
+    const normalize = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '');
+    const normalizedSpecs = pathsToCommit.map(normalize);
+    stagedFiles = diff.nameOnly.filter(file => {
+      const nf = normalize(file);
+      return normalizedSpecs.some(spec => nf === spec || nf.startsWith(`${spec}/`));
+    });
+    if (stagedFiles.length === 0) {
+      return { data: { committed: false, reason: 'nothing staged' } };
+    }
+  } else {
+    const status = vcs.status({ porcelain: true });
+    // Bidirectional path-containment: a status entry overlaps the requested
+    // scope when either (a) the entry is INSIDE one of the requested paths
+    // (entry.startsWith(scope)) — e.g. scope=".planning/", entry=".planning/
+    // STATE.md" — or (b) the entry IS a directory that CONTAINS one of the
+    // requested paths (scope.startsWith(entry)) — e.g. entry=".planning/" (the
+    // un-recursed untracked-directory summary git emits in default mode) and
+    // scope=".planning/STATE.md". The latter form is required because `git
+    // status --porcelain` collapses fully-untracked directories to a single
+    // `?? <dir>/` entry rather than enumerating their files.
+    const surviving = status.entries.filter(e => pathsToCommit.some(p => e.path.startsWith(p) || p.startsWith(e.path)));
+    if (surviving.length === 0) {
+      return { data: { committed: false, reason: 'nothing to commit' } };
+    }
+    stagedFiles = surviving.map(e => e.path);
   }
-  const stagedFiles = surviving.map(e => e.path);
 
-  // WC-state-capture: vcs.commit({files}) runs `git add -A -- <files>` then
-  // `git commit -m <msg>` (no -a), capturing exactly the requested scope's
+  // WC-state-capture (default): vcs.commit({files}) runs `git add -A -- <files>`
+  // then `git commit -m <msg>` (no -a), capturing exactly the requested scope's
   // WC state (#3061 — pre-staged unrelated entries do not leak in because
   // the commit's path scope stays bound to <files>).
+  //
+  // #3522 (--respect-staged): the backend skips the read-tree + git add and
+  // appends `-- <files>` to scope the commit. Pass the resolved in-scope
+  // staged file set as `files` so the trailing pathspec never includes paths
+  // git doesn't know about (avoids "pathspec did not match" failure).
   const commitResult = vcs.commit({
     message: sanitized ?? '',
     amend: hasAmend,
     noVerify: hasNoVerify,
-    files: pathsToCommit,
+    files: hasRespectStaged ? stagedFiles : pathsToCommit,
+    respectStaged: hasRespectStaged,
   });
   if (commitResult.exitCode !== 0) {
     if (commitResult.stdout.includes('nothing to commit') || commitResult.stderr.includes('nothing to commit')) {

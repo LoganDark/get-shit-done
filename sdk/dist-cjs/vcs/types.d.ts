@@ -62,6 +62,26 @@ export interface CommitInput {
      */
     bookmarkRaw?: string;
     /**
+     * #3522 (`--respect-staged`): when true, the backend MUST NOT touch the
+     * index/working-copy before recording the commit — pre-staged partial
+     * content (e.g. set up via `git add -p`) is preserved as-is. The commit
+     * captures whatever is already staged within the requested `files`
+     * pathspec; nothing outside that pathspec leaks in. If the index is
+     * empty within the pathspec, the backend MUST return a CommitResult
+     * with exitCode !== 0 AND stderr containing 'nothing staged' (the
+     * handler maps that to `{committed: false, reason: 'nothing staged'}`).
+     *
+     * Backend support:
+     *   - git: honored — skips `read-tree` reset and `git add -A`, appends
+     *     `-- <files>` to commit args for #3061 scope enforcement.
+     *   - jj:  REJECTED with a typed error — jj has no separate index;
+     *     the WC IS the staged state. Callers needing per-hunk commits on
+     *     jj should use `jj split` rather than this flag.
+     *
+     * Cross-backend code: only pass this on git (`vcs.kind === 'git'`).
+     */
+    respectStaged?: boolean;
+    /**
      * Phase 4 plan 04 D-14: phase-merge gate. When set, vcs.commit() reads
      * `${phaseDir}/incomplete-work.md` BEFORE the squash/commit and throws
      * VcsIncompleteSubagentsError if the queue is non-empty.

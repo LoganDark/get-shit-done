@@ -277,6 +277,10 @@ Programmatic SDK callers (`GSDTools`) route through one seam that owns query dis
 
 This keeps callers thin adapters and centralizes transport decisions for SDK publishability.
 
+### Command Routing Hub (`get-shit-done/bin/lib/command-routing-hub.cjs`)
+
+CJS command family routers migrate to dispatch through `CommandRoutingHub` incrementally. `phase-command-router.cjs` is the first migration (issue #3788); remaining routers (`phases-command-router.cjs`, `roadmap-command-router.cjs`, etc.) continue using `routeCjsCommandFamily` until migrated in follow-up issues. The hub owns three cross-cutting concerns that each router previously duplicated: (1) mode selection (`sdk` when `tryLoadSdk()` succeeds and no `GSD_WORKSTREAM` is active, `cjs` otherwise), set once at construction; (2) a no-throw pure-result contract (`hub.dispatch()` catches all exceptions and returns `{ ok: false, errorKind, message, details }` instead of propagating); and (3) a closed six-value `errorKind` enum exported as the frozen `ERROR_KINDS` object. Router adapters remain thin CLI translators — they build the hub, call `dispatch`, then map the Result to `output()`/`error()` calls. No transparent SDK→CJS fallback: an SDK-mode hub that encounters a load or dispatch failure returns `SdkLoadFailed` or `SdkDispatchFailed` without retrying via CJS. See `docs/adr/0012-command-routing-hub.md`.
+
 ### CLI Tools (`get-shit-done/bin/`)
 
 Node.js CLI utility (`gsd-tools.cjs`) with domain modules split across `get-shit-done/bin/lib/` (see [`docs/INVENTORY.md`](INVENTORY.md#cli-modules-59-shipped) for the authoritative roster):
@@ -679,7 +683,7 @@ Debounce: 5 tool uses between repeated warnings. Severity escalation (WARNING→
 - Missing bridge files handled gracefully (subagents, fresh sessions)
 - Context monitor is advisory — never issues imperative commands that override user preferences
 
-### Package Legitimacy Gate (v1.51)
+### Package Legitimacy Gate (v1.42.1)
 
 The researcher → planner → executor pipeline includes a supply-chain gate against slopsquatting (AI-hallucinated package names pre-registered with malicious post-install scripts).
 
@@ -737,7 +741,7 @@ The migration-specific ownership and source snapshots live in
 | OpenCode | `~/.config/opencode` | `./.opencode` | `command/gsd-*.md` | `agents/gsd-*.md` | `opencode.json` or `opencode.jsonc`; no GSD hooks |
 | Kilo | `~/.config/kilo` | `./.kilo` | `command/gsd-*.md` | `agents/gsd-*.md` | `kilo.json` or `kilo.jsonc`; no GSD hooks |
 | Gemini CLI | `~/.gemini` | `./.gemini` | `commands/gsd/*.toml` | `agents/gsd-*.md` | `settings.json` feature flag, hooks, and statusline |
-| Codex | `~/.codex` | `./.codex` | `skills/gsd-*/SKILL.md` | `agents/` source markdown plus per-agent TOML | `config.toml` `[agents.gsd-*]`, `[features].codex_hooks`, and hook tables |
+| Codex | `~/.codex` | `./.codex` | `skills/gsd-*/SKILL.md` | `agents/` source markdown plus per-agent TOML | `config.toml` `[agents.gsd-*]`, `[features].hooks` (canonical; legacy alias `codex_hooks` is recognized and migrated forward on reinstall, #3566), and hook tables |
 | GitHub Copilot | `~/.copilot` | `./.github` | `skills/gsd-*/SKILL.md` and `copilot-instructions.md` | `.agent.md` files | No GSD hooks or statusline |
 | Antigravity | `~/.gemini/antigravity` | `./.agent` | `skills/gsd-*/SKILL.md` | `agents/gsd-*.md` | Gemini-style `settings.json` hook entries when installed by GSD |
 | Cursor | `~/.cursor` | `./.cursor` | `skills/gsd-*/SKILL.md` | `agents/gsd-*.md` | Rule references under `rules/`; no GSD hooks |

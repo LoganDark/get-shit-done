@@ -140,7 +140,7 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         });
       }
     }
-    if (input.files && input.files.length > 0) {
+    if (input.files && input.files.length > 0 && !input.respectStaged) {
       // Phase 2.1 #3061: reset the index to HEAD (or empty when there is no
       // HEAD yet) before staging the requested paths. Pre-staged entries that
       // the caller did not list in `files` would otherwise leak into the
@@ -149,6 +149,10 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
       // equivalent (D-02). Trade-off: pre-staged unrelated entries become
       // worktree-only changes after the commit instead of remaining staged —
       // matches jj's index-less semantics; documented in 2.1-04-SUMMARY.md.
+      //
+      // #3522 (respectStaged): skipped — the WHOLE POINT of respectStaged is
+      // to preserve pre-staged partial content. The trailing `-- <paths>` on
+      // the commit args (below) still enforces #3061 scope without the reset.
       const headExists =
         execGit(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD']).exitCode === 0;
       const resetRes = execGit(cwd, ['read-tree', headExists ? 'HEAD' : '--empty']);
@@ -198,6 +202,16 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     // commit scope now pass `files` and rely on D-04 WC-state-capture
     // semantics; the `-A` add stages exactly the requested paths and nothing
     // more.
+    //
+    // #3522 (respectStaged): scope re-introduced. Without the `git add -A`
+    // reset above, we need the trailing `-- <paths>` to enforce #3061 (files
+    // staged outside the requested pathspec must not leak in). The handler
+    // pre-resolves <paths> to the in-scope staged file set so the pathspec
+    // never includes anything git doesn't know about (avoids `pathspec did
+    // not match` failure on untracked-and-deliberately-unstaged files).
+    if (input.respectStaged && input.files && input.files.length > 0) {
+      args.push('--', ...input.files);
+    }
     const commitRes = execGit(cwd, args);
     if (commitRes.exitCode !== 0) {
       return {

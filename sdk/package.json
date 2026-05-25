@@ -39,6 +39,24 @@
     "build:esm": "tsc",
     "build:cjs": "tsc -p tsconfig.cjs.json && node -e \"require('node:fs').writeFileSync('dist-cjs/package.json', JSON.stringify({type:'commonjs'},null,2)+'\\n')\"",
     "check:alias-drift": "pnpm run build && node scripts/check-command-aliases-fresh.mjs",
+    "gen:state-document": "pnpm run build && npx tsx scripts/gen-state-document.ts",
+    "check:state-document-fresh": "pnpm run build && node scripts/check-state-document-fresh.mjs",
+    "gen:configuration": "pnpm run build && node scripts/gen-configuration.mjs",
+    "check:configuration-fresh": "pnpm run build && node scripts/check-configuration-fresh.mjs",
+    "gen:workstream-inventory-builder": "pnpm run build && node scripts/gen-workstream-inventory-builder.mjs",
+    "check:workstream-inventory-builder-fresh": "pnpm run build && node scripts/check-workstream-inventory-builder-fresh.mjs",
+    "gen:project-root": "pnpm run build && node scripts/gen-project-root.mjs",
+    "check:project-root-fresh": "pnpm run build && node scripts/check-project-root-fresh.mjs",
+    "gen:plan-scan": "pnpm run build && node scripts/gen-plan-scan.mjs",
+    "check:plan-scan-fresh": "pnpm run build && node scripts/check-plan-scan-fresh.mjs",
+    "gen:secrets": "pnpm run build && node scripts/gen-secrets.mjs",
+    "check:secrets-fresh": "pnpm run build && node scripts/check-secrets-fresh.mjs",
+    "gen:schema-detect": "pnpm run build && node scripts/gen-schema-detect.mjs",
+    "check:schema-detect-fresh": "pnpm run build && node scripts/check-schema-detect-fresh.mjs",
+    "gen:decisions": "pnpm run build && node scripts/gen-decisions.mjs",
+    "check:decisions-fresh": "pnpm run build && node scripts/check-decisions-fresh.mjs",
+    "gen:workstream-name-policy": "pnpm run build && node scripts/gen-workstream-name-policy.mjs",
+    "check:workstream-name-policy-fresh": "pnpm run build && node scripts/check-workstream-name-policy-fresh.mjs",
     "dev": "tsc -w & tsc -p tsconfig.cjs.json -w",
     "prepublishOnly": "rm -rf dist dist-cjs && tsc && pnpm run build:cjs && chmod +x dist/cli.js",
     "test": "vitest run",
@@ -47,11 +65,13 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.84",
-    "ws": "^8.20.0"
+    "synckit": "^0.11.12",
+    "ws": "8.20.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/ws": "^8.18.1",
+    "tsx": "^4.22.0",
     "typescript": "^5.7.0",
     "vitest": "^3.1.1"
   }
