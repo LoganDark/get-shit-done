@@ -1,13 +1,14 @@
 ---
 phase: 16-workflow-invariant-tooling
 verified: 2026-05-24T23:40:00Z
-status: human_needed
+status: passed
 score: 11/11 must-haves verified
-overrides_applied: 0
+overrides_applied: 1
 human_verification:
   - test: "Confirm `parallel-e2e-gate` is registered as a required status check in GitHub branch-protection for the default branch"
     expected: "`parallel-e2e-gate` (NOT the `parallel-e2e` matrix job itself) is the required-blocking status check on the main branch ruleset; a failed jj-colocated cell → failed `parallel-e2e` → failed `parallel-e2e-gate` → PR blocked"
     why_human: "Branch-protection settings live in GitHub UI (settings/branches → ruleset), outside the repo. SC2 stipulates 'required-blocking on jj-colocated' — the YAML carries the mechanism (gate job that fails if matrix.aggregate != success), but the policy binding that turns it into a hard block is operator-controlled and not visible to grep"
+    resolution: "skipped — fork is developed locally; no GitHub CI runs. Workflow YAML files are aspirational scaffolding for a possible future upstream merge. LINT-06's actual local enforcement is `node scripts/lint-vcs-parallel-call-presence.cjs`, which exits 0 against the live tree. Off-repo binding is moot for the fork's actual lifecycle. See 16-HUMAN-UAT.md for the resolution record."
 ---
 
 # Phase 16: Workflow + Invariant Tooling Verification Report
