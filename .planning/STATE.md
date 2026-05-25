@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Clean, consistent state for next upstream pull
-status: executing
+status: verifying
 stopped_at: Phase 17 context gathered
-last_updated: "2026-05-25T22:22:49.339Z"
+last_updated: "2026-05-25T22:31:11.369Z"
 last_activity: 2026-05-25
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 11
-  completed_plans: 10
-  percent: 75
+  completed_plans: 11
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 
 Phase: 17 (drift-control-reconciliation) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-25
 
 ## Performance Metrics
@@ -85,6 +85,7 @@ Last activity: 2026-05-25
 | Phase 17 P17.01 | 2min | 2 tasks | 4 files |
 | Phase 17 P17.02 | 8min | 2 tasks | 3 files |
 | Phase 17 P17.03 | 22min | 8 tasks | 20 files |
+| Phase 17 P17.04 | 8 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -172,6 +173,7 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase ?]: Phase 17 Plan 17.03: 7 atomic per-theme commits + 1 close-gate (Pitfall 12 + CF-05) closed DOCS-01..07 + DOCS-09; 45/45 original failing claims resolved (100.0% pass rate); ADR immutability above-the-line preserved
 - [Phase ?]: RESEARCH function-name claim corrected during execute: ADR 0009 supersession-note cites projectShellCommandText (live) instead of projectShellCommand (RESEARCH placeholder)
 - [Phase ?]: Theme 7 path (b) fallback applied: en source docs/superpowers/specs/... does not exist; pt-BR specs L4 dangling self-reference removed instead of being rewritten to en target
+- [Phase ?]: PROJECT-01-form: inline computation, NOT a permanent reconcile script (YAGNI per REQUIREMENTS.md OOS clause)
 
 ### Pending Todos
 
@@ -242,7 +244,7 @@ All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQU
 
 ## Session Continuity
 
-Last session: 2026-05-25T22:22:17.679Z
+Last session: 2026-05-25T22:31:05.890Z
 Stopped at: Phase 17 context gathered
 Resume file: 
 

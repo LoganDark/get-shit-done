@@ -71,7 +71,7 @@ Eight themes from `/gsd:docs-update --verify-only` audit captured in `v14-docs-v
 
 Separate workstream from docs cleanup per `/gsd-new-milestone` discuss decision.
 
-- [ ] **PROJECT-01**: Reconcile `.planning/PROJECT.md` `### Validated` requirements against `.planning/MILESTONES.md` + archived per-phase SUMMARYs (pre-Phase-11 drift noted at v1.3 close 2026-05-24). One-shot prose sweep — NOT a recurring SDK verb (YAGNI; no second consumer). Two-pass: machine-generate truth file from MILESTONES.md headings, human-edit narrative quality per Pitfall 8.
+- [x] **PROJECT-01**: Reconcile `.planning/PROJECT.md` `### Validated` requirements against `.planning/MILESTONES.md` + archived per-phase SUMMARYs (pre-Phase-11 drift noted at v1.3 close 2026-05-24). One-shot prose sweep — NOT a recurring SDK verb (YAGNI; no second consumer). Two-pass: machine-generate truth file from MILESTONES.md headings, human-edit narrative quality per Pitfall 8.
 
 ## v2 Requirements
 
@@ -120,7 +120,7 @@ Which phases cover which requirements. Updated during roadmap creation 2026-05-2
 | DOCS-06 | Phase 17 (plan 17.03) | Complete |
 | DOCS-07 | Phase 17 (plan 17.03) | Complete |
 | DOCS-09 | Phase 17 (plan 17.03) | Complete |
-| PROJECT-01 | Phase 17 (plan 17.04) | Pending |
+| PROJECT-01 | Phase 17 (plan 17.04) | Complete |
 | CLEANUP-01 | Phase 18 (plan 18.01) | Pending |
 | CLEANUP-03 | Phase 18 (plan 18.02) | Pending |
 | CLEANUP-04 | Phase 18 (plan 18.02) | Pending |
