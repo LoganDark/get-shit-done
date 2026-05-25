@@ -45,7 +45,7 @@ created: 2026-05-24
 | 16-02-01 | 02 | 1 | CLEANUP-02 | — | Workspaces on disk are removed after clean-path fan-in success — prevents stale credential/state leakage in `.claude/jj-workspaces/` | unit (sdk vitest) | `pnpm --filter ./sdk test -- src/vcs/jj/parallel.test.ts -t "clean path reaps workspace dirs"` | ✅ | ⬜ pending |
 | 16-02-02 | 02 | 1 | CLEANUP-02 | — | Conflicted-branch workspaces preserved on disk for forensics (W3 (a) joint-assertion) — must NOT be reaped | unit (sdk vitest) | `pnpm --filter ./sdk test -- src/vcs/jj/parallel.test.ts -t "conflicted path preserves workspace dirs"` | ✅ | ⬜ pending |
 | 16-02-03 | 02 | 1 | CLEANUP-02 | — | N/A (CLI bridge surface) | unit | `node --test tests/cli-cleanup-subagent-workspaces.test.cjs` | ❌ W0 | ⬜ pending |
-| 16-02-04 | 02 | 1 | CLEANUP-02 | — | Recovery script removes orphan dirs after `jj op restore` (idempotent) | integration | `node --test tests/dogfood-restore-cleanup-subagent-workspaces.test.cjs` | ❌ W0 | ⬜ pending |
+| 16-02-04 | 02 | 1 | CLEANUP-02 | — | Recovery script removes orphan dirs after `jj op restore` (idempotent) | integration | `node --test tests/scripts/dogfood-restore-orphan-cleanup.test.cjs` | ❌ W0 | ⬜ pending |
 | 16-02-05 | 02 | 1 | CLEANUP-02 | — | Cross-backend symmetry (git-cell fanIn-success-no-orphan-dirs invariant) | unit (vitest) | `pnpm --filter ./sdk test -- src/vcs/jj/parallel.test.ts -t "cross-backend"` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
@@ -59,7 +59,7 @@ created: 2026-05-24
 - [ ] `tests/scripts/lint-vcs-parallel-call-presence.test.cjs` — fixture-based unit test for LINT-06 (Pattern B mkdtemp + per-fixture-file allowlist; covers Pitfall 7 false-positive cases: `code-review.md`, `audit-fix.md` prose-only mentions)
 - [ ] `tests/scripts/fixtures/lint-vcs-parallel-call-presence/` — fixture directory (paired/missing-dispatch/missing-fanin/prose-only fixtures)
 - [ ] `tests/cli-cleanup-subagent-workspaces.test.cjs` — CLI bridge smoke test (mirrors `tests/cli-workspace-parallel-cancel.test.cjs` shape per Open Q4)
-- [ ] `tests/dogfood-restore-cleanup-subagent-workspaces.test.cjs` — end-to-end test for the dogfood-restore.sh post-restore step (synthetic `jj op restore` + orphan-survival fixture per Success Criterion 5)
+- [ ] `tests/scripts/dogfood-restore-orphan-cleanup.test.cjs` — end-to-end test for the dogfood-restore.sh post-restore step (synthetic `jj op restore` + orphan-survival fixture per Success Criterion 5)
 - [ ] No framework install needed — both `node:test` and vitest are already in use across the repo
 
 ---
