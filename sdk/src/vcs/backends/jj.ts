@@ -1136,20 +1136,14 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
             );
           }
         }
-        // Cross-workspace edit/abandon mutates the op log. The main repo's
-        // WC view does NOT auto-snapshot those mutations, so subsequent
-        // operations from the main cwd (e.g. parallel.fanIn's
-        // `vcs.workspace.list()` from mainRepoRoot) fail with "stale WC".
-        // Refresh proactively — the alternative (per-read --ignore-working-copy)
-        // is forbidden by D-13. update-stale is a no-op when the WC is fresh.
-        const updateStaleRes = vcsExec(cwd, 'jj', [
-          ...jjArgv('workspace', 'update-stale'),
-        ]);
-        if (updateStaleRes.exitCode !== 0) {
-          // Non-fatal: surface via stderr but don't abort — mirrors the
-          // pattern in jj/lock.ts:134 (update-stale failure is observable
-          // via the stderr stream but never throws).
-        }
+        // NB: empirically (probe 2026-05-26, jj 0.41) the cross-workspace
+        // edit/abandon here does NOT stale main's `jj log` /
+        // `jj workspace add` / `jj workspace list` views — those self-sync
+        // or simply don't trip jj's stale-WC check for this op shape.
+        // performJjParallelFanIn keeps an unconditional update-stale at its
+        // entry as the single coverage point for subagent-induced staleness
+        // (subagent commits arrive between dispatch and fan-in). No
+        // dispatch-loop refresh needed.
         // Re-fetch the entry so the returned `rev` reflects post-remediation
         // state (entry.rev now resolves to baseRef's change_id).
         entries = workspace.list();
