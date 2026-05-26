@@ -22,6 +22,7 @@ import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 import { createJjAdapter } from '../backends/jj.js';
 import { VcsNotImplementedError } from '../types.js';
+import { expr } from '../expr.js';
 
 let jjAvailable = false;
 try {
@@ -264,6 +265,86 @@ describe.sequential.skipIf(!jjAvailable)(
         expect(caught.message).not.toMatch(/unknown (argument|flag)/i);
         expect(caught.message).not.toMatch(/unexpected (argument|flag)/i);
       }
+    });
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// baseRef contract — cross-backend parity (regression for
+// [[project-jj-workspace-add-auto-empty-bug]]).
+//
+// `jj workspace add -r <baseRef>` natively inserts an auto-empty WC ON TOP of
+// baseRef, leaving `@-` as baseRef and `@` as the auto-empty. The git backend
+// produces HEAD === baseRef instead. The jj adapter remediates by running
+// `jj edit -r baseRef` + `jj abandon <auto-empty>` from inside the new
+// workspace, so callers (parallel dispatch, octopus.createSubagentSlot, etc.)
+// get the same `@`-equals-baseRef contract on both backends.
+// ─────────────────────────────────────────────────────────────────────────────
+describe.sequential.skipIf(!jjAvailable)(
+  'jj workspace.add — baseRef contract: @ === baseRef after add',
+  () => {
+    let dir: string;
+    let vcs: ReturnType<typeof createJjAdapter>;
+
+    beforeAll(() => {
+      dir = seedJjColocatedRepo();
+      vcs = createJjAdapter(dir);
+    });
+    afterAll(() => {
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    });
+
+    function jjChangeIdAt(repoDir: string, revset: string): string {
+      const out = execSync(
+        `jj --repository "${repoDir}" --no-pager --color never log -r '${revset}' -T 'change_id ++ "\\n"' --no-graph -n 1`,
+        { cwd: repoDir, stdio: ['ignore', 'pipe', 'pipe'] },
+      ).toString();
+      return out.trim();
+    }
+
+    it('after workspace.add({baseRef}): workspace @ resolves to baseRef change_id (no auto-empty interposed)', () => {
+      // Create a baseRef change to dispatch onto. Use `jj new` to make a
+      // dedicated change with a unique description so we can resolve its
+      // change_id deterministically.
+      execSync(
+        'jj new -m "baseRef-anchor" --no-edit',
+        { cwd: dir, stdio: 'pipe' },
+      );
+      const baseChangeId = jjChangeIdAt(
+        dir,
+        `subject(exact:"baseRef-anchor")`,
+      );
+      expect(baseChangeId).toMatch(/^[k-z]{8,}/);
+
+      const wsPath = join(dir, '.claude/jj-workspaces/baseref-contract');
+      vcs.workspace.add({
+        path: wsPath,
+        name: 'baseref-contract',
+        baseRef: expr.rev(baseChangeId),
+      });
+
+      // Workspace's @ must equal baseRef post-add (remediation moved @
+      // back from the auto-empty to baseRef).
+      const wsHeadId = jjChangeIdAt(wsPath, '@');
+      expect(wsHeadId).toBe(baseChangeId);
+
+      // And workspace.list()'s `rev` for this workspace must match too
+      // (re-fetched after the remediation by the adapter).
+      const entry = vcs.workspace.list().find((e) => e.path === 'baseref-contract');
+      expect(entry).toBeDefined();
+      expect(entry!.rev).toBe(baseChangeId);
+    });
+
+    it('without baseRef: native jj auto-empty behavior preserved (no remediation)', () => {
+      // The contract only kicks in when caller passes baseRef. The bare
+      // `workspace.add({path})` form keeps jj's native semantics: `@` is a
+      // fresh auto-empty above the source workspace's `@-`. We don't assert
+      // the exact shape here — just that the call succeeds and produces a
+      // listable workspace (regression-shield only).
+      const wsPath = join(dir, '.claude/jj-workspaces/no-baseref');
+      const info = vcs.workspace.add({ path: wsPath, name: 'no-baseref' });
+      expect(info.path).toBe('no-baseref');
+      expect(existsSync(join(wsPath, '.jj'))).toBe(true);
     });
   },
 );

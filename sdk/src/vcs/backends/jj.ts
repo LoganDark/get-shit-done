@@ -1083,11 +1083,80 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       if (r.exitCode !== 0) {
         throw new Error(`workspace.add failed: ${r.stderr || r.stdout}`);
       }
+      // Cross-backend contract parity: when caller passes `baseRef`, the
+      // workspace's `@` MUST equal baseRef (git backend's `git worktree add
+      // <path> -b <name> <baseRef>` does this natively — HEAD === baseRef,
+      // no extra commit). jj's `workspace add -r <baseRef>` violates this:
+      // it always inserts a fresh auto-empty WC ON TOP of baseRef, making
+      // `@-` the baseRef and `@` the auto-empty. Downstream callers that
+      // rely on `commit({squashIntoBase: '@'})` semantics then stack work as
+      // descendants of the named change instead of squashing INTO it (see
+      // [[project-jj-workspace-add-auto-empty-bug]]).
+      //
+      // Remediation: from inside the new workspace, `jj edit -r <baseRef>`
+      // to move @ back to baseRef, then `jj abandon <auto-empty-id>` to
+      // clean up the orphaned descendant. Scoped to `baseRef` callers so
+      // the bare `workspace.add({path})` path (which has no contract about
+      // @) preserves jj's native behavior.
+      let entries = workspace.list();
+      const wsName = input.name ?? basename(input.path);
+      let entry = entries.find((e) => e.path === wsName);
+      if (input.baseRef && entry && entry.rev) {
+        const autoEmptyId = entry.rev;
+        // --repository points at the workspace path so jj operates on THAT
+        // workspace's `@`, not the main repo's. cwd matches for consistency
+        // with the rest of the adapter's vcsExec discipline.
+        const wsFlags = [
+          '--repository', input.path,
+          '--no-pager', '--color', 'never', '--quiet',
+        ];
+        const editRes = vcsExec(input.path, 'jj', [
+          ...wsFlags, 'edit', '-r', toJjRev(input.baseRef),
+        ]);
+        if (editRes.exitCode !== 0) {
+          throw new Error(
+            `workspace.add baseRef remediation: jj edit failed: ${editRes.stderr || editRes.stdout}`,
+          );
+        }
+        // jj's default behavior auto-abandons empty descriptionless changes
+        // when `jj edit` moves @ away from them, so the auto-empty may
+        // already be gone. Probe before abandoning to keep the remediation
+        // idempotent across jj-version behavior shifts.
+        const probeRes = vcsExec(input.path, 'jj', [
+          ...wsFlags, 'log', '-r', autoEmptyId,
+          '-T', 'change_id ++ "\\n"', '--no-graph', '-n', '1',
+        ]);
+        if (probeRes.exitCode === 0 && probeRes.stdout.trim()) {
+          const abandonRes = vcsExec(input.path, 'jj', [
+            ...wsFlags, 'abandon', autoEmptyId,
+          ]);
+          if (abandonRes.exitCode !== 0) {
+            throw new Error(
+              `workspace.add baseRef remediation: jj abandon auto-empty (${autoEmptyId}) failed: ${abandonRes.stderr || abandonRes.stdout}`,
+            );
+          }
+        }
+        // Cross-workspace edit/abandon mutates the op log. The main repo's
+        // WC view does NOT auto-snapshot those mutations, so subsequent
+        // operations from the main cwd (e.g. parallel.fanIn's
+        // `vcs.workspace.list()` from mainRepoRoot) fail with "stale WC".
+        // Refresh proactively — the alternative (per-read --ignore-working-copy)
+        // is forbidden by D-13. update-stale is a no-op when the WC is fresh.
+        const updateStaleRes = vcsExec(cwd, 'jj', [
+          ...jjArgv('workspace', 'update-stale'),
+        ]);
+        if (updateStaleRes.exitCode !== 0) {
+          // Non-fatal: surface via stderr but don't abort — mirrors the
+          // pattern in jj/lock.ts:134 (update-stale failure is observable
+          // via the stderr stream but never throws).
+        }
+        // Re-fetch the entry so the returned `rev` reflects post-remediation
+        // state (entry.rev now resolves to baseRef's change_id).
+        entries = workspace.list();
+        entry = entries.find((e) => e.path === wsName);
+      }
       // Return shape parity with git backend (git.ts:453-465): fetch the new
       // workspace's entry from list() rather than re-deriving change_id.
-      const entries = workspace.list();
-      const wsName = input.name ?? basename(input.path);
-      const entry = entries.find((e) => e.path === wsName);
       return entry ?? { path: input.path, rev: '', locked: false };
     },
     forget: (workspaceNameOrPath: string): void => {

@@ -309,6 +309,17 @@ export function performJjParallelFanIn(
 	// `@` via `@-` and therefore included in the merge tree). Mirrors the
 	// same `workspace.list()` re-resolution that `backends/jj.ts:1115-1135`
 	// (`workspace.reap`) performs for the same reason.
+	// Subagents commit work from inside their workspaces, which bumps the
+	// shared op log; the main repo's WC pointer doesn't auto-advance, so
+	// `jj workspace list` from mainRepoRoot here will fail with "stale WC"
+	// (D-13 forbids --ignore-working-copy as the read-side escape). Refresh
+	// proactively — update-stale is a no-op when the WC is fresh. Mirrors the
+	// pattern in backends/jj.ts workspace.add baseRef remediation.
+	const updateStaleArgs = [
+		...jjArgvFlags(mainRepoRoot),
+		'workspace', 'update-stale',
+	];
+	vcsExec(mainRepoRoot, 'jj', updateStaleArgs);
 	const wsListArgs = [
 		...jjArgvFlags(mainRepoRoot),
 		'workspace', 'list', '-T', 'json(self) ++ "\\n"',

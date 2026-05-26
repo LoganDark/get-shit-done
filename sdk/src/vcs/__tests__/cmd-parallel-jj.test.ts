@@ -690,6 +690,16 @@ describe.sequential.skipIf(!jjAvailable)(
 				});
 			}
 
+			// Refresh main repo's WC pointer — the simulated subagent
+			// squashes above ran from inside subagent workspaces and bumped
+			// the op log, leaving main stale. D-13 forbids
+			// --ignore-working-copy on read probes, so we update-stale
+			// instead (idempotent when fresh).
+			execSync(`jj workspace update-stale --repository ${dir}`, {
+				cwd: dir,
+				stdio: 'pipe',
+			});
+
 			// Snapshot pre-state: neither valid-name nor another-valid exists
 			// as a bookmark.
 			const preValid = execSync(
