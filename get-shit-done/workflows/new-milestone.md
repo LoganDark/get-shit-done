@@ -338,7 +338,13 @@ Use template: ~/.claude/get-shit-done/templates/research-project/{FILE}
 
 > **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling all 4 researcher Agent() calls above, do NOT read research files or synthesize content independently while the subagents are active. Wait for all 4 researchers to complete before spawning the synthesizer. This prevents duplicate work and wasted context.
 
-After all 4 complete, spawn synthesizer:
+After all 4 complete, **first create an empty `.planning/research/SUMMARY.md`** so the synthesizer can populate it via Edit. (Claude Code v2.1+ blocks the `Write` tool for subagents writing a `SUMMARY.md` basename — `tengu_subagent_md_report_blocked` — so the synthesizer edits a pre-seeded file. See gsd-research-synthesizer Step 6.)
+
+```bash
+: > .planning/research/SUMMARY.md
+```
+
+Then spawn the synthesizer:
 
 ```text
 Agent(prompt="
@@ -353,7 +359,7 @@ Synthesize research outputs into SUMMARY.md.
 
 ${AGENT_SKILLS_SYNTHESIZER}
 
-Write to: .planning/research/SUMMARY.md
+An empty .planning/research/SUMMARY.md has been pre-created for you. Read it in its entirety, then populate it with the Edit tool (empty old_string) — do NOT use the Write tool (it is blocked for this filename in subagents).
 Use template: ~/.claude/get-shit-done/templates/research-project/SUMMARY.md
 Commit after writing.
 ", subagent_type="gsd-research-synthesizer", model="{synthesizer_model}", description="Synthesize research")
