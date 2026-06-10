@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Tactical cleanup + test-flake
-status: planning
+status: executing
 stopped_at: v1.5 opened (minimal milestone); Phase 18 re-scoped; next `/gsd-plan-phase 18`
-last_updated: "2026-06-10T21:47:10.884Z"
-last_activity: 2026-06-10 — v1.5 opened; re-scope audit found zero Phase 18 items subsumed by Phase 19 (all 7 fixes still missing at relocated paths)
+last_updated: "2026-06-10T21:56:12.233Z"
+last_activity: 2026-06-10 -- Phase 18 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-10 at v1.4 close)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** v1.5 (minimal milestone, opened 2026-06-10) — Phase 18 re-scoped against post-merge tree; 7 REQ-IDs active (CLEANUP-01, CLEANUP-03..07, TEST-17). MERGE-08 stays deferred-by-design.
+**Current focus:** Phase 18 — Tactical cleanup + test-flake (re-scoped)
 
 ## Current Position
 
-Phase: 18 (Tactical cleanup + test-flake, re-scoped) — v1.5
-Plan: 0/3
-Status: Ready to plan (`/gsd-plan-phase 18`)
-Last activity: 2026-06-10 — v1.5 opened; re-scope audit found zero Phase 18 items subsumed by Phase 19 (all 7 fixes still missing at relocated paths)
+Phase: 18 (Tactical cleanup + test-flake (re-scoped)) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-06-10 -- Phase 18 execution started
 
 ## Performance Metrics
 
@@ -99,6 +99,7 @@ Last activity: 2026-06-10 — v1.5 opened; re-scope audit found zero Phase 18 it
 | Phase 19 P19-11 | ~80min | 2 tasks | 135 files |
 | Phase 19 P19-12 | 76min | 3 tasks | 260 files |
 | Phase 19 P19-13 | ~25min | 2 tasks | 4 files |
+| Phase 18 P18-01 | 4min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -221,6 +222,7 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase ?]: [Phase 19]: 19-11 vitest config caps maxWorkers:2 + 30s timeouts — sync-spawn-heavy jj suite starves worker RPC past birpc hard 60s at higher parallelism (exit 1 with all tests green); 2 workers = zero RPC errors, ~110s suite
 - [Phase 19]: 19-13 completeness proof closed MERGE-02 — 951/951 sweep lines ledger-matched via committed checker (lint-allowlist bookkeeping rows excluded from the matcher set per T-19-36); 310-file sdk/ residue resolved with one machine-verified fork-unmodified class row, not back-fill
 - [Phase 19]: 19-13 phase gate all 10 steps green in one run (node:test 13006/13050 modulo the 2 triaged gpg-environmental files; vitest 612/612 both backends); 19-MERGE-AUDIT.md finalized LIVE→FINAL with next-merge pointer; operator squash of the stack into vpzlrrlv + installed-GSD update remain manual actions
+- [Phase 18]: 18-01: single assert_clean_wc gate before offer_next_phase + tolerant config.json commits at both Route B1/B config-set sites (instead of 5 per-banner gates); single STATE.md sweep commit covers the 4-step cluster + graduation backlog — RESEARCH Open Q2 + A1: post-gate writes are limited to the two config-sets which carry their own || true commits; STATE.md cluster is one logical mutating step
 
 ### Pending Todos
 
@@ -299,11 +301,12 @@ Items acknowledged and deferred at milestone close on 2026-06-10, then **promote
 
 ## Session Continuity
 
-Last session: 2026-06-10
+Last session: 2026-06-10T21:55:42.838Z
 Stopped at: v1.5 opened (minimal milestone); Phase 18 re-scoped; next `/gsd-plan-phase 18`
 Resume file:
 
-- v1.5 `.planning/REQUIREMENTS.md` written 2026-06-10 with the re-scope audit evidence inline (7 REQ-IDs carried from v1.4; relocated targets: `gsd-core/workflows/transition.md`, `src/vcs-command-router.cts`, `src/vcs/__tests__/cmd-parallel-{jj,git}.test.ts`, `src/vcs/__tests__/jj-reap.test.ts`).
+None
+
 - v1.4 archived to `.planning/milestones/v1.4-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`.
 - jj discipline (standing): the Phase 19 resolution stack (19-01…19-13, ~70 commits) sits on top of merge change `vpzlrrlv` — NEVER rewrite/squash/abandon `vpzlrrlv` or below; operator squashes the stack.
 - Installed GSD updated from this workspace 2026-06-10 (`node bin/install.js --claude --global`; payload at `~/.claude/gsd-core/`, legacy `~/.claude/get-shit-done/` removed).

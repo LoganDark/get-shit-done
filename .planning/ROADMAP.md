@@ -90,7 +90,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 
 **Plans**: 3 plans
 
-  - [ ] 18-01-PLAN.md — CLEANUP-01 transition.md commit-adjacency + gate (HIGHEST PRIORITY per v1.4 Pitfall 2 — the false-clean-WC pattern already bit Phase 14). Note the re-scope delta: this is now upstream's rewritten file; the fix adds the missing commit steps, not just the gate.
+  - [x] 18-01-PLAN.md — CLEANUP-01 transition.md commit-adjacency + gate (HIGHEST PRIORITY per v1.4 Pitfall 2 — the false-clean-WC pattern already bit Phase 14). Note the re-scope delta: this is now upstream's rewritten file; the fix adds the missing commit steps, not just the gate.
   - [ ] 18-02-PLAN.md — CLEANUP-03..07 (Phase 14 WR-01..05). Per-WR commits per v1.4 Pitfall 10; order: prod-code guards (CLEANUP-05, CLEANUP-06 — both in `src/vcs-command-router.cts`, no longer file-disjoint) FIRST, then script fixes (CLEANUP-03, CLEANUP-04), then test fixes (CLEANUP-07). 5 Phase 14 info findings NOT forced in (opportunistic only).
   - [ ] 18-03-PLAN.md — TEST-17 re-verify-then-fix. Reproduce under current config BEFORE touching anything; narrow per-test fix or resolved-by-restructure closure per Success Criterion 5.
 
@@ -123,7 +123,7 @@ v1.4 executed 15 → 16 → 17 as planned; Phase 19 (upstream merge, operator-in
 | 15. Adapter surface extensions + rename | 4/4 | Complete    | 2026-05-25 |
 | 16. Workflow + invariant tooling | 2/2 | Complete    | 2026-05-25 |
 | 17. Drift control + reconciliation | 4/4 | Complete    | 2026-05-25 |
-| 18. Tactical cleanup + test-flake (re-scoped, v1.5) | 0/3 | Planning | — |
+| 18. Tactical cleanup + test-flake (re-scoped, v1.5) | 1/3 | In Progress|  |
 | 19. Upstream merge conflict resolution + fork-abstraction audit | 13/13 | Complete    | 2026-06-10 |
 
 ## Next
