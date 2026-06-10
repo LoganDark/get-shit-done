@@ -18,6 +18,7 @@ import path from 'node:path';
 // only for the jj-side restore (same fork gap-fill carry-over as the
 // vcs-command-router restore verb; see src/vcs/backends/jj.cts TODO).
 import { createVcsAdapter } from './vcs/index.cjs';
+import { expr } from './vcs/expr.cjs';
 import { vcsExec } from './vcs/exec.cjs';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import planningWorkspace = require('./planning-workspace.cjs');
@@ -500,12 +501,24 @@ function applyMigration(cwd: string, plan: MigrationPlan, options: { dryRun?: bo
     throw new Error('Working tree is dirty. Commit or stash changes before migrating.');
   }
 
-  // Capture the HEAD revision id for rollback — unified revision model:
-  // LogEntry.id is the backend-canonical identifier (full hex commit_id on
-  // git, change_id on jj). (was: git rev-parse HEAD)
+  // Capture the rollback baseline revision id BEFORE any mutation — unified
+  // revision model: LogEntry.id is the backend-canonical identifier (full hex
+  // commit_id on git, change_id on jj). (was: git rev-parse HEAD)
+  //
+  // 19-review CR-02: on jj the first log row is `@` — the working-copy
+  // commit's change_id. A change_id is a stable pointer to a MUTABLE change:
+  // by rollback time jj has auto-snapshotted the half-migrated working copy
+  // into `@`, so `jj restore --from <@'s change_id>` would restore the WC
+  // from itself — a silent no-op. Use `@-` (the parent of the working-copy
+  // commit) as the baseline on jj: it is the last landed state before this
+  // tool's mutations, and the clean-tree gate above guarantees `@` and `@-`
+  // have identical .planning/ content at capture time. On git, HEAD is an
+  // immutable commit and stays correct as-is.
   let headRev: string;
   try {
-    const headEntries = vcs.log({ maxCount: 1 });
+    const headEntries = vcs.kind === 'jj'
+      ? vcs.log({ rev: expr.parent(), maxCount: 1 })   // @- : pre-mutation baseline
+      : vcs.log({ maxCount: 1 });                      // git HEAD (immutable)
     if (headEntries.length === 0 || !headEntries[0].id) {
       throw new Error('no commits found at HEAD');
     }
@@ -605,10 +618,14 @@ function applyMigration(cwd: string, plan: MigrationPlan, options: { dryRun?: bo
     //   1. Reverse the completed directory renames via the filesystem (exact
     //      inverse of the WC operations performed above — also removes the
     //      renamed-to dirs the old `clean -fd` swept).
-    //   2. Restore .planning/ file content from the captured HEAD revision
-    //      through the adapter restore surface (git: gitOnly.restore
-    //      --source; jj: `jj restore --from <rev>` via the adapter-internal
-    //      exec seam — same surface as the `gsd-tools query restore` verb).
+    //   2. Restore .planning/ file content from the captured pre-mutation
+    //      baseline through the adapter restore surface (git: gitOnly.restore
+    //      --source HEAD; jj: `jj restore --from <@-'s change_id>` via the
+    //      adapter-internal exec seam — same surface as the `gsd-tools query
+    //      restore` verb). 19-review CR-02: the jj baseline is `@-`, NOT `@`
+    //      — restoring from `@`'s change_id would be a no-op because jj
+    //      auto-snapshots the half-migrated WC into `@` (see capture site
+    //      above).
     // If any rollback step fails, FAIL LOUDLY with manual-recovery
     // instructions — never fall back to raw destructive git.
     const rollbackErrors: string[] = [];
