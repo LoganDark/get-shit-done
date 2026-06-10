@@ -85,8 +85,25 @@ describe('bug #685: Windows spawns must set windowsHide:true (no console-window 
   // (hooks + src) must set windowsHide — catches future additions, not just the
   // sites known today. Handles the `{ ...CONST }` spread indirection.
   test('completeness: no external-binary spawn in runtime source omits windowsHide', () => {
-    const listDir = (dir, re) =>
-      fs.readdirSync(path.join(root, dir)).filter((f) => re.test(f)).map((f) => `${dir}/${f}`);
+    // 19-review WR-01: recursive walk — the prior non-recursive readdirSync
+    // skipped everything under src/vcs/ (and hooks/lib/), which let the
+    // statusTrimEnd spawnSync in src/vcs/backends/git.cts evade the
+    // invariant. __tests__ directories are excluded (test fixtures are not
+    // runtime source).
+    const listDir = (dir, re) => {
+      const out = [];
+      const walk = (rel) => {
+        for (const ent of fs.readdirSync(path.join(root, rel), { withFileTypes: true })) {
+          if (ent.isDirectory()) {
+            if (ent.name !== '__tests__' && ent.name !== 'node_modules') walk(`${rel}/${ent.name}`);
+          } else if (re.test(ent.name)) {
+            out.push(`${rel}/${ent.name}`);
+          }
+        }
+      };
+      walk(dir);
+      return out;
+    };
     const files = [...listDir('hooks', /\.js$/), ...listDir('src', /\.cts$/)];
     const callRe = /(?:execSync|execFileSync|spawnSync|spawn)\s*\(\s*(?:`|'|")?(?:git|npm|gh)\b|spawn\s*\(\s*process\.execPath/g;
     const offenders = [];

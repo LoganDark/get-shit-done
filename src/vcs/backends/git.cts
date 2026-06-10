@@ -22,7 +22,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { resolve as resolvePath } from 'node:path';
-import { execGitVcs, VcsExecError } from '../exec.cjs';
+import { execGitVcs, VcsExecError, DEFAULT_VCS_TIMEOUT_MS } from '../exec.cjs';
 import type { ExecResult } from '../exec.cjs';
 import { expr } from '../expr.cjs';
 import { toGitRev } from '../parse/git-rev.cjs';
@@ -300,8 +300,19 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     // entries without a leading-space first entry stay byte-equal, while the
     // first entry's leading-space (worktree-only modifications/deletions)
     // survives — execGitVcs's full .trim() corrupts the latter (Phase 2.1 #3061).
+    // 19-review WR-01: this is the one spawn site that bypasses vcsExec (to
+    // avoid its full .trim()), so it must carry the exec-seam contract
+    // explicitly: windowsHide (issue #685 — no Windows console flash) and the
+    // adapter-wide timeout bound (a wedged git — locked index, hung NFS —
+    // must not hang vcs.status() forever while every other call is bounded).
     const statusTrimEnd = (gitArgs: string[]): { exitCode: number; stdout: string } => {
-      const r = spawnSync('git', gitArgs, { cwd: targetCwd, stdio: 'pipe', encoding: 'utf-8' });
+      const r = spawnSync('git', gitArgs, {
+        cwd: targetCwd,
+        stdio: 'pipe',
+        encoding: 'utf-8',
+        timeout: DEFAULT_VCS_TIMEOUT_MS,
+        windowsHide: true,
+      });
       return { exitCode: r.status ?? -1, stdout: (r.stdout ?? '').toString().replace(/\n+$/, '') };
     };
     // Parse path-safe entries from `-z` output; preserve byte-identity `raw` from
