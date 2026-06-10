@@ -21,7 +21,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { resolve as resolvePath } from 'node:path';
+import { basename, resolve as resolvePath } from 'node:path';
 import { execGitVcs, VcsExecError, DEFAULT_VCS_TIMEOUT_MS } from '../exec.cjs';
 import type { ExecResult } from '../exec.cjs';
 import { expr } from '../expr.cjs';
@@ -733,8 +733,12 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
       const abandoned: { name: string; changeId: string; path: string }[] = [];
       for (const entry of entries) {
         // git workspace.list() returns the on-disk path (not a workspace
-        // name); inclusion filter matches on basename.
-        const name = entry.path.split('/').pop() ?? entry.path;
+        // name); inclusion filter matches on basename. 19-review WR-08:
+        // path.basename, NOT split('/') — `git worktree list --porcelain`
+        // emits backslash paths on Windows, so the '/'-split returned the
+        // full path and the prefix filter never matched (reap silently
+        // became a no-op on Windows).
+        const name = basename(entry.path);
         if (!name.startsWith(opts.phaseNamePrefix)) continue;
         const removeRes = execGitVcs(cwd, ['worktree', 'remove', entry.path]);
         if (removeRes.exitCode !== 0) {
