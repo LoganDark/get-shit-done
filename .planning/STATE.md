@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Tactical cleanup + test-flake
 status: executing
-stopped_at: v1.5 opened (minimal milestone); Phase 18 re-scoped; next `/gsd-plan-phase 18`
-last_updated: "2026-06-10T21:56:12.233Z"
+stopped_at: Completed 18-02-PLAN.md
+last_updated: "2026-06-10T22:06:30.253Z"
 last_activity: 2026-06-10 -- Phase 18 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-06-10 at v1.4 close)
 ## Current Position
 
 Phase: 18 (Tactical cleanup + test-flake (re-scoped)) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-06-10 -- Phase 18 execution started
 
@@ -100,6 +100,7 @@ Last activity: 2026-06-10 -- Phase 18 execution started
 | Phase 19 P19-12 | 76min | 3 tasks | 260 files |
 | Phase 19 P19-13 | ~25min | 2 tasks | 4 files |
 | Phase 18 P18-01 | 4min | 2 tasks | 1 files |
+| Phase 18 P18-02 | 9min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -223,6 +224,9 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase 19]: 19-13 completeness proof closed MERGE-02 — 951/951 sweep lines ledger-matched via committed checker (lint-allowlist bookkeeping rows excluded from the matcher set per T-19-36); 310-file sdk/ residue resolved with one machine-verified fork-unmodified class row, not back-fill
 - [Phase 19]: 19-13 phase gate all 10 steps green in one run (node:test 13006/13050 modulo the 2 triaged gpg-environmental files; vitest 612/612 both backends); 19-MERGE-AUDIT.md finalized LIVE→FINAL with next-merge pointer; operator squash of the stack into vpzlrrlv + installed-GSD update remain manual actions
 - [Phase 18]: 18-01: single assert_clean_wc gate before offer_next_phase + tolerant config.json commits at both Route B1/B config-set sites (instead of 5 per-banner gates); single STATE.md sweep commit covers the 4-step cluster + graduation backlog — RESEARCH Open Q2 + A1: post-gate writes are limited to the two config-sets which carry their own || true commits; STATE.md cluster is one logical mutating step
+- [Phase 18]: 18-02: CLEANUP-06 reason string locked as max_concurrency_invalid — phase_number_required not reused because --max-concurrency is an optional flag, not a required field; 2 contract tests pin the envelope — RESEARCH Open Q1 recommendation; snake_case peer convention (phase_number_required, plan_json_parse_failed)
+- [Phase 18]: 18-02: CLEANUP-04 resolved as option (b) documented asymmetry — jj op restore is the actual rollback, tar overlay stays additive; destructive rm -rf clean-overlay rejected as new risk in a recovery primitive — Phase 14 P05 production run validated restore-then-untar empirically; comment-only, zero behavior change
+- [Phase 18]: 18-02: dogfood-restore root assertion placed BEFORE the tarball-existence check so the wrong-cwd verify is non-tautological; emitted gsd-core/bin/lib/vcs-command-router.cjs is tracked (not gitignored) and was committed as a 6th chore commit after build:lib — post-tarball placement would let FATAL: tarball-not-found fire first on wrong-cwd dummy-arg runs; tracked artifact would otherwise trip the clean-WC phase gate
 
 ### Pending Todos
 
@@ -301,8 +305,8 @@ Items acknowledged and deferred at milestone close on 2026-06-10, then **promote
 
 ## Session Continuity
 
-Last session: 2026-06-10T21:55:42.838Z
-Stopped at: v1.5 opened (minimal milestone); Phase 18 re-scoped; next `/gsd-plan-phase 18`
+Last session: 2026-06-10T22:06:30.248Z
+Stopped at: Completed 18-02-PLAN.md
 Resume file:
 
 None
