@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Tactical cleanup + test-flake
-status: executing
+status: verifying
 stopped_at: Completed 18-02-PLAN.md
-last_updated: "2026-06-10T22:06:30.253Z"
+last_updated: "2026-06-10T22:18:38.774Z"
 last_activity: 2026-06-10 -- Phase 18 execution started
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 0
+  completed_plans: 3
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-10 at v1.4 close)
 
 Phase: 18 (Tactical cleanup + test-flake (re-scoped)) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-10 -- Phase 18 execution started
 
 ## Performance Metrics
@@ -101,6 +101,7 @@ Last activity: 2026-06-10 -- Phase 18 execution started
 | Phase 19 P19-13 | ~25min | 2 tasks | 4 files |
 | Phase 18 P18-01 | 4min | 2 tasks | 1 files |
 | Phase 18 P18-02 | 9min | 3 tasks | 6 files |
+| Phase 18 P18-03 | 10min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -227,6 +228,7 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase 18]: 18-02: CLEANUP-06 reason string locked as max_concurrency_invalid — phase_number_required not reused because --max-concurrency is an optional flag, not a required field; 2 contract tests pin the envelope — RESEARCH Open Q1 recommendation; snake_case peer convention (phase_number_required, plan_json_parse_failed)
 - [Phase 18]: 18-02: CLEANUP-04 resolved as option (b) documented asymmetry — jj op restore is the actual rollback, tar overlay stays additive; destructive rm -rf clean-overlay rejected as new risk in a recovery primitive — Phase 14 P05 production run validated restore-then-untar empirically; comment-only, zero behavior change
 - [Phase 18]: 18-02: dogfood-restore root assertion placed BEFORE the tarball-existence check so the wrong-cwd verify is non-tautological; emitted gsd-core/bin/lib/vcs-command-router.cjs is tracked (not gitignored) and was committed as a 6th chore commit after build:lib — post-tarball placement would let FATAL: tarball-not-found fire first on wrong-cwd dummy-arg runs; tracked artifact would otherwise trip the clean-WC phase gate
+- [Phase 18]: 18-03: TEST-17 verdict (b) resolved-by-restructure — inclusion-filter passed all 5 gate invocations (419-473ms) under the 19-11 config (maxWorkers 2 + 30s unit timeout); zero edits, vitest.config.ts byte-identical — 3 full-suite runs 618/618 + reg-gate shape + isolation control; intermittent birpc onTaskUpdate exit-1 confound (zero test failures) deferred per Pitfall 9 to phase deferred-items.md
 
 ### Pending Todos
 
@@ -305,7 +307,7 @@ Items acknowledged and deferred at milestone close on 2026-06-10, then **promote
 
 ## Session Continuity
 
-Last session: 2026-06-10T22:06:30.248Z
+Last session: 2026-06-10T22:18:13.042Z
 Stopped at: Completed 18-02-PLAN.md
 Resume file:
 

@@ -28,7 +28,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Test Isolation
 
-- [ ] **TEST-17**: `src/vcs/__tests__/jj-reap.test.ts > workspace.reap > inclusion-filter` no longer times out at 5s under parallel test load. **Re-verification gate first**: the suite moved from `sdk/vitest.config.ts` to root `vitest.config.ts` with `maxWorkers: 2` (19-11) — reproduce the flake under the current config before fixing; if it cannot be reproduced in 3+ full-suite runs, close as resolved-by-restructure with the runs recorded as evidence. If it reproduces: per-test fix only — `it(..., 15_000)` timeout extension preferred, `{ concurrent: false }` opt-out as fallback; diff ≤5 LOC, ≤1 file, root `vitest.config.ts` UNTOUCHED, `scripts/check-skip-count.cjs` green. Broader test-perf sweep (`project_test_perf_pain_vitest`) stays out of scope. (closes `v14-jj-reap-test-flake`)
+- [x] **TEST-17**: `src/vcs/__tests__/jj-reap.test.ts > workspace.reap > inclusion-filter` no longer times out at 5s under parallel test load. **Re-verification gate first**: the suite moved from `sdk/vitest.config.ts` to root `vitest.config.ts` with `maxWorkers: 2` (19-11) — reproduce the flake under the current config before fixing; if it cannot be reproduced in 3+ full-suite runs, close as resolved-by-restructure with the runs recorded as evidence. If it reproduces: per-test fix only — `it(..., 15_000)` timeout extension preferred, `{ concurrent: false }` opt-out as fallback; diff ≤5 LOC, ≤1 file, root `vitest.config.ts` UNTOUCHED, `scripts/check-skip-count.cjs` green. Broader test-perf sweep (`project_test_perf_pain_vitest`) stays out of scope. (closes `v14-jj-reap-test-flake`)
 
 ## Out of Scope
 
