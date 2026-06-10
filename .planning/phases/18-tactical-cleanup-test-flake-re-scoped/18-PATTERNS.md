@@ -107,7 +107,7 @@ if [ ! -f "$TARBALL_PATH" ]; then
 fi
 ```
 
-**CLEANUP-03 insertion point:** after L68 (tarball check), before L70-71 (`jj op restore` is the FIRST mutation; `tar -xf` at L74 is the second) — one assertion guards both. The WR-01 literal (single-line `||`-group form, `set -e`-safe, tab-indented):
+**CLEANUP-03 insertion point (revised per plan checker):** immediately after the positional parse (L47-48), BEFORE the tarball check (L65-68) — still ahead of both mutations (`jj op restore` L71, `tar -xf` L74), and the root assertion (not the tarball FATAL) is what fires on a wrong-cwd run. The WR-01 literal (single-line `||`-group form, `set -e`-safe, tab-indented):
 ```bash
 [ -f .planning/STATE.md ] || { echo "ERROR: dogfood-restore.sh must run from project root" >&2; exit 1; }
 ```

@@ -1,10 +1,11 @@
 ---
 phase: 18
 slug: tactical-cleanup-test-flake-re-scoped
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: approved
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-06-10
+approved: 2026-06-10
 ---
 
 # Phase 18 — Validation Strategy
@@ -41,7 +42,7 @@ created: 2026-06-10
 | (filled by planner) | 01 | 1 | CLEANUP-01 | — | N/A | scripted fixture + grep | `grep -c 'gsd_run query diff --name-only' gsd-core/workflows/transition.md` ≥ 1; ephemeral fixture-repo gate script exits 1 dirty / 0 clean; `node scripts/audit-workflow-raw-git.cjs` exit 0 | ❌ W0 (ephemeral) | ⬜ pending |
 | (filled by planner) | 02 | 1 | CLEANUP-05 | T-18-01 | non-array plan fails closed with `{ok:false, reason:'plan_not_array'}` | unit (vi.mock) | `npx vitest run --project unit src/vcs/__tests__/cmd-parallel-max-concurrency-cli.test.ts` | ❌ W0 (new `it`s in existing file) | ⬜ pending |
 | (filled by planner) | 02 | 1 | CLEANUP-06 | T-18-02 | NaN `--max-concurrency` fails closed; absent flag stays `undefined` (D-07) | unit (vi.mock) | same file; D-07 test at L132 stays green | ❌ W0 (new `it`s in existing file) | ⬜ pending |
-| (filled by planner) | 02 | 1 | CLEANUP-03 | T-18-03 | wrong-cwd run aborts before any mutation | manual-equivalent + node:test | `cd /tmp && bash <repo>/scripts/dogfood-restore.sh x y` → exit 1; `node --test tests/scripts/dogfood-restore-orphan-cleanup.test.cjs` green | ✅ | ⬜ pending |
+| (filled by planner) | 02 | 1 | CLEANUP-03 | T-18-03 | wrong-cwd run aborts before any mutation | manual-equivalent + node:test | with `REPO="$PWD"` captured pre-cd: `cd /tmp && bash "$REPO/scripts/dogfood-restore.sh" x y` → exit 1 + `ERROR: dogfood-restore.sh must run from project root` on stderr (root assertion precedes the tarball check); `node --test tests/scripts/dogfood-restore-orphan-cleanup.test.cjs` green | ✅ | ⬜ pending |
 | (filled by planner) | 02 | 1 | CLEANUP-04 | — | overlay semantics documented or made clean | review + existing test green | same as CLEANUP-03 | ✅ | ⬜ pending |
 | (filled by planner) | 02 | 1 | CLEANUP-07 | — | N/A | targeted run + tmp inspect | run CONFIG-02 describes, then assert zero leaked tmpdirs | ✅ (edits to existing describes) | ⬜ pending |
 | (filled by planner) | 03 | 1 | TEST-17 | — | N/A | 3+ full-suite runs | `GSD_TEST_BACKENDS=git,jj npx vitest run` ×3 exit 0; `node scripts/check-skip-count.cjs` green (baseline 22) | ✅ | ⬜ pending |
@@ -52,8 +53,10 @@ created: 2026-06-10
 
 ## Wave 0 Requirements
 
-- [ ] New contract `it`s in `src/vcs/__tests__/cmd-parallel-max-concurrency-cli.test.ts` — CLEANUP-05/06 envelope pins (written GREEN alongside the guards in the same per-WR commit; guard-addition, not TDD-RED)
-- [ ] Ephemeral fixture-repo gate script for CLEANUP-01 SC1 verification (run-and-discard, stdout-only — never written into the working tree per `feedback_avoid_jj_auto_tracked_output`)
+- [x] New contract `it`s in `src/vcs/__tests__/cmd-parallel-max-concurrency-cli.test.ts` — CLEANUP-05/06 envelope pins (written GREEN alongside the guards in the same per-WR commit; guard-addition, not TDD-RED) — scheduled inside plan 18-02 Task 1 (commits 1-2)
+- [x] Ephemeral fixture-repo gate script for CLEANUP-01 SC1 verification (run-and-discard, stdout-only — never written into the working tree per `feedback_avoid_jj_auto_tracked_output`) — scheduled inside plan 18-01 Task 2 (step 3)
+
+No standalone pre-execution Wave 0 exists for this phase: both items land inside Wave-1 plan tasks by design, hence `wave_0_complete: true` at plan sign-off.
 
 ---
 
@@ -67,11 +70,11 @@ created: 2026-06-10
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 120s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 120s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-06-10

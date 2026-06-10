@@ -190,7 +190,7 @@ There is **no `src/vcs-command-router.cjs` on disk** (only `.cts`), so vitest's 
 - L25 comment: "Pre-condition: must be run from the project root." — no enforcement.
 - L31-45 usage gate (`$# -ne 2`); L47-48 positional parse; L56-63 `run_gsd_tools` with `GSD_TOOLS_BIN` injection seam; L65-68 tarball existence check; **L71 `jj op restore "$PRE_OP_ID"` (first mutation); L74 `tar -xf "$TARBALL_PATH" -C .` (second mutation)**; L96-121 orphan-cleanup + jq count reporting.
 
-**CLEANUP-03 insertion point:** after the tarball check (L68), before L70-71 — guards BOTH mutations. WR-01's literal is the spec:
+**CLEANUP-03 insertion point (superseded by plan 18-02 revision):** immediately after the positional parse (L47-48), BEFORE the tarball check (L65-68) — still guards both mutations, and makes the wrong-cwd verify non-tautological (a post-tarball placement would let `FATAL: tarball not found` fire first on a wrong-cwd run with dummy args). WR-01's literal is the spec:
 
 ```bash
 [ -f .planning/STATE.md ] || { echo "ERROR: dogfood-restore.sh must run from project root" >&2; exit 1; }
@@ -406,11 +406,11 @@ Not a rename/migration phase, but the CLEANUP-01 target is a live workflow — c
 
 All other claims in this document are [VERIFIED: repo] via direct file reads, line-number confirmation, or live command runs this session.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **CLEANUP-06 reason string** — `max_concurrency_invalid` (recommended) vs `max_concurrency_nan` vs folding into a generic envelope. What we know: peer reasons are snake_case (`phase_number_required`, `plan_json_parse_failed`). Recommendation: planner locks `max_concurrency_invalid`; the contract test pins it.
-2. **Gate placement vs "immediately before the banners"** — single gate step before `offer_next_phase` + committed config-sets (recommended) vs per-route gates duplicated across 5 banner variants. Recommendation: single step + explicit prose noting the read-only-queries-and-committed-config-set gap; record as a plan decision.
-3. **CLEANUP-01 mode of SC1 verification** — fixture-repo script-extraction (recommended, see §verification) vs live-repo synthetic file (hazardous under jj auto-snapshot). Recommendation: fixture repo.
+1. **CLEANUP-06 reason string** — `max_concurrency_invalid` (recommended) vs `max_concurrency_nan` vs folding into a generic envelope. What we know: peer reasons are snake_case (`phase_number_required`, `plan_json_parse_failed`). Recommendation: planner locks `max_concurrency_invalid`; the contract test pins it. **RESOLVED** — locked by plan 18-02 Task 1: `max_concurrency_invalid` ships; the contract tests pin it.
+2. **Gate placement vs "immediately before the banners"** — single gate step before `offer_next_phase` + committed config-sets (recommended) vs per-route gates duplicated across 5 banner variants. Recommendation: single step + explicit prose noting the read-only-queries-and-committed-config-set gap; record as a plan decision. **RESOLVED** — locked by plan 18-01 Task 2: single gate step before `offer_next_phase` + committed config-sets, deviation documented in the step preamble.
+3. **CLEANUP-01 mode of SC1 verification** — fixture-repo script-extraction (recommended, see §verification) vs live-repo synthetic file (hazardous under jj auto-snapshot). Recommendation: fixture repo. **RESOLVED** — locked by plan 18-01 Task 2: fixture-repo verification (ephemeral mktemp colocated repo, run-and-discard).
 
 ## Environment Availability
 
