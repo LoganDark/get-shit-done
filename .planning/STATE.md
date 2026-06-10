@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
 status: executing
-stopped_at: "Completed 19-10-PLAN.md (lint gates re-pointed, .cts trap closed); next: 19-11 vitest revival"
-last_updated: "2026-06-10T13:55:41.818Z"
+stopped_at: "Completed 19-11-PLAN.md (vitest revived, fork suite green both backends, baselines re-captured); next: 19-12 fork-test triage + residue deletion"
+last_updated: "2026-06-10T15:20:04.759Z"
 last_activity: 2026-06-10
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 24
-  completed_plans: 21
+  completed_plans: 22
   percent: 80
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 ## Current Position
 
 Phase: 19 (upstream-merge-conflict-resolution-fork-abstraction-audit) — EXECUTING
-Plan: 11 of 13
+Plan: 12 of 13
 Status: Ready to execute
 Last activity: 2026-06-10
 
@@ -96,6 +96,7 @@ Last activity: 2026-06-10
 | Phase 19 P19-08 | 25min | 2 tasks | 10 files |
 | Phase 19 PP19-09 | 30min | 3 tasks | 91 files |
 | Phase 19 P19-10 | 30min | 3 tasks | 19 files |
+| Phase 19 P19-11 | ~80min | 2 tasks | 135 files |
 
 ## Accumulated Context
 
@@ -213,6 +214,9 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase 19]: 19-09: .githooks/pre-commit wires fork vcs lints known-RED until 19-10 baselines (Pitfall 12); jj-native degrade + HOOK-07 exactly-once proven through ported adapter; git-cmd.js jj-parity deferred v1.5
 - [Phase 19]: 19-10: .cts booby trap closed mechanically — SCAN_EXT +cts in both scanners + planted-.cts positive-detection fixture tests; emitted gsd-core/bin/lib artifacts walk-ignored (T-19-28); launcher snippet git-first leg allowlisted per 19-09 ledger instead of weakening the scan pattern
 - [Phase 19]: 19-10: audit-workflow-raw-git baseline machine-re-derived at 230 hits / 93 files (script's own counter; launcher embed +1 per file dominates) replacing the 127-hit fork-path map; legacy sdk/** + get-shit-done/** allowlist entries RETAINED under pending-19-12-residue-deletion; audit-id-namespace re-pointed, rootCommits-rename + migr-06 close-gate marked historical
+- [Phase ?]: [Phase 19]: 19-11 A4 resolved config-level — vite resolves .cjs->.cts but esbuild.include needed +cts and 3 import-equals sites converted to interop default imports; tests stay .test.ts, publish build auto-excludes
+- [Phase ?]: [Phase 19]: 19-11 fork guard-test triage — wave-cleanup-executor DROPPED (pins fork D-05 fanIn-delegation body; 19-07 substrate disposition + 5 upstream files pin the adopted body; D-05 invariant lives at workspace.parallel.fan-in, pinned by cmd-parallel-{jj,git}) and bug-3749* DROPPED (fork-SDK typed-IR helpers retired; invariant carried by commands.test.cjs strategy-branch tests, verified passing)
+- [Phase ?]: [Phase 19]: 19-11 vitest config caps maxWorkers:2 + 30s timeouts — sync-spawn-heavy jj suite starves worker RPC past birpc hard 60s at higher parallelism (exit 1 with all tests green); 2 workers = zero RPC errors, ~110s suite
 
 ### Pending Todos
 
@@ -283,11 +287,12 @@ All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQU
 
 ## Session Continuity
 
-Last session: 2026-06-10T13:55:25.068Z
-Stopped at: Completed 19-10-PLAN.md (lint gates re-pointed, .cts trap closed); next: 19-11 vitest revival
+Last session: 2026-06-10T15:20:04.754Z
+Stopped at: Completed 19-11-PLAN.md (vitest revived, fork suite green both backends, baselines re-captured); next: 19-12 fork-test triage + residue deletion
 Resume file:
 
-- Strategy (operator-locked, full text in 19-CONTEXT.md): ADOPT upstream restructure (SDK retirement, `gsd-core/`, `src/*.cts`); port fork VCS layer to `src/vcs/*.cts`; pnpm; mirror upstream identity `@opengsd/gsd-core@1.4.3`; vitest revival; adapter-routed cmdCommit; doc-parity tests drop+ledger.
+None
+
 - 13 plans (19-01…19-13), 13 sequential waves, revised per plan-checker iteration 1 (1 BLOCKER + 3 MAJOR + 4 MINOR all fixed, commit `sponvvtl`). VALIDATION.md nyquist-approved.
 - **NEXT STEP: plan-checker iteration 2** (verify the 8 fixes; spot-check 19-10/19-12 allowlist ordering, 19-07 verify, GSD_TEST_BACKENDS prefixes, context includes) → then `/gsd-execute-phase 19`.
 - Execution notes: 19-02 has the phase's only human checkpoint (package legitimacy gate before single `pnpm install`; `autonomous: false`, never auto-approve). jj discipline: work on top of `vpzlrrlv` only; NEVER rewrite/squash/abandon it or below; no bookmark moves; no `jj op restore`/`undo`; operator squashes the stack at the end.
