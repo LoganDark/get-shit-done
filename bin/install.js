@@ -521,7 +521,7 @@ const banner = '\n' +
   '   ╚═════╝ ╚══════╝╚═════╝' + reset + '\n' +
   '\n' +
   '  GSD Core ' + dim + 'v' + pkg.version + reset + '\n' +
-  '  Git. Ship. Done.\n' +
+  '  Get Shit Done\n' +
   '  A meta-prompting, context engineering and spec-driven\n' +
   '  development workflows for Claude Code, OpenCode, Gemini, Kilo, Codex, Copilot, Antigravity, Cursor, Windsurf, Augment, Trae, Qwen Code, Hermes Agent, Cline and CodeBuddy.\n';
 
@@ -5564,7 +5564,7 @@ const GSD_AGENTS_MD_CLOSE_MARKER = '<!-- End GSD Configuration -->';
  */
 function buildClineRulesBody() {
   return [
-    '# GSD Core — Git. Ship. Done.',
+    '# GSD Core — Get Shit Done',
     '',
     '- GSD workflows live in `gsd-core/workflows/`. Load the relevant workflow when',
     '  the user runs a `/gsd-*` command.',
@@ -6949,7 +6949,7 @@ function writeHermesCategoryDescription(categoryDir) {
     '---',
     'name: gsd',
     `version: ${pkg.version}`,
-    'description: GSD Core — Git. Ship. Done. Disciplined planning, execution, and shipping workflows. Use any gsd-* skill in this category to drive a project through new-project → discuss-phase → plan-phase → execute-phase → ship.',
+    'description: GSD Core — Get Shit Done. Disciplined planning, execution, and shipping workflows. Use any gsd-* skill in this category to drive a project through new-project → discuss-phase → plan-phase → execute-phase → ship.',
     '---',
     '',
     '# GSD Core',

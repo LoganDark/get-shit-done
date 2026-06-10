@@ -2,7 +2,7 @@
 
 # GSD Core
 
-**Git. Ship. Done.**
+**Get Shit Done**
 
 [English](README.md) · [Português](README.pt-BR.md) · [简体中文](README.zh-CN.md) · **日本語** · [한국어](README.ko-KR.md)
 
