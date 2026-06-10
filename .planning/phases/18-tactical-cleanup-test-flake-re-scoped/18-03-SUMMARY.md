@@ -91,9 +91,9 @@ Observed inclusion-filter timings (435/464/442/473/419ms) sit ~65x under the cur
 
 ## Task Commits
 
-1. **Tasks 1+2: re-verification gate + verdict (b) closure** — zero source edits by design; the only commit is the plan-completion docs commit below.
+1. **Tasks 1+2: re-verification gate + verdict (b) closure** — zero source edits by design; the only commits are the plan-completion docs commits below. Change IDs (jj):
 
-**Plan metadata:** `docs(18-03): close TEST-17 as resolved-by-restructure (verdict b)` — SUMMARY + deferred-items.md + tracking files.
+**Plan metadata:** `xwxoywywsulu` (`docs(18-03): close TEST-17 as resolved-by-restructure (verdict b)` — SUMMARY + deferred-items.md) and `onnttkzlnqyu` (`docs(18-03): update STATE/ROADMAP/REQUIREMENTS after plan completion`).
 
 ## Files Created/Modified
 
