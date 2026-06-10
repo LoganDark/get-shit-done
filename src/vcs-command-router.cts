@@ -1188,6 +1188,15 @@ const workspaceParallelDispatchVerb: VcsVerbHandler = (args, projectDir) => {
     };
   }
 
+  // Phase 18 (CLEANUP-05 / Phase 14 WR-03): `JSON.parse` accepts any JSON
+  // value — objects, strings, numbers, null all parse cleanly and would flow
+  // unchecked into the adapter's dispatch. Fail closed BEFORE
+  // `createVcsAdapter` so the envelope is backend-agnostic (ASVS V5 input
+  // validation; peer to `phase_number_required` above).
+  if (!Array.isArray(plan)) {
+    return { data: { ok: false, reason: 'plan_not_array' } };
+  }
+
   const vcs = createVcsAdapter(cwd);
   const handle = vcs.workspace.parallel.dispatch({
     phaseNumber,

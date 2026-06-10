@@ -144,3 +144,33 @@ describe('PARALLEL-06 — workspace.parallel.dispatch CLI threads --max-concurre
 		expect(recordedDispatchOpts[0].maxConcurrency).toBeUndefined();
 	});
 });
+
+// Phase 18 (CLEANUP-05/06 / Phase 14 WR-03/WR-04): contract tests pinning the
+// fail-closed input-validation envelopes added to the dispatch handler. Both
+// guards must return BEFORE `createVcsAdapter` is reached — proven by
+// `recordedDispatchOpts.length === 0` (the vi.mock recorder above never sees
+// a dispatch call). `projectDir: '/tmp/irrelevant-cwd'` works because the
+// handler's config-read catch treats missing config as dispatch-allowed.
+describe('CLEANUP-05/06 — dispatch input guards', () => {
+	const nonArrayPlans: ReadonlyArray<[label: string, planInput: string]> = [
+		['a JSON object plan', '{"not":"an array"}'],
+		['a JSON string plan', '"str"'],
+		['a JSON number plan', '42'],
+		['a JSON null plan', 'null'],
+	];
+
+	for (const [label, planInput] of nonArrayPlans) {
+		it(`returns {ok:false, reason:plan_not_array} for ${label}; adapter never called`, async () => {
+			recordedDispatchOpts.length = 0;
+			const dispatch = await loadWorkspaceParallelDispatchVerb();
+			const res = await dispatch(
+				['--phase', '18', '--plan', planInput],
+				'/tmp/irrelevant-cwd',
+			);
+			const data = res.data as { ok?: boolean; reason?: string };
+			expect(data.ok).toBe(false);
+			expect(data.reason).toBe('plan_not_array');
+			expect(recordedDispatchOpts.length).toBe(0);
+		});
+	}
+});
