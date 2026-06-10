@@ -165,7 +165,10 @@ If found, delete them — phase is complete, handoffs are stale.
 ```bash
 _GSD_SHIM_NAME="gsd-tools.cjs"; _GSD_RUNTIME_ROOT="${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || jj workspace root 2>/dev/null || pwd)}"; GSD_TOOLS="${_GSD_RUNTIME_ROOT}/gsd-core/bin/${_GSD_SHIM_NAME}"; if [ -f "$GSD_TOOLS" ]; then gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${_GSD_RUNTIME_ROOT}/.claude/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${_GSD_RUNTIME_ROOT}/.claude/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif command -v gsd-tools >/dev/null 2>&1; then GSD_TOOLS="$(command -v gsd-tools)"; gsd_run() { "$GSD_TOOLS" "$@"; }; elif [ -f "$HOME/.claude/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="$HOME/.claude/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${HERMES_HOME:-$HOME/.hermes}/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${HERMES_HOME:-$HOME/.hermes}/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${CURSOR_CONFIG_DIR:-$HOME/.cursor}/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${CURSOR_CONFIG_DIR:-$HOME/.cursor}/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${CODEX_HOME:-$HOME/.codex}/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${CODEX_HOME:-$HOME/.codex}/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${GEMINI_CONFIG_DIR:-$HOME/.gemini}/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${GEMINI_CONFIG_DIR:-$HOME/.gemini}/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${COPILOT_CONFIG_DIR:-$HOME/.copilot}/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${COPILOT_CONFIG_DIR:-$HOME/.copilot}/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${WINDSURF_CONFIG_DIR:-$HOME/.codeium/windsurf}/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${WINDSURF_CONFIG_DIR:-$HOME/.codeium/windsurf}/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${AUGMENT_CONFIG_DIR:-$HOME/.augment}/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${AUGMENT_CONFIG_DIR:-$HOME/.augment}/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${TRAE_CONFIG_DIR:-$HOME/.trae}/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${TRAE_CONFIG_DIR:-$HOME/.trae}/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${QWEN_CONFIG_DIR:-$HOME/.qwen}/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${QWEN_CONFIG_DIR:-$HOME/.qwen}/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${CODEBUDDY_CONFIG_DIR:-$HOME/.codebuddy}/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${CODEBUDDY_CONFIG_DIR:-$HOME/.codebuddy}/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${CLINE_CONFIG_DIR:-$HOME/.cline}/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${CLINE_CONFIG_DIR:-$HOME/.cline}/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${GROK_AGENTS_HOME:-$HOME/.agents}/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${GROK_AGENTS_HOME:-$HOME/.agents}/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${ANTIGRAVITY_CONFIG_DIR:-$HOME/.gemini/antigravity}/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${ANTIGRAVITY_CONFIG_DIR:-$HOME/.gemini/antigravity}/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${KILO_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/kilo}/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${KILO_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/kilo}/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; else echo "ERROR: gsd-tools.cjs not found at $GSD_TOOLS and gsd-tools is not on PATH. Run: npx -y @opengsd/gsd-core@latest --claude --local" >&2; exit 1; fi
 TRANSITION=$(gsd_run query phase.complete "${current_phase}")
+gsd_run query commit "docs(phase-${completed_phase}): complete phase via transition" --files .planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md
 ```
+
+The commit line above MUST run immediately after `phase.complete` — the mutating verb writes to `.planning/ROADMAP.md` + `.planning/STATE.md` + `.planning/REQUIREMENTS.md` on disk but does NOT commit. The order is load-bearing: do NOT defer the commit past the result-parsing prose that follows, or the orchestrator may declare the transition complete with the planning files still uncommitted.
 
 The CLI handles:
 - Marking the phase checkbox as `[x]` complete with today's date
@@ -260,6 +263,12 @@ After (Phase 2 shipped JWT auth, discovered rate limiting needed):
 - OAuth2 — complexity not needed for v1
 ```
 
+**Commit the evolution** (the inline edits above write PROJECT.md to disk but nothing commits it):
+
+```bash
+gsd_run query commit "docs(phase-${completed_phase}): evolve PROJECT.md after transition" --files .planning/PROJECT.md
+```
+
 **Step complete when:**
 
 - [ ] Phase summaries reviewed for learnings
@@ -269,6 +278,7 @@ After (Phase 2 shipped JWT auth, discovered rate limiting needed):
 - [ ] New decisions logged with rationale
 - [ ] "What This Is" updated if product changed
 - [ ] "Last updated" footer reflects this transition
+- [ ] PROJECT.md committed
 
 </step>
 
@@ -388,11 +398,18 @@ Stopped at: Phase [X] complete, ready to plan Phase [X+1]
 Resume file: None
 ```
 
+**Commit the STATE.md cluster** — this single commit deliberately sweeps the four consecutive STATE.md-only steps (update_current_position_after_transition, update_project_reference, review_accumulated_context, update_session_continuity_after_transition) plus the graduation backlog written earlier by graduation_scan; the requirement's "STATE.md update" is one logical mutating step:
+
+```bash
+gsd_run query commit "docs(phase-${completed_phase}): update STATE.md after transition" --files .planning/STATE.md
+```
+
 **Step complete when:**
 
 - [ ] Last session timestamp updated to current date and time
 - [ ] Stopped at describes phase completion and next phase
 - [ ] Resume file confirmed as None (transitions don't use resume files)
+- [ ] STATE.md committed (single sweep commit covering the whole STATE.md cluster)
 
 </step>
 
@@ -550,7 +567,10 @@ to the next milestone — other workstreams are still working.
 
 ```bash
 gsd_run query config-set workflow._auto_chain_active false
+gsd_run query commit "chore: clear auto-advance chain flag" --files .planning/config.json || true
 ```
+
+The tolerant commit (`|| true`) is required because `config-set` writes `.planning/config.json` to disk WITHOUT committing; when the flag was already `false` the rewrite is byte-identical, the VCS sees no change, and the commit is a harmless no-op.
 
 <if mode="yolo">
 
@@ -604,7 +624,10 @@ Do NOT auto-invoke any further slash commands.
 
 ```bash
 gsd_run query config-set workflow._auto_chain_active false
+gsd_run query commit "chore: clear auto-advance chain flag" --files .planning/config.json || true
 ```
+
+The tolerant commit (`|| true`) is required because `config-set` writes `.planning/config.json` to disk WITHOUT committing; when the flag was already `false` the rewrite is byte-identical, the VCS sees no change, and the commit is a harmless no-op.
 
 <if mode="yolo">
 
