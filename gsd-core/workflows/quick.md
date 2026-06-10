@@ -140,14 +140,6 @@ Parse JSON for: `planner_model`, `executor_model`, `checker_model`, `verifier_mo
 USE_WORKTREES=$(gsd_run query config-get workflow.use_worktrees 2>/dev/null || echo "true")
 ```
 
-If `USE_WORKTREES` is not `"false"`, run a startup orphan sweep before spawning any executors. This reaps locked worktrees whose lock-owner process is dead, whose branch is merged into the default branch, and whose lock file mtime is older than 5 minutes. Running it at startup prevents accumulation of orphaned worktrees from prior sessions that exited without cleanup (#3707).
-
-```bash
-if [ "$USE_WORKTREES" != "false" ]; then
-  gsd_run query worktree.reap-orphans 2>/dev/null || true
-fi
-```
-
 If the project uses git submodules, worktree isolation is unsafe **only when the quick task touches a submodule path**. The previous behavior unconditionally disabled worktree isolation whenever `.gitmodules` existed, which penalised every quick task in a submodule project even when the task was nowhere near a submodule. Parse submodule paths from `.gitmodules` so the executor can act on actual submodule paths rather than the mere file's existence:
 
 ```bash
@@ -157,6 +149,7 @@ If the project uses git submodules, worktree isolation is unsafe **only when the
 # executor stages any path that falls inside SUBMODULE_PATHS, it must abort
 # the commit and surface the conflict rather than silently corrupting the
 # submodule state.
+# Note: `.gitmodules` is a git-specific config file; jj has no submodule concept yet. The `git config --file` invocation is read-only INI parsing on a flat file — keeping it raw (no D-33 cost; it is not a VCS state mutation).
 if [ -f .gitmodules ]; then
   SUBMODULE_PATHS=$(git config --file .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null | awk '{print $2}')
 else
@@ -184,6 +177,7 @@ compound on top of each other and stay unpushed (#2916). If `$branch_name`
 already exists locally, reuse it as-is so resumed work is not rebased.
 
 ```bash
+# TODO(05-05 sweep): the quick-task branching block below mixes git-only orchestration verbs (symbolic-ref of refs/remotes/origin/HEAD, show-ref --verify, switch, fetch, merge --ff-only, checkout -b "$x" "$base") that have no current adapter substitute and depend on WS-01/WS-02. Block is git-mode-only by construction (quick-task branching applies when branch_name is set, which today only fires on git backend); no D-33 backend conditional needed.
 DEFAULT_BRANCH=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
 DEFAULT_BRANCH=${DEFAULT_BRANCH:-main}
 
@@ -203,7 +197,7 @@ else
     echo "WARNING: git fetch origin $DEFAULT_BRANCH failed; using the local copy of origin/$DEFAULT_BRANCH as base." >&2
   fi
 
-  if [ -n "$(git status --porcelain)" ]; then
+  if [ -n "$(gsd_run query status --porcelain --cwd . 2>/dev/null | jq -r '.raw // ""')" ]; then
     echo "WARNING: Uncommitted changes present. Carrying them onto the new quick-task branch — they will be branched off origin/$DEFAULT_BRANCH (not the previous-task HEAD)."
   else
     # Best-effort: fast-forward the local default branch so subsequent local
@@ -634,22 +628,21 @@ Skip this step entirely if `USE_WORKTREES === "false"` (non-worktree mode: PLAN.
 if [ "${USE_WORKTREES}" != "false" ]; then
   COMMIT_DOCS=$(gsd_run query config-get commit_docs 2>/dev/null || echo "true")
   if [ "$COMMIT_DOCS" != "false" ]; then
-    git add "${QUICK_DIR}/${quick_id}-PLAN.md"
-    # No-op skip if nothing actually staged (idempotent re-runs).
-    if git diff --cached --quiet -- "${QUICK_DIR}/${quick_id}-PLAN.md"; then
-      echo "ℹ Pre-dispatch PLAN.md commit skipped (no staged changes)"
+    # CMD-05: single squash on orchestrator @ (no phase setup, no workspace, no octopus).
+    # The query commit verb routes through vcs.commit({files, message, noVerify});
+    # adapter handles git-add ↔ jj-squash translation. --no-verify is forwarded when
+    # workflow.worktree_skip_hooks=true (#2924 honored on both backends).
+    SKIP_HOOKS=$(gsd_run query config-get workflow.worktree_skip_hooks 2>/dev/null || echo "false")
+    if [ "$SKIP_HOOKS" = "true" ]; then
+      gsd_run query commit "docs(${quick_id}): pre-dispatch plan for ${DESCRIPTION}" --files "${QUICK_DIR}/${quick_id}-PLAN.md" --no-verify \
+        || { echo "ERROR: pre-dispatch PLAN.md commit failed (--no-verify path). Aborting before executor dispatch." >&2; exit 1; }
     else
-      # Run hooks normally (#2924). If a project opts out via
-      # workflow.worktree_skip_hooks=true, honor that opt-in only.
-      SKIP_HOOKS=$(gsd_run query config-get workflow.worktree_skip_hooks 2>/dev/null || echo "false")
-      if [ "$SKIP_HOOKS" = "true" ]; then
-        git commit --no-verify -m "docs(${quick_id}): pre-dispatch plan for ${DESCRIPTION}" -- "${QUICK_DIR}/${quick_id}-PLAN.md" \
-          || { echo "ERROR: pre-dispatch PLAN.md commit failed (--no-verify path). Aborting before executor dispatch." >&2; exit 1; }
-      else
-        git commit -m "docs(${quick_id}): pre-dispatch plan for ${DESCRIPTION}" -- "${QUICK_DIR}/${quick_id}-PLAN.md" \
-          || { echo "ERROR: pre-dispatch PLAN.md commit failed — likely a pre-commit hook failure. Fix the hook output above (or set workflow.worktree_skip_hooks=true to bypass) and re-run." >&2; exit 1; }
-      fi
+      gsd_run query commit "docs(${quick_id}): pre-dispatch plan for ${DESCRIPTION}" --files "${QUICK_DIR}/${quick_id}-PLAN.md" \
+        || { echo "ERROR: pre-dispatch PLAN.md commit failed — likely a pre-commit hook failure. Fix the hook output above (or set workflow.worktree_skip_hooks=true to bypass) and re-run." >&2; exit 1; }
     fi
+    # Idempotent re-runs: when there is nothing to commit, the query commit verb
+    # emits {committed: false, reason: 'nothing_to_commit'} with exit 0 (no-op
+    # semantics) — no special-case staged-diff probe needed.
   fi
 fi
 ```
@@ -658,15 +651,37 @@ fi
 
 **Step 6: Spawn executor**
 
-Capture current HEAD before spawning (used for worktree branch check):
+Capture current HEAD + dispatch the quick task via the cross-backend parallel verb. Per Phase 11 D-01, no manifest file is written — the `ParallelDispatchHandle` JSON lives in `$HANDLE_JSON`. `maxConcurrency` is omitted (D-07). Quick mode typically dispatches N=1 (single executor); the parallel verb works trivially at N=1.
+
 ```bash
-EXPECTED_BASE=$(git rev-parse HEAD)
+EXPECTED_BASE=$(gsd_run query head-ref --cwd . --pick head)
+DISPATCH_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+# Phase 14.1 (PARALLEL-08, D-01 symmetric workflow scope): the `current-branch`
+# FATAL preflight is removed — bookmark-less jj `@` and detached-HEAD git
+# working copies are first-class dispatch states. EXPECTED_BRANCH is still
+# captured here because the fan-in branch-drift guard below still
+# consumes it (gracefully degrades to a no-op when empty per Pitfall 6).
+# Envelope note: `current-branch` returns {ok, bookmarks: []} — bookmarks[0]
+# is the head bookmark (empty on bookmark-less jj `@` / detached git HEAD).
+EXPECTED_BRANCH=$(gsd_run query current-branch --cwd . --pick "bookmarks[0]")
 if [ "${USE_WORKTREES:-true}" != "false" ]; then
-  QUICK_WORKTREE_MANIFEST=$(mktemp "${TMPDIR:-/tmp}/gsd-quick-worktree-XXXXXX.json")
-  printf '{"worktrees":[]}\n' > "$QUICK_WORKTREE_MANIFEST"
-  export QUICK_WORKTREE_MANIFEST
+  QUICK_PLAN_JSON=$(jq -nc --arg aid "${quick_id}" --arg pid "${quick_id}" \
+    '[{agentId:$aid,planId:$pid}]')
+  # Phase sentinel 0 for quick mode (no real phase number; the verb requires Number()-able input).
+  # Phase 14.1 (PARALLEL-08, D-02): no --main-bookmark flag — zero flags
+  # yields empty mainBookmarks → fan-in skips the bookmark/ref advance step.
+  # Bookmark-less jj `@` and detached-HEAD git working copies pass cleanly.
+  HANDLE_JSON=$(printf '%s' "$QUICK_PLAN_JSON" \
+    | gsd_run query workspace.parallel.dispatch \
+        --phase 0 --plan @-)
+  [ -z "$HANDLE_JSON" ] && { echo "FATAL: workspace.parallel.dispatch returned empty Handle JSON" >&2; exit 1; }
+  HANDLE_OK=$(echo "$HANDLE_JSON" | jq -r '.ok // "true"')
+  [ "$HANDLE_OK" = "false" ] && { echo "FATAL: workspace.parallel.dispatch failed: $HANDLE_JSON" >&2; exit 1; }
+  RESULTS_ACCUM='[]'   # ParallelAgentResult[]; one appended per Agent() return
 fi
 ```
+
+Iterate `.workspaces[]` from `$HANDLE_JSON` (N=1 for quick mode — single iteration). Each entry is `{ name, path, baseRev, agentId, baselineOpId }`. `path` is the per-agent cwd; `agentId` keys the `ParallelAgentResult` accumulated for fan-in.
 
 Spawn gsd-executor with plan reference:
 
@@ -677,7 +692,14 @@ Execute quick task ${quick_id}.
 
 ${USE_WORKTREES !== "false" ? `
 <worktree_branch_check>
-ORCHESTRATOR build-time embed (NOT a sub-agent runtime step): before this dispatch, read \`gsd-core/references/worktree-branch-check.md\`, substitute \`{EXPECTED_BASE}\` with the base SHA captured above (${EXPECTED_BASE}), and replace this note with that fragment's \`<worktree_branch_check>\` block so the dispatched prompt carries the runnable guard verbatim — do not pass this instruction through in its place.
+Upstream-guard re-expression (#48/#2924/#2015): the upstream \`worktree_branch_check\`
+build-time embed (fragment: \`gsd-core/references/worktree-branch-check.md\`, base
+${EXPECTED_BASE}) is superseded on the dispatch path by the executor-side
+\`workspace.assert-dispatched-cwd\` precondition — the dispatch envelope binds this
+workspace to \`baseRev\` at creation, and the executor's first commit asserts its cwd
+IS a dispatched subagent workspace (FATAL, never self-recovers via \`git update-ref\`;
+same verify-only contract as the fragment's exit-42). The git-only fragment remains at
+\`gsd-core/references/worktree-branch-check.md\` for non-dispatched worktree flows.
 </worktree_branch_check>
 ` : ''}
 
@@ -701,7 +723,7 @@ list, so the guard runs at commit time:
 \`\`\`bash
 SUBMODULE_PATHS=\"${SUBMODULE_PATHS}\"
 if [ -n \"\$SUBMODULE_PATHS\" ]; then
-  STAGED=\$(git diff --cached --name-only)
+  STAGED=\$(gsd_run query diff --cached --name-only --cwd . 2>/dev/null | jq -r '.nameOnly // [] | .[]')
   for sm_raw in \$SUBMODULE_PATHS; do
     sm=\"\${sm_raw#./}\"
     sm=\"\${sm%/}\"
@@ -742,24 +764,38 @@ SUMMARY.md and stop — the user must rerun with worktrees disabled.
 
 > **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
-If the executor ran with `isolation="worktree"`, append its returned `{agent_id, worktree_path, branch, expected_base}` metadata to `QUICK_WORKTREE_MANIFEST` before cleanup. If any field is unavailable, stop and ask for recovery; do not discover global worktrees.
+After `Agent()` returns (N=1 in quick mode), append one `ParallelAgentResult` (`{ agentId, exitCode, lastChangeId?, stderr? }`) to `$RESULTS_ACCUM`. Probe the workspace head via `gsd_run query head-ref --cwd "$WS_PATH" --pick head`. `$HANDLE_JSON` is the source of truth for the workspace SET; do not re-discover via filesystem scans.
+
+**Upstream-guard re-expression (#3384 manifest source of truth):** upstream refused broad worktree discovery without `QUICK_WORKTREE_MANIFEST`. The same anti-discovery contract now rides the dispatch envelope: `$HANDLE_JSON` is the only workspace-set source of truth, consumed directly by fan-in.
 
 After executor returns:
-1. **Worktree cleanup:** If the executor ran with `isolation="worktree"`, merge the worktree branch back and clean up:
+1. **Workspace fan-in:** If the executor ran with `isolation="worktree"`, merge the dispatched workspace back via `vcs.workspace.parallel.fanIn`. The adapter handles per-success cleanup (git) and atomic octopus merge + reap (jj). Per Phase 11 D-01, no manifest file is on disk — the Handle JSON in `$HANDLE_JSON` + the `$RESULTS_ACCUM` array are the full input.
    ```bash
-   QUICK_WORKTREE_MANIFEST=${QUICK_WORKTREE_MANIFEST:-$WAVE_WORKTREE_MANIFEST}
-   [ -n "${QUICK_WORKTREE_MANIFEST:-}" ] && [ -f "$QUICK_WORKTREE_MANIFEST" ] || {
-     echo "BLOCKED: missing QUICK_WORKTREE_MANIFEST; refusing broad worktree cleanup (#3384)." >&2
-     exit 1
-   }
+   if [ "${USE_WORKTREES:-true}" != "false" ] && [ -n "${HANDLE_JSON:-}" ]; then
+     # Branch-drift guard (#3174-class). `current-branch` returns {ok, bookmarks: []};
+     # empty EXPECTED_BRANCH (bookmark-less jj `@` / detached git HEAD) degrades to a no-op.
+     ORCH_BRANCH=$(gsd_run query current-branch --cwd . --pick "bookmarks[0]" 2>/dev/null)
+     [ -z "${EXPECTED_BRANCH:-}" ] || [ "$ORCH_BRANCH" = "$EXPECTED_BRANCH" ] || { echo "FATAL: orchestrator on '$ORCH_BRANCH' but expected '$EXPECTED_BRANCH' before fan-in (#3174-class drift)" >&2; exit 1; }
 
-   # Prefer the bounded cleanup helper. It verifies branch identity, expected
-   # base, deletion diffs, merge result, and worktree removal before branch
-   # deletion. If it blocks, resolve the reported manifest entry and rerun.
-   # Fail closed: SDK refusal (safety guard #3174/#3384) must surface — do not swallow exit 1.
-   gsd_run query worktree.cleanup-wave --manifest "$QUICK_WORKTREE_MANIFEST" || exit 1
+     # Handle via tmpfile (CLI rejects both --handle @- and --results @- per Plan 11.2).
+     HANDLE_FILE=$(mktemp "${TMPDIR:-/tmp}/gsd-handle-XXXXXX.json")
+     printf '%s' "$HANDLE_JSON" > "$HANDLE_FILE"
+     FAN_RESULT=$(printf '%s' "$RESULTS_ACCUM" \
+       | gsd_run query workspace.parallel.fan-in --handle "@$HANDLE_FILE" --results @-)
+     rm -f "$HANDLE_FILE"
+
+     CONFLICTED=$(echo "$FAN_RESULT" | jq -r '.conflicted // false')
+     FAILED_REAPED=$(echo "$FAN_RESULT" | jq -r '.failedReaped // [] | length')
+     MERGED_COUNT=$(echo "$FAN_RESULT" | jq -r '.merged // [] | length')
+     if [ "$CONFLICTED" = "true" ] || [ "$FAILED_REAPED" -gt 0 ]; then
+       echo "⚠ Fan-in surfaced issues (conflicted=$CONFLICTED, failedReaped=$FAILED_REAPED)" >&2
+       echo "$FAN_RESULT" | jq .
+       exit 1
+     fi
+     echo "✓ Fan-in merged $MERGED_COUNT workspace(s) cleanly."
+   fi
    ```
-   If `workflow.use_worktrees` is `false`, skip this step.
+   If `workflow.use_worktrees` is `false` or `$HANDLE_JSON` is empty, skip this step.
 2. Verify summary exists at `${QUICK_DIR}/${quick_id}-SUMMARY.md`
 3. Extract commit hash from executor output
 4. Report completion status
@@ -785,11 +821,12 @@ If `"false"`, skip with message "Code review skipped (workflow.code_review=false
 **Scope files from executor's commits:**
 ```bash
 # Find the diff base: last commit before quick task started
-# Use git log to find commits referencing the quick task id, then take the parent of the oldest
-QUICK_COMMITS=$(git log --oneline --format="%H" --grep="${quick_id}" 2>/dev/null)
+# gsd_run query log returns {ok, entries: LogEntry[]}; client-side filter on subject to find quick-task commits. LogEntry.id is the unified revision id (hex on git, [k-z] change-id on jj).
+QUICK_COMMITS=$(gsd_run query log --max-count 200 --cwd . 2>/dev/null \
+  | jq -r --arg sub "${quick_id}" '.entries[]? | select(.subject | contains($sub)) | .id')
 if [ -n "$QUICK_COMMITS" ]; then
   DIFF_BASE=$(echo "$QUICK_COMMITS" | tail -1)^
-  # Verify parent exists (guard against first commit in repo)
+  # TODO(05-05 sweep): no rev-parse-shaped query verb exists (phantom — do not invent); the parent-resolution probe (used to detect "first commit in repo" so we can fall back) stays raw git for now. Read-only — D-33 anti-pattern guard not engaged.
   git rev-parse "${DIFF_BASE}" >/dev/null 2>&1 || DIFF_BASE=$(echo "$QUICK_COMMITS" | tail -1)
 else
   # No commits found for this quick task — skip review
@@ -797,7 +834,8 @@ else
 fi
 
 if [ -n "$DIFF_BASE" ]; then
-  CHANGED_FILES=$(git diff --name-only "${DIFF_BASE}..HEAD" -- . ':!.planning' 2>/dev/null | tr '\n' ' ')
+  CHANGED_FILES=$(gsd_run query diff --name-only --range "${DIFF_BASE}..HEAD" --cwd . -- . ':!.planning' 2>/dev/null \
+    | jq -r '.nameOnly // [] | .[]' | tr '\n' ' ')
 else
   CHANGED_FILES=""
 fi
@@ -941,22 +979,23 @@ Build file list:
 - If `${QUICK_DIR}/${quick_id}-deferred-items.md` exists: `${QUICK_DIR}/${quick_id}-deferred-items.md`
 
 ```bash
-# Explicitly stage all artifacts before commit — PLAN.md may be untracked
-# if the executor ran without worktree isolation and committed docs early
-# Filter .planning/ files from staging if commit_docs is disabled (#1783)
+# gsd_run query commit captures WC state for the supplied --files internally
+# (the handler runs `vcs.commit({files})` which does `git add -A -- <files>`
+# then `git commit -m` on git; direct WC record on jj). The pre-staging
+# `git add` is no longer needed. Filter .planning/ files from the file list
+# if commit_docs is disabled (#1783).
 COMMIT_DOCS=$(gsd_run query config-get commit_docs 2>/dev/null || echo "true")
 if [ "$COMMIT_DOCS" = "false" ]; then
   file_list_filtered=$(echo "${file_list}" | tr ' ' '\n' | grep -v '^\.planning/' | tr '\n' ' ')
-  git add ${file_list_filtered} 2>/dev/null
+  gsd_run query commit "docs(quick-${quick_id}): ${DESCRIPTION}" --files ${file_list_filtered}
 else
-  git add ${file_list} 2>/dev/null
+  gsd_run query commit "docs(quick-${quick_id}): ${DESCRIPTION}" --files ${file_list}
 fi
-gsd_run query commit "docs(quick-${quick_id}): ${DESCRIPTION}" --files ${file_list}
 ```
 
 Get final commit hash:
 ```bash
-commit_hash=$(git rev-parse --short HEAD)
+commit_hash=$(gsd_run query head-ref --cwd . --pick head | cut -c1-7)
 ```
 
 Display completion output:

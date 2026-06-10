@@ -113,6 +113,7 @@ If the project uses git submodules, worktree isolation is unsafe **only when a p
 ```bash
 # Parse submodule paths from .gitmodules once (empty if no .gitmodules).
 # SUBMODULE_PATHS is a newline-separated list of repo-relative paths.
+# Note: `.gitmodules` is a git-specific config file; jj has no submodule concept yet. The `git config --file` invocation is read-only INI parsing on a flat file — keeping it raw (no D-33 cost; it is not a VCS state mutation).
 if [ -f .gitmodules ]; then
   SUBMODULE_PATHS=$(git config --file .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null | awk '{print $2}')
 else
@@ -194,7 +195,10 @@ Offer these recovery options:
 if [ "$MVP_MODE" = "true" ] && [ "$TDD_MODE" = "true" ]; then
   IS_BEHAVIOR_ADDING=$(gsd_run query task.is-behavior-adding "$TASK_FILE" --pick is_behavior_adding)
   if [ "$IS_BEHAVIOR_ADDING" = "true" ]; then
-    RED_COMMIT=$(git log --oneline --grep="^test(${PHASE_NUMBER}-${PLAN_ID}):" -- "**/*.test.*" "**/*.spec.*" "tests/" | head -1)
+    # `gsd_run query log` returns a structured {ok, entries: LogEntry[]} envelope; we client-side filter on subject prefix (--grep is parsed-but-unused at the adapter layer). LogEntry.id is the unified revision id (short hex on git, [k-z] change-id on jj).
+    RED_COMMIT=$(gsd_run query log --max-count 200 --cwd . 2>/dev/null \
+      | jq -r --arg prefix "test(${PHASE_NUMBER}-${PLAN_ID}):" '.entries[]? | select(.subject | startswith($prefix)) | (.id[0:7] + " " + .subject)' \
+      | head -1)
     if [ -z "$RED_COMMIT" ]; then
       gsd_run query state.update last_gate_trip "${PLAN_ID}/${TASK_ID}" || true
       echo "MVP+TDD GATE TRIPPED: missing RED commit for ${PLAN_ID}/${TASK_ID}"
@@ -288,6 +292,7 @@ Check `branching_strategy` from init:
 Fork the new phase branch off `origin/HEAD` (the project's default branch), not the current HEAD — otherwise consecutive phases compound and stay unpushed (#2916). If `$BRANCH_NAME` already exists locally, reuse it as-is.
 
 ```bash
+# TODO(05-05 sweep): the branching block below mixes verbs that have no clean adapter substitute (symbolic-ref of refs/remotes/origin/HEAD, show-ref --verify, switch, fetch, merge --ff-only, checkout -b "$x" "$base") — these are git-only orchestration that cannot route through the VCS adapter without first growing the corresponding workspace/ref-management verbs (WS-01/WS-02 territory). The whole block is git-mode-only by construction (branching_strategy != "none" implies a git working tree); jj equivalent will live in a sibling code path keyed off `vcs.kind`. Stays raw git until the WS-* verbs land.
 DEFAULT_BRANCH=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
 DEFAULT_BRANCH=${DEFAULT_BRANCH:-main}
 
@@ -299,7 +304,7 @@ else
       || { echo "ERROR: fetch origin/$DEFAULT_BRANCH failed and no local copy exists. Refusing to create '$BRANCH_NAME' off current HEAD (#2916)." >&2; exit 1; }
     echo "WARNING: fetch origin/$DEFAULT_BRANCH failed; using local copy as base." >&2
   fi
-  if [ -n "$(git status --porcelain)" ]; then
+  if [ -n "$(gsd_run query status --porcelain --cwd . 2>/dev/null | jq -r '.raw // ""')" ]; then
     echo "WARNING: Uncommitted changes will be carried onto '$BRANCH_NAME' (branched off origin/$DEFAULT_BRANCH, not previous HEAD)."
   else
     git switch --quiet "$DEFAULT_BRANCH" 2>/dev/null && git merge --ff-only --quiet "origin/$DEFAULT_BRANCH" 2>/dev/null || true
@@ -392,7 +397,8 @@ CROSS_AI_TIMEOUT=$(gsd_run query config-get workflow.cross_ai_timeout 2>/dev/nul
 
 2. **Check for dirty working tree before execution:**
    ```bash
-   if ! git diff --quiet HEAD 2>/dev/null; then
+   # gsd_run query diff parses --quiet but returns JSON; callers inspect `raw` length.
+   if [ -n "$(gsd_run query diff --range HEAD --cwd . 2>/dev/null | jq -r '.raw // ""')" ]; then
      echo "WARNING: dirty working tree detected — the external AI command may produce uncommitted changes that conflict with existing modifications"
    fi
    ```
@@ -561,21 +567,58 @@ increases monotonically across waves. `{status}` is `complete` (success),
 
    **Worktree mode** (`USE_WORKTREES_FOR_PLAN` is not `false` — evaluated per-plan in step 2.5):
 
-   Before spawning, capture the current HEAD:
+   Capture HEAD + dispatch the wave via the cross-backend parallel verb. Per Phase 11
+   D-01, no manifest file is written — the `ParallelDispatchHandle` JSON lives in
+   `$HANDLE_JSON`. `maxConcurrency` is omitted (D-07).
+
+   **Upstream-guard re-expression (#630 manifest pinning):** upstream persisted the
+   dispatch-time `orchestrator_root` into `WAVE_WORKTREE_MANIFEST` so cleanup could pin
+   back to the orchestrator's OWN worktree instead of `git worktree list`'s first entry.
+   With handle-based dispatch there is no manifest to pin: `$HANDLE_JSON.workspaces[]`
+   is the authoritative workspace SET, fan-in runs adapter-side from the orchestrator's
+   cwd, and the #48 entry guard + the #3174 branch-drift guard in step 5.5 cover
+   orchestrator-position drift. The #630 semantics ride the dispatch envelope.
+
    ```bash
-   EXPECTED_BASE=$(git rev-parse HEAD)
+   EXPECTED_BASE=$(gsd_run query head-ref --cwd . --pick head)
    DISPATCH_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-   EXPECTED_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-   if [ "${USE_WORKTREES_FOR_PLAN:-true}" != "false" ] && [ -z "${WAVE_WORKTREE_MANIFEST:-}" ]; then
-     WAVE_WORKTREE_MANIFEST=$(mktemp "${TMPDIR:-/tmp}/gsd-worktree-wave-XXXXXX.json")
-     # Persist the dispatch-time orchestrator worktree root so wave-cleanup can pin back to the
-     # orchestrator's OWN worktree — NOT `git worktree list`'s first entry (always the main
-     # checkout), which pins a non-primary (per-phase lane) orchestrator off its branch (#630).
-     # Dispatch runs from the orchestrator's lane, so show-toplevel here is the correct root.
-     ORCH_ROOT=$(git rev-parse --show-toplevel)
-     ORCH_ROOT="$ORCH_ROOT" MANIFEST="$WAVE_WORKTREE_MANIFEST" node -e 'const fs=require("fs");fs.writeFileSync(process.env.MANIFEST,JSON.stringify({orchestrator_root:process.env.ORCH_ROOT||null,worktrees:[]})+"\n")'
-     export WAVE_WORKTREE_MANIFEST
+   # Phase 14.1 (PARALLEL-08, D-01 symmetric workflow scope): the `current-branch`
+   # FATAL preflight is removed — bookmark-less jj `@` and detached-HEAD git
+   # working copies are first-class dispatch states. EXPECTED_BRANCH is still
+   # captured here because the fan-in branch-drift guard in step 5.5 still
+   # consumes it (gracefully degrades to a no-op when empty per Pitfall 6).
+   # Envelope note: `current-branch` returns {ok, bookmarks: []} — bookmarks[0]
+   # is the head bookmark (empty on bookmark-less jj `@` / detached git HEAD).
+   EXPECTED_BRANCH=$(gsd_run query current-branch --cwd . --pick "bookmarks[0]")
+   # WAVE_WORKTREE_PLANS_JSON: build the dispatch plan-array from the per-plan-worktree-gate.md
+   # accumulator. Plan IDs are filename-derived — `$WAVE_WORKTREE_PLANS` is
+   # intentionally unquoted here so word-splitting feeds each plan-id as a separate jq -R . input.
+   # Adding quotes would put the entire space-joined list into a single jq line. The attack surface
+   # for shell-meta injection is empty by construction; see Plan 11-10 D-04 / T-11-10-04.
+   #
+   # Zero-element guard (Plan 11 WR-N01): this construction is only correct when
+   # WAVE_WORKTREE_PLANS is non-empty. `printf '%s\n' ""` emits a single newline byte;
+   # jq reads it as one empty string, and the pipeline produces [{"agentId":"","planId":""}]
+   # — a phantom workspace dispatch. The entry into this dispatch block must therefore
+   # guarantee WAVE_WORKTREE_PLANS is non-empty (currently enforced by
+   # per-plan-worktree-gate.md appending plan_ids when USE_WORKTREES_FOR_PLAN != false,
+   # combined with the worktree-mode branch entry condition). The explicit guard below
+   # surfaces a clean FATAL if a future refactor flips the entry guard.
+   if [ -z "$WAVE_WORKTREE_PLANS" ]; then
+     echo "FATAL: worktree-mode dispatch entered with empty WAVE_WORKTREE_PLANS — refusing to dispatch a phantom wave." >&2
+     echo "RECOVERY: this indicates a per-plan-worktree-gate.md state-machine drift — every plan in this wave was gated to sequential mode but the orchestrator entered the worktree-mode dispatch branch anyway." >&2
+     exit 1
    fi
+   WAVE_WORKTREE_PLANS_JSON=$(printf '%s\n' $WAVE_WORKTREE_PLANS | jq -R . | jq -sc 'map({agentId: ., planId: .})')
+   # Phase 14.1 (PARALLEL-08, D-02): no --main-bookmark flag — zero flags
+   # yields empty mainBookmarks → fan-in skips the bookmark/ref advance step.
+   # Bookmark-less jj `@` and detached-HEAD (on git) working copies pass cleanly.
+   HANDLE_JSON=$(printf '%s' "$WAVE_WORKTREE_PLANS_JSON" \
+     | gsd_run query workspace.parallel.dispatch \
+         --phase "${PHASE_NUMBER}" --plan @-)
+   [ -z "$HANDLE_JSON" ] && { echo "FATAL: workspace.parallel.dispatch returned empty Handle JSON" >&2; exit 1; }
+   HANDLE_OK=$(echo "$HANDLE_JSON" | jq -r '.ok // "true"')
+   [ "$HANDLE_OK" = "false" ] && { echo "FATAL: workspace.parallel.dispatch failed: $HANDLE_JSON" >&2; exit 1; }
    ```
 
    **Sequential dispatch for parallel execution (waves with 2+ agents):**
@@ -586,6 +629,14 @@ increases monotonically across waves. `{status}` is `complete` (success),
    ```text
    # CORRECT: one Agent() per message with run_in_background: true
    # WRONG: multiple Agent() calls in one message -> .git/config.lock contention
+   ```
+
+   Iterate `.workspaces[]` from `$HANDLE_JSON` — each entry is `{ name, path, baseRev,
+   agentId, baselineOpId }`. `path` is the per-agent cwd; `agentId` keys the
+   `ParallelAgentResult` accumulated for fan-in. Initialize the results array:
+
+   ```bash
+   RESULTS_ACCUM='[]'   # ParallelAgentResult[]; one appended per Agent() return
    ```
 
    ```text
@@ -605,12 +656,20 @@ increases monotonically across waves. `{status}` is `complete` (success),
        </objective>
 
        <worktree_branch_check>
-       ORCHESTRATOR build-time embed (NOT a sub-agent runtime step): before this dispatch, read `gsd-core/references/worktree-branch-check.md`, substitute `{EXPECTED_BASE}` with the base SHA captured above ({EXPECTED_BASE}), and replace this note with that fragment's `<worktree_branch_check>` block so the dispatched prompt carries the runnable guard verbatim — do not pass this instruction through in its place.
-       Per-commit HEAD/cwd-drift/path-guard: `agents/gsd-executor.md` steps 0/0a/0b + `references/worktree-path-safety.md` (in <execution_context>).
+       Upstream-guard re-expression (#48/#683): the upstream `worktree_branch_check` build-time
+       embed (fragment: `gsd-core/references/worktree-branch-check.md`, base SHA {EXPECTED_BASE})
+       is superseded on the dispatch path by the executor-side `workspace.assert-dispatched-cwd`
+       precondition — the dispatch envelope binds each workspace to `baseRev` at creation, and the
+       executor's first commit asserts its cwd IS a dispatched subagent workspace (FATAL, never
+       self-recovers via `git update-ref` — same #2924 contract, verify-only like exit-42). The
+       base-ref degrade (#683) check runs orchestrator-side at init (`worktree.base-check`,
+       git-backend-only; jj workspaces fork from the dispatch-time `@` and do not share the
+       diverged-base problem). The git-only fragment remains at
+       `gsd-core/references/worktree-branch-check.md` for non-dispatched worktree flows.
        </worktree_branch_check>
 
        <parallel_execution>
-       You are running as a PARALLEL executor agent in a git worktree. Worktree path safety (cwd-drift, absolute-path guards) is in `worktree-path-safety.md` (loaded below).
+       You are running as a PARALLEL executor agent in a dispatched workspace. Dispatched-cwd safety (workspace.assert-dispatched-cwd precondition guard) is in `dispatch-cwd-safety.md` (loaded below).
        Run `git commit` normally — hooks run by default. Do NOT pass `--no-verify`
        unless the orchestrator surfaces `workflow.worktree_skip_hooks=true` in this
        prompt; silent bypass violates project CLAUDE.md guidance (#2924).
@@ -633,7 +692,7 @@ increases monotonically across waves. `{status}` is `complete` (success),
        @~/.claude/gsd-core/templates/summary.md
        @~/.claude/gsd-core/references/checkpoints.md
        @~/.claude/gsd-core/references/tdd.md
-       @~/.claude/gsd-core/references/worktree-path-safety.md
+       @~/.claude/gsd-core/references/dispatch-cwd-safety.md
        ${CONTEXT_WINDOW < 200000 ? '' : '@~/.claude/gsd-core/references/executor-examples.md'}
        </execution_context>
 
@@ -673,9 +732,12 @@ increases monotonically across waves. `{status}` is `complete` (success),
    )
    ```
 
-   Immediately after each worktree `Agent()` spawn returns metadata, atomically append `{agent_id, worktree_path, branch, expected_base}` to `WAVE_WORKTREE_MANIFEST`. If any field is missing, stop and ask for recovery instead of scanning all agent worktrees.
+   After each `Agent()` returns, append one `ParallelAgentResult` (`{ agentId,
+   exitCode, lastChangeId?, stderr? }`) to `$RESULTS_ACCUM`. Probe the workspace head
+   via `gsd_run query head-ref --cwd "$WS_PATH" --pick head`. `$HANDLE_JSON` is the
+   source of truth for the workspace SET; do not re-discover via filesystem scans.
 
-   > **ORCHESTRATOR FAIL-CLOSED RULE (#48):** `worktree_branch_check` is verify-only — an executor that hits a base/HEAD-namespace mismatch prints `FATAL:` and exits **42** instead of self-recovering. If any executor result reports a `FATAL:`/`exit 42` (or its commits never appear because it halted at the check), mark that plan **blocked**: do NOT merge or clean up its worktree (preserve it for inspection), do NOT count the wave as successful, and surface the mismatch with recovery guidance to the user. The orchestrator — the worktree lifecycle owner — performs any base correction (e.g. recreate the worktree on `{EXPECTED_BASE}`); the sub-agent never does. Never proceed past a halted executor on the assumption it succeeded.
+   > **ORCHESTRATOR FAIL-CLOSED RULE (#48):** the executor-side guard (`worktree_branch_check` fragment on legacy git worktree flows; `workspace.assert-dispatched-cwd` on the dispatch path) is verify-only — an executor that hits a base/HEAD-namespace/dispatched-cwd mismatch prints `FATAL:` and halts (exit **42** for the fragment, exit 1 for the assert) instead of self-recovering. If any executor result reports a `FATAL:` (or its commits never appear because it halted at the check), mark that plan **blocked**: do NOT fan-in or clean up its workspace (preserve it for inspection), do NOT count the wave as successful, and surface the mismatch with recovery guidance to the user. The orchestrator — the workspace lifecycle owner — performs any base correction (e.g. re-dispatch on the correct base); the sub-agent never does. Never proceed past a halted executor on the assumption it succeeded.
 
    > **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above to spawn executor agent(s), stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
@@ -725,20 +787,27 @@ increases monotonically across waves. `{status}` is `complete` (success),
    ```bash
    # For each plan in this wave, check if the executor finished:
    SUMMARY_EXISTS=$(test -f "{phase_dir}/{plan_number}-{plan_padded}-SUMMARY.md" && echo "true" || echo "false")
-   COMMITS_FOUND=$(git log --oneline --all --grep="{phase_number}-{plan_padded}" --since="1 hour ago" | head -1)
-   COMMITS_SINCE_DISPATCH=$(git log "${EXPECTED_BRANCH}" --since="${DISPATCH_TS}" --oneline | head -1)
+   # gsd_run query log --all returns {ok, entries: LogEntry[]}; client-side filter on subject. (--since is parsed-but-unused; substring match on subject is sufficient as a spot-check.)
+   COMMITS_FOUND=$(gsd_run query log --all --max-count 50 --cwd . 2>/dev/null \
+     | jq -r --arg sub "{phase_number}-{plan_padded}" '.entries[]? | select(.subject | contains($sub)) | (.id[0:7] + " " + .subject)' \
+     | head -1)
+   # Stall-surveillance probe: any commit on the orchestrator's branch since dispatch?
+   # Adapter-mediated; LogEntry.date is ISO-8601, compared lexicographically against DISPATCH_TS.
+   COMMITS_SINCE_DISPATCH=$(gsd_run query log --range "${EXPECTED_BRANCH}" --max-count 50 --cwd . 2>/dev/null \
+     | jq -r --arg ts "${DISPATCH_TS}" '.entries[]? | select(.date >= $ts) | (.id[0:7] + " " + .subject)' \
+     | head -1)
    ```
 
    **If SUMMARY.md exists AND commits are found:** The agent completed successfully —
    treat as done and proceed to step 5. Log: `"✓ {Plan ID} completed (verified via spot-check — completion signal not received)"`
 
    **If SUMMARY.md does NOT exist after a reasonable wait:** The agent may still be
-   running or may have failed silently. Check `git log --oneline -5` for recent
+   running or may have failed silently. Check `gsd_run query log --max-count 5` for recent
    activity. If commits are still appearing, wait longer. If no activity, report
    the plan as failed and route to the failure handler in step 6.
 
    **Configurable stall surveillance (#3212):** Every `${EXECUTOR_STALL_INTERVAL_MINUTES}`
-   minutes while waiting, inspect `git log "${EXPECTED_BRANCH}" --since="${DISPATCH_TS}"`
+   minutes while waiting, re-run the `COMMITS_SINCE_DISPATCH` probe above
    for activity. If no completion signal, no SUMMARY.md, and no expected-branch
    commits appear for `${EXECUTOR_STALL_THRESHOLD_MINUTES}` minutes, pause and
    ask for one recovery path: `continue waiting`, `kill and retry`, or
@@ -747,104 +816,67 @@ increases monotonically across waves. `{status}` is `complete` (success),
    **This fallback applies automatically to all runtimes.** Claude Code's Agent() normally
    returns synchronously, but the fallback ensures resilience if it doesn't.
 
-5. **Post-wave hook validation (parallel mode only):** Hooks run on every executor commit by default (#2924); this post-wave run only fires when `workflow.worktree_skip_hooks=true` opted out of per-commit hooks:
+5. **Post-wave hook validation (parallel mode only):** Hooks run on every executor commit by default (#2924); this post-wave run only fires when `workflow.worktree_skip_hooks=true` opted out of per-commit hooks. The adapter handles backend-specific firing (`.githooks/<stage>` on jj; git hooks on git) — the `hooks.fire` verb is shape-symmetric across both backends (D-33):
    ```bash
    SKIP_HOOKS=$(gsd_run query config-get workflow.worktree_skip_hooks 2>/dev/null || echo "false")
    if [ "$SKIP_HOOKS" = "true" ]; then
-     # Stash uncommitted changes under a named ref so we always pop (bare `git stash` strands them on hook/script failure). #3542: `refs/stash` is shared across worktrees, so this helper runs ONLY in the orchestrator's main checkout after all wave worktrees have been merged + removed; executors are forbidden from running any `git stash` subcommand (see `<destructive_git_prohibition>` in `agents/gsd-executor.md`).
+     # TODO(05-05 sweep): grow adapter stash-push/stash-pop verbs so the stash dance routes through the adapter (no such query verb exists today — do not invent one); until then the stash lines stay raw git (no-op on jj where the working-copy auto-snapshot makes stashing unnecessary). #3542: `refs/stash` is shared across worktrees, so this helper runs ONLY in the orchestrator's main checkout after all wave workspaces have been fanned in; executors are forbidden from running any `git stash` subcommand (see `<destructive_git_prohibition>` in `agents/gsd-executor.md`).
      STASHED=false
      if (! git diff --quiet || ! git diff --cached --quiet) && git stash push -u -m "gsd-post-wave-hook-$$" >/dev/null 2>&1; then STASHED=true; fi
-     git hook run pre-commit 2>&1 || echo "⚠ Pre-commit hooks failed — review before continuing"
+     gsd_run query hooks.fire pre-commit --cwd . 2>&1 || echo "⚠ Pre-commit hooks failed — review before continuing"
      [ "$STASHED" = "true" ] && (git stash pop >/dev/null 2>&1 || echo "⚠ Could not pop gsd-post-wave-hook stash — recover manually")
    fi
    ```
    If hooks fail: report the failure and ask "Fix hook issues now?" or "Continue to next wave?"
 
-5.5. **Worktree cleanup (when `isolation="worktree"` was used):**
+5.5. **Workspace fan-in (when `isolation="worktree"` was used):**
 
-   **Standard wave contract:** Each wave's worktrees merge to main via the templated path below before the next wave's worktrees fork. The cleanup loop runs once per wave at the end of the wave lifecycle. Worktrees created in wave N must be fully removed before wave N+1 forks new ones.
+   Each wave's dispatched workspaces merge back via `vcs.workspace.parallel.fanIn`
+   before the next wave forks. The adapter handles per-success cleanup (git) and
+   atomic octopus merge + reap (jj). Per Phase 11 D-01, no manifest file is on disk
+   — the Handle JSON in `$HANDLE_JSON` + the `$RESULTS_ACCUM` array accumulated in
+   step 3 are the full input.
 
-   **Cross-wave dependency deviation (supported execution mode):** When the orchestrator legitimately deviates from the standard wave model — for example, a phase with cross-wave plan dependencies that requires custom inter-worktree base-update merges (e.g., `merge: bring 09-01 + 09-02 into 09-03 base`) — the cleanup loop below is NOT automatically re-entered for those custom merges. The deviation path produces correct final history but bypasses this loop, leaving `worktree-agent-*` directories in place. Use the **cleanup-tail snippet** below to remove any residual worktrees after such a deviation.
-
-   When executor agents ran in worktree isolation, their commits land on temporary branches in separate working trees. After the wave completes, merge these changes back and clean up:
-
-   **Manifest source of truth (#3384):** Cleanup consumes the `WAVE_WORKTREE_MANIFEST` created and populated during executor dispatch in step 3. Do not recreate or truncate it here.
-
-   Prefer the bounded helper, which validates branch identity, expected base, deletion
-   diffs, merge result, and worktree removal before deleting the temporary branch.
-   If the helper reports a blocked cleanup, resolve the reported manifest entry and
-   rerun the same command. Do not fall back to broad worktree discovery.
+   **Upstream-guard re-expression (#630 manifest pinning + #3384 manifest source of truth):**
+   upstream's cleanup pinned the orchestrator back to the manifest-persisted
+   `orchestrator_root` (#630) and refused broad worktree discovery without
+   `WAVE_WORKTREE_MANIFEST` (#3384). Both ride the dispatch envelope now: `$HANDLE_JSON`
+   is the only workspace-set source of truth (no filesystem discovery, satisfying #3384),
+   and fan-in runs adapter-side against the handle's recorded workspaces rather than a
+   cwd-derived worktree list (the #630 wrong-pin hazard has no analog — the branch-drift
+   guard below still catches orchestrator drift before any merge).
 
    ```bash
-   [ -n "${WAVE_WORKTREE_MANIFEST:-}" ] && [ -f "$WAVE_WORKTREE_MANIFEST" ] || {
-     echo "BLOCKED: missing WAVE_WORKTREE_MANIFEST; refusing broad worktree cleanup (#3384)." >&2
-     exit 1
-   }
+   # Branch-drift guard (#3174-class). `current-branch` returns {ok, bookmarks: []};
+   # empty EXPECTED_BRANCH (bookmark-less jj `@` / detached git HEAD) degrades to a no-op.
+   ORCH_BRANCH=$(gsd_run query current-branch --cwd . --pick "bookmarks[0]" 2>/dev/null)
+   [ -z "${EXPECTED_BRANCH:-}" ] || [ "$ORCH_BRANCH" = "$EXPECTED_BRANCH" ] || { echo "FATAL: orchestrator on '$ORCH_BRANCH' but expected '$EXPECTED_BRANCH' before fan-in (#3174-class drift)" >&2; exit 1; }
 
-   # Guard: pin cleanup back to the orchestrator's OWN worktree and fail on branch drift (#3174, #630).
-   # Resolve from the dispatch-time orchestrator root persisted in the manifest — NOT `git worktree
-   # list`'s first entry, which is always the main checkout and would pin a non-primary (per-phase
-   # lane) orchestrator off its own branch, tripping the #3174 assertion below (#630). Byte-identical
-   # for a primary orchestrator (its root IS the first entry); the fallback covers pre-#630 manifests.
-   PRIMARY_WT=$(MANIFEST="$WAVE_WORKTREE_MANIFEST" node -e 'const fs=require("fs");try{const j=JSON.parse(fs.readFileSync(process.env.MANIFEST,"utf8"));if(j&&j.orchestrator_root)process.stdout.write(String(j.orchestrator_root))}catch(e){}')
-   [ -n "$PRIMARY_WT" ] || PRIMARY_WT=$(git worktree list --porcelain | awk '/^worktree /{print substr($0,10); exit}')
-   if [ -z "$PRIMARY_WT" ]; then
-     echo "FATAL: could not resolve orchestrator worktree before cleanup" >&2
+   # Handle via tmpfile (CLI rejects both --handle @- and --results @- per Plan 11.2).
+   HANDLE_FILE=$(mktemp "${TMPDIR:-/tmp}/gsd-handle-XXXXXX.json")
+   printf '%s' "$HANDLE_JSON" > "$HANDLE_FILE"
+   FAN_RESULT=$(printf '%s' "$RESULTS_ACCUM" \
+     | gsd_run query workspace.parallel.fan-in --handle "@$HANDLE_FILE" --results @-)
+   rm -f "$HANDLE_FILE"
+
+   CONFLICTED=$(echo "$FAN_RESULT" | jq -r '.conflicted // false')
+   FAILED_REAPED=$(echo "$FAN_RESULT" | jq -r '.failedReaped // [] | length')
+   MERGED_COUNT=$(echo "$FAN_RESULT" | jq -r '.merged // [] | length')
+   if [ "$CONFLICTED" = "true" ] || [ "$FAILED_REAPED" -gt 0 ]; then
+     echo "⚠ Fan-in surfaced issues (conflicted=$CONFLICTED, failedReaped=$FAILED_REAPED)" >&2
+     echo "$FAN_RESULT" | jq .
      exit 1
    fi
-   if [ -n "$PRIMARY_WT" ] && [ "$(pwd -P 2>/dev/null)" != "$(cd "$PRIMARY_WT" 2>/dev/null && pwd -P)" ]; then echo "⚠ Orchestrator CWD drifted to $(pwd) — pinning to $PRIMARY_WT before worktree cleanup (#3174)"; cd "$PRIMARY_WT" || { echo "FATAL: cannot cd to primary worktree $PRIMARY_WT" >&2; exit 1; }; fi
-   ORCH_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-   [ -z "${EXPECTED_BRANCH:-}" ] || [ "$ORCH_BRANCH" = "$EXPECTED_BRANCH" ] || { echo "FATAL: orchestrator on '$ORCH_BRANCH' but expected '$EXPECTED_BRANCH' before worktree cleanup — refusing to merge (#3174-class drift)" >&2; exit 1; }
-
-   # Fail closed: SDK refusal (safety guard #3174/#3384) must surface — do not swallow exit 1.
-   gsd_run query worktree.cleanup-wave --manifest "$WAVE_WORKTREE_MANIFEST" || exit 1
-   ```
-
-   **Cleanup-tail snippet (use after any wave whose merges did not flow through the templated path above):**
-
-   If the orchestrator deviated from the standard wave merge path (e.g., custom inter-worktree base-update merges with `merge: bring …` style messages), run this snippet after the custom merges are complete. It reads only `WAVE_WORKTREE_MANIFEST`; do not discover unrelated `worktree-agent-*` worktrees.
-
-   ```bash
-   # Cleanup-tail: pin orchestrator CWD to its OWN worktree before cleanup-tail (#3174, #630).
-   # Same fix as the templated path: resolve the dispatch-time orchestrator root from the manifest,
-   # not `git worktree list`'s first entry (always the main checkout — wrong for a lane orchestrator).
-   PRIMARY_WT=$(MANIFEST="$WAVE_WORKTREE_MANIFEST" node -e 'const fs=require("fs");try{const j=JSON.parse(fs.readFileSync(process.env.MANIFEST,"utf8"));if(j&&j.orchestrator_root)process.stdout.write(String(j.orchestrator_root))}catch(e){}')
-   [ -n "$PRIMARY_WT" ] || PRIMARY_WT=$(git worktree list --porcelain | awk '/^worktree /{print substr($0,10); exit}')
-   if [ -n "$PRIMARY_WT" ] && [ "$(pwd -P 2>/dev/null)" != "$(cd "$PRIMARY_WT" 2>/dev/null && pwd -P)" ]; then echo "⚠ Orchestrator CWD drifted to $(pwd) — pinning to $PRIMARY_WT before cleanup-tail (#3174)"; cd "$PRIMARY_WT" || { echo "FATAL: cannot cd to primary worktree $PRIMARY_WT" >&2; exit 1; }; fi
-   # Cleanup-tail: remove residual agent worktrees after a cross-wave-dependency deviation.
-   # Uses only the current wave manifest to avoid touching unrelated active agents (#3384).
-   WT_PATHS_FILE=$(mktemp "${TMPDIR:-/tmp}/gsd-worktree-paths-XXXXXX")
-   node -e 'const fs=require("fs");const p=process.env.WAVE_WORKTREE_MANIFEST;try{if(!p)throw new Error("WAVE_WORKTREE_MANIFEST is unset");if(!fs.existsSync(p))throw new Error("manifest does not exist");const s=fs.readFileSync(p,"utf8");if(!s.trim())throw new Error("manifest is empty");const j=JSON.parse(s);for(const w of j.worktrees||[])if(w.worktree_path)console.log(w.worktree_path)}catch(e){console.error(`ERROR: cannot read worktree manifest ${p||"(unset)"}: ${e.message}`);process.exit(1)}' > "$WT_PATHS_FILE" || { echo "BLOCKED: cannot read WAVE_WORKTREE_MANIFEST; refusing cleanup (#3384)." >&2; exit 1; }
-   while IFS= read -r WT; do
-     [ -z "$WT" ] && continue
-     WT_BRANCH=$(git -C "$WT" rev-parse --abbrev-ref HEAD 2>/dev/null)
-     [ -z "$WT_BRANCH" ] || [ "$WT_BRANCH" = "HEAD" ] && continue
-     echo "Cleaning up residual worktree: $WT (branch: $WT_BRANCH)"
-     git worktree unlock "$WT" 2>/dev/null || true
-     if ! git worktree remove "$WT" --force; then
-       WT_NAME=$(basename "$WT")
-       if [ -f ".git/worktrees/${WT_NAME}/locked" ]; then
-         echo "⚠ Worktree $WT is locked — unlock failed; manual cleanup required:"
-         echo "    git worktree unlock \"$WT\" && git worktree remove \"$WT\" --force && git branch -D \"$WT_BRANCH\""
-       else
-         echo "⚠ Residual worktree at $WT — remove failed; manual cleanup required"
-       fi
-     else
-       git branch -D "$WT_BRANCH" 2>/dev/null || true
-     fi
-   done < "$WT_PATHS_FILE"
-   git worktree prune
+   echo "✓ Fan-in merged $MERGED_COUNT workspaces cleanly."
    ```
 
    **When to skip step 5.5:**
 
    **If no plan in this wave used worktree isolation** (project-level `USE_WORKTREES=false` OR every plan in the wave had `USE_WORKTREES_FOR_PLAN=false` — i.e. `WAVE_WORKTREE_PLANS` from step 2.5 is empty): all agents ran on the main working tree — skip this step entirely.
 
-   **If the orchestrator merged via custom messages (cross-wave-dependency deviation):** the templated cleanup loop above was not triggered for those merges. Run the cleanup-tail snippet above instead. After the snippet completes, proceed to step 5.6.
+   **If at least one plan used worktrees but others did not:** still run fan-in — the adapter's workspace SET (derived from `$HANDLE_JSON.workspaces[]`) covers only the workspaces dispatched in step 3, leaving sequential plans' commits on the main tree untouched.
 
-   **If at least one plan used worktrees but others did not:** still run this cleanup — it iterates over actual `git worktree list` output and only merges back the worktrees that were created, leaving sequential plans' commits on the main tree untouched.
-
-   **If no worktrees found at runtime:** Skip silently — agents may have been spawned without worktree isolation, or the orchestrator already cleaned them up.
+   **If `$HANDLE_JSON` is empty or carries zero workspaces at runtime:** Skip silently — agents may have been spawned without worktree isolation, or fan-in already merged them. The fan-in CLI itself is a trivial no-op when invoked with an empty workspace SET.
 
 5.6. **Post-merge build & test gate:**
 
@@ -877,7 +909,7 @@ increases monotonically across waves. `{status}` is `complete` (success),
      done
 
      # Only commit tracking files if they actually changed
-     if ! git diff --quiet .planning/ROADMAP.md .planning/STATE.md 2>/dev/null; then
+     if [ -n "$(gsd_run query diff --name-only --cwd . -- .planning/ROADMAP.md .planning/STATE.md 2>/dev/null | jq -r '.nameOnly // [] | join("\n")')" ]; then
        gsd_run query commit "docs(phase-${PHASE_NUMBER}): update tracking after wave ${N}" --files .planning/ROADMAP.md .planning/STATE.md
      fi
    elif [ "${TEST_EXIT}" -eq 124 ]; then
@@ -933,7 +965,7 @@ increases monotonically across waves. `{status}` is `complete` (success),
 
    For each SUMMARY.md:
    - Verify first 2 files from `key-files.created` exist on disk
-   - Check `git log --oneline --all --grep="{phase}-{plan}"` returns ≥1 commit
+   - Check `gsd_run query log --all --max-count 50 --cwd . | jq '[.entries[]? | select(.subject | contains("{phase}-{plan}"))] | length'` returns ≥1
    - Check for `## Self-Check: FAILED` marker
 
    If ANY spot-check fails: report which plan failed, route to failure handler — ask "Retry plan?" or "Continue with remaining waves?"
@@ -1539,7 +1571,10 @@ Gap closure cycle: `/gsd:plan-phase {X} --gaps ${GSD_WS}` reads VERIFICATION.md 
 
 ```bash
 COMPLETION=$(gsd_run query phase.complete "${PHASE_NUMBER}")
+gsd_run query commit "docs(phase-{X}): complete phase execution" --files .planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md {phase_dir}/*-VERIFICATION.md
 ```
+
+The commit line above MUST run immediately after `phase.complete` — the mutating verb writes to `.planning/ROADMAP.md` + `.planning/STATE.md` + `.planning/REQUIREMENTS.md` on disk but does NOT commit. The order is load-bearing: do NOT defer the commit past the result-parsing prose that follows, or the orchestrator may declare "PHASE COMPLETE" with the planning files still uncommitted.
 
 The CLI handles:
 - Marking phase checkbox `[x]` with completion date
@@ -1558,10 +1593,6 @@ Extract from result: `next_phase`, `next_phase_name`, `is_last_phase`, `warnings
 {list each warning}
 
 These items are tracked and will appear in `/gsd:progress` and `/gsd:audit-uat`.
-```
-
-```bash
-gsd_run query commit "docs(phase-{X}): complete phase execution" --files .planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md {phase_dir}/*-VERIFICATION.md
 ```
 </step>
 
@@ -1640,6 +1671,51 @@ gsd_run query commit "docs(phase-{X}): evolve PROJECT.md after phase completion"
 ```
 
 **Skip this step if** `.planning/PROJECT.md` does not exist.
+</step>
+
+<step name="assert_clean_wc">
+**Final-gate check: assert the working copy is clean before declaring phase complete.**
+
+By the time we reach this step, every committable change should already be in history:
+- The executor's per-task commit protocol committed each task's source/test/script edits inline.
+- Every workflow-orchestrator-owned mutation (`phase.complete`, `state.*`, `roadmap.*`, `update_project_md`, `close_phase_todos`, etc.) was followed by an immediate `gsd_run query commit`.
+
+Any uncommitted change at this point is therefore a real problem — either (a) a workflow step ran a mutating verb but forgot the follow-up commit, (b) the executor's commit protocol leaked, (c) a pre-commit hook silently aborted a commit, or (d) the user mixed unrelated WIP with phase execution. All four cases warrant aborting before "PHASE COMPLETE" emission rather than silently lying about WC cleanliness.
+
+```bash
+DIRTY=$(gsd_run query diff --name-only 2>/dev/null | jq -r '.nameOnly // [] | join("\n")')
+if [ -n "$DIRTY" ]; then
+	# Categorize the dirty paths so the operator can diagnose which class of leak fired.
+	PLANNING_DIRTY=$(echo "$DIRTY" | grep -E '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
+	OTHER_DIRTY=$(echo "$DIRTY" | grep -vE '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
+
+	echo "FATAL: working copy is dirty before phase completion." >&2
+	echo "" >&2
+	if [ -n "$PLANNING_DIRTY" ]; then
+		echo "Orchestrator-owned planning artifacts (a workflow step skipped its follow-up commit):" >&2
+		echo "$PLANNING_DIRTY" | sed 's/^/  /' >&2
+	fi
+	if [ -n "$OTHER_DIRTY" ]; then
+		echo "Source / scripts / tests (executor commit protocol may have leaked, OR unrelated WIP was present):" >&2
+		echo "$OTHER_DIRTY" | sed 's/^/  /' >&2
+	fi
+	echo "" >&2
+	echo "Phase completion requires a clean working copy. Resolve via one of:" >&2
+	echo "  - commit the listed files with a descriptive message" >&2
+	echo "  - if planning artifacts: identify the workflow step that produced them and add its missing commit (do not just paper over here)" >&2
+	echo "  - if unrelated WIP: jj abandon @ (or stash via git, then re-run phase execution)" >&2
+	exit 1
+fi
+```
+
+**Why unconditional and not just `.planning/`:** the gate's job is to catch ALL forms of "we're declaring done but state isn't durable" — orchestrator mutations, executor mutations, hook-aborted commits, mixed-in WIP. Restricting to `.planning/` would only catch case (a) and silently rubber-stamp cases (b)–(d). The categorization in the error message keeps the diagnostic story clean without weakening the gate.
+
+**Do not bypass.** If this gate fires, fix the root cause:
+- Orchestrator-owned planning paths dirty → find the workflow step that ran the mutating verb without an immediate commit and add the commit there
+- Source/script/test paths dirty → trace which executor task left them; the executor commit protocol should have caught it
+- Mixed unrelated WIP → commit or `jj abandon @` before re-running
+
+Suppressing the gate without fixing the root cause re-introduces the original Phase 14 bug.
 </step>
 
 <step name="offer_next">
