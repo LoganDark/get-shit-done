@@ -1773,11 +1773,21 @@ By the time we reach this step, every committable change should already be in hi
 Any uncommitted change at this point is a real problem — either (a) §13d was gated off by `commit_docs: false` leaving §13b/§13c mutations dirty, (b) a future-added mutating verb call site forgot its follow-up commit, (c) a subagent wrote files without committing, or (d) the user mixed unrelated WIP with phase planning. All four cases warrant aborting before the "PHASE PLANNED ✓" banner rather than silently lying about WC cleanliness.
 
 ```bash
-DIRTY=$(gsd_run query diff --name-only 2>/dev/null | jq -r '.nameOnly // [] | join("\n")')
+# Fail-closed probe (Phase 18 REVIEW WR-01/WR-02): `status --porcelain` sees
+# untracked and staged-only changes on every backend (a `diff --name-only`
+# probe missed both on non-jj backends), and EVERY probe-failure mode aborts
+# instead of resolving to "clean" — a broken probe must never rubber-stamp
+# this gate.
+STATUS_JSON=$(gsd_run query status --porcelain) || { echo "FATAL: WC-cleanliness probe failed (status query exited non-zero); cannot verify the working copy is clean — fix the probe, do NOT treat this as clean." >&2; exit 1; }
+DIRTY=$(printf '%s' "$STATUS_JSON" | jq -re 'if .ok == true then .raw else error("status envelope not ok") end') || { echo "FATAL: WC-cleanliness probe returned an error envelope or unparseable JSON; cannot verify the working copy is clean — fix the probe, do NOT treat this as clean." >&2; exit 1; }
 if [ -n "$DIRTY" ]; then
 	# Categorize so the operator can diagnose which class of leak fired.
-	PLANNING_DIRTY=$(echo "$DIRTY" | grep -E '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
-	OTHER_DIRTY=$(echo "$DIRTY" | grep -vE '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
+	# Prefer structured entry paths for categorization; fall back to the raw
+	# porcelain lines if the entry list is empty.
+	DIRTY_PATHS=$(printf '%s' "$STATUS_JSON" | jq -r '[.entries[]?.path] | join("\n")')
+	[ -n "$DIRTY_PATHS" ] || DIRTY_PATHS="$DIRTY"
+	PLANNING_DIRTY=$(printf '%s\n' "$DIRTY_PATHS" | grep -E '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
+	OTHER_DIRTY=$(printf '%s\n' "$DIRTY_PATHS" | grep -vE '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
 
 	echo "FATAL: working copy is dirty before phase planning declaration." >&2
 	echo "" >&2
