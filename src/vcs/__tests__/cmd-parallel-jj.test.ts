@@ -782,7 +782,10 @@ describe('CONFIG-02 — parallelization_disabled', () => {
 	let tmpDir: string;
 
 	afterEach(async () => {
-		await rm(tmpDir, { recursive: true, force: true });
+		// Phase 18 REVIEW IN-02: guard like every sibling afterAll — if a
+		// test's mkdtemp rejected, tmpDir is undefined and rm(undefined) would
+		// layer ERR_INVALID_ARG_TYPE over the real failure.
+		if (tmpDir) await rm(tmpDir, { recursive: true, force: true });
 	});
 
 	it('returns {ok:false, reason:parallelization_disabled} when .planning/config.json has explicit false', async () => {
