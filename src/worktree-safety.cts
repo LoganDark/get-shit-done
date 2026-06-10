@@ -436,6 +436,12 @@ function normalizeCleanupManifestEntry(entry: unknown): CleanupManifestEntry | n
   const expectedBase = typeof e.expected_base === 'string' ? e.expected_base : '';
   if (!worktreePath || !branch || !expectedBase) return null;
   if (!/^worktree-agent-[A-Za-z0-9._/-]+$/.test(branch)) return null;
+  // 19-review WR-09: worktree_path is spliced into argv POSITIONS
+  // (`git worktree remove <path> --force`, `git worktree unlock <path>`), so
+  // a `-`-leading value from a crafted/corrupted manifest would be parsed as
+  // an option by git. Reject it here, matching the repo-wide `--`/validator
+  // discipline (the `-C <path>` uses are safe — `-C` consumes the value).
+  if (worktreePath.startsWith('-')) return null;
   return {
     agent_id: typeof e.agent_id === 'string' ? e.agent_id : null,
     worktree_path: worktreePath,
@@ -747,8 +753,10 @@ function executeWorktreeWaveCleanupPlan(plan: WaveCleanupPlan | null, deps: Work
 
     const worktreeStatus = execGit(['-C', entry.worktree_path, 'status', '--porcelain', '--untracked-files=all'], { cwd: plan.repoRoot });
     if (!gitResultOk(worktreeStatus)) {
+      // 19-review WR-09: the probe itself failed — the tree's dirtiness was
+      // never determined, so don't mislabel it 'worktree_dirty'.
       result.status = 'blocked';
-      result.reason = 'worktree_dirty';
+      result.reason = 'status_probe_failed';
       result.stderr = worktreeStatus?.stderr || '';
       results.push(result);
       pending.push(...entries.slice(i + 1));
