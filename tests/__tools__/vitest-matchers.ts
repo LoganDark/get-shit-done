@@ -8,14 +8,14 @@
  * Composable inside `expect.objectContaining(...)` via the
  * `AsymmetricMatchersContaining` augmentation (vitest.d.ts).
  *
- * Registered via `setupFiles` in sdk/vitest.config.ts — loads once per
+ * Registered via `setupFiles` in the root vitest.config.ts — loads once per
  * vitest process, automatic for every test file.
  *
  * Source: https://vitest.dev/guide/extending-matchers
  */
 
 import { expect } from 'vitest';
-import type { VcsKind, VcsBackendKey } from '../../sdk/src/vcs/types.js';
+import type { VcsKind, VcsBackendKey } from '../../src/vcs/types.cjs';
 
 /**
  * Accept the broader `VcsBackendKey` (`'git' | 'jj-colocated' | 'jj-native'`)

@@ -18,8 +18,11 @@ import path from 'node:path';
 import { platformEnsureDir } from './shell-command-projection.cjs';
 import { realClock } from './clock.cjs';
 import type { Clock } from './clock.cjs';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-import activeWorkstreamStore = require('./active-workstream-store.cjs');
+// Phase 19 (19-11): interop default import instead of `import = require` so
+// the module stays vite-transformable for the revived vitest suite (esbuild
+// leaves TS import-equals as a bare `require()` under ESM output). tsc emit
+// is equivalent under esModuleInterop.
+import activeWorkstreamStore from './active-workstream-store.cjs';
 const {
   createSharedPointerAdapter,
   createSessionScopedPointerAdapter,

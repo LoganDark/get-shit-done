@@ -58,8 +58,11 @@ import type {
   VcsAdapter,
   WorkspaceInfo,
 } from './vcs/types.cjs';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-import planningWorkspace = require('./planning-workspace.cjs');
+// Phase 19 (19-11): interop default import instead of `import = require` so
+// the module stays vite-transformable for the revived vitest suite (esbuild
+// leaves TS import-equals as a bare `require()` under ESM output). tsc emit
+// is equivalent under esModuleInterop.
+import planningWorkspace from './planning-workspace.cjs';
 const { planningPaths } = planningWorkspace;
 
 // ─── Envelope contract types ─────────────────────────────────────────────────

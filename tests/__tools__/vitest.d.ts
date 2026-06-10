@@ -13,7 +13,7 @@
  * Source: https://vitest.dev/guide/extending-matchers#typescript-extension
  */
 
-import type { VcsKind, VcsBackendKey } from '../../sdk/src/vcs/types.js';
+import type { VcsKind, VcsBackendKey } from '../../src/vcs/types.cjs';
 
 /**
  * The matcher accepts either the cross-backend `VcsKind` (the canonical
