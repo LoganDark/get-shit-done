@@ -78,6 +78,16 @@ fi
 echo "dogfood-restore: restoring op-id ${PRE_OP_ID}" >&2
 jj op restore "$PRE_OP_ID"
 
+# Overlay-asymmetry rationale (Phase 18 CLEANUP-04 / Phase 14 WR-02,
+# resolved as option (b) — documented asymmetry): the tar extract below is
+# an ADDITIVE top-up, not a clean overlay. `jj op restore` above already
+# rewinds all tracked `.planning/` state to the snapshot — it is the actual
+# rollback. The tarball re-populates `.planning/` content on top of that;
+# files created under `.planning/` AFTER the snapshot that survive the
+# restore are ACCEPTED, intended behavior. A destructive `rm -rf .planning`
+# clean-overlay step was rejected: adding a destructive operation to a
+# recovery primitive is the worst place for new risk, and Phase 14 P05's
+# production run validated restore-then-untar empirically as-is.
 echo "dogfood-restore: extracting ${TARBALL_PATH}" >&2
 tar -xf "$TARBALL_PATH" -C .
 
