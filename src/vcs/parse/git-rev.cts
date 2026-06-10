@@ -23,6 +23,16 @@ export function toGitRev(rev: RevisionExpr): string {
   if (encoded.startsWith('rev:')) {
     return encoded.slice('rev:'.length); // emit SHA / change_id prefix verbatim
   }
+  // 19-review WR-05 — 'ancestor:<n>' translates to git's first-parent
+  // Nth-ancestor syntax 'HEAD~N' so git itself resolves the ancestry walk
+  // (correct on merge-bearing histories, unlike a log-row-index lookup).
+  if (encoded.startsWith('ancestor:')) {
+    const n = Number(encoded.slice('ancestor:'.length));
+    if (!Number.isInteger(n) || n < 0) {
+      throw new Error(`Malformed ancestor RevisionExpr: '${encoded}'`);
+    }
+    return n === 0 ? 'HEAD' : `HEAD~${n}`;
+  }
   // Plan 06-01 Task 2 — 'children:<inner>' is not supported on the git backend.
   // git has no single-token direct-children revset operator. Plan 06-02
   // restricts vcs.log({ rev: expr.children(...) }) calls to the JJ adapter.

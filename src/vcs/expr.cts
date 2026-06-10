@@ -93,6 +93,17 @@ export const expr = Object.freeze({
     }
     return brand(`rev:${id}`);
   },
+  // 19-review WR-05 — Nth-ancestor-of-head factory (CLI `HEAD~N` / `@~N`).
+  // Lets the BACKEND resolve the ancestor (git: `HEAD~N`; jj: `@` + n×`-`)
+  // instead of approximating via vcs.log() row index, which is wrong on
+  // histories containing merges (log order is reverse-chronological across
+  // ALL parents, not first-parent ancestry).
+  ancestor(n: number): RevisionExpr {
+    if (!Number.isInteger(n) || n < 0) {
+      throw new Error(`expr.ancestor: n must be a non-negative integer (got ${n})`);
+    }
+    return brand(`ancestor:${n}`);
+  },
 });
 
 // Internal — the parsers in parse/*.ts use this to switch on encoded form.

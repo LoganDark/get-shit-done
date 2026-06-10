@@ -25,6 +25,20 @@ export function toJjRev(rev: RevisionExpr): string {
   if (encoded.startsWith('rev:')) {
     return encoded.slice('rev:'.length); // emit change_id (or SHA) prefix verbatim
   }
+  // 19-review WR-05 — 'ancestor:<n>' translates to the n-fold parent
+  // operator: '@', '@-', '@--', … jj resolves the walk itself. Caveat: on a
+  // merge change, '<rev>-' is the SET of all parents (jj has no first-parent
+  // operator), so '@--' may resolve to multiple revisions where git's
+  // 'HEAD~2' picks the first-parent path — still strictly better than the
+  // prior log-row-index approximation, which was wrong on BOTH backends for
+  // merge-bearing histories.
+  if (encoded.startsWith('ancestor:')) {
+    const n = Number(encoded.slice('ancestor:'.length));
+    if (!Number.isInteger(n) || n < 0) {
+      throw new Error(`Malformed ancestor RevisionExpr: '${encoded}'`);
+    }
+    return `@${'-'.repeat(n)}`;
+  }
   // Plan 06-01 Task 2 — 'children:<inner>' translates to jj revset 'x+'
   // (direct children, depth-1 — empirically verified by jj-children-probe.test.ts).
   if (encoded.startsWith('children:')) {

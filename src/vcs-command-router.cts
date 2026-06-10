@@ -81,7 +81,7 @@ type VcsVerbHandler = (args: string[], projectDir: string) => Promise<VerbResult
  * classify a CLI `--range` argv into an encoded RevisionExpr. D-12 forbids
  * `expr.raw()`, so every raw string must flow through a structured factory.
  */
-function parseRangeArg(raw: string, vcs: VcsAdapter): RevisionExpr {
+function parseRangeArg(raw: string): RevisionExpr {
   const rangeIdx = raw.indexOf('..');
   if (rangeIdx >= 0) {
     const fromRaw = raw.slice(0, rangeIdx);
@@ -89,24 +89,23 @@ function parseRangeArg(raw: string, vcs: VcsAdapter): RevisionExpr {
     if (!fromRaw || !toRaw) {
       throw new Error(`parseRangeArg: malformed range '${raw}' (one side empty)`);
     }
-    return expr.range(parseSingle(fromRaw, vcs), parseSingle(toRaw, vcs));
+    return expr.range(parseSingle(fromRaw), parseSingle(toRaw));
   }
-  return parseSingle(raw, vcs);
+  return parseSingle(raw);
 }
 
-function parseSingle(raw: string, vcs: VcsAdapter): RevisionExpr {
+function parseSingle(raw: string): RevisionExpr {
   if (raw === 'HEAD' || raw === '@') return expr.head();
   const tildeMatch = raw.match(/^(?:HEAD|@)~(\d+)$/);
   if (tildeMatch) {
     const n = parseInt(tildeMatch[1], 10);
     if (n === 0) return expr.head();
-    const entries = vcs.log({ maxCount: n + 1 });
-    if (entries.length <= n) {
-      throw new Error(
-        `parseRangeArg: ${raw} exceeds repo depth (${entries.length} commits available)`,
-      );
-    }
-    return expr.rev(entries[n].id);
+    // 19-review WR-05: resolve HEAD~N through the backend via the
+    // expr.ancestor(n) factory (git: 'HEAD~N'; jj: '@' + n×'-'). The prior
+    // vcs.log({maxCount:n+1})[n].id lookup approximated ancestry with
+    // reverse-chronological log order, which silently picks the WRONG
+    // revision on any history containing merge commits.
+    return expr.ancestor(n);
   }
   if (/^[0-9a-fA-F]{4,40}$/.test(raw) || /^[k-z]{4,40}$/.test(raw)) {
     return expr.rev(raw);
@@ -250,7 +249,7 @@ const logVerb: VcsVerbHandler = (args, projectDir) => {
   let rev: RevisionExpr | undefined;
   if (range !== undefined) {
     try {
-      rev = parseRangeArg(range, vcs);
+      rev = parseRangeArg(range);
     } catch (err) {
       return {
         data: {
@@ -328,7 +327,7 @@ const diffVerb: VcsVerbHandler = (args, projectDir) => {
   let rev: RevisionExpr | undefined;
   if (range !== undefined) {
     try {
-      rev = parseRangeArg(range, vcs);
+      rev = parseRangeArg(range);
     } catch (err) {
       return {
         data: {
