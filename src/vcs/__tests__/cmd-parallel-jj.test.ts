@@ -33,9 +33,9 @@
  * existing directory.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
@@ -776,8 +776,17 @@ describe.sequential.skipIf(!jjAvailable)(
 // ───────────────────────────────────────────────────────────────────────────
 
 describe('CONFIG-02 — parallelization_disabled', () => {
+	// Phase 18 (CLEANUP-07 / Phase 14 WR-05): describe-scoped tmpDir + per-test
+	// cleanup — these 3 tests previously leaked one mkdtemp dir each per run.
+	// Safe as a shared `let`: vitest runs same-file `it`s serially.
+	let tmpDir: string;
+
+	afterEach(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
 	it('returns {ok:false, reason:parallelization_disabled} when .planning/config.json has explicit false', async () => {
-		const tmpDir = await mkdtemp(
+		tmpDir = await mkdtemp(
 			join(tmpdir(), `gsd-cfg02-jj-${Math.random().toString(36).slice(2, 10)}-`),
 		);
 		await mkdir(join(tmpDir, '.planning'), { recursive: true });
@@ -806,7 +815,7 @@ describe('CONFIG-02 — parallelization_disabled', () => {
 	});
 
 	it('does NOT fire envelope when .planning/config.json omits parallelization key', async () => {
-		const tmpDir = await mkdtemp(
+		tmpDir = await mkdtemp(
 			join(tmpdir(), `gsd-cfg02-jj-${Math.random().toString(36).slice(2, 10)}-`),
 		);
 		await mkdir(join(tmpDir, '.planning'), { recursive: true });
@@ -839,7 +848,7 @@ describe('CONFIG-02 — parallelization_disabled', () => {
 	});
 
 	it('does NOT fire envelope when .planning/config.json has explicit true', async () => {
-		const tmpDir = await mkdtemp(
+		tmpDir = await mkdtemp(
 			join(tmpdir(), `gsd-cfg02-jj-${Math.random().toString(36).slice(2, 10)}-`),
 		);
 		await mkdir(join(tmpDir, '.planning'), { recursive: true });
