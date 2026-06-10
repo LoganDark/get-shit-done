@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
 status: executing
-stopped_at: "Completed 19-07-PLAN.md (call-site migration); next: 19-08 workflow re-wiring"
-last_updated: "2026-06-10T12:30:59.031Z"
+stopped_at: "Completed 19-08-PLAN.md (workflow re-wiring); next: 19-09 agents + launcher/githooks"
+last_updated: "2026-06-10T12:59:37.724Z"
 last_activity: 2026-06-10
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 24
-  completed_plans: 18
-  percent: 75
+  completed_plans: 19
+  percent: 79
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 ## Current Position
 
 Phase: 19 (upstream-merge-conflict-resolution-fork-abstraction-audit) — EXECUTING
-Plan: 8 of 13
+Plan: 9 of 13
 Status: Ready to execute
 Last activity: 2026-06-10
 
@@ -93,6 +93,7 @@ Last activity: 2026-06-10
 | Phase 19 P05 | 16min | 2 tasks | 37 files |
 | Phase 19 P06 | 19min | 3 tasks | 6 files |
 | Phase 19 P19-07 | 35min | 3 tasks | 19 files |
+| Phase 19 P19-08 | 25min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -201,6 +202,8 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase ?]: 19-07: adapter auto-detect (not the fork 02-09 kind:git pins) in cmdCommit/cmdStats — pins predate the jj backend; jj-native commit/log smoke proves [k-z] id with no commit_id key; envelope hash->id (unified revision model)
 - [Phase ?]: 19-07: T-19-DG closed — roadmap-upgrade rollback is fs rename-reversal + adapter restore scoped to .planning/ (loud-fail, never raw git); literal reset-hard token absent from src/*.cts including comments
 - [Phase ?]: 19-07: AUDIT-01 src/ surface complete — execGit survivors only in shell-command-projection + worktree-safety + worktree-base-ref (substrate-ledgered); #685 windowsHide centralized at vcsExec seam; 3 build-state test re-baselines deferred to 19-10/19-12
+- [Phase ?]: 19-08: fork workflow deltas re-applied three-way — envelope adaptations (.entries/.id/date/bookmarks[0]) per ported router; help monolith re-expressed as 2 bullets in help/modes/full.md; upstream #48/#630/#683/#3384/#3491 + create_tag gates preserved via fork-verb re-expression notes
+- [Phase ?]: 19-08 forward deps for 19-09: dispatch-cwd-safety.md @-ref dangles until created; new-project matrix asserts has_jj which init.new-project does not emit yet
 
 ### Pending Todos
 
@@ -271,8 +274,8 @@ All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQU
 
 ## Session Continuity
 
-Last session: 2026-06-10T12:30:59.026Z
-Stopped at: Completed 19-07-PLAN.md (call-site migration); next: 19-08 workflow re-wiring
+Last session: 2026-06-10T12:59:37.718Z
+Stopped at: Completed 19-08-PLAN.md (workflow re-wiring); next: 19-09 agents + launcher/githooks
 Resume file:
 
 None
