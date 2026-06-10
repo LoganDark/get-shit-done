@@ -19,7 +19,7 @@
  * in `bin/lib/commands.cjs`).
  */
 
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { expr } from '../expr.cjs';
 import { vcsExec, VcsExecError } from '../exec.cjs';
 import type { ExecResult } from '../exec.cjs';
@@ -1350,7 +1350,39 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       const entries = workspace.list();
       const matchByName = entries.find((e) => e.path === workspacePathOrName);
       const name = matchByName?.path ?? basename(workspacePathOrName);
-      const onDiskPath = join(cwd, '.claude/jj-workspaces', name);
+      // 19-review WR-07: the old "no path traversal because name is either a
+      // workspace.list() entry path or a basename" claim was false —
+      // basename('..') === '..' would have made the rm-rf target
+      // join(cwd, '.claude/jj-workspaces', '..') === cwd/.claude (deleting
+      // the whole .claude directory). Reject traversal-shaped and
+      // separator-bearing names outright.
+      if (name === '.' || name === '..' || name.includes('/') || name.includes('\\')) {
+        throw new Error(
+          `workspace.remove: invalid workspace name '${name}' (traversal-shaped or contains a path separator)`,
+        );
+      }
+      const layoutRoot = join(cwd, '.claude/jj-workspaces');
+      const onDiskPath = join(layoutRoot, name);
+      // Containment check (defense-in-depth): the resolved rm-rf target MUST
+      // sit strictly inside the D-16 layout root.
+      const resolvedTarget = resolve(onDiskPath);
+      if (!resolvedTarget.startsWith(resolve(layoutRoot) + sep)) {
+        throw new Error(
+          `workspace.remove: refusing rm -rf outside the .claude/jj-workspaces layout (resolved '${resolvedTarget}')`,
+        );
+      }
+      // 19-review WR-07 (b): when the caller passed a real on-disk PATH (not
+      // a workspace name) that does not resolve into the D-16 layout, the old
+      // code silently rm-rf'd the same-named directory UNDER the layout while
+      // the actual workspace dir survived. Refuse to guess instead.
+      const looksLikePath =
+        workspacePathOrName.includes('/') || workspacePathOrName.includes('\\');
+      if (!matchByName && looksLikePath && resolve(cwd, workspacePathOrName) !== resolvedTarget) {
+        throw new Error(
+          `workspace.remove: '${workspacePathOrName}' is not a known workspace name and does not ` +
+            `resolve into the .claude/jj-workspaces/<name> layout — refusing to guess an rm -rf target`,
+        );
+      }
       // 1. forget metadata first (Pitfall 4 order). Security (T-07.01-03):
       //    `--` separator before user-influenced positional.
       const args = jjArgv('workspace', 'forget', '--', name);
@@ -1358,10 +1390,8 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       if (r.exitCode !== 0 && !opts?.force) {
         throw new Error(`workspace.remove forget failed: ${r.stderr || r.stdout}`);
       }
-      // 2. rm -rf the on-disk dir. Path is constrained to the
-      //    .claude/jj-workspaces/<name> layout (D-16) — no path traversal
-      //    because `name` is either a workspace.list() entry path or a
-      //    basename of the input string.
+      // 2. rm -rf the on-disk dir, constrained to the validated
+      //    .claude/jj-workspaces/<name> layout target (D-16).
       rmSync(onDiskPath, { recursive: true, force: true });
     },
     // Phase 9 (VCS-16, PARALLEL-01/02): cross-backend parallel namespace.
