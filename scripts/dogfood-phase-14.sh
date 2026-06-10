@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # dogfood-phase-14.sh — v1.3 dogfood orchestrator (Phase 14, DOGFOOD-01 + DOGFOOD-02).
 #
+# HISTORICAL (Phase 19 merge, 19-13): this one-shot dogfood driver fired on
+# 2026-05-23 against the v1.3 fork-SDK layout; its `gsd-sdk` CLI invocations
+# (GSD_SDK default below) target the SDK retired by upstream ADR-0174 and are
+# NOT runnable against the adopted tree. Retained as the recorded driver of
+# the v1.3 dogfood metrics (.planning/intel/v1.3-dogfood-metrics.md); the
+# live parallel-dispatch e2e surface is scripts/e2e-parallel-phase.sh
+# (gsd-tools bridge). Do not re-point — re-derivation beyond merge scope.
+#
 # Drives the SDK CLI parallel-dispatch surface end-to-end against THIS repo
 # (jj cell, isolated `gsd/phase-14-dogfood` bookmark) AND a sibling mktemp
 # throwaway colocated repo (git cell, raw-git-clean via `jj "git" init`). Two

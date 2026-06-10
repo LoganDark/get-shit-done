@@ -373,6 +373,7 @@ Every ledger row's disposition MUST start with exactly one of these six prefixes
 | tests/precommit-alias-drift-hook.test.cjs (staged-path literal re-point) | both | merged | 19-12 Task 3: mock-git staged path `sdk/src/query/command-manifest.phase.ts` (retired fork trigger) → `src/command-aliases.cts` (the adopted tree's alias source of truth that .githooks/pre-commit actually watches) (19-12 Task 3) |
 | scripts/e2e-parallel-phase.sh (gsd-sdk → run_gsd_tools + hook-marker relocation) | fork | merged | 19-12 Task 3: harness re-pointed at the PORT-02 bridge (script-relative default, GSD_TOOLS_BIN injection seam — dogfood-restore.sh precedent); SC5 sentinel hook marker MOVED OUTSIDE the throwaway repo [Rule 1]: with the marker at $REPO/.gsd-hook-marker the workspace-side commits (which fire the hook) contaminated the stale primary WC, so fan-in's `jj workspace update-stale` snapshot-reconciled a DIVERGENT primary WC change and tripped assertion 5 (divergent() empty). Marker outside the repo keeps the primary WC byte-clean (matches the cmd-parallel-jj.test.ts-proven topology). Both cells verified green locally (jj-colocated: all 6 assertions incl. hook-fired-per-workspace; git: all 4) (19-12 Task 3) |
 | .github/workflows/parallel-e2e.yml (re-pointed) | fork | merged | 19-12 Task 3: npm ci → corepack + `pnpm install --frozen-lockfile` (test.yml 19-04 pattern); `npm run build:sdk` → `pnpm run build:lib`; GSD_SDK env dropped (harness resolves gsd-tools script-relative in the checkout); PR paths filter sdk/src/vcs/** → src/vcs/**, sdk/src/query/workspace-parallel-*.ts → src/vcs-command-router.cts, get-shit-done/workflows/** → gsd-core/workflows/**; inverted-polarity matrix + parallel-e2e-gate aggregate job byte-identical in structure; CI-06 audit + LINT-06 steps unchanged by name (scripts re-pointed in 19-10) and both verified exit 0 locally (19-12 Task 3) |
+| sdk/** residual base-present set (310 files: sdk/src core runtime 79 + sdk/src/query non-vcs layer 170 + sdk/src/golden 14 + sdk/src/{configuration,project-root,runtime-bridge-sync,workstream-inventory} 10, sdk/scripts generators/freshness-checks 21, sdk/prompts/templates 9, sdk/shared/{config-defaults.manifest.json,model-catalog.json}, sdk/docs/caching.md, sdk/test-fixtures/sample-plan.md, sdk/HANDOVER-*.md 3) | both (base; upstream deleted) | dropped:sdk-retired-upstream-ADR-0174 | 19-13 Task 1 completeness-proof class row (real disposition, not back-fill — T-19-36 honored): every file in this set is machine-verified fork-UNMODIFIED from base — `jj diff --from b533f718 --to c7bd6bee -s -- sdk get-shit-done tests` (381 fork-delta paths) intersected with this set is EMPTY, so the merge auto-resolved them as upstream ADR-0174 deletions with zero fork delta to lose. Non-vcs SDK runtime/tooling surface; the fork's vcs capability lived under sdk/src/vcs/** + the 19 registered verb handlers, all per-file-ledgered above (19-03/19-05/19-06). sdk/src/query/worktree.ts (in this set) was the cleanup-wave spawnSync back-bridge INTO gsd-tools — explicitly dispositioned no-bridge-needed in the 19-06 verb-surface row (19-13 Task 1) |
 
 ## Fixture exclusions (conflict-marker sweep)
 
@@ -917,3 +918,70 @@ Grep-hit files EXCLUDED as false positives (recorded for completeness): `command
 - `config-schema.manifest.json` — fork `sdk/shared/config-schema.manifest.json` (full fork manifest)
 - `config.json` — fork `get-shit-done/templates/config.json` (carries Phase-14 flat-boolean `"parallelization": true` + fork workflow keys)
 - `config-schema-delta.diff` — `diff -u` fork manifest → working-copy `gsd-core/bin/shared/config-schema.manifest.json`. **Direction note:** `-` lines are FORK-ONLY content, `+` lines are upstream-only additions. Analysis: the ONLY fork-only validKey is `vcs.adapter` (`parallelization` already exists in upstream's manifest, line 6 both sides); upstream adds phase_id_convention, effort.*, fast_mode.*, plan_review.*, model_policy.*, agent_skills_security.trusted_global_roots + granularities/effort/fast_mode/model_policy dynamicKeyPatterns. Graft (19-03 Task 3) is therefore purely additive: insert `"vcs.adapter"` into upstream validKeys.
+
+## Appendix: MERGE-02 completeness proof + severed-chain sweep + dispatch smoke (19-13 Task 1)
+
+**Run:** 2026-06-10 (plan 19-13 Task 1). All three proofs machine-generated; transcripts below are pasted, not asserted (T-19-35).
+
+### Completeness proof (MERGE-02)
+
+**Sweep:** `comm -23 <(jj file list -r c7bd6bee sdk get-shit-done tests | sort) <(jj file list -r @ sdk get-shit-done tests | sort)` → **951 lines** (fork side has 1,540 tracked files under the three roots at c7bd6bee; 810 survive at @; the comm asymmetry counts paths in fork-not-@).
+
+**Checker:** `19-13-ledger-check.mjs` (committed beside this ledger; rerunnable for the next pull). It parses every row of the `## Ledger` table above, extracts the PATH-column tokens (exact paths, `{a,b}` brace groups, `*`/`**` globs, trailing-`/` directory prefixes), and requires every sweep line to match at least one row. **Honesty guard (T-19-36):** rows whose path cell describes lint-ALLOWLIST ENTRIES (`allow.json` bookkeeping, e.g. the `sdk/**`/`get-shit-done/**` legacy-entry strip row) are EXCLUDED from the matcher set — their globs describe allowlist lines, not file dispositions; without that exclusion the proof would rubber-stamp itself.
+
+**First run:** 315 unmatched. Triage before any row was added:
+
+- `jj diff --from b533f718 --to c7bd6bee -s -- sdk get-shit-done tests` = 381 fork-delta paths (everything the fork touched since base). **Intersection with the 315 unmatched = exactly the 5 `tests/scripts/fixtures/lint-vcs-parallel-call-presence/*/get-shit-done/workflows/*.md` fixture files** — which already had a ledger row (19-10 fixture-rename row); the checker's trailing-`/` glob handling was the miss (fixed: trailing-slash glob = directory prefix).
+- The remaining **310 sdk/ files are machine-verified fork-UNMODIFIED from base** — pure upstream ADR-0174 deletions auto-resolved at merge, zero fork delta to lose. One class row added to the ledger with that real disposition (`dropped:sdk-retired-upstream-ADR-0174`); NOT a back-filled invention — the disposition is the machine-verified fact.
+
+**Final run:**
+
+```
+ledger rows parsed: 348; path matchers extracted: 366
+sweep lines: 951; matched: 951; UNMATCHED: 0
+top covering matchers (token  kind  lines-covered):
+  sdk/**  glob  310            (the 19-13 class row — fork-unmodified residue)
+  get-shit-done/  prefix  278  (19-12 directory-rename verification row)
+  sdk/dist-cjs/**  glob  93    (19-12 built-artifact row)
+  sdk/src/vcs/__tests__/**  glob  59  (19-11 port row)
+  tests/scripts/fixtures/lint-vcs-parallel-call-presence/*/get-shit-done/  glob  5
+  sdk/scripts/.tmp/**  glob  5
+  (+ 360 exact-path matchers, one per per-file row)
+RESULT: PASS — every sweep line resolves to a ledger row
+```
+
+**Broad-row rigor check:** the two wide covering rows only carry fork-unmodified files — all **22** fork-MODIFIED `get-shit-done/` paths in the sweep (fork-delta ∩ sweep) have their own specific ledger rows (machine-checked per path; zero relying on the prefix row). **Zero silently-lost fork capability: MERGE-02 PROVEN.**
+
+### Severed-chain sweep (Pitfall 4)
+
+**Sweep:** `rg -n 'gsd-sdk' --glob '!.planning/**'` (node_modules excluded) → **234 hits / 90 files.** Classification — every hit is one of:
+
+| class | files (count) | verdict |
+|-------|---------------|---------|
+| upstream docs/changelogs/ADRs about the SDK retirement | CHANGELOG.md (34), docs/** (ADR-0174, 3524, 0007/0009, ARCHITECTURE translations, RELEASE-NOTES-LEGACY, prd, superpowers), CONTRIBUTING.md, CONTEXT.md, VERSIONING.md, QUICK-WINS-CONFIRMED-BUGS.md | historical — adopted-upstream prose |
+| retirement-pinning guard tests (the literal IS the forbidden pattern they scan for) | bug-3810-no-gsd-sdk-runtime-refs, enh-191-retire-sdk-package, bug-505-remove-dead-sdk-verification, no-cjs-sdk-handsync-tooling, issue-498-identity-drift-lint | self-referential guards — they PROVE the severed chain |
+| comment/docblock provenance in ported src/vcs (ledgered 19-06 BLOCKER-3 row: 9 hits, all comments) | vcs-command-router.cts (2), vcs/types.cts (4), backends/git.cts, git/parallel.cts, jj/workspace-cleanup.cts | historical — already ledgered |
+| test comments / fixture strings / negative assertions / stderr-noise shim labels | dogfood-restore-orphan-cleanup (12 — CR-02 shim simulates "gsd-sdk stderr noise"), src/vcs/__tests__/* (file name + comments), ~40 tests/*.test.cjs with prose mentions or regex alternations like `/(?:git commit\|gsd-sdk query commit)/` | historical — none spawn |
+| classifier/pattern source naming the token | fix-slash-commands.cjs, lint-package-identity-drift.cjs, github-release-notes.cjs keyword regex | historical — string analysis, never invoked |
+| shell-script header notes | dogfood-restore.sh (3), e2e-parallel-phase.sh (1) — both re-pointed 19-11/19-12, comments document the retirement | historical |
+| **scripts/dogfood-phase-14.sh** | 6 hits incl. a LIVE default `GSD_SDK="${GSD_SDK:-gsd-sdk}"` invocation surface | **fixed this plan:** header HISTORICAL note added (19-10 historical-gate precedent) — one-shot v1.3 dogfood driver, fired 2026-05-23, not runnable against the adopted tree; live e2e surface is e2e-parallel-phase.sh. `bash -n` green |
+
+**Spawn-path assert:** `rg -n 'resolveGsdToolsPath|bin/gsd-sdk' src gsd-core tests` → **1 hit**, the enh-191 NEGATIVE assertion `assert.equal(fs.existsSync(shimPath), false, 'bin/gsd-sdk.js must be deleted')`. **Zero live spawn paths.**
+
+### End-to-end dispatch smoke (PORT-02 final form)
+
+Two throwaway tmp cells, launcher snippet (`gsd-core/workflows/_runtime-launcher.snippet.sh`, the real file) sourced from a **subdirectory** (`sub/dir/`); this repo's `gsd-core/` symlinked into the tmp root so the snippet's first probe leg is the surface under test. Smoke script committed beside this ledger as `19-13-dispatch-smoke.sh` (rerunnable for the next pull); jq assert: `.ok == true and has("entries") and has("porcelain")`.
+
+```
+=== cell jj-only (jj git init --no-colocate; tmp=/tmp/gsd-19-13-smoke.Iu37FR) ===
+GSD_TOOLS=/private/tmp/gsd-19-13-smoke.Iu37FR/gsd-core/bin/gsd-tools.cjs
+{ "ok": true, "entries": [], "raw": "", "porcelain": false }
+cell jj-only: PASS (root resolved from sub/dir via the jj leg; envelope valid; raw empty = jj adapter)
+=== cell git (jj git init --colocate seed, GSD_VCS=git; tmp=/tmp/gsd-19-13-smoke.7BMv65) ===
+GSD_TOOLS=/private/tmp/gsd-19-13-smoke.7BMv65/gsd-core/bin/gsd-tools.cjs
+{ "ok": true, "entries": [], "raw": "On branch master\n\nNo commits yet\n\nUntracked files:\n...", "porcelain": false }
+cell git: PASS (root resolved from sub/dir; envelope valid; git-status raw = git adapter)
+DISPATCH SMOKE: BOTH CELLS PASS
+```
+
+Both GSD_TOOLS paths `readlink -f`-verified identical to this repo's `gsd-core/bin/gsd-tools.cjs`. Cells removed after the run; `jj st` on this repo confirmed untouched (T-19-17 discipline). Note for the next pull: plain `jj git init` now COLOCATES by default on jj ≥0.45 — jj-only cells must pass `--no-colocate` explicitly (first smoke draft hit this; the git adapter answered in the "jj-only" cell).
