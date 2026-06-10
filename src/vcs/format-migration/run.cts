@@ -60,9 +60,11 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { existsSync, realpathSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
 import { join, relative, resolve as pathResolve, sep as pathSep } from 'node:path';
 import { createVcsAdapter } from '../index.cjs';
+// 19-07: jj-init spawn routes through the adapter-internal exec seam
+// (raw child_process execFileSync retired from this module).
+import { vcsExec } from '../exec.cjs';
 // 19-05 port shim: the SDK query layer is retired (upstream ADR-0174). The
 // fork-only helpers live in ./planning-shim.cts (byte-identical bodies);
 // planningPaths re-points at upstream's canonical planning-workspace module.
@@ -202,11 +204,15 @@ export async function runMigration(
     const initArgs = opts.native
       ? ['git', 'init', '--no-colocate']
       : ['git', 'init', '--colocate'];
-    try {
-      execFileSync('jj', initArgs, { cwd: canonicalCwd, stdio: 'pipe' });
-    } catch (e) {
+    // 19-07: routed through the adapter-internal exec seam (vcsExec) instead
+    // of raw child_process execFileSync — same argv-array spawn wrapper the
+    // backends use (Task 2 sweep: zero execSync/execFileSync outside
+    // shell-command-projection.cts). vcsExec returns a result instead of
+    // throwing; the non-zero branch reproduces the prior throw semantics.
+    const initRes = vcsExec(canonicalCwd, 'jj', initArgs);
+    if (initRes.exitCode !== 0) {
       throw new Error(
-        `migrate-vcs: failed to initialise jj backend (${initArgs.join(' ')}): ${(e as Error).message}`,
+        `migrate-vcs: failed to initialise jj backend (${initArgs.join(' ')}): ${initRes.stderr || initRes.stdout || initRes.error?.message || `exit ${initRes.exitCode}`}`,
       );
     }
   }

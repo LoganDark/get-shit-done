@@ -9,7 +9,13 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execGit, platformWriteSync, platformReadSync, platformEnsureDir } from './shell-command-projection.cjs';
+import { platformWriteSync, platformReadSync, platformEnsureDir } from './shell-command-projection.cjs';
+// 19-07 (AUDIT-01): VCS probes route through the ported adapter (replayed
+// from the fork's core.cjs reference, plan 02-11). `execGit` from
+// shell-command-projection is intentionally NOT imported (project_no_raw_git
+// — all VCS reads/writes route through the adapter so jj workspaces aren't
+// perturbed by ambient git).
+import { createVcsAdapter } from './vcs/index.cjs';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import modelProfiles = require('./model-profiles.cjs');
 const { MODEL_PROFILES, AGENT_TO_PHASE_TYPE, VALID_PHASE_TYPES: _VALID_PHASE_TYPES, AGENT_DEFAULT_TIERS, VALID_AGENT_TIERS, nextTier } = modelProfiles;
@@ -597,11 +603,24 @@ const _gitIgnoredCache = new Map<string, boolean>();
 function isGitIgnored(cwd: string, targetPath: string): boolean {
   const key = cwd + '::' + targetPath;
   if (_gitIgnoredCache.has(key)) return _gitIgnoredCache.get(key)!;
-  // --no-index checks .gitignore rules regardless of whether the file is tracked.
-  const result = execGit(['check-ignore', '-q', '--no-index', '--', targetPath], { cwd });
-  const ignored = result.exitCode === 0;
-  _gitIgnoredCache.set(key, ignored);
-  return ignored;
+  try {
+    // 19-07 (fork core.cjs plan 02-11 reference): vcs.refs.isIgnored(path)
+    // wraps `git check-ignore -q --no-index -- <path>`. The adapter routes
+    // through an argv-array exec (no shell interpretation of special chars),
+    // preserving the command-injection guard. `--no-index` semantics are
+    // preserved by the backend: it checks .gitignore rules regardless of
+    // whether the file is tracked. The `{ kind: 'git' }` pin is KEPT from
+    // the fork reference — gitignore semantics are a git-side concept; the
+    // jj backend's refs.isIgnored is deferred (throws VcsNotImplementedError,
+    // caught below → false, same as the fork's catch-false behavior).
+    const vcs = createVcsAdapter(cwd, { kind: 'git' });
+    const ignored = vcs.refs.isIgnored(targetPath);                                // (was: check-ignore -q --no-index -- <path>)
+    _gitIgnoredCache.set(key, ignored);
+    return ignored;
+  } catch {
+    _gitIgnoredCache.set(key, false);
+    return false;
+  }
 }
 
 // ─── Common path helpers ──────────────────────────────────────────────────────
@@ -1896,20 +1915,19 @@ interface GitWorktreeInfo {
  * absolute path of the worktree root.
  */
 function gitWorktreeInfoInternal(cwd: string): GitWorktreeInfo {
+  // 19-07 (AUDIT-01): backend-aware root detection via the adapter (the fork
+  // core.cjs reference's intent — its retained execGit identifier was
+  // unbound, so the fork de facto degraded to {inside:false}; this port
+  // implements the documented backend-aware semantics instead of replaying
+  // that latent bug). vcs.workspace.context() throws cleanly on non-repo and
+  // returns effectiveRoot for git AND jj repos
+  // (was: rev-parse --is-inside-work-tree + rev-parse --show-toplevel).
+  // Failure modes (no VCS binary, non-repo cwd, timeout) all collapse to
+  // `{ inside: false, worktreeRoot: null }` — the conservative default.
   try {
-    const insideResult = execGit(['rev-parse', '--is-inside-work-tree'], { cwd, timeout: 5000 });
-    if (insideResult.exitCode !== 0) {
-      return { inside: false, worktreeRoot: null };
-    }
-    const insideStdout = String(insideResult.stdout || '').trim();
-    if (insideStdout !== 'true') {
-      return { inside: false, worktreeRoot: null };
-    }
-    const rootResult = execGit(['rev-parse', '--show-toplevel'], { cwd, timeout: 5000 });
-    if (rootResult.exitCode !== 0) {
-      return { inside: true, worktreeRoot: null };
-    }
-    const root = String(rootResult.stdout || '').trim();
+    const vcs = createVcsAdapter(cwd);
+    const context = vcs.workspace.context();
+    const root = String(context.effectiveRoot || '').trim();
     return { inside: true, worktreeRoot: root || null };
   } catch {
     return { inside: false, worktreeRoot: null };

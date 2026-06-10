@@ -9,7 +9,17 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { execTool, execGit, platformWriteSync } from './shell-command-projection.cjs';
+import { execTool, platformWriteSync } from './shell-command-projection.cjs';
+// 19-07 (AUDIT-01): graphify's two git reads route through the adapter per
+// the fork graphify.cjs reference (plan 02-07): rev-parse HEAD →
+// vcs.refs.resolveShort(refs.head); rev-list --count A..B →
+// vcs.refs.countCommits({rev: expr.range(...)}). The `{ kind: 'git' }` pins
+// are KEPT from the fork reference (substrate:graphify-colocated-read —
+// graph.built_at_commit is hex-fenced by COMMIT_HASH_RE, and jj commit_ids
+// ARE git commit_ids in colocated repos; a jj change_id would fail the hex
+// fence, so these reads stay pinned to the git object store). `execGit` is
+// intentionally NOT imported (project_no_raw_git).
+import { createVcsAdapter, expr } from './vcs/index.cjs';
 
 // ─── Config Gate ─────────────────────────────────────────────────────────────
 
@@ -369,25 +379,53 @@ function applyBudget(result: ExpandResult, budgetTokens: number | null): ExpandR
 const COMMIT_HASH_RE = /^[0-9a-f]{4,40}$/i;
 
 /**
- * Read git HEAD for the project at `cwd`. Returns the full commit hash on
- * success, or null when cwd is not a git repo / `git` is not on PATH.
+ * Read git HEAD for the project at `cwd`. Returns the resolved short commit
+ * hash on success, or null when cwd is not a git repo / HEAD is unresolvable.
+ *
+ * 19-07 (fork graphify.cjs plan 02-07 reference): migrated from raw
+ * `git rev-parse HEAD` to `vcs.refs.resolveShort(vcs.refs.head)`. The
+ * previous shape returned the full 40-hex SHA; the new shape returns the
+ * auto-disambiguated short SHA. The consumers in graphifyStatus() either
+ * (a) `.slice(0, 7)` it for display (no-op for already-short SHAs) or
+ * (b) feed it to countCommitsBetween, which accepts the short SHA via
+ * expr.rev() (4-40 hex validator).
  */
 function readGitHead(cwd: string): string | null {
-  const r = execGit(['rev-parse', 'HEAD'], { cwd });
-  if (r.exitCode !== 0) return null;
-  return r.stdout.trim() || null;
+  try {
+    const vcs = createVcsAdapter(cwd, { kind: 'git' });
+    const sha = vcs.refs.resolveShort(vcs.refs.head);                              // (was: rev-parse HEAD)
+    return sha.trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 /**
  * Count commits between `from` and `to` (exclusive..inclusive, like
  * `git rev-list --count A..B`). Returns null when either ref is unreachable
  * or the cwd is not a git repo.
+ *
+ * 19-07 (fork graphify.cjs plan 02-07 reference): migrated to
+ * `vcs.refs.countCommits({rev: expr.range(expr.rev(from), expr.rev(to))})`.
+ * Both `from` and `to` are runtime SHA strings (`from` validated by
+ * COMMIT_HASH_RE upstream; `to` produced by readGitHead) so they wrap via
+ * expr.rev() (no raw escape hatch). Adapter contract differs subtly from the
+ * prior raw-git: countCommits returns 0 on non-zero exit (e.g. unreachable
+ * ref) where the original returned null (tri-state "we don't know"). To
+ * preserve the "unreachable → null" semantic, ref existence is pre-validated
+ * with vcs.refs.exists before computing the count.
  */
 function countCommitsBetween(cwd: string, from: string, to: string): number | null {
-  const r = execGit(['rev-list', '--count', `${from}..${to}`], { cwd });
-  if (r.exitCode !== 0) return null;
-  const n = parseInt(r.stdout.trim(), 10);
-  return Number.isFinite(n) ? n : null;
+  try {
+    const vcs = createVcsAdapter(cwd, { kind: 'git' });
+    const fromExpr = expr.rev(from);
+    const toExpr = expr.rev(to);
+    if (!vcs.refs.exists(fromExpr) || !vcs.refs.exists(toExpr)) return null;
+    const n = vcs.refs.countCommits({ rev: expr.range(fromExpr, toExpr) });        // (was: rev-list --count <from>..<to>)
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

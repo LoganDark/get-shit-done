@@ -108,6 +108,13 @@ export function vcsExec(
     stdio: 'pipe',
     encoding: 'utf-8',
     timeout,
+    // 19-07 (upstream issue #685 parity): suppress the Windows console-window
+    // flash for every adapter-routed spawn. The raw call sites migrated into
+    // this seam (check-command-router, roadmap-upgrade, commands, verify,
+    // core, init, graphify) previously set windowsHide:true individually;
+    // setting it here preserves that contract adapter-wide. Additive spawn
+    // option — the 5-field ExecResult shape is untouched (Pitfall 10).
+    windowsHide: true,
     ...(childEnv ? { env: childEnv } : {}),
   });
   const timedOut =

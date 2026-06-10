@@ -382,6 +382,12 @@ function serializeFrontmatter(data: Record<string, string>, body: string): strin
 /**
  * Read `last_mapped_commit` from the frontmatter of a `.planning/codebase/*.md`
  * file. Returns null if the file does not exist or has no frontmatter.
+ *
+ * 19-07 (AUDIT-01 disposition): this module performs NO raw VCS exec — the
+ * `last_mapped_commit` value is opaque revision-id STORAGE under the unified
+ * revision model (hex commit_id on git, [k-z] change_id on jj). Its only
+ * VCS-facing consumer (verify.cts cmdVerifyCodebaseDrift) wraps it via
+ * expr.rev(), which is alphabet-agnostic.
  */
 function readMappedCommit(filePath: string): string | null {
   let content: string;

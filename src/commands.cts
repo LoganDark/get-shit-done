@@ -1405,8 +1405,13 @@ function cmdStats(cwd: string, format: string | undefined, raw: boolean): void {
   let gitFirstCommitDate: string | null = null;
   try {
     const statsVcs = createVcsAdapter(cwd);
-    gitCommits = statsVcs.refs.countCommits({ rev: statsVcs.refs.head });          // (was: rev-list --count HEAD)
-    const roots = statsVcs.refs.rootRevisions({ rev: statsVcs.refs.head });        // (was: rev-list --max-parents=0 HEAD)
+    // Rule-1 deviation from the fork's 02-09 annotation (which passed
+    // {rev: refs.head}, written pre-jj-backend): on jj, an explicit head rev
+    // translates to '@' and counts ONE commit, while the no-rev default is
+    // '::@' (full ancestry) — identical to git's no-rev 'HEAD' default. Omit
+    // rev so both backends count head's full ancestry.
+    gitCommits = statsVcs.refs.countCommits({});                                   // (was: rev-list --count HEAD)
+    const roots = statsVcs.refs.rootRevisions({});                                 // (was: rev-list --max-parents=0 HEAD)
     if (roots.length > 0) {
       const firstCommit = roots[0];
       // Wrap the runtime revision id via expr.rev() (structured RevisionExpr;

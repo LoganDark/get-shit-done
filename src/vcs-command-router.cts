@@ -38,7 +38,6 @@
 
 import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { readFile, realpath } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
 import { isAbsolute, join, normalize, relative, resolve } from 'node:path';
 import { createVcsAdapter } from './vcs/index.cjs';
 import { expr } from './vcs/expr.cjs';
@@ -998,10 +997,13 @@ const migrateVcsVerb: VcsVerbHandler = async (args, projectDir) => {
   }
 
   // Pre-flight: target=jj requires jj binary available.
+  // 19-07: routed through the adapter-internal exec seam (vcsExec) instead
+  // of raw child_process execSync — same argv-array discipline as every
+  // other VCS spawn in this module (project_no_raw_git; Task 2 sweep:
+  // zero execSync/execFileSync outside shell-command-projection.cts).
   if (target === 'jj') {
-    try {
-      execSync('jj --version', { stdio: 'pipe' });
-    } catch {
+    const probe = vcsExec(cwd, 'jj', ['--version']);
+    if (probe.exitCode !== 0) {
       return {
         data: {
           ok: false,

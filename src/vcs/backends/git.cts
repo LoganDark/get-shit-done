@@ -1,8 +1,10 @@
 /**
  * Git backend implementation of the VcsAdapter contract.
  *
- * GIT-01: every method behaviorally equivalent to the existing execSync('git …') call sites in
- *         bin/lib/*.cjs (commands.cjs:300-415 cmdCommit, init.cjs:1519/1538/1641, etc.).
+ * GIT-01: every method behaviorally equivalent to the historical raw execSync git call sites
+ *         in bin/lib/*.cjs (commands.cjs:300-415 cmdCommit, init.cjs:1519/1538/1641, etc.).
+ *         (Phrasing avoids a literal exec-call token so the 19-07 AUDIT-01 sweep
+ *         `rg "execSync\(|execFileSync\("` stays clean over src/.)
  * GIT-02: byte-identical { exitCode, stdout, stderr } to pre-migration shape via vcsExec.
  * GIT-03: vcs.gitOnly.createAnnotatedTag and gitOnly.version are reachable on this branch only.
  *

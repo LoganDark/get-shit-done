@@ -8,7 +8,11 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+// 19-07 (AUDIT-01): the commit-message read routes through the ported
+// adapter (fork check-decision-coverage.ts reference: adapter-routed
+// vcs.log({maxCount}) with B-08 sticky-adapter detection). Raw
+// child_process exec is gone from this module (project_no_raw_git).
+import { createVcsAdapter } from './vcs/index.cjs';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import core = require('./core.cjs');
 const { output, error, ERROR_REASON } = core;
@@ -248,13 +252,14 @@ function cmdDecisionCoveragePlan(projectDir: string, args: string[], raw: boolea
 }
 
 function recentCommitMessages(projectDir: string): string {
+  // 19-07: vcs.log({maxCount:200}) with `%s%n%b` shaping in JS
+  // (was: git log -n 200 --pretty=%s%n%b). The joined subject+body text is a
+  // free-text grep target for decision-coverage matching; LogEntry.subject /
+  // LogEntry.body carry the same content on both backends.
   try {
-    return execFileSync('git', ['log', '-n', '200', '--pretty=%s%n%b'], {
-      cwd: projectDir,
-      encoding: 'utf-8',
-      maxBuffer: 4 * 1024 * 1024,
-      windowsHide: true,
-    });
+    const vcs = createVcsAdapter(projectDir);
+    const entries = vcs.log({ maxCount: 200 });                                    // (was: log -n 200 --pretty=%s%n%b)
+    return entries.map((e) => `${e.subject || ''}\n${e.body || ''}`).join('\n');
   } catch {
     return '';
   }

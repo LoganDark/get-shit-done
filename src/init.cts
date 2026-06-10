@@ -9,7 +9,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { execGit, platformWriteSync, platformReadSync } from './shell-command-projection.cjs';
+import { platformWriteSync, platformReadSync } from './shell-command-projection.cjs';
+// 19-07 (AUDIT-01): VCS probes route through the ported adapter (replayed
+// from the fork's init.cjs reference). `execGit` from shell-command-projection
+// is intentionally NOT imported (project_no_raw_git). The `{ kind: 'git' }`
+// pins below are KEPT from the fork reference: detectChildRepos /
+// workspace-dirty probes are gated on `.git` presence (git-backed children),
+// and the worktree_available probe narrows to gitOnly.version() (MIGR-02
+// fork precedent — jj-backed child detection is future work).
+import { createVcsAdapter } from './vcs/index.cjs';
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- core.cjs is an export= CommonJS module
 import core = require('./core.cjs');
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- planning-workspace.cjs is an export= CommonJS module
@@ -137,36 +145,28 @@ function getInitGitState(cwd: string): GitState {
 
   let inNestedSubdir = false;
   if (info['inside']) {
-    let resolvedByGitPrefix = false;
-    try {
-      const prefixResult = execGit(['rev-parse', '--show-prefix'], { cwd, timeout: 5000 }) as unknown as Record<string, unknown>;
-      if (prefixResult['exitCode'] === 0) {
-        const prefix = (typeof prefixResult['stdout'] === 'string' ? prefixResult['stdout'] : '').trim().replace(/\\/g, '/');
-        inNestedSubdir = prefix.length > 0 && prefix !== '.' && prefix !== './';
-        resolvedByGitPrefix = true;
-      }
-    } catch {
-      /* intentionally empty */
-    }
-
-    if (!resolvedByGitPrefix) {
-      const rootNorm = normalizeForCompare(worktreeRoot!);
-      const cwdNorm = normalizeForCompare(cwd);
-      if (rootNorm && cwdNorm) {
-        if (rootNorm === cwdNorm) {
-          inNestedSubdir = false;
-        } else {
-          const rel = path.relative(rootNorm, cwdNorm);
-          const relNorm = process.platform === 'win32' ? rel.replace(/\//g, '\\') : rel;
-          inNestedSubdir =
-            relNorm !== '' &&
-            relNorm !== '.' &&
-            !relNorm.startsWith('..') &&
-            !path.isAbsolute(relNorm);
-        }
+    // 19-07: the raw `rev-parse --show-prefix` probe is gone (was: rev-parse
+    // --show-prefix). The fork init.cjs reference de facto resolved
+    // nested-subdir state via the worktreeRoot/cwd path comparison below
+    // (its retained execGit identifier was unbound — the try/catch always
+    // fell through to this branch), and the comparison is backend-agnostic:
+    // worktreeRoot now comes from the adapter-routed gitWorktreeInfoInternal.
+    const rootNorm = normalizeForCompare(worktreeRoot!);
+    const cwdNorm = normalizeForCompare(cwd);
+    if (rootNorm && cwdNorm) {
+      if (rootNorm === cwdNorm) {
+        inNestedSubdir = false;
       } else {
-        inNestedSubdir = worktreeRoot !== null;
+        const rel = path.relative(rootNorm, cwdNorm);
+        const relNorm = process.platform === 'win32' ? rel.replace(/\//g, '\\') : rel;
+        inNestedSubdir =
+          relNorm !== '' &&
+          relNorm !== '.' &&
+          !relNorm.startsWith('..') &&
+          !path.isAbsolute(relNorm);
       }
+    } else {
+      inNestedSubdir = worktreeRoot !== null;
     }
   }
 
@@ -1693,13 +1693,16 @@ function detectChildRepos(dir: string): { name: string; path: string; has_uncomm
     const fullPath = path.join(dir, entry.name);
     const gitDir = path.join(fullPath, '.git');
     if (fs.existsSync(gitDir)) {
-      const statusResult = execGit(['status', '--porcelain'], {
-        cwd: fullPath,
-        timeout: 5000,
-      }) as unknown as Record<string, unknown>;
-      const hasUncommitted =
-        statusResult['exitCode'] === 0 &&
-        (statusResult['stdout'] as string).length > 0;
+      // 19-07 (fork init.cjs MIGR-02 reference): this helper only detects
+      // git-backed children (`.git` presence), so the status probe pins the
+      // git backend. jj-backed child detection (`.jj` presence) is a
+      // future-work item beyond the fork's MIGR-02 scope.
+      let hasUncommitted = false;
+      try {
+        const vcs = createVcsAdapter(fullPath, { kind: 'git' });
+        const status = vcs.status({ porcelain: true });                            // (was: status --porcelain)
+        hasUncommitted = status.entries.length > 0;
+      } catch { /* best-effort */ }
       repos.push({ name: entry.name, path: fullPath, has_uncommitted: hasUncommitted });
     }
   }
@@ -1712,8 +1715,19 @@ function cmdInitNewWorkspace(cwd: string, raw: boolean): void {
 
   const childRepos = detectChildRepos(cwd);
 
-  const gitVersion = execGit(['--version'], { timeout: 5000 }) as unknown as Record<string, unknown>;
-  const worktreeAvailable = gitVersion['exitCode'] === 0;
+  // 19-07 (fork init.cjs reference): worktree/workspace-primitive availability
+  // probe via the adapter. The vcs.kind === 'git' narrow is for gitOnly.*
+  // capability access (version() lives on GitOnlyOps, not the cross-backend
+  // surface), NOT for id-shape reasons — "vcs.kind branching for non-id
+  // reasons remains valid" (fork Phase 8 out-of-scope clause).
+  let worktreeAvailable = false;
+  try {
+    const vcs = createVcsAdapter(cwd, { kind: 'git' });
+    if (vcs.kind === 'git') {
+      vcs.gitOnly.version();                                                       // (was: git --version)
+      worktreeAvailable = true;
+    }
+  } catch { /* no git at all */ }
 
   const result: Record<string, unknown> = {
     default_workspace_base: defaultBase,
@@ -1824,20 +1838,20 @@ function cmdInitRemoveWorkspace(cwd: string, name: string | undefined, raw: bool
     }
   }
 
+  // Check for uncommitted changes in workspace repos.
+  // 19-07 (fork init.cjs reference): per-repo adapter status probe, git pin
+  // kept (workspace manifest repos are git clones per the workspace flow).
   const dirtyRepos: string[] = [];
   for (const repo of repos) {
     const repoPath = path.join(wsPath, repo.name);
     if (!fs.existsSync(repoPath)) continue;
-    const statusResult = execGit(['status', '--porcelain'], {
-      cwd: repoPath,
-      timeout: 5000,
-    }) as unknown as Record<string, unknown>;
-    if (
-      statusResult['exitCode'] === 0 &&
-      (statusResult['stdout'] as string).length > 0
-    ) {
-      dirtyRepos.push(repo.name);
-    }
+    try {
+      const vcs = createVcsAdapter(repoPath, { kind: 'git' });
+      const status = vcs.status({ porcelain: true });                              // (was: status --porcelain)
+      if (status.entries.length > 0) {
+        dirtyRepos.push(repo.name);
+      }
+    } catch { /* best-effort */ }
   }
 
   const result: Record<string, unknown> = {

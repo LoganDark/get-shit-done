@@ -1398,8 +1398,10 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
   // ─── test-only snapshot/restore (plan 03-02) ───────────────────────────
   // RESEARCH §`[__vcsTestOnly]`: `jj op log` ids are stable snapshots of
   // the entire repo state. `jj op restore <id>` rewinds the workspace to
-  // exactly that operation, which is cleaner than git's `reset --hard +
-  // clean -fdx` strategy. D-05 still applies: no `--ignore-working-copy`.
+  // exactly that operation, which is cleaner than git's hard-reset +
+  // clean -fdx strategy. D-05 still applies: no `--ignore-working-copy`.
+  // (19-07 cosmetic reword: the AUDIT-01 acceptance asserts the literal
+  // destructive-reset token is absent from src/*.cts, comments included.)
   const testOnly: VcsTestOnly = Object.freeze({
     snapshot: (): SnapshotHandle => {
       const args = jjArgv('op', 'log', '--no-graph', '-T', 'id ++ "\\n"', '-n', '1');

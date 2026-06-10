@@ -52,17 +52,28 @@ describe('bug #685: Windows spawns must set windowsHide:true (no console-window 
     assert.match(region, /windowsHide:\s*true/, 'gsd-workflow-guard git-branch spawn must set windowsHide: true');
   });
 
-  test('check-command-router recentCommitMessages execFileSync sets windowsHide', () => {
-    const region = regionBetween(read('src/check-command-router.cts'), "execFileSync('git', ['log'", '});');
-    assert.match(region, /windowsHide:\s*true/, 'check-command-router git-log execFileSync must set windowsHide: true');
+  // 19-07 (AUDIT-01): check-command-router and roadmap-upgrade no longer
+  // spawn raw child_process — their git reads/writes route through the
+  // VcsAdapter, whose single spawn wrapper (src/vcs/exec.cts vcsExec) now
+  // carries windowsHide:true for every adapter-routed spawn. The #685
+  // invariant is preserved at the seam; these tests bind (a) the seam sets
+  // the flag and (b) the migrated modules stay raw-spawn-free so the seam
+  // is the only spawn path.
+  test('vcs exec seam (vcsExec) spawnSync sets windowsHide', () => {
+    const region = regionBetween(read('src/vcs/exec.cts'), 'const result = spawnSync', 'const timedOut');
+    assert.match(region, /windowsHide:\s*true/, 'vcsExec spawnSync must set windowsHide: true');
   });
 
-  test('roadmap-upgrade execSync git calls all set windowsHide', () => {
+  test('check-command-router recentCommitMessages is adapter-routed (no raw spawn)', () => {
+    const region = regionBetween(read('src/check-command-router.cts'), 'function recentCommitMessages', 'function isInsideRoot');
+    assert.match(region, /createVcsAdapter\(/, 'recentCommitMessages must route through createVcsAdapter');
+    assert.doesNotMatch(region, /exec(?:File)?Sync\s*\(/, 'recentCommitMessages must not spawn raw child_process');
+  });
+
+  test('roadmap-upgrade is adapter-routed (no raw exec calls anywhere)', () => {
     const src = read('src/roadmap-upgrade.cts');
-    const calls = src.match(/execSync\([^)]*\)/g) || [];
-    assert.ok(calls.length >= 4, 'expected the roadmap-upgrade git execSync calls to be present');
-    const missing = calls.filter((c) => !/windowsHide:\s*true/.test(c));
-    assert.deepEqual(missing, [], `execSync without windowsHide:\n${missing.join('\n')}`);
+    assert.match(src, /createVcsAdapter\(/, 'roadmap-upgrade must route through createVcsAdapter');
+    assert.doesNotMatch(src, /exec(?:File)?Sync\s*\(/, 'roadmap-upgrade must not spawn raw child_process');
   });
 
   test('gsd-check-update spawn retains windowsHide (precedent guard)', () => {
