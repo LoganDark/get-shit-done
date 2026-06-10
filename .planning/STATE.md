@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Clean, consistent state for next upstream pull
 status: executing
-last_updated: "2026-06-10T10:46:42.607Z"
+last_updated: "2026-06-10T11:20:30.857Z"
 last_activity: 2026-06-10
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 24
-  completed_plans: 14
-  percent: 58
+  completed_plans: 15
+  percent: 63
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 ## Current Position
 
 Phase: 19 (upstream-merge-conflict-resolution-fork-abstraction-audit) — EXECUTING
-Plan: 4 of 13
+Plan: 5 of 13
 Status: Ready to execute
 Last activity: 2026-06-10
 
@@ -88,6 +88,7 @@ Last activity: 2026-06-10
 | Phase 19 P01 | 11min | 2 tasks | 19 files |
 | Phase 19 P02 | 22min | 3 tasks | 3 files |
 | Phase 19 P19-03 | 39min | 3 tasks | 139 files |
+| Phase 19 P19-04 | 32min | 3 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -185,6 +186,10 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase ?]: Phase 19 Plan 03: harvest-before-delete executed — 50 byte-verified c7bd6bee reference copies (27 query handlers incl. verb registry, 10 bin-lib CJS, 9 workflow deltas, 4 misc); buckets A/B/C cleared as upstream deletions (72 -> 17 conflicts, all D/E/F/G)
 - [Phase ?]: Phase 19 Plan 03: fork JSON payloads re-homed same-plan — gsd-core/templates/config.json = fork content (flat parallelization:true; fork template has NO vcs block, plan over-claimed) + vcs.adapter validKey grafted into gsd-core/bin/shared/config-schema.manifest.json (19-02 unknown-config-key warning gone)
 - [Phase ?]: Phase 19 Plan 03: canonical marker sweep amended — add --glob '!node_modules/**' (untracked third-party content post-install) and explicit path arg (rg reads never-EOF stdin without it); tracked-fixture exclusion list stays EMPTY
+- [Phase ?]: [Phase 19] Plan 04: MERGE-01 tree-level done — 17 D/E/F/G conflicts resolved to zero; pre-port unit baseline frozen (12860 tests / 153 fails, 49 files one-line-caused, classes A-E)
+- [Phase ?]: [Phase 19] Plan 04: test.yml pnpm conversion via corepack-enable (no third-party action SHA enters the SHA-pinned workflow); npm-lockfile integrity-gate steps dropped — frozen-lockfile install is the drift gate
+- [Phase ?]: [Phase 19] Plan 04: synthesizer reconciliation — upstream #222 does NOT cover the fork blocked-Write guarantee (truncation-only fallback); rule 7 pre-seeded-file Edit path grafted + Edit added to tools allowlist
+- [Phase ?]: [Phase 19] Plan 04: c7bd6bee ISSUE_TEMPLATE URLs were stale GSD-redux deprecation pointers — replaced with the real fork issues URL per identity decision (plan-letter deviation, ledgered); MIGR-05 release-notes adapter migration deferred to 19-07/19-13 via deferred-items.md
 
 ### Pending Todos
 
@@ -255,7 +260,7 @@ All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQU
 
 ## Session Continuity
 
-Last session: 2026-06-10T10:46:35.606Z
+Last session: 2026-06-10T11:19:51.936Z
 Stopped at: Completed 19-02-PLAN.md (install gate + build bring-up); next: 19-03
 Resume file:
 
