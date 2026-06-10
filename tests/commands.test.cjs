@@ -1270,7 +1270,7 @@ describe('commit command', () => {
   // VcsAdapter (createVcsAdapter scoped to tmpDir) for setup AND post-state
   // probes. The previous file-level execSync require is gone; the adapter
   // surface (vcs.stage / vcs.commit / vcs.log) is the contract path.
-  const { createVcsAdapter } = require('../sdk/dist-cjs/vcs/index.js');
+  const { createVcsAdapter } = require('../gsd-core/bin/lib/vcs/index.cjs');
   let tmpDir;
 
   beforeEach(() => {
@@ -1322,7 +1322,7 @@ describe('commit command', () => {
     assert.strictEqual(output.reason, 'nothing_to_commit');
   });
 
-  test('creates real commit with correct hash', () => {
+  test('creates real commit with correct id', () => {
     // Create a new file in .planning/
     fs.writeFileSync(path.join(tmpDir, '.planning', 'test-file.md'), '# Test\n');
 
@@ -1331,18 +1331,21 @@ describe('commit command', () => {
 
     const output = JSON.parse(result.output);
     assert.strictEqual(output.committed, true, 'should have committed');
-    assert.ok(output.hash, 'should have a commit hash');
+    // Phase 19 (19-07/19-11): unified revision model — the envelope field is
+    // `id` (short commit_id on git, short change_id on jj), replacing the
+    // git-only `hash` key this test previously pinned.
+    assert.ok(output.id, 'should have a commit id');
     assert.strictEqual(output.reason, 'committed');
 
     // Verify via vcs.log post-state probe (D-06): the adapter's log entry
-    // exposes hash + subject; the prior `git log --oneline -1` shape combined
+    // exposes id + subject; the prior `git log --oneline -1` shape combined
     // those into a single line. Reconstruct the contains() check on the
     // structured fields so the assertion is byte-identical to the prior shape.
     const probeVcs = createVcsAdapter(tmpDir, { kind: 'git' });
     const head = probeVcs.log({ maxCount: 1 })[0];
-    const oneline = `${head.hash.slice(0, 7)} ${head.subject}`;
+    const oneline = `${head.id.slice(0, 7)} ${head.subject}`;
     assert.ok(oneline.includes('test: add test file'), 'log entry should contain the commit message');
-    assert.ok(oneline.includes(output.hash), 'log entry should contain the returned hash');
+    assert.ok(oneline.includes(output.id), 'log entry should contain the returned id');
   });
 
   test('amend mode works without crashing', () => {
@@ -1933,7 +1936,7 @@ describe('stats command', () => {
     // Adapter has no env-injection seam for per-commit dates, so the dated
     // commits stay on raw execSync (allowlisted via the gpgsign disabler
     // pattern from plan 02-01); they are scope-narrowed to this single test.
-    const { createVcsAdapter } = require('../sdk/dist-cjs/vcs/index.js');
+    const { createVcsAdapter } = require('../gsd-core/bin/lib/vcs/index.cjs');
     const vcs = createVcsAdapter(tmpDir, { kind: 'git' });
     if (vcs.kind === 'git') {
       vcs.gitOnly.init();

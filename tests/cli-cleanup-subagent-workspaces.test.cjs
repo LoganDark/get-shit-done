@@ -1,7 +1,7 @@
 /**
  * tests/cli-cleanup-subagent-workspaces.test.cjs — Phase 16.02 (CLEANUP-02)
  *
- * Repo-side CLI smoke for `gsd-sdk query cleanup-subagent-workspaces`. Mirrors
+ * Repo-side CLI smoke for `gsd-tools query cleanup-subagent-workspaces`. Mirrors
  * `tests/cli-workspace-parallel-cancel.test.cjs` shape — `node:test` domain
  * keeps the SDK per-backend vitest domain and the repo-side CLI domain
  * cleanly separated (N4 / RESEARCH Wave 0 Gaps line 1400).
@@ -42,7 +42,9 @@ const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 
-const SDK_BIN = path.resolve(__dirname, '..', 'bin', 'gsd-sdk.js');
+// Phase 19 (19-11): the fork gsd-sdk CLI retired (ADR-0174); the same verb
+// surface dispatches through the PORT-02 bridge in gsd-tools.cjs.
+const SDK_BIN = path.resolve(__dirname, '..', 'gsd-core', 'bin', 'gsd-tools.cjs');
 
 function runQuery(argv, { stdin } = {}) {
 	const opts = {

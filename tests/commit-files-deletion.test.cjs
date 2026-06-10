@@ -17,8 +17,8 @@ const path = require('path');
 const { createTempGitProject, cleanup, runGsdTools } = require('./helpers.cjs');
 // Plan 02-09 D-06 paired retarget: setup (stage + commit) and post-state
 // probes (diff between adjacent commits) route through the VcsAdapter.
-const { createVcsAdapter } = require('../sdk/dist-cjs/vcs/index.js');
-const { expr } = require('../sdk/dist-cjs/vcs/index.js');
+const { createVcsAdapter } = require('../gsd-core/bin/lib/vcs/index.cjs');
+const { expr } = require('../gsd-core/bin/lib/vcs/index.cjs');
 
 describe('commit --files: missing files must not stage deletions (#2014)', () => {
   let tmpDir;

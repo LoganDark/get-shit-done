@@ -12,7 +12,7 @@ const { runGsdTools, createTempProject, createTempGitProject, cleanup } = requir
 // migrations). The CLI under test (verify-summary, verify-commits) still
 // operates on git internally — these are setup-only adapter calls so the
 // test exercises real commits without raw-git in the test body.
-const { createVcsAdapter } = require('../sdk/dist-cjs/vcs');
+const { createVcsAdapter } = require('../gsd-core/bin/lib/vcs/index.cjs');
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 

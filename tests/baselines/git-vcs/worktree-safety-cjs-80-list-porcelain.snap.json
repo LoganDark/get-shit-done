@@ -1,7 +1,7 @@
 {
   "id": "worktree-safety-cjs-80-list-porcelain",
   "source": "get-shit-done/bin/lib/worktree-safety.cjs:80",
-  "captured_at": "2026-05-15",
+  "captured_at": "2026-06-10",
   "fixture": {
     "init": "git init",
     "config": [
@@ -21,7 +21,7 @@
   ],
   "expected": {
     "exitCode": 0,
-    "stdout": "worktree /private/var/folders/sq/v1_sd6990ysgkqvckj68qcvw0000gn/T/gsd-baseline-yqtNeg\nHEAD 775816a7ce383f1d4556363b6ba62c1132dc5cfd\nbranch refs/heads/master",
+    "stdout": "worktree /private/var/folders/sq/v1_sd6990ysgkqvckj68qcvw0000gn/T/gsd-baseline-sNMQL1\nHEAD ed3f866c539b318c48c07bbc11ae727361d681a5\nbranch refs/heads/master",
     "stderr": "",
     "timedOut": false,
     "error": null

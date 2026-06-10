@@ -1,7 +1,7 @@
 {
   "id": "verify-ts-628-log-all",
   "source": "sdk/src/query/verify.ts:628",
-  "captured_at": "2026-05-15",
+  "captured_at": "2026-06-10",
   "fixture": {
     "init": "git init",
     "config": [
@@ -22,7 +22,7 @@
   ],
   "expected": {
     "exitCode": 0,
-    "stdout": "a7b7c45 initial",
+    "stdout": "95076c9 initial",
     "stderr": "",
     "timedOut": false,
     "error": null

@@ -1,7 +1,7 @@
 {
   "id": "graphify-cjs-384-rev-list-count-range",
   "source": "get-shit-done/bin/lib/graphify.cjs:384",
-  "captured_at": "2026-05-15",
+  "captured_at": "2026-06-10",
   "fixture": {
     "init": "git init",
     "config": [

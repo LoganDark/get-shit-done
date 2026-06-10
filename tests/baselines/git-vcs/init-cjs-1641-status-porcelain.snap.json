@@ -1,7 +1,7 @@
 {
   "id": "init-cjs-1641-status-porcelain",
   "source": "get-shit-done/bin/lib/init.cjs:1641",
-  "captured_at": "2026-05-15",
+  "captured_at": "2026-06-10",
   "fixture": {
     "init": "git init",
     "config": [

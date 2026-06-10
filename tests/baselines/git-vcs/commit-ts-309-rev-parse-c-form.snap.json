@@ -1,7 +1,7 @@
 {
   "id": "commit-ts-309-rev-parse-c-form",
   "source": "sdk/src/query/commit.ts:309",
-  "captured_at": "2026-05-15",
+  "captured_at": "2026-06-10",
   "fixture": {
     "init": "git init",
     "config": [
@@ -25,7 +25,7 @@
   ],
   "expected": {
     "exitCode": 0,
-    "stdout": "cf163c5",
+    "stdout": "d937fbb",
     "stderr": "",
     "timedOut": false,
     "error": null

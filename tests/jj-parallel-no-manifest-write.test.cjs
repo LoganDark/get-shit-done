@@ -6,13 +6,13 @@
  * D-01 architectural invariant: only persistent state is workspaces /
  * bookmarks / HEADs themselves; no orchestrator-managed sidecar files. Plan
  * 11-09 retired the orphaned WAVE_WORKTREE_MANIFEST writer in
- * `sdk/src/vcs/jj/parallel.ts` (the SDK-side mirror of the same retirement
- * that `bin/lib/worktree-safety.cjs::reconstructHandleFromLegacyPlan` shipped
+ * `src/vcs/jj/parallel.cts` (the SDK-side mirror of the same retirement
+ * that `src/worktree-safety.cts::reconstructHandleFromLegacyPlan` shipped
  * for the legacy-plan path).
  *
  * Test strategy: two layers.
  *
- *   1. Source-level guard (always runs) — read `sdk/src/vcs/jj/parallel.ts`
+ *   1. Source-level guard (always runs) — read `src/vcs/jj/parallel.cts`
  *      as text and assert that the retired tokens are not present in
  *      executable positions. This catches any future re-introduction of the
  *      manifest write at PR-review time without needing a live jj fixture.
@@ -32,7 +32,7 @@ const os = require('node:os');
 
 const repoRoot = path.resolve(__dirname, '..');
 const PARALLEL_TS = fs.readFileSync(
-  path.join(repoRoot, 'sdk/src/vcs/jj/parallel.ts'),
+  path.join(repoRoot, 'src/vcs/jj/parallel.cts'),
   'utf-8',
 );
 
@@ -41,12 +41,12 @@ test.describe('WR-01 source-level guard (always runs)', () => {
     assert.doesNotMatch(
       PARALLEL_TS,
       /mkdtempSync\s*\([^)]*gsd-wave-manifest/,
-      'WR-01: sdk/src/vcs/jj/parallel.ts must not mkdtempSync a gsd-wave-manifest dir (D-01 invariant: no orchestrator-managed sidecar state)',
+      'WR-01: src/vcs/jj/parallel.cts must not mkdtempSync a gsd-wave-manifest dir (D-01 invariant: no orchestrator-managed sidecar state)',
     );
     assert.doesNotMatch(
       PARALLEL_TS,
       /writeFileSync\s*\([^)]*wave-worktree-manifest/,
-      'WR-01: sdk/src/vcs/jj/parallel.ts must not writeFileSync the wave-worktree-manifest.json sidecar',
+      'WR-01: src/vcs/jj/parallel.cts must not writeFileSync the wave-worktree-manifest.json sidecar',
     );
   });
 
@@ -54,7 +54,7 @@ test.describe('WR-01 source-level guard (always runs)', () => {
     assert.match(
       PARALLEL_TS,
       /manifest:\s*''/,
-      'WR-01: handle.manifest must be the empty string (mirrors bin/lib/worktree-safety.cjs:reconstructHandleFromLegacyPlan)',
+      'WR-01: handle.manifest must be the empty string (mirrors src/worktree-safety.cts:reconstructHandleFromLegacyPlan)',
     );
   });
 
@@ -69,7 +69,7 @@ test.describe('WR-01 source-level guard (always runs)', () => {
 
 test.describe('WR-01 filesystem-level guard (skipped — opportunistic upgrade hook)', { skip: true }, () => {
   // Implementer note: if a jj-fixture helper exists in the test suite (e.g.
-  // the pattern used by sdk/src/vcs/__tests__/cmd-parallel-jj.test.ts via
+  // the pattern used by src/vcs/__tests__/cmd-parallel-jj.test.ts via
   // createJjRepoFixture / vitest), upgrade this describe block to run a live
   // dispatch + scan os.tmpdir() for new `gsd-wave-manifest-*` dirs. For now
   // the source-level guard above is sufficient to pin the contract — the

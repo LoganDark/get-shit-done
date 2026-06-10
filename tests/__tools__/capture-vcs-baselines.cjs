@@ -7,9 +7,11 @@
  * git invocation, and write a {exitCode, stdout, stderr, timedOut, error} record
  * into tests/baselines/git-vcs/<id>.snap.json.
  *
- * Run: `node scripts/capture-vcs-baselines.cjs`
- * Then commit the produced JSON files. The baseline-parity test asserts each
- * recorded shape matches the adapter's equivalent call byte-identically.
+ * Run: `node tests/__tools__/capture-vcs-baselines.cjs`
+ * Then commit the produced JSON files. The baseline-parity test
+ * (src/vcs/__tests__/baseline-parity.test.ts) asserts each recorded shape
+ * matches the adapter's equivalent call byte-identically. NEVER hand-edit
+ * the snap files — re-run this harness (19-11 / T-19-30).
  */
 
 'use strict';

@@ -1,7 +1,7 @@
 {
   "id": "verify-cjs-1309-diff-name-status",
   "source": "get-shit-done/bin/lib/verify.cjs:1309",
-  "captured_at": "2026-05-15",
+  "captured_at": "2026-06-10",
   "fixture": {
     "init": "git init",
     "config": [

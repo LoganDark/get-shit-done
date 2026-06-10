@@ -1,7 +1,7 @@
 {
   "id": "verify-cjs-1286-rev-parse",
   "source": "get-shit-done/bin/lib/verify.cjs:1286",
-  "captured_at": "2026-05-15",
+  "captured_at": "2026-06-10",
   "fixture": {
     "init": "git init",
     "config": [
@@ -20,7 +20,7 @@
   ],
   "expected": {
     "exitCode": 0,
-    "stdout": "35d37d52bfc492dcd469bd1fcacaf197a13410b6",
+    "stdout": "23f3f707e940a9622e60aa5c3ccc1255b01ebcee",
     "stderr": "",
     "timedOut": false,
     "error": null

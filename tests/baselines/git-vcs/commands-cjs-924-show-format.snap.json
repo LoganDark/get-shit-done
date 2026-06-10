@@ -1,7 +1,7 @@
 {
   "id": "commands-cjs-924-show-format",
   "source": "get-shit-done/bin/lib/commands.cjs:924",
-  "captured_at": "2026-05-15",
+  "captured_at": "2026-06-10",
   "fixture": {
     "init": "git init",
     "config": [
@@ -22,7 +22,7 @@
   ],
   "expected": {
     "exitCode": 0,
-    "stdout": "2026-05-14",
+    "stdout": "2026-06-10",
     "stderr": "",
     "timedOut": false,
     "error": null

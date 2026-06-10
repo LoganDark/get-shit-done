@@ -4,7 +4,7 @@
 // Regression guards for Phase 11 verifier CR-02 + CR-03 (BLOCKERs closed by Plan 11-08).
 //
 // CR-02 (3 sub-defects in quick.md): the workspace.parallel.dispatch call site at
-//   get-shit-done/workflows/quick.md:670-675 was structurally landed by Plan 11-06 but
+//   gsd-core/workflows/quick.md:670-675 was structurally landed by Plan 11-06 but
 //   silently broken in three independent ways: (a) plan JSON wrapped as {plans:[...]}
 //   instead of a flat array, (b) --phase passed as literal "quick" (verb does Number()
 //   and rejects NaN), (c) only [-z "$HANDLE_JSON"] FATAL — the {ok:false,reason} payload
@@ -48,8 +48,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const repoRoot = path.resolve(__dirname, '..');
-const QUICK = fs.readFileSync(path.join(repoRoot, 'get-shit-done/workflows/quick.md'), 'utf-8');
-const EXEC = fs.readFileSync(path.join(repoRoot, 'get-shit-done/workflows/execute-phase.md'), 'utf-8');
+const QUICK = fs.readFileSync(path.join(repoRoot, 'gsd-core/workflows/quick.md'), 'utf-8');
+const EXEC = fs.readFileSync(path.join(repoRoot, 'gsd-core/workflows/execute-phase.md'), 'utf-8');
 
 test.describe('CR-02 quick.md dispatch shape', () => {
 	test.test('plan JSON is a flat array (no {plans:[...]} wrapper)', () => {

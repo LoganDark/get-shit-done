@@ -51,6 +51,51 @@
       "owner": "@LoganDark"
     },
     {
+      "path": "src/vcs/__tests__/adapter-contract.test.ts",
+      "reason": "19-11 re-point of sdk/src/vcs/__tests__/adapter-contract.test.ts (audit-rows-10 safe — test fixtures, EMPTY_TREE constant, allowlist literals).",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/vcs/__tests__/baseline-parity.test.ts",
+      "reason": "19-11 re-point of sdk/src/vcs/__tests__/baseline-parity.test.ts (audit-rows-11 safe — test fixtures, EMPTY_TREE constant, allowlist literals).",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/vcs/__tests__/expr.test.ts",
+      "reason": "19-11 re-point of sdk/src/vcs/__tests__/expr.test.ts (audit-rows-19 safe — test fixtures, EMPTY_TREE constant, allowlist literals).",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/vcs/__tests__/git-backend.test.ts",
+      "reason": "19-11 re-point of sdk/src/vcs/__tests__/git-backend.test.ts (audit-rows-25 safe — test fixtures, EMPTY_TREE constant, allowlist literals).",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/vcs/__tests__/jj-id-alphabet-probe.test.ts",
+      "reason": "19-11 re-point of sdk/src/vcs/__tests__/jj-id-alphabet-probe.test.ts (audit-rows-36 historical-prose — JSDoc/prose reference to commit_id naming the unified contract).",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/vcs/__tests__/jj-parsers.test.ts",
+      "reason": "19-11 re-point of sdk/src/vcs/__tests__/jj-parsers.test.ts (audit-rows-49 historical-prose — JSDoc/prose reference to commit_id naming the unified contract).",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/vcs/__tests__/jj-refs.test.ts",
+      "reason": "19-11 re-point of sdk/src/vcs/__tests__/jj-refs.test.ts (NDJSON parser test fixtures — alphabet-transparent passthrough assertions over both [0-9a-f] and [k-z]).",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/vcs/__tests__/parse-worktree-list.test.ts",
+      "reason": "19-11 re-point of sdk/src/vcs/__tests__/parse-worktree-list.test.ts (audit-rows-59 safe — test fixtures, EMPTY_TREE constant, allowlist literals).",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "tests/bridge-commit-files.test.cjs",
+      "reason": "19-11 NEW — negative assertions naming the forbidden surface ('commit_id' key absence + 40-hex shape rejection on the jj envelope); same self-reference class as the lint fixture test.",
+      "owner": "@LoganDark"
+    },
+    {
       "path": "sdk/src/vcs/__tests__/adapter-contract.test.ts",
       "reason": "audit-rows-10 safe — legitimate hex/commit_id usage (test fixtures, EMPTY_TREE constant, allowlist literals).",
       "owner": "@LoganDark"

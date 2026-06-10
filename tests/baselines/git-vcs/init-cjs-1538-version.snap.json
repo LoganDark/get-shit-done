@@ -1,7 +1,7 @@
 {
   "id": "init-cjs-1538-version",
   "source": "get-shit-done/bin/lib/init.cjs:1538",
-  "captured_at": "2026-05-15",
+  "captured_at": "2026-06-10",
   "fixture": {
     "init": "git init",
     "config": [

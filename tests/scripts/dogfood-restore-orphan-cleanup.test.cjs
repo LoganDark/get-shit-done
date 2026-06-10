@@ -134,24 +134,19 @@ test('D-16: dogfood-restore.sh reaps orphan workspace dirs from 2 distinct phase
 			'scripts',
 			'dogfood-restore.sh',
 		);
-		// Inject a temp `gsd-sdk` PATH-shim that dispatches to THIS
-		// workspace's sdk/dist/cli.js (the build that contains the new
-		// bridge). Without this PATH override the script's `gsd-sdk` lookup
-		// finds the user's globally-installed `gsd-sdk` symlink which may
-		// point to a sibling workspace's dist that does not yet have the
-		// bridge registered. The shim mirrors `bin/gsd-sdk.js` semantics
-		// (Node executes the cli.js with stdio: inherit) so behavior is
-		// identical to a normal PATH-resolved invocation.
+		// Phase 19 (19-11): the fork gsd-sdk CLI retired (ADR-0174); the
+		// script now resolves the PORT-02 bridge (gsd-core/bin/gsd-tools.cjs)
+		// script-relative, with GSD_TOOLS_BIN as the test-injection seam
+		// (replaces the retired PATH-shim mechanism). Inject an executable
+		// shim that dispatches to THIS workspace's gsd-tools.cjs so the
+		// script never falls through to a sibling/global install.
 		// Place the shim OUTSIDE fixDir: fixDir is a colocated jj working
 		// tree, so `jj op restore` (invoked by dogfood-restore.sh) snapshots
 		// the WC first and then restores to PRE_OP_ID — a shim placed inside
 		// fixDir would get rolled back by the restore step (added-after-OPID).
-		// The script then could not find `gsd-sdk` on PATH and would fall
-		// through to the user's global gsd-sdk install (which lacks the new
-		// bridge), causing the WARN trap to fire.
-		const workspaceCli = path.resolve(__dirname, '..', '..', 'sdk', 'dist', 'cli.js');
+		const workspaceCli = path.resolve(__dirname, '..', '..', 'gsd-core', 'bin', 'gsd-tools.cjs');
 		shimDir = mkdtempSync(path.join(tmpdir(), '__dogfood-test-shim-'));
-		const shimPath = path.join(shimDir, 'gsd-sdk');
+		const shimPath = path.join(shimDir, 'gsd-tools');
 		writeFileSync(
 			shimPath,
 			`#!/bin/sh\nexec "${process.execPath}" "${workspaceCli}" "$@"\n`,
@@ -159,6 +154,7 @@ test('D-16: dogfood-restore.sh reaps orphan workspace dirs from 2 distinct phase
 		);
 		const env = {
 			...process.env,
+			GSD_TOOLS_BIN: shimPath,
 			PATH: `${shimDir}${path.delimiter}${process.env.PATH || ''}`,
 		};
 		const r = spawnSync('bash', [restoreScript, opId, tarBundle.tarPath], {
@@ -251,14 +247,16 @@ test('CR-02 regression: dogfood-restore.sh tolerates non-empty gsd-sdk stderr (p
 			'scripts',
 			'dogfood-restore.sh',
 		);
-		const workspaceCli = path.resolve(__dirname, '..', '..', 'sdk', 'dist', 'cli.js');
+		// Phase 19 (19-11): shim retargeted at the PORT-02 bridge via the
+		// GSD_TOOLS_BIN injection seam (gsd-sdk CLI retired with ADR-0174).
+		const workspaceCli = path.resolve(__dirname, '..', '..', 'gsd-core', 'bin', 'gsd-tools.cjs');
 		shimDir = mkdtempSync(path.join(tmpdir(), '__dogfood-test-shim-stderr-'));
-		const shimPath = path.join(shimDir, 'gsd-sdk');
+		const shimPath = path.join(shimDir, 'gsd-tools');
 		// NOISY shim: emit a fake stderr warning BEFORE delegating to the
-		// real cli.js. Mirrors the production gsd-sdk wrapper's
+		// real bridge. Mirrors the historical gsd-sdk wrapper's
 		// "not in native registry; falling back to gsd-tools.cjs" path
-		// that surfaces on real installs but is suppressed in the clean
-		// PATH-shim used by the D-16 test above. Without the CR-02 fix
+		// that surfaced on real installs but was suppressed in the clean
+		// shim used by the D-16 test above. Without the CR-02 fix
 		// this stderr line would get merged into CLEANUP_JSON via `2>&1`
 		// and corrupt jq parse, flipping abandoned to "?".
 		writeFileSync(
@@ -268,6 +266,7 @@ test('CR-02 regression: dogfood-restore.sh tolerates non-empty gsd-sdk stderr (p
 		);
 		const env = {
 			...process.env,
+			GSD_TOOLS_BIN: shimPath,
 			PATH: `${shimDir}${path.delimiter}${process.env.PATH || ''}`,
 		};
 		const r = spawnSync('bash', [restoreScript, opId, tarBundle.tarPath], {

@@ -1,7 +1,7 @@
 {
   "id": "commit-ts-execGit-3field",
   "source": "sdk/src/query/commit.ts:211 (checkCommit)",
-  "captured_at": "2026-05-15",
+  "captured_at": "2026-06-10",
   "fixture": {
     "init": "git init",
     "config": [

@@ -1,7 +1,7 @@
 /**
  * tests/cli-workspace-parallel-cancel.test.cjs — Phase 15.04 (PARALLEL-07)
  *
- * Repo-side CLI smoke for `gsd-sdk query workspace.parallel.cancel`. node:test
+ * Repo-side CLI smoke for `gsd-tools query workspace.parallel.cancel`. node:test
  * domain (N4 decision per RESEARCH Wave 0 Gaps line 1400 — keeps the SDK
  * per-backend vitest domain and the repo-side CLI domain cleanly separated).
  *
@@ -35,7 +35,9 @@ const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 
-const SDK_BIN = path.resolve(__dirname, '..', 'bin', 'gsd-sdk.js');
+// Phase 19 (19-11): the fork gsd-sdk CLI retired (ADR-0174); the same verb
+// surface dispatches through the PORT-02 bridge in gsd-tools.cjs.
+const SDK_BIN = path.resolve(__dirname, '..', 'gsd-core', 'bin', 'gsd-tools.cjs');
 
 function runQuery(argv, { stdin } = {}) {
 	const opts = {
@@ -62,8 +64,14 @@ test('CLI smoke: --handle @- with invalid JSON on stdin returns {ok: false, reas
 	assert.strictEqual(parsed.reason, 'handle_json_parse_failed', `expected reason:handle_json_parse_failed, got: ${JSON.stringify(parsed)}`);
 });
 
-test('CLI smoke: space-alias form resolves identically (proves alias-table site registered)', () => {
-	const r = runQuery(['workspace parallel.cancel']);
+test('CLI smoke: spaced form resolves identically (proves the dotted→spaced normalization site)', () => {
+	// Phase 19 (19-11): the fork dispatcher registered a single-token
+	// space-alias ('workspace parallel.cancel'). The gsd-tools bridge's
+	// equivalent registration surface is the #3243 dotted→spaced
+	// normalization — the multi-token spaced argv form must route to the
+	// SAME registered handler (a registration miss would surface as the
+	// unknown-verb error the negative control below pins).
+	const r = runQuery(['workspace', 'parallel', 'cancel']);
 	assert.strictEqual(r.status, 0, `non-zero exit: stdout=${r.stdout} stderr=${r.stderr}`);
 	const parsed = JSON.parse(r.stdout);
 	assert.strictEqual(parsed.ok, false, `expected ok:false, got: ${JSON.stringify(parsed)}`);
@@ -73,20 +81,20 @@ test('CLI smoke: space-alias form resolves identically (proves alias-table site 
 test('CLI smoke: bogus verb returns unknown-verb error (negative control)', () => {
 	const r = runQuery(['workspace.parallel.cancellation-xyz']);
 	// Negative control: a deliberately-misspelled sibling verb MUST NOT
-	// resolve to the registered bridge. The gsd-sdk dispatcher's
-	// "not in native registry; falling back to gsd-tools.cjs" warning is
-	// the expected stderr marker; the gsd-tools.cjs fallback then exits
-	// non-zero with `Error: Unknown command` since it doesn't know the verb
-	// either. Either signature (non-zero exit OR an unknown/error marker
+	// resolve to the registered bridge. Phase 19 (19-11): the gsd-tools
+	// bridge surfaces this as a non-zero exit with the vcs router's
+	// "Unknown workspace subcommand. Available: …" stderr line (the fork
+	// dispatcher's "not in native registry" fallback warning retired with
+	// the SDK). Either signature (non-zero exit OR an unknown/error marker
 	// in the combined output) suffices to demonstrate the verb-resolution
 	// gate fired.
 	const combined = (r.stdout || '') + '\n' + (r.stderr || '');
-	const unknownMarker = /not in native registry|Unknown command|unknown\s+verb|fallback failed/i;
+	const unknownMarker = /not in native registry|Unknown (command|workspace subcommand|vcs verb)|unknown\s+verb|fallback failed/i;
 	assert.ok(
 		r.status !== 0 || unknownMarker.test(combined),
 		`expected unknown-verb error (non-zero exit OR unknown marker), got status=${r.status}, output=${combined}`,
 	);
 	// Stronger assertion: at least one of the unknown markers must surface
 	// somewhere so we are NOT silently passing on an unrelated error.
-	assert.match(combined, unknownMarker, `expected one of {not in native registry, Unknown command, unknown verb, fallback failed} in combined output, got: ${combined}`);
+	assert.match(combined, unknownMarker, `expected one of {not in native registry, Unknown command/workspace subcommand/vcs verb, unknown verb, fallback failed} in combined output, got: ${combined}`);
 });

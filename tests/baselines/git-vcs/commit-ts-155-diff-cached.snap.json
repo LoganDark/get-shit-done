@@ -1,7 +1,7 @@
 {
   "id": "commit-ts-155-diff-cached",
   "source": "sdk/src/query/commit.ts:155",
-  "captured_at": "2026-05-15",
+  "captured_at": "2026-06-10",
   "fixture": {
     "init": "git init",
     "config": [

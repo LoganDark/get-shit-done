@@ -1,7 +1,7 @@
 {
   "id": "graphify-cjs-373-rev-parse-head",
   "source": "get-shit-done/bin/lib/graphify.cjs:373",
-  "captured_at": "2026-05-15",
+  "captured_at": "2026-06-10",
   "fixture": {
     "init": "git init",
     "config": [
@@ -20,7 +20,7 @@
   ],
   "expected": {
     "exitCode": 0,
-    "stdout": "043689963113826f2e1666027124e99fe27ff25c",
+    "stdout": "5f1dad17bd73385a526d93fd997122e0dbeac1e3",
     "stderr": "",
     "timedOut": false,
     "error": null

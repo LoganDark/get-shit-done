@@ -17,7 +17,7 @@ const { detectChildRepos } = require('../gsd-core/bin/lib/init.cjs');
 // VcsAdapter (vcs.gitOnly.init / vcs.gitOnly.configSet / vcs.stage /
 // vcs.commit / vcs.workspace.prune / vcs.workspace.list). Mirrors the
 // helpers.cjs::createTempGitProject migration shape from plan 02-03.
-const { createVcsAdapter } = require('../sdk/dist-cjs/vcs/index.js');
+const { createVcsAdapter } = require('../gsd-core/bin/lib/vcs/index.cjs');
 
 // ─── detectChildRepos ────────────────────────────────────────────────────────
 

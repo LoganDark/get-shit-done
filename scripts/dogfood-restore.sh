@@ -47,6 +47,21 @@ fi
 PRE_OP_ID="$1"
 TARBALL_PATH="$2"
 
+# Phase 19 (19-11): the fork `gsd-sdk` CLI retired with the SDK (upstream
+# ADR-0174); the cleanup verb dispatches through the PORT-02 bridge at
+# gsd-core/bin/gsd-tools.cjs. Default resolution is script-relative (this
+# script lives in scripts/, the bridge in ../gsd-core/bin/). GSD_TOOLS_BIN
+# lets tests inject an executable shim (PATH-shim parity with the retired
+# gsd-sdk lookup) without touching the production resolution.
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+run_gsd_tools() {
+	if [ -n "${GSD_TOOLS_BIN:-}" ]; then
+		"$GSD_TOOLS_BIN" "$@"
+	else
+		node "${SCRIPT_DIR}/../gsd-core/bin/gsd-tools.cjs" "$@"
+	fi
+}
+
 if [ ! -f "$TARBALL_PATH" ]; then
 	echo "FATAL: tarball not found: ${TARBALL_PATH}" >&2
 	exit 1
@@ -67,19 +82,19 @@ echo "dogfood-restore: complete. Verify with: jj diff --summary && jj log -r '@-
 #
 # Phase 16 REVIEW CR-02 fix: stdout and stderr are captured SEPARATELY so
 # jq only ever parses pristine JSON. Prior `2>&1`-into-CLEANUP_JSON form
-# corrupted the JSON payload as soon as gsd-sdk emitted ANY stderr noise
-# (e.g. the "not in native registry; falling back to gsd-tools.cjs"
-# fallback warning documented in tests/cli-cleanup-subagent-workspaces
-# .test.cjs:97-101) — concatenated warning+JSON failed jq parse, both
-# counts silently flipped to "?", and the WARN trap never fired because
-# the gsd-sdk exit code was still 0.
+# corrupted the JSON payload as soon as the CLI emitted ANY stderr noise
+# (historically the retired gsd-sdk wrapper's "not in native registry;
+# falling back to gsd-tools.cjs" warning, documented in
+# tests/cli-cleanup-subagent-workspaces.test.cjs) — concatenated
+# warning+JSON failed jq parse, both counts silently flipped to "?", and
+# the WARN trap never fired because the CLI exit code was still 0.
 #
 # Note on `set -e` interaction (Phase 16 REVIEW IN-01): `set -e` is in
-# effect from line 29. The if/else form below makes the gsd-sdk exit
+# effect from line 29. The if/else form below makes the CLI exit
 # code observable to the script without tripping `set -e`'s
 # unguarded-failure trap — `if cmd` is `set -e`-safe.
 CLEANUP_STDERR_FILE=$(mktemp -t dogfood-restore-cleanup-stderr.XXXXXX)
-if CLEANUP_JSON=$(gsd-sdk query cleanup-subagent-workspaces --all-phases 2>"$CLEANUP_STDERR_FILE"); then
+if CLEANUP_JSON=$(run_gsd_tools query cleanup-subagent-workspaces --all-phases 2>"$CLEANUP_STDERR_FILE"); then
 	:
 else
 	echo "WARN: orphan cleanup failed (stderr follows):" >&2

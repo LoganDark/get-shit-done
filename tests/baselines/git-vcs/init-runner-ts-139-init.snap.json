@@ -1,7 +1,7 @@
 {
   "id": "init-runner-ts-139-init",
   "source": "sdk/src/init-runner.ts:139",
-  "captured_at": "2026-05-15",
+  "captured_at": "2026-06-10",
   "fixture": {
     "mode": "fresh-dir",
     "setup": []
@@ -12,7 +12,7 @@
   ],
   "expected": {
     "exitCode": 0,
-    "stdout": "Initialized empty Git repository in /private/var/folders/sq/v1_sd6990ysgkqvckj68qcvw0000gn/T/gsd-baseline-TcvDtg/.git/",
+    "stdout": "Initialized empty Git repository in /private/var/folders/sq/v1_sd6990ysgkqvckj68qcvw0000gn/T/gsd-baseline-bbZAZd/.git/",
     "stderr": "",
     "timedOut": false,
     "error": null

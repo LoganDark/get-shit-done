@@ -1,7 +1,7 @@
 {
   "id": "commands-cjs-339-commit",
   "source": "get-shit-done/bin/lib/commands.cjs:339",
-  "captured_at": "2026-05-15",
+  "captured_at": "2026-06-10",
   "fixture": {
     "init": "git init",
     "config": [
@@ -24,7 +24,7 @@
   ],
   "expected": {
     "exitCode": 0,
-    "stdout": "[master 1ab023d] test\n 1 file changed, 1 insertion(+)\n create mode 100644 foo.txt",
+    "stdout": "[master 4d122bf] test\n 1 file changed, 1 insertion(+)\n create mode 100644 foo.txt",
     "stderr": "",
     "timedOut": false,
     "error": null

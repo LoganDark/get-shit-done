@@ -1,7 +1,7 @@
 {
   "id": "worktree-safety-cjs-198-worktree-prune",
   "source": "get-shit-done/bin/lib/worktree-safety.cjs:198",
-  "captured_at": "2026-05-15",
+  "captured_at": "2026-06-10",
   "fixture": {
     "init": "git init",
     "config": [
