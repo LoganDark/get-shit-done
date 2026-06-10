@@ -1,8 +1,11 @@
 'use strict';
 /**
  * VcsAdapter contract suite — node --test variant (Phase 1 plan 04).
- * Mirrors sdk/src/vcs/__tests__/adapter-contract.test.ts but runs against the dist-cjs/ artifact.
- * D-02: integration tests require() dist-cjs/ — verifies the actual artifact bin/lib will load.
+ * Phase 19 plan 19-06: runs against the build-at-publish artifact at
+ * gsd-core/bin/lib/vcs (emitted by `pnpm run build:lib`; the retired
+ * sdk/dist-cjs build is gone).
+ * D-02: integration tests require() the built artifact — verifies the actual
+ * artifact bin/lib will load.
  * RESEARCH Pitfall 1: this file uses the hand-rolled vcsTest from helpers.cjs (NOT vitest API).
  *
  * Phase 3 plan 03-01 Task 5: per-verb gating via BACKENDS_AVAILABLE_FOR_VERB.
@@ -32,14 +35,24 @@ vcsTest('auto', ({ getVcs, getCwd, getKind }) => {
     else if (getKind() === 'jj-colocated') assert.equal(vcs.kind, 'jj');
   });
 
-  test('vcs.commit({files,message}) produces a hash', () => {
+  // Phase 19 plan 19-06 (Rule 1 fix during port): the adapter contract field
+  // is `id`, not `hash` — CommitResult/LogEntry never carried a `hash` field
+  // (types.cts: hex commit_id on git, [k-z] change_id on jj; "Do NOT assume
+  // hex form"). The c7bd6bee assertions on `.hash` were latent fork-side test
+  // bugs masked by the stale-dist-cjs module-load error (19-04 baseline class
+  // B). Assert the documented per-backend id alphabet instead.
+  function idAlphabetRe() {
+    return getKind() === 'git' ? /^[0-9a-f]+$/ : /^[k-z]+$/;
+  }
+
+  test('vcs.commit({files,message}) produces a canonical revision id', () => {
     if (!verbReady('commit')) return; // verb-group plan 03-04 lands jj impl
     const vcs = getVcs();
     const cwd = getCwd();
     fs.writeFileSync(path.join(cwd, 'a.txt'), 'a');
     const r = vcs.commit({ files: ['a.txt'], message: 'add a' });
     assert.equal(r.exitCode, 0);
-    assert.match(r.hash, /^[0-9a-f]+$/);
+    assert.match(r.id, idAlphabetRe());
   });
 
   test('vcs.log returns entries after a commit', () => {
@@ -50,7 +63,7 @@ vcsTest('auto', ({ getVcs, getCwd, getKind }) => {
     vcs.commit({ files: ['b.txt'], message: 'add b' });
     const entries = vcs.log({ maxCount: 5 });
     assert.ok(entries.length > 0);
-    assert.match(entries[0].hash, /^[0-9a-f]+$/);
+    assert.match(entries[0].id, idAlphabetRe());
   });
 
   test('vcs.status({porcelain:true}) lists untracked files', () => {
@@ -162,7 +175,7 @@ vcsTest('auto', ({ getVcs, getCwd, getKind }) => {
     vcs.commit({ files: ['wm-agent.txt'], message: 'wm: agent commit' });
     vcs.refs.bookmarks.create(agentBranch, vcs.refs.head, { raw: true });
     // 4. Call merge with the required mainBookmark.
-    const vcsModule = require('../sdk/dist-cjs/vcs/index.js');
+    const vcsModule = require('../gsd-core/bin/lib/vcs/index.cjs');
     const expr = vcsModule.expr;
     const r = vcs.workspace.merge({
       branch: expr.bookmark(agentBranch),

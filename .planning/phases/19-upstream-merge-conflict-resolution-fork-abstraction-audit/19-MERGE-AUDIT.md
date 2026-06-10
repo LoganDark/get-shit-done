@@ -188,6 +188,8 @@ Every ledger row's disposition MUST start with exactly one of these six prefixes
 | .gitignore (gsd-core/bin/lib/vcs emit coverage) | n/a (new) | merged | Convention deviation (deliberate): single directory ignore line `/gsd-core/bin/lib/vcs/` instead of upstream's per-file enumeration — a directory line auto-covers future vcs modules and makes enumeration drift impossible; emitted vcs artifacts verified absent from `jj st` post-build (19-05 Task 2) |
 | harvest/query-handlers/* (19 vcs verbs) | fork (read at c7bd6bee) | ported-to:src/vcs-command-router.cts + gsd-tools wiring | PORT-02 CLI bridge: the fork's registered vcs verb surface re-expressed as gsd-tools verbs with envelope parity over gsd-core/bin/lib/vcs (covers the 19-03 `ported-to:src/vcs-command-router.cts` rows above: status, log, diff, head-ref, current-branch, branch-list, push, merge, reset, restore, revert, hooks.fire, migrate-vcs, workspace.assert-dispatched-cwd, workspace.parallel.{dispatch,fan-in,cancel}, cleanup-subagent-workspaces, commit-to-subrepo). Dispatch wired in gsd-core/bin/gsd-tools.cjs as a family case group → routeVcsCommand (routeStateCommand precedent); `query` meta-prefix + #3243 dotted→spaced normalization reach the verbs unchanged. Verb-surface corrections vs the 19-06 plan letter: `branch-create`/`branch-delete`/`rev-parse`/`rm`/bare-`workspace` have NO fork-side handlers (19-03 ledger already recorded the registered set; phantom-verb rule honored); `commit-to-subrepo` handler ships in the router for envelope parity but gsd-tools' pre-existing upstream case keeps dispatch ownership until the 19-07 internals migration (same locked-decision treatment as `commit`); `worktree.cleanup-wave` needs no bridge — the fork handler was a spawnSync back-bridge INTO gsd-tools' own `worktree cleanup-wave` case, which survives upstream-side. Retired-SDK collapses inside the router: loadConfig → planningPaths(cwd).config direct read (strict `=== false` parallelization check preserved), helpers.resolvePathUnderProject inlined, GSDError → name-tagged Error; planning-shim's sanitizeCommitMessage consumed (first 19-05 collapse-plan consumer) (19-06 Tasks 1+2) |
 | gsd-sdk spawn-path sweep (BLOCKER-3 / T-19-15) | n/a (verification) | merged | `rg -n 'gsd-sdk\|resolveGsdToolsPath' src gsd-core/bin --glob '!*.md'` → 9 hits, ALL comment/docblock provenance references (src/vcs-command-router.cts header + exit-code note, src/vcs/{git/parallel,types,backends/git,jj/workspace-cleanup}.cts doc mentions); ZERO executable spawn paths (no spawnSync/execSync/require targeting the retired gsd-sdk binary, no resolveGsdToolsPath survivor — the fork's worktree.ts spawn-bridge was dropped, not ported). Chain verified live: `node gsd-core/bin/gsd-tools.cjs query head-ref` → parseable JSON on this jj repo; `query state.load` (pre-existing upstream verb) still dispatches (19-06 Task 2) |
+| tests/vcs-cjs-smoke.test.cjs | fork (clean survivor, byte-identical to c7bd6bee) | ported-to:tests/vcs-cjs-smoke.test.cjs (re-pointed in place) | Early regression net (built-artifact require smoke): `../sdk/dist-cjs/vcs/{index.js,backends.js}` → `../gsd-core/bin/lib/vcs/{index.cjs,backends.cjs}`; header re-documents `pnpm run build:lib` as the build hint; node -c green; 2/2 pass against the BUILT artifacts (clears its 2 class-B baseline rows) (19-06 Task 3) |
+| tests/vcs-adapter-contract.test.cjs | fork (clean survivor, byte-identical to c7bd6bee) | ported-to:tests/vcs-adapter-contract.test.cjs (re-pointed in place) | Contract suite vs built artifacts: dist-cjs require → `../gsd-core/bin/lib/vcs/index.cjs`. Rule 1 fix during port: the c7bd6bee assertions read `r.hash`/`entries[0].hash`, but the adapter contract (fork AND ported types: CommitResult/LogEntry) has only `id` — hex commit_id on git, [k-z] change_id on jj, with an explicit "Do NOT assume hex form" docblock; the `.hash` asserts were latent fork-side test bugs masked by the stale-dist-cjs class-B module-load error (fork had no unit-CI lane — only parallel-e2e). Fixed to assert `id` against the per-backend alphabet (`/^[0-9a-f]+$/` git, `/^[k-z]+$/` jj). 45/45 pass across git + jj-colocated + jj-native lanes (clears its class-B baseline row) (19-06 Task 3) |
 
 ## Fixture exclusions (conflict-marker sweep)
 
@@ -225,6 +227,31 @@ Run 2026-06-10 (plan 19-03, after buckets A/B/C cleared): **17 hits, set-identic
 | scripts/changeset/github-release-notes.cjs | 19-04 | yes (2026-06-10) |
 | tests/helpers.cjs | 19-04 | yes (2026-06-10) |
 | tests/bug-3097-3099-executor-worktree-path-safety.test.cjs | 19-04 | yes (2026-06-10) |
+| gsd-core/bin/gsd-tools.cjs | 19-06 | yes (2026-06-10) |
+| tests/vcs-cjs-smoke.test.cjs | 19-06 | yes (2026-06-10) |
+| tests/vcs-adapter-contract.test.cjs | 19-06 | yes (2026-06-10) |
+
+## Appendix: PORT-02 per-family dispatch smoke (19-06 Task 3)
+
+**Run:** 2026-06-10. Two throwaway tmp cells (removed after the run; `jj st` on this repo confirmed untouched — T-19-17): **jj cell** = `jj git init --no-colocate` + 1 seed commit (only `.jj/` present → detector resolves jj; no `.planning/config.json` in the cell, so no lock-in write); **git cell** = `jj git init --colocate` + 1 seed commit + `main` bookmark, `GSD_VCS=git` env pin (Phase 13 lint-clean precedent). Every invocation: `node <abs>/gsd-core/bin/gsd-tools.cjs query <verb> …` from inside the cell. Read-only verbs invoked for real; mutation verbs probed via argv-validation envelopes that return BEFORE any adapter call (dispatch reached, repo untouched).
+
+| verb family | invocation | jj cell | git cell |
+|-------------|------------|---------|----------|
+| status | `query status` | exit 0, `ok:true`, entries+raw | exit 0, `ok:true`, entries+raw |
+| log | `query log --max-count 1` | exit 0, entry id = 32-char [k-z] change_id | exit 0, entry id = 40-hex commit_id |
+| diff | `query diff --name-only` | exit 0, `ok:true` | exit 0, `ok:true` |
+| head-ref | `query head-ref` | exit 0, `head` = change_id shortest | exit 0, `head` = 7-hex short |
+| current-branch | `query current-branch` | exit 0, `bookmarks: []` | exit 0, `bookmarks: []` |
+| branch-list | `query branch-list` | exit 0, `bookmarks: []` | exit 0, lists `main` |
+| workspace.assert-dispatched-cwd | `query workspace.assert-dispatched-cwd` | exit 0, `isPrimary:true`, jj name→path resolution live (`workspaceName:"default"`, fs `workspacePath`) | exit 0, `isPrimary:true` |
+| hooks.fire | `query hooks.fire` (stage-missing probe) | exit 0, typed `ok:false` stage-required envelope | same |
+| migrate-vcs | `query migrate-vcs --bogus-flag` (unknown-flag probe) | exit 0, typed `ok:false` unknown-flag envelope | same |
+| workspace.parallel.dispatch | `query workspace.parallel.dispatch` (dry probe) | exit 0, `reason:"phase_number_required"` — NO dispatch executed | same |
+| workspace.parallel.fan-in | `query workspace.parallel.fan-in` (dry probe) | exit 0, `reason:"handle_required"` | same |
+| workspace.parallel.cancel | `query workspace.parallel.cancel` (dry probe) | exit 0, `reason:"handle_required"` | same |
+| cleanup-subagent-workspaces | `query cleanup-subagent-workspaces` (mode-flag probe) | exit 0, `reason:"phase_or_all_phases_required"` | same |
+| merge / reset / restore / revert | argv-validation probes (no ref/--ref/files/rev) | exit 0, typed `ok:false` usage envelopes | same |
+| push | `query push --bookmark 'bad..name'` (refname-reject probe) | exit 0, `expr.bookmark` forbidden-sequence envelope — no push attempted | same |
 
 ## Appendix: Pre-port test baseline (19-04 Task 3)
 

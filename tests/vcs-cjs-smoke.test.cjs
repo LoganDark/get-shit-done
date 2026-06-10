@@ -3,9 +3,12 @@
  * vcs-cjs-smoke.test.cjs (Plan 01-03 Task 3 — W-1 fix)
  *
  * Proves SC-1: "consumable from bin/lib/*.cjs via plain require()".
- * Vitest tests load TS via vitest's loader — this test runs CJS via plain Node
- * require() so the actual artifact path that bin/lib/*.cjs uses in production is
- * exercised end-to-end.
+ * This test runs CJS via plain Node require() so the actual artifact path that
+ * bin/lib/*.cjs uses in production is exercised end-to-end.
+ *
+ * Phase 19 plan 19-06: re-pointed from the retired ../sdk/dist-cjs build to the
+ * build-at-publish artifact at ../gsd-core/bin/lib/vcs (emitted by
+ * `pnpm run build:lib`).
  *
  * Picked up automatically by scripts/run-tests.cjs (`tests/*.test.cjs` glob).
  */
@@ -17,16 +20,16 @@ const os = require('node:os');
 const path = require('node:path');
 const { execSync } = require('node:child_process');
 
-test('plain require() of dist-cjs/vcs/index.js loads createVcsAdapter', () => {
-  const mod = require('../sdk/dist-cjs/vcs/index.js');
+test('plain require() of gsd-core/bin/lib/vcs/index.cjs loads createVcsAdapter', () => {
+  const mod = require('../gsd-core/bin/lib/vcs/index.cjs');
   assert.equal(typeof mod.createVcsAdapter, 'function');
   assert.ok(
-    Array.isArray(require('../sdk/dist-cjs/vcs/backends.js').BACKENDS_AVAILABLE),
+    Array.isArray(require('../gsd-core/bin/lib/vcs/backends.cjs').BACKENDS_AVAILABLE),
   );
 });
 
 test('createVcsAdapter against a real tmp git repo returns a git adapter', () => {
-  const { createVcsAdapter } = require('../sdk/dist-cjs/vcs/index.js');
+  const { createVcsAdapter } = require('../gsd-core/bin/lib/vcs/index.cjs');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-cjs-smoke-'));
   try {
     execSync('git init', { cwd: tmp, stdio: 'pipe' });
