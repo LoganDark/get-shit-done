@@ -14,7 +14,7 @@ const {
   platformWriteSync,
   platformReadSync,
   platformEnsureDir,
-} = require(path.join(__dirname, '..', 'get-shit-done', 'bin', 'lib', 'shell-command-projection.cjs'));
+} = require(path.join(__dirname, '..', 'gsd-core', 'bin', 'lib', 'shell-command-projection.cjs'));
 
 const { createTempGitProject, createTempDir, cleanup } = require('./helpers.cjs');
 
@@ -206,7 +206,7 @@ describe('platformWriteSync', () => {
     assert.ok(fs.statSync(filePath).isFile());
   });
 
-  test('mtime advances on re-write', (t) => {
+  test('mtime advances on re-write', (_t) => {
     const filePath = path.join(tmpDir, 'output.md');
     platformWriteSync(filePath, '# First\n');
     const mtimeBefore = fs.statSync(filePath).mtimeMs;

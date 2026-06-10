@@ -93,6 +93,29 @@ describe('run-tests.cjs harness (issue #3597)', () => {
       const r = runHarness(tmpDir, ['--suite=security']);
       assert.strictEqual(r.status, 0, `stderr: ${r.stderr}\nstdout: ${r.stdout}`);
     });
+
+    test('missing --files value exits non-zero', () => {
+      seed(tmpDir, ['a.test.cjs']);
+      const r = runHarness(tmpDir, ['--files']);
+      assert.notStrictEqual(r.status, 0);
+      assert.match(r.stderr, /--files requires a value/i);
+    });
+
+    test('duplicate --files flag is rejected', () => {
+      seed(tmpDir, ['a.test.cjs']);
+      const r = runHarness(tmpDir, ['--files', 'a.test.cjs', '--files', 'a.test.cjs']);
+      assert.notStrictEqual(r.status, 0);
+      assert.match(r.stderr, /duplicate --files/i);
+    });
+
+    test('--files and --files-from cannot be combined', () => {
+      seed(tmpDir, ['a.test.cjs']);
+      const listPath = path.join(tmpDir, 'selected-tests.txt');
+      fs.writeFileSync(listPath, 'a.test.cjs\n', 'utf8');
+      const r = runHarness(tmpDir, ['--files', 'a.test.cjs', '--files-from', listPath]);
+      assert.notStrictEqual(r.status, 0);
+      assert.match(r.stderr, /cannot be combined/i);
+    });
   });
 
   describe('suite filtering', () => {
@@ -192,6 +215,35 @@ describe('run-tests.cjs harness (issue #3597)', () => {
     });
   });
 
+  describe('explicit file selection', () => {
+    test('--files runs only the named tests', () => {
+      seed(tmpDir, ['a.test.cjs', 'b.security.test.cjs', 'c.test.cjs']);
+      const r = runHarness(tmpDir, ['--files', 'a.test.cjs tests/c.test.cjs']);
+      assert.strictEqual(r.status, 0, `stderr: ${r.stderr}`);
+      assert.ok(r.stderr.includes('a.test.cjs'));
+      assert.ok(r.stderr.includes('c.test.cjs'));
+      assert.ok(!r.stderr.includes('b.security.test.cjs'));
+    });
+
+    test('--files-from runs tests listed in a file', () => {
+      seed(tmpDir, ['a.test.cjs', 'b.security.test.cjs', 'c.test.cjs']);
+      const listPath = path.join(tmpDir, 'selected-tests.txt');
+      fs.writeFileSync(listPath, 'a.test.cjs\nb.security.test.cjs\n', 'utf8');
+      const r = runHarness(tmpDir, ['--files-from', listPath]);
+      assert.strictEqual(r.status, 0, `stderr: ${r.stderr}`);
+      assert.ok(r.stderr.includes('a.test.cjs'));
+      assert.ok(r.stderr.includes('b.security.test.cjs'));
+      assert.ok(!r.stderr.includes('c.test.cjs'));
+    });
+
+    test('missing explicit test file exits non-zero', () => {
+      seed(tmpDir, ['a.test.cjs']);
+      const r = runHarness(tmpDir, ['--files', 'a.test.cjs missing.test.cjs']);
+      assert.notStrictEqual(r.status, 0);
+      assert.match(r.stderr, /requested test file\(s\) not found: missing\.test\.cjs/i);
+    });
+  });
+
   describe('failure propagation', () => {
     test('non-zero from node:test propagates through harness', () => {
       const FAIL = `'use strict';
@@ -205,6 +257,32 @@ test('boom', () => { throw new Error('intentional'); });
         0,
         `expected non-zero exit; got status=${r.status} signal=${r.signal}\nSTDOUT:\n${r.stdout}\nSTDERR:\n${r.stderr}`,
       );
+    });
+  });
+
+  describe('env hermeticity', () => {
+    // Regression guard for the two `delete process.env.GSD_PROJECT/GSD_WORKSTREAM`
+    // lines added in scripts/run-tests.cjs main() right after ensureBuiltArtifacts().
+    // If those deletions are removed, the fixture's assertions fail inside the child
+    // node:test process → non-zero harness exit → this test fails → CI catches it.
+    test('harness strips GSD_PROJECT and GSD_WORKSTREAM before running child tests', () => {
+      // Write a fixture that asserts both vars are absent in the child process env.
+      const FIXTURE = `'use strict';
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+test('ambient GSD workstream vars are stripped by the runner', () => {
+  assert.strictEqual(process.env.GSD_PROJECT, undefined);
+  assert.strictEqual(process.env.GSD_WORKSTREAM, undefined);
+});
+`;
+      fs.writeFileSync(path.join(tmpDir, 'env-hermeticity.test.cjs'), FIXTURE, 'utf8');
+      // Pass both vars in the ambient env given to the harness process.
+      // The harness must delete them before spawning the child node:test process.
+      const r = runHarness(tmpDir, [], {
+        GSD_PROJECT: 'ambient-proj',
+        GSD_WORKSTREAM: 'ambient-ws',
+      });
+      assert.strictEqual(r.status, 0, r.stderr);
     });
   });
 

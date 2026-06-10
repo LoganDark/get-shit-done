@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Clean, consistent state for next upstream pull
-status: milestone_complete
-stopped_at: Phase 17 context gathered
-last_updated: "2026-05-25T22:31:11.369Z"
-last_activity: 2026-05-25
+status: executing
+last_updated: "2026-06-10T10:46:42.607Z"
+last_activity: 2026-06-10
 progress:
-  total_phases: 4
-  completed_phases: 5
-  total_plans: 11
-  completed_plans: 11
-  percent: 125
+  total_phases: 5
+  completed_phases: 4
+  total_plans: 24
+  completed_plans: 14
+  percent: 58
 ---
 
 # Project State
@@ -21,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 17 — drift-control-reconciliation
+**Current focus:** Phase 19 — upstream-merge-conflict-resolution-fork-abstraction-audit
 
 ## Current Position
 
-Phase: 17
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-05-25
+Phase: 19 (upstream-merge-conflict-resolution-fork-abstraction-audit) — EXECUTING
+Plan: 4 of 13
+Status: Ready to execute
+Last activity: 2026-06-10
 
 ## Performance Metrics
 
@@ -86,11 +85,15 @@ Last activity: 2026-05-25
 | Phase 17 P17.02 | 8min | 2 tasks | 3 files |
 | Phase 17 P17.03 | 22min | 8 tasks | 20 files |
 | Phase 17 P17.04 | 8 | 2 tasks | 2 files |
+| Phase 19 P01 | 11min | 2 tasks | 19 files |
+| Phase 19 P02 | 22min | 3 tasks | 3 files |
+| Phase 19 P19-03 | 39min | 3 tasks | 139 files |
 
 ## Accumulated Context
 
 ### Roadmap Evolution
 
+- **Phase 19 added 2026-06-10:** Upstream merge conflict resolution + fork-abstraction audit. Operator pulled upstream main (`03764dbc`, hotfix/1.4.3) into fork main (`c7bd6bee`) as merge change `vpzlrrlv` — ~76 conflicted files, ~485 upstream commits incl. full restructure (SDK retirement per upstream ADR-0174, `get-shit-done/` → `gsd-core/`, `src/*.cts` rewrite). **Operator decision 2026-06-10: follow upstream's renames/restructure as much as possible so future pulls stay cheap; the fork's only durable divergence is the VCS abstraction enabling jj support, which is PORTED INTO upstream's new architecture (`src/vcs/*.cts`), with upstream raw-git call sites migrated through it.** (Supersedes the researcher's fork-layout-canonical Option A recommendation.) Resolution in working copy on top of the merge in workspace `get-shit-done-2`; operator squashes at the end. Numbered 19 because roadmap-only Phase 18 (Tactical cleanup) exists without a phase directory — `phase.add` initially emitted a colliding 18, manually renumbered.
 - **v1.4 roadmap created 2026-05-23:** 4-phase shape (Phases 15-18) derived from research synthesis, 13 plans estimated, 25 v1.4 requirements mapped 100% (no orphans). Phase 15 = adapter surface extensions + rename (NAMING-01, VCS-21, VCS-22, PARALLEL-07; sequential plans on shared types.ts); Phase 16 = workflow + invariant tooling (LINT-06, CLEANUP-02; parallel-safe, consumes Phase 15 helper); Phase 17 = drift control + reconciliation (DOCS-08 fix → DRIFT-01/02 tests → DOCS-01..07/09 batched → PROJECT-01 reconciliation LAST per IP-4); Phase 18 = tactical cleanup + test-flake (CLEANUP-01 transition.md gate FIRST per Pitfall 2, CLEANUP-03..07 per-WR commits per Pitfall 10, TEST-17 narrow scope per Pitfall 9). One clarification vs research recommendation: PARALLEL-07's plan extracts the shared `cleanupSubagentWorkspaces` helper as its Wave 1 (single-owner per IP-5), then Phase 16 CLEANUP-02 consumes the same helper — avoids cross-phase dependency inversion.
 - **Phase 9 discuss 2026-05-15:** PARALLEL-03 (liveness probe) and PARALLEL-04 (repo-scoped lock) dropped at premise level. Orchestrator awaits `Agent()` completion before fanIn → no production scenario where a workspace is mid-write. In `octopus.ts` topology each subagent owns a distinct change at distinct change_id → agents never squash into shared ancestors → no inter-process contention. fanIn signature locked at two-arg `fanIn(handle, results)` with frozen-JSON Handle per SDK pure-data convention. Reap classifier widens 1→2 in `reap.ts` during Phase 9; Phase 10 adds git-side producer. See `09-CONTEXT.md`.
 - **v1.3 opened 2026-05-15:** 6-phase shape derived from (originally 29, now 27) requirements; verb namespace locked at `vcs.workspace.parallel.*` (Tension 1 resolved); A3 fix path deferred to Phase 12 discuss-phase decision (Tension 3 NOT pre-decided); no migration command for default-flip (subagent workspaces ephemeral); lint allowlist framing locked at +0/+1 (production entries stay); dogfood is LAST (Pitfall 10); CI parallel-path lane (Phase 13) ships BEFORE default-flip (Phase 14).
@@ -174,6 +177,14 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase ?]: RESEARCH function-name claim corrected during execute: ADR 0009 supersession-note cites projectShellCommandText (live) instead of projectShellCommand (RESEARCH placeholder)
 - [Phase ?]: Theme 7 path (b) fallback applied: en source docs/superpowers/specs/... does not exist; pt-BR specs L4 dangling self-reference removed instead of being rewritten to en target
 - [Phase ?]: PROJECT-01-form: inline computation, NOT a permanent reconcile script (YAGNI per REQUIREMENTS.md OOS clause)
+- [Phase ?]: Phase 19 Plan 01: fixture-exclusion list frozen EMPTY — marker sweep needs --hidden (plan's literal command missed .github/ conflicts); 75 hits set-identical to 75 conflicted paths, canonical command recorded in 19-MERGE-AUDIT.md
+- [Phase ?]: Phase 19 Plan 01: mutation.yml dropped as org-automation (PR-gating wired to upstream next-branch train) despite testing code; Stryker stays runnable locally via npm run test:mutation
+- [Phase ?]: Phase 19 Plan 01: pnpm pinned at 11.3.0 (locally installed) superseding fork-side 11.0.8 pin; pnpm-vs-npm recorded as permanent divergence in the ledger
+- [Phase ?]: Phase 19 Plan 02: operator-performed pnpm install accepted as the phase's single vetted install — executor verified idempotence ('Already up to date') instead of re-installing; pnpm-workspace.yaml kept as pnpm 11 allowBuilds store (esbuild), distinct from the 19-01-dropped workspace manifest
+- [Phase ?]: Phase 19 Plan 02: build gate green pre-port — pnpm run build:lib exit 0 (noEmitOnError) + gsd-tools query dispatch smoke alive; upstream 'unknown config key: vcs' warning is expected later-plan port work, not a defect
+- [Phase ?]: Phase 19 Plan 03: harvest-before-delete executed — 50 byte-verified c7bd6bee reference copies (27 query handlers incl. verb registry, 10 bin-lib CJS, 9 workflow deltas, 4 misc); buckets A/B/C cleared as upstream deletions (72 -> 17 conflicts, all D/E/F/G)
+- [Phase ?]: Phase 19 Plan 03: fork JSON payloads re-homed same-plan — gsd-core/templates/config.json = fork content (flat parallelization:true; fork template has NO vcs block, plan over-claimed) + vcs.adapter validKey grafted into gsd-core/bin/shared/config-schema.manifest.json (19-02 unknown-config-key warning gone)
+- [Phase ?]: Phase 19 Plan 03: canonical marker sweep amended — add --glob '!node_modules/**' (untracked third-party content post-install) and explicit path arg (rg reads never-EOF stdin without it); tracked-fixture exclusion list stays EMPTY
 
 ### Pending Todos
 
@@ -244,11 +255,16 @@ All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQU
 
 ## Session Continuity
 
-Last session: 2026-05-25T22:31:05.890Z
-Stopped at: Phase 17 context gathered
-Resume file: 
+Last session: 2026-06-10T10:46:35.606Z
+Stopped at: Completed 19-02-PLAN.md (install gate + build bring-up); next: 19-03
+Resume file:
 
 None
+
+- Strategy (operator-locked, full text in 19-CONTEXT.md): ADOPT upstream restructure (SDK retirement, `gsd-core/`, `src/*.cts`); port fork VCS layer to `src/vcs/*.cts`; pnpm; mirror upstream identity `@opengsd/gsd-core@1.4.3`; vitest revival; adapter-routed cmdCommit; doc-parity tests drop+ledger.
+- 13 plans (19-01…19-13), 13 sequential waves, revised per plan-checker iteration 1 (1 BLOCKER + 3 MAJOR + 4 MINOR all fixed, commit `sponvvtl`). VALIDATION.md nyquist-approved.
+- **NEXT STEP: plan-checker iteration 2** (verify the 8 fixes; spot-check 19-10/19-12 allowlist ordering, 19-07 verify, GSD_TEST_BACKENDS prefixes, context includes) → then `/gsd-execute-phase 19`.
+- Execution notes: 19-02 has the phase's only human checkpoint (package legitimacy gate before single `pnpm install`; `autonomous: false`, never auto-approve). jj discipline: work on top of `vpzlrrlv` only; NEVER rewrite/squash/abandon it or below; no bookmark moves; no `jj op restore`/`undo`; operator squashes the stack at the end.
 
 - Phase 12 (A3 fix) is an independent parallel track — may be planned/executed in parallel with Phases 9/10/11; joins at Phase 13 CI integration. (v1.3 closed.)
 - v1.4 phases (15-18) execute in canonical order; Phase 15 plan 15.04 (PARALLEL-07) extracts `cleanupSubagentWorkspaces` helper as Wave 1, consumed by Phase 16 plan 16.02 (CLEANUP-02) — single-owner per IP-5.

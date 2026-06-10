@@ -1,7 +1,7 @@
-// allow-test-rule: pending-migration-to-typed-ir [#2974]
-// Tracked in #2974 for migration to typed-IR assertions per CONTRIBUTING.md
-// "Prohibited: Raw Text Matching on Test Outputs". Per-file review may
-// reclassify some entries as source-text-is-the-product during migration.
+// allow-test-rule: source-text-is-the-product
+// Workflow .md / agent .md / command .md / reference .md files — their text
+// IS what the runtime loads. Testing text content tests the deployed contract.
+// Per CONTRIBUTING.md exception matrix.
 
 /**
  * GSD Tools Tests - frontmatter CLI integration
@@ -94,7 +94,7 @@ describe('frontmatter set', () => {
 
     // Read back and verify
     const content = fs.readFileSync(file, 'utf-8');
-    const { extractFrontmatter } = require('../get-shit-done/bin/lib/frontmatter.cjs');
+    const { extractFrontmatter } = require('../gsd-core/bin/lib/frontmatter.cjs');
     const fm = extractFrontmatter(content);
     assert.strictEqual(fm.phase, '02');
   });
@@ -105,7 +105,7 @@ describe('frontmatter set', () => {
     assert.ok(result.success, `Command failed: ${result.error}`);
 
     const content = fs.readFileSync(file, 'utf-8');
-    const { extractFrontmatter } = require('../get-shit-done/bin/lib/frontmatter.cjs');
+    const { extractFrontmatter } = require('../gsd-core/bin/lib/frontmatter.cjs');
     const fm = extractFrontmatter(content);
     assert.strictEqual(fm.status, 'active');
   });
@@ -116,7 +116,7 @@ describe('frontmatter set', () => {
     assert.ok(result.success, `Command failed: ${result.error}`);
 
     const content = fs.readFileSync(file, 'utf-8');
-    const { extractFrontmatter } = require('../get-shit-done/bin/lib/frontmatter.cjs');
+    const { extractFrontmatter } = require('../gsd-core/bin/lib/frontmatter.cjs');
     const fm = extractFrontmatter(content);
     assert.ok(Array.isArray(fm.tags), 'tags should be an array');
     assert.deepStrictEqual(fm.tags, ['a', 'b']);
@@ -149,7 +149,7 @@ describe('frontmatter merge', () => {
     assert.ok(result.success, `Command failed: ${result.error}`);
 
     const content = fs.readFileSync(file, 'utf-8');
-    const { extractFrontmatter } = require('../get-shit-done/bin/lib/frontmatter.cjs');
+    const { extractFrontmatter } = require('../gsd-core/bin/lib/frontmatter.cjs');
     const fm = extractFrontmatter(content);
     assert.strictEqual(fm.phase, '01', 'original field should be preserved');
     assert.strictEqual(fm.plan, '02', 'merged field should be present');
@@ -162,7 +162,7 @@ describe('frontmatter merge', () => {
     assert.ok(result.success, `Command failed: ${result.error}`);
 
     const content = fs.readFileSync(file, 'utf-8');
-    const { extractFrontmatter } = require('../get-shit-done/bin/lib/frontmatter.cjs');
+    const { extractFrontmatter } = require('../gsd-core/bin/lib/frontmatter.cjs');
     const fm = extractFrontmatter(content);
     assert.strictEqual(fm.phase, '02', 'conflicting field should be overwritten');
     assert.strictEqual(fm.type, 'execute', 'non-conflicting field should be preserved');

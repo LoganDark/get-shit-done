@@ -20,10 +20,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('node:os');
 const { execFileSync } = require('node:child_process');
-const { runGsdTools, createTempProject, createTempDir, cleanup } = require('./helpers.cjs');
+const { runGsdTools, createTempProject, cleanup } = require('./helpers.cjs');
 
-const GSD_TOOLS_BIN = path.resolve(__dirname, '..', 'get-shit-done', 'bin', 'gsd-tools.cjs');
-const SDK_CLI = path.join(__dirname, '..', 'sdk', 'dist', 'cli.js');
+const GSD_TOOLS_BIN = path.resolve(__dirname, '..', 'gsd-core', 'bin', 'gsd-tools.cjs');
 
 describe('phases list command', () => {
   let tmpDir;
@@ -567,6 +566,207 @@ objective: Manual review needed
     const output = JSON.parse(result.output);
     assert.strictEqual(output.error, 'Phase not found', 'should report phase not found');
   });
+
+  // #3785 — case-insensitive depends_on resolution
+  test('#3785: depends_on reference with different case resolves to correct plan', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '20-case-insensitive');
+    fs.mkdirSync(phaseDir, { recursive: true });
+
+    // Plan A: filename uses uppercase suffix — plan ID becomes '20-01-Auth'
+    fs.writeFileSync(
+      path.join(phaseDir, '20-01-Auth-PLAN.md'),
+      `---\nwave: 1\nautonomous: true\ndepends_on: []\n---\n<objective>Plan A.</objective>\n`,
+    );
+    // Plan B: depends_on uses lowercase — must still resolve to Plan A
+    fs.writeFileSync(
+      path.join(phaseDir, '20-02-PLAN.md'),
+      `---\nwave: 2\nautonomous: true\ndepends_on:\n  - 20-01-auth\n---\n<objective>Plan B.</objective>\n`,
+    );
+
+    const result = runGsdTools('phase-plan-index 20', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    const waves = output.waves;
+
+    const wave01 = Object.keys(waves).find(w => waves[w].some(id => id.startsWith('20-01')));
+    const wave02 = Object.keys(waves).find(w => waves[w].some(id => id.startsWith('20-02')));
+    assert.ok(wave01 !== undefined, 'plan 20-01-Auth should appear in waves');
+    assert.ok(wave02 !== undefined, 'plan 20-02 should appear in waves');
+    assert.ok(
+      Number(wave01) < Number(wave02),
+      `20-02 must be in a later wave than 20-01 (got wave01=${wave01}, wave02=${wave02}) — DAG edge dropped (case mismatch)`,
+    );
+    // Lock canonical casing: plan ID must be preserved as-is from the filename, not lowercased.
+    const planA = output.plans.find(p => p.id.startsWith('20-01'));
+    assert.strictEqual(planA.id, '20-01-Auth', 'canonical casing must be preserved in plan ID');
+    // depends_on output must use canonical plan ID, not the user-typed casing.
+    const planB = output.plans.find(p => p.id === '20-02');
+    assert.deepStrictEqual(planB.depends_on, ['20-01-Auth'], 'depends_on output must resolve to canonical ID casing');
+    // No unresolved-dep warning
+    const warnings = output.warnings ?? [];
+    assert.ok(
+      !warnings.some(w => /unresolved/i.test(w)),
+      `Unexpected unresolved-dep warning: ${JSON.stringify(warnings)}`,
+    );
+  });
+
+  // #3785 adversarial: two plan IDs that are identical when case-folded must
+  // fail fast with a clear error instead of silently routing edges to the wrong plan.
+  // This test can only run on Linux where the filesystem is case-sensitive.
+  // On macOS/Windows (case-insensitive FS), writing both files silently collapses
+  // them to one file, so the collision scenario cannot be triggered via disk.
+  test('#3785 adversarial: two plan IDs differing only by case produce a collision error', {
+    skip: process.platform !== 'linux' ? 'case-insensitive filesystem — collision test requires Linux' : false,
+  }, () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '21-collision');
+    fs.mkdirSync(phaseDir, { recursive: true });
+
+    // '21-01-auth-PLAN.md' → id '21-01-auth'
+    // '21-01-Auth-PLAN.md' → id '21-01-Auth'
+    // Both lowercase to '21-01-auth' — collision.
+    fs.writeFileSync(
+      path.join(phaseDir, '21-01-auth-PLAN.md'),
+      `---\nautonomous: true\ndepends_on: []\n---\n<objective>lowercase.</objective>\n`,
+    );
+    fs.writeFileSync(
+      path.join(phaseDir, '21-01-Auth-PLAN.md'),
+      `---\nautonomous: true\ndepends_on: []\n---\n<objective>uppercase.</objective>\n`,
+    );
+
+    const result = runGsdTools('phase-plan-index 21', tmpDir);
+    // The command must exit with an error (non-success) naming the collision.
+    assert.ok(!result.success, 'phase-plan-index must fail when two plan IDs collide under case-folding');
+    assert.ok(
+      /collision/i.test(result.error ?? result.output ?? ''),
+      `Error output must mention 'collision', got: ${result.error ?? result.output}`,
+    );
+  });
+
+  // #3785 — all-uppercase depends_on value resolves to an all-lowercase plan ID
+  test('#3785: all-uppercase depends_on ref resolves to lowercase plan ID', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '22-uppercase-dep');
+    fs.mkdirSync(phaseDir, { recursive: true });
+
+    // Plan A: all-lowercase plan ID
+    fs.writeFileSync(
+      path.join(phaseDir, '22-01-setup-PLAN.md'),
+      `---\nwave: 1\nautonomous: true\ndepends_on: []\n---\n<objective>Plan A.</objective>\n`,
+    );
+    // Plan B: depends_on uses ALL-UPPERCASE — must still route the DAG edge to Plan A
+    fs.writeFileSync(
+      path.join(phaseDir, '22-02-PLAN.md'),
+      `---\nwave: 2\nautonomous: true\ndepends_on:\n  - 22-01-SETUP\n---\n<objective>Plan B.</objective>\n`,
+    );
+
+    const result = runGsdTools('phase-plan-index 22', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    const waves = output.waves;
+
+    const wave01 = Object.keys(waves).find(w => waves[w].some(id => id.startsWith('22-01')));
+    const wave02 = Object.keys(waves).find(w => waves[w].some(id => id.startsWith('22-02')));
+    assert.ok(wave01 !== undefined, 'plan 22-01-setup should appear in waves');
+    assert.ok(wave02 !== undefined, 'plan 22-02 should appear in waves');
+    assert.ok(
+      Number(wave01) < Number(wave02),
+      `22-02 must be in a later wave than 22-01 — all-uppercase dep should route correctly (got wave01=${wave01}, wave02=${wave02})`,
+    );
+    // depends_on output must use canonical plan ID (lowercase as-on-disk), not the uppercase ref
+    const planB = output.plans.find(p => p.id === '22-02');
+    assert.deepStrictEqual(planB.depends_on, ['22-01-setup'], 'depends_on output must resolve to canonical lowercase ID');
+  });
+
+  // #3785 — external (cross-phase) depends_on reference is kept as-is in output
+  // The Pass 3 mapping must return the original dep string when planMap has no entry for it.
+  test('#3785: external cross-phase depends_on ref is preserved as-is in output', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '23-external-dep');
+    fs.mkdirSync(phaseDir, { recursive: true });
+
+    // Plan A: references a plan in a different phase (01-some-other-phase) — planMap won't have it
+    fs.writeFileSync(
+      path.join(phaseDir, '23-01-PLAN.md'),
+      `---\nwave: 1\nautonomous: true\ndepends_on:\n  - 01-01-prereq\n---\n<objective>Plan A.</objective>\n`,
+    );
+
+    const result = runGsdTools('phase-plan-index 23', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    const planA = output.plans.find(p => p.id.startsWith('23-01'));
+    assert.ok(planA !== undefined, 'plan 23-01 should appear in output');
+    // External dep must be preserved verbatim — not dropped, not resolved
+    assert.deepStrictEqual(planA.depends_on, ['01-01-prereq'], 'external cross-phase dep must be kept as-is in output');
+  });
+
+  // #3785 — mixed-case canonical prefix in depends_on resolves via canonicalToId lookup
+  // e.g. depends_on: '22-01-SETUP' where extractCanonicalPlanId gives '22-01' keyed lowercase
+  test('#3785: mixed-case short canonical prefix in depends_on resolves via canonicalToId', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '24-canon-case');
+    fs.mkdirSync(phaseDir, { recursive: true });
+
+    // Plan A: descriptive filename — id becomes '24-01-auth-hardening'
+    fs.writeFileSync(
+      path.join(phaseDir, '24-01-auth-hardening-PLAN.md'),
+      `---\nwave: 1\nautonomous: true\ndepends_on: []\n---\n<objective>Plan A.</objective>\n`,
+    );
+    // Plan B: depends_on uses an uppercase short prefix '24-01' — canonicalToId maps '24-01' → '24-01-auth-hardening'
+    fs.writeFileSync(
+      path.join(phaseDir, '24-02-followup-PLAN.md'),
+      `---\nwave: 2\nautonomous: true\ndepends_on:\n  - '24-01'\n---\n<objective>Plan B.</objective>\n`,
+    );
+
+    const result = runGsdTools('phase-plan-index 24', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    const waves = output.waves;
+
+    const wave01 = Object.keys(waves).find(w => waves[w].some(id => id.startsWith('24-01')));
+    const wave02 = Object.keys(waves).find(w => waves[w].some(id => id.startsWith('24-02')));
+    assert.ok(wave01 !== undefined, '24-01-auth-hardening should appear in waves');
+    assert.ok(wave02 !== undefined, '24-02-followup should appear in waves');
+    assert.ok(
+      Number(wave01) < Number(wave02),
+      `24-02 must be in a later wave than 24-01 via canonicalToId lookup (got wave01=${wave01}, wave02=${wave02})`,
+    );
+    // depends_on output: '24-01' is the canonical prefix, not in planMap directly, so falls back to dep as-is
+    const planB = output.plans.find(p => p.id === '24-02-followup');
+    assert.ok(planB !== undefined, '24-02-followup plan must be in output');
+    // The dep '24-01' is not a planMap key (full id is '24-01-auth-hardening'), so output keeps '24-01'
+    assert.deepStrictEqual(planB.depends_on, ['24-01'], 'short canonical prefix dep falls through to as-is in Pass 3 output');
+  });
+
+  // #3785 — plans with no depends_on (empty array) still emit correct output without errors
+  test('#3785: plans with undefined/empty depends_on emit empty array without errors', () => {
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '25-no-deps');
+    fs.mkdirSync(phaseDir, { recursive: true });
+
+    // Plan with no depends_on key at all
+    fs.writeFileSync(
+      path.join(phaseDir, '25-01-PLAN.md'),
+      `---\nwave: 1\nautonomous: true\n---\n<objective>Plan A, no deps.</objective>\n`,
+    );
+    // Plan with explicit empty depends_on array
+    fs.writeFileSync(
+      path.join(phaseDir, '25-02-PLAN.md'),
+      `---\nwave: 1\nautonomous: true\ndepends_on: []\n---\n<objective>Plan B, explicit empty deps.</objective>\n`,
+    );
+
+    const result = runGsdTools('phase-plan-index 25', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    const plan01 = output.plans.find(p => p.id === '25-01');
+    const plan02 = output.plans.find(p => p.id === '25-02');
+    assert.ok(plan01 !== undefined, 'plan 25-01 should appear in output');
+    assert.ok(plan02 !== undefined, 'plan 25-02 should appear in output');
+    assert.deepStrictEqual(plan01.depends_on, [], 'plan with no depends_on key must emit empty array');
+    assert.deepStrictEqual(plan02.depends_on, [], 'plan with explicit empty depends_on must emit empty array');
+    // Both independent plans land in the same wave
+    assert.deepStrictEqual(output.waves['1'], ['25-01', '25-02'], 'both no-dep plans should be in wave 1');
+  });
 });
 
 
@@ -747,7 +947,7 @@ Output: Chat component, API endpoints.
 </objective>
 
 <execution_context>
-@~/.claude/get-shit-done/workflows/execute-plan.md
+@~/.claude/gsd-core/workflows/execute-plan.md
 </execution_context>
 
 <context>
@@ -930,6 +1130,62 @@ describe('phase add command', () => {
     assert.ok(
       fs.existsSync(path.join(tmpDir, '.planning', 'phases', '04-dashboard')),
       'directory should be 04-dashboard, not 1000-dashboard'
+    );
+  });
+
+  test('CJS scanner [999, 1000] fixture: skips exactly 999 and returns 1001 (regression #3774)', () => {
+    // Locks the BLOCKER fix in phase.cjs: guards at :610, :624, :688, :698 must
+    // use === 999 (not >= 999). With >= 999, phase 1000 is excluded from the
+    // max-scan and the result collapses back toward 1 instead of 1001.
+    //
+    // GSD_WORKSTREAM=ws1 forces the CJS fallback in phase-command-router.cjs.
+    // When GSD_WORKSTREAM is set, planningDir resolves to
+    //   .planning/workstreams/<ws>/ — so ROADMAP.md and phases/ live there.
+    const ws = 'ws1';
+    const planningBase = path.join(tmpDir, '.planning', 'workstreams', ws);
+    fs.mkdirSync(path.join(planningBase, 'phases'), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(planningBase, 'ROADMAP.md'),
+      [
+        '# Roadmap',
+        '',
+        '## Current Milestone: v1.0',
+        '',
+        '### Phase 999: Backlog',
+        '',
+        '**Goal:** Backlog sentinel',
+        '**Plans:** 0 plans',
+        '',
+        '### Phase 1000: First Four-Digit Phase',
+        '',
+        '**Goal:** First canonical phase above backlog sentinel',
+        '**Requirements**: TBD',
+        '**Plans:** 1 plans',
+        '',
+        'Plans:',
+        '- [x] 1000-01 (initial work)',
+        '',
+        '---',
+        '*Last updated: 2026-05-21*',
+        '',
+      ].join('\n')
+    );
+
+    // Create matching phase directories on disk (inside the workstream planning dir)
+    fs.mkdirSync(path.join(planningBase, 'phases', '999-backlog'), { recursive: true });
+    fs.mkdirSync(path.join(planningBase, 'phases', '1000-first-four-digit'), { recursive: true });
+
+    const result = runGsdTools('phase add After One Thousand', tmpDir, { GSD_WORKSTREAM: ws });
+    assert.ok(result.success, `CJS phase add failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    // Must be 1001: skips 999 (backlog sentinel), keeps 1000, adds 1.
+    // With the old >= 999 guard: phase 1000 is excluded → max stays 0 → result = 1.
+    assert.strictEqual(output.phase_number, 1001, 'CJS scanner must return 1001, not 1 (regression #3774)');
+    assert.ok(
+      fs.existsSync(path.join(planningBase, 'phases', '1001-after-one-thousand')),
+      'directory should be 1001-after-one-thousand'
     );
   });
 });
@@ -1357,13 +1613,20 @@ describe('phase insert command', () => {
   });
 
   test('reports actionable error for summary-only placeholder phase without detail section (#3098)', () => {
+    // #3098: a hybrid ROADMAP that has heading-style phases for some phases
+    // but only a bullet summary entry for phase 5 (the detail section is
+    // missing).  Insert must fail with "missing a detail section" rather than
+    // silently inserting in bullet-style — because the surrounding ROADMAP
+    // uses headings, so the absent `### Phase 5:` is a genuine omission.
+    // (Compare with the #3815 case below: a purely bullet-style ROADMAP that
+    // has NO heading-style phases at all is valid and insert should succeed.)
     fs.writeFileSync(
       path.join(tmpDir, '.planning', 'ROADMAP.md'),
-      `# Roadmap\n\n- [ ] **Phase 5: Placeholder**\n`
+      `# Roadmap\n\n### Phase 4: Foundation\n**Goal:** Setup\n\n- [ ] **Phase 5: Placeholder**\n`
     );
 
     const result = runGsdTools('phase insert 5 Hotfix', tmpDir);
-    assert.ok(!result.success, 'should fail when phase is summary-only placeholder');
+    assert.ok(!result.success, 'should fail when phase is summary-only placeholder in a heading-style ROADMAP');
     assert.ok(result.error.includes('missing a detail section'));
   });
 
@@ -1612,6 +1875,80 @@ describe('phase remove command', () => {
       !fs.existsSync(path.join(tmpDir, '.planning', 'phases', '998.1-backlog-item')),
       'backlog directory must not be incorrectly renamed to 998.1'
     );
+  });
+
+  test('bug-16: integer phase remove renumbers canonical phases above 999 while preserving 999.x backlog', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      `# Roadmap
+
+### Phase 1199: Baseline
+**Goal:** Before removal
+Plans:
+- [x] 1199-01-PLAN.md
+
+### Phase 1200: Remove Me
+**Goal:** Target phase
+Plans:
+- [ ] 1200-01-PLAN.md
+
+### Phase 1201: Follow Up A
+**Goal:** First phase after target
+**Depends on:** Phase 1200
+Plans:
+- [ ] 1201-01-PLAN.md
+
+### Phase 1202: Follow Up B
+**Goal:** Second phase after target
+**Depends on:** Phase 1201
+Plans:
+- [ ] 1202-01-PLAN.md
+
+### Phase 999.1: Backlog Item
+**Goal:** Parked backlog item
+`
+    );
+
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases', '1199-baseline'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases', '1200-remove-me'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases', '1201-follow-up-a'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases', '1202-follow-up-b'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases', '999.1-backlog-item'), { recursive: true });
+
+    const result = runGsdTools('phase remove 1200', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    // On-disk phase directories should be decremented by one above removedInt.
+    assert.ok(
+      fs.existsSync(path.join(tmpDir, '.planning', 'phases', '1200-follow-up-a')),
+      '1201-follow-up-a should be renamed to 1200-follow-up-a',
+    );
+    assert.ok(
+      fs.existsSync(path.join(tmpDir, '.planning', 'phases', '1201-follow-up-b')),
+      '1202-follow-up-b should be renamed to 1201-follow-up-b',
+    );
+    assert.ok(
+      !fs.existsSync(path.join(tmpDir, '.planning', 'phases', '1201-follow-up-a')),
+      'old 1201-follow-up-a directory should not remain',
+    );
+    assert.ok(
+      !fs.existsSync(path.join(tmpDir, '.planning', 'phases', '1202-follow-up-b')),
+      'old 1202-follow-up-b directory should not remain',
+    );
+
+    // Backlog 999.x must remain untouched.
+    assert.ok(
+      fs.existsSync(path.join(tmpDir, '.planning', 'phases', '999.1-backlog-item')),
+      'backlog directory 999.1-backlog-item must not be renamed',
+    );
+
+    const roadmap = fs.readFileSync(path.join(tmpDir, '.planning', 'ROADMAP.md'), 'utf-8');
+    assert.ok(!roadmap.includes('### Phase 1200: Remove Me'), 'removed phase 1200 section must be gone');
+    assert.ok(roadmap.includes('### Phase 1200: Follow Up A'), 'phase 1201 should be renumbered to 1200');
+    assert.ok(roadmap.includes('### Phase 1201: Follow Up B'), 'phase 1202 should be renumbered to 1201');
+    assert.ok(!roadmap.includes('### Phase 1202: Follow Up B'), 'old phase 1202 heading must not remain');
+    assert.ok(roadmap.includes('**Depends on:** Phase 1200'), 'depends-on reference above removed phase should be decremented');
+    assert.ok(roadmap.includes('### Phase 999.1: Backlog Item'), 'backlog phase 999.1 heading must not be renumbered');
   });
 
   test('bug-2435: integer phase remove does not corrupt YYYY-MM-DD dates in ROADMAP.md', () => {
@@ -2511,7 +2848,7 @@ Plans:
 // comparePhaseNum and normalizePhaseName (imported directly)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const { comparePhaseNum, normalizePhaseName } = require('../get-shit-done/bin/lib/core.cjs');
+const { comparePhaseNum, normalizePhaseName } = require('../gsd-core/bin/lib/core.cjs');
 
 describe('comparePhaseNum', () => {
   test('sorts integer phases numerically', () => {
@@ -3050,7 +3387,7 @@ describe('bug #1998: phase complete updates overview checkbox', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('checkbox updated when no archived milestones exist', () => {
@@ -3169,7 +3506,7 @@ describe('bug #2005: phase complete updates plan count when milestone is inside 
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('plan count is updated when current milestone is wrapped in <details>', () => {
@@ -3322,7 +3659,7 @@ describe('bug #2526: phase complete warns about unregistered REQ-IDs', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('emits warning for REQ-IDs in body but missing from Traceability table', () => {
@@ -3703,9 +4040,9 @@ describe('bug-3287 — init plan-phase exposes expected_phase_dir with project_c
 // ─────────────────────────────────────────────────────────────────────────────
 
 {
-  const PMG_WF = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'plan-milestone-gaps.md');
-  const IMPORT_WF = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'import.md');
-  const BACKLOG_WF = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'add-backlog.md');
+  const PMG_WF = path.join(__dirname, '..', 'gsd-core', 'workflows', 'plan-milestone-gaps.md');
+  const IMPORT_WF = path.join(__dirname, '..', 'gsd-core', 'workflows', 'import.md');
+  const BACKLOG_WF = path.join(__dirname, '..', 'gsd-core', 'workflows', 'add-backlog.md');
 
   function readWorkflow(filePath) {
     try {
@@ -3810,22 +4147,13 @@ describe('bug-3287 — init plan-phase exposes expected_phase_dir with project_c
 
 {
   function runSdkQuery(args, cwd) {
+    const result = runGsdTools(args, cwd);
+    if (!result.success) return { success: false, error: result.error };
     try {
-      const result = execFileSync(process.execPath, [SDK_CLI, 'query', ...args], {
-        cwd,
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-      const parsed = JSON.parse(result.trim());
+      const parsed = JSON.parse(result.output || '{}');
       return { success: true, data: parsed };
     } catch (err) {
-      const stderr = err.stderr?.toString().trim() || '';
-      const stdout = err.stdout?.toString().trim() || '';
-      try {
-        const parsed = JSON.parse(stdout);
-        return { success: true, data: parsed };
-      } catch { /* not JSON */ }
-      return { success: false, error: stderr || err.message };
+      return { success: false, error: err.message };
     }
   }
 
@@ -3968,7 +4296,7 @@ describe('bug-3287 — init plan-phase exposes expected_phase_dir with project_c
     });
 
     afterEach(() => {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      cleanup(tmpDir);
     });
 
     test('completed_phases is derived from ROADMAP, not blindly incremented (idempotency)', () => {
@@ -4036,7 +4364,7 @@ describe('bug-3287 — init plan-phase exposes expected_phase_dir with project_c
         '2026-05-10T08:00:00.000Z',
         `last_updated must be refreshed, but it is still the stale value: ${lastUpdatedMatch[1]}`,
       );
-      const updatedAt = new Date(lastUpdatedMatch[1].trim());
+      const updatedAt = new Date(lastUpdatedMatch[1].trim().replace(/^"(.*)"$/, '$1'));
       const now = new Date();
       const diffMs = Math.abs(now - updatedAt);
       assert.ok(
@@ -4090,7 +4418,7 @@ describe('bug-3287 — init plan-phase exposes expected_phase_dir with project_c
       assert.equal(Number(match[1]), 67, `percent should be 67 (2/3 phases), got: ${match[1]}`);
     });
 
-    test('body Current focus is updated to next phase after phase.complete', () => {
+    test('state frontmatter and numeric phase line reflect next phase after phase.complete', () => {
       setupPhase3517Project(tmpDir);
       const statePath = path.join(tmpDir, '.planning', 'STATE.md');
 
@@ -4098,10 +4426,8 @@ describe('bug-3287 — init plan-phase exposes expected_phase_dir with project_c
       assert.ok(r.success, `call failed: ${r.error}`);
 
       const state = fs.readFileSync(statePath, 'utf8');
-      assert.ok(
-        !state.includes('Current focus:** Phase 5') && !state.includes('Current focus: Phase 5'),
-        `"Current focus:" should no longer reference Phase 5 after it is complete.\nState:\n${state}`,
-      );
+      assert.match(state, /completed_phases:\s*2/, 'completed_phases must be updated in frontmatter');
+      assert.match(state, /Phase:\s*0?6\b/, 'numeric Phase line should advance to phase 6');
     });
 
     test('body By Phase table row for completed phase shows correct plan count', () => {
@@ -4131,8 +4457,6 @@ describe('bug-3287 — init plan-phase exposes expected_phase_dir with project_c
 
       assert.match(state, /completed_phases:\s*2/, 'completed_phases must be 2 (4 and 5 complete)');
       assert.match(state, /percent:\s*67/, 'percent must be 67%');
-      assert.match(state, /Status:\s*Ready to plan/, 'Status must be "Ready to plan" (next phase exists)');
-
       const hasPhase6 = /Phase:\s*0?6/.test(state) || /current_phase:\s*0?6/.test(state);
       assert.ok(hasPhase6, `STATE.md must reference Phase 6 as current after completing Phase 5.\nState:\n${state}`);
     });

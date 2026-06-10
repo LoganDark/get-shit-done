@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Regression guard for issue #3251:
- * 14 commands used in workflows must be present in command-aliases.generated.cjs.
+ * 14 commands used in workflows must be present in command-aliases.cjs.
  *
  * Asserts structurally by requiring the manifest and checking each canonical
  * command appears in either the family arrays or the non-family array.
@@ -15,16 +15,17 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('path');
 const { spawnSync } = require('node:child_process');
+const { cleanup } = require('./helpers.cjs');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const COMMAND_ALIASES_FILE = path.join(
   REPO_ROOT,
-  'get-shit-done',
+  'gsd-core',
   'bin',
   'lib',
-  'command-aliases.generated.cjs',
+  'command-aliases.cjs',
 );
-const GSD_TOOLS = path.join(REPO_ROOT, 'get-shit-done', 'bin', 'gsd-tools.cjs');
+const GSD_TOOLS = path.join(REPO_ROOT, 'gsd-core', 'bin', 'gsd-tools.cjs');
 
 const MISSING_14 = [
   'check.decision-coverage-plan',
@@ -43,7 +44,7 @@ const MISSING_14 = [
   'workstream.list',
 ];
 
-describe('feat-3251: command-aliases.generated.cjs manifest coverage', () => {
+describe('feat-3251: command-aliases.cjs manifest coverage', () => {
   let manifest;
 
   test('manifest file can be required without error', () => {
@@ -59,7 +60,7 @@ describe('feat-3251: command-aliases.generated.cjs manifest coverage', () => {
     manifest = manifest ?? require(COMMAND_ALIASES_FILE);
     assert.ok(
       Array.isArray(manifest.NON_FAMILY_COMMAND_ALIASES),
-      'NON_FAMILY_COMMAND_ALIASES must be an exported array in command-aliases.generated.cjs',
+      'NON_FAMILY_COMMAND_ALIASES must be an exported array in command-aliases.cjs',
     );
   });
 
@@ -183,7 +184,7 @@ describe('feat-3251: generated aliases dispatch through real gsd-tools behavior'
         cli_flag_present: true,
       });
     } finally {
-      fs.rmSync(projectDir, { recursive: true, force: true });
+      cleanup(projectDir);
     }
   });
 
@@ -216,7 +217,7 @@ describe('feat-3251: generated aliases dispatch through real gsd-tools behavior'
       assert.equal(output.cli_flag_present, false);
       assert.deepEqual(snapshotProjectState(projectDir), beforeFiles);
     } finally {
-      fs.rmSync(projectDir, { recursive: true, force: true });
+      cleanup(projectDir);
     }
   });
 
@@ -250,7 +251,7 @@ describe('feat-3251: generated aliases dispatch through real gsd-tools behavior'
       assert.equal(output.roadmap_mode, null);
       assert.deepEqual(snapshotProjectState(projectDir), beforeFiles);
     } finally {
-      fs.rmSync(projectDir, { recursive: true, force: true });
+      cleanup(projectDir);
     }
   });
 
@@ -270,7 +271,7 @@ describe('feat-3251: generated aliases dispatch through real gsd-tools behavior'
       assert.equal(/\n\s*at\s/.test(result.stderr), false, 'non-debug failure must not print a stack trace');
       assert.deepEqual(snapshotProjectState(projectDir), beforeFiles);
     } finally {
-      fs.rmSync(projectDir, { recursive: true, force: true });
+      cleanup(projectDir);
     }
   });
 });

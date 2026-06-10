@@ -19,6 +19,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { cleanup } = require('./helpers.cjs');
 
 const HOOK_PATH = path.join(__dirname, '..', 'hooks', 'gsd-update-banner.js');
 const {
@@ -26,6 +27,7 @@ const {
   shouldSuppressFailureWarning,
   RATE_LIMIT_SECONDS,
 } = require('../hooks/gsd-update-banner.js');
+const { updateCacheFileName } = require('../gsd-core/bin/lib/package-identity.cjs');
 
 // ─── Pure function: buildBannerOutput ───────────────────────────────────────
 
@@ -50,7 +52,7 @@ describe('buildBannerOutput', () => {
 
   test('returns banner envelope when update_available is true', () => {
     const out = buildBannerOutput({
-      cache: { update_available: true, installed: '1.39.0', latest: '1.40.0' },
+      cache: { update_available: true, installed: '1.39.0', latest: '1.40.0', package_name: '@opengsd/gsd-core' },
       parseError: false,
       suppressFailureWarning: false,
     });
@@ -95,7 +97,7 @@ describe('buildBannerOutput', () => {
 
   test('falls back to "unknown" when installed/latest missing', () => {
     const out = buildBannerOutput({
-      cache: { update_available: true },
+      cache: { update_available: true, package_name: '@opengsd/gsd-core' },
       parseError: false,
       suppressFailureWarning: false,
     });
@@ -123,7 +125,7 @@ describe('shouldSuppressFailureWarning', () => {
       );
       assert.equal(result, false);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -135,7 +137,7 @@ describe('shouldSuppressFailureWarning', () => {
       const result = shouldSuppressFailureWarning(f, 1000 + RATE_LIMIT_SECONDS - 1);
       assert.equal(result, true);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -147,7 +149,7 @@ describe('shouldSuppressFailureWarning', () => {
       const result = shouldSuppressFailureWarning(f, 1000 + RATE_LIMIT_SECONDS + 1);
       assert.equal(result, false);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -159,7 +161,7 @@ describe('shouldSuppressFailureWarning', () => {
       const result = shouldSuppressFailureWarning(f, 100);
       assert.equal(result, false);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 });
@@ -182,7 +184,7 @@ describe('gsd-update-banner.js end-to-end', () => {
 
   function writeCache(home, contents) {
     fs.writeFileSync(
-      path.join(home, '.cache', 'gsd', 'gsd-update-check.json'),
+      path.join(home, '.cache', 'gsd', updateCacheFileName),
       typeof contents === 'string' ? contents : JSON.stringify(contents)
     );
   }
@@ -194,7 +196,7 @@ describe('gsd-update-banner.js end-to-end', () => {
       assert.equal(r.status, 0, `expected exit 0, got ${r.status} stderr=${r.stderr}`);
       assert.equal(r.stdout.trim(), '');
     } finally {
-      fs.rmSync(home, { recursive: true, force: true });
+      cleanup(home);
     }
   });
 
@@ -205,6 +207,7 @@ describe('gsd-update-banner.js end-to-end', () => {
         update_available: true,
         installed: '1.39.0',
         latest: '1.40.0',
+        package_name: '@opengsd/gsd-core',
       });
       const r = runHook(home);
       assert.equal(r.status, 0);
@@ -213,7 +216,7 @@ describe('gsd-update-banner.js end-to-end', () => {
       assert.ok(parsed.systemMessage.includes('1.40.0'));
       assert.ok(parsed.systemMessage.includes('/gsd:update'));
     } finally {
-      fs.rmSync(home, { recursive: true, force: true });
+      cleanup(home);
     }
   });
 
@@ -229,7 +232,7 @@ describe('gsd-update-banner.js end-to-end', () => {
       assert.equal(r.status, 0);
       assert.equal(r.stdout.trim(), '');
     } finally {
-      fs.rmSync(home, { recursive: true, force: true });
+      cleanup(home);
     }
   });
 
@@ -243,7 +246,7 @@ describe('gsd-update-banner.js end-to-end', () => {
       assert.equal(typeof parsed.systemMessage, 'string');
       assert.ok(/check failed/i.test(parsed.systemMessage));
     } finally {
-      fs.rmSync(home, { recursive: true, force: true });
+      cleanup(home);
     }
   });
 
@@ -272,7 +275,7 @@ describe('gsd-update-banner.js end-to-end', () => {
         'subsequent run within rate-limit window must stay silent'
       );
     } finally {
-      fs.rmSync(home, { recursive: true, force: true });
+      cleanup(home);
     }
   });
 
@@ -284,7 +287,7 @@ describe('gsd-update-banner.js end-to-end', () => {
       assert.equal(r.status, 0);
       assert.equal(r.stdout.trim(), '');
     } finally {
-      fs.rmSync(home, { recursive: true, force: true });
+      cleanup(home);
     }
   });
 });
@@ -314,6 +317,7 @@ describe('install.js update-banner wiring', () => {
     // Strip ANSI color escapes before structural assertions — the choice
     // digits are wrapped in color codes so word-boundary regex against the
     // raw text would miss them.
+    // eslint-disable-next-line no-control-regex -- \x1b (ESC) is the required leading byte of ANSI SGR color sequences; matching it is the purpose of stripping ANSI codes from captured CLI/console output
     const stripped = text.replace(/\x1b\[[0-9;]*m/g, '');
     // Prompt must offer at least two choices (default + opt-in).
     assert.match(stripped, /\b1\b/);

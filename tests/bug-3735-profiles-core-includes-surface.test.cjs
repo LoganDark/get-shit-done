@@ -13,10 +13,9 @@ const assert = require('node:assert/strict');
 const path = require('path');
 
 const {
-  PROFILES,
   resolveProfile,
   loadSkillsManifest,
-} = require('../get-shit-done/bin/lib/install-profiles.cjs');
+} = require('../gsd-core/bin/lib/install-profiles.cjs');
 
 const REAL_COMMANDS_DIR = path.join(__dirname, '..', 'commands', 'gsd');
 

@@ -2,11 +2,12 @@
  * GSD Tools Test Helpers
  */
 
-const { execSync, execFileSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { createFixture } = require('./fixtures/index.cjs');
 
-const TOOLS_PATH = path.join(__dirname, '..', 'get-shit-done', 'bin', 'gsd-tools.cjs');
+const TOOLS_PATH = path.join(__dirname, '..', 'gsd-core', 'bin', 'gsd-tools.cjs');
 const TEST_ENV_BASE = {
   GSD_SESSION_KEY: '',
   CODEX_THREAD_ID: '',
@@ -62,10 +63,18 @@ function runGsdTools(args, cwd = process.cwd(), env = {}) {
     }
     return { success: true, output: result.trim(), exitCode: 0 };
   } catch (err) {
+    const stderrRaw = err.stderr?.toString().trim() || '';
+    // Prefer actual stderr content; fall back to err.message (which contains
+    // the command invocation). If stderr is empty, append a note so CI logs
+    // show "stderr: (empty)" rather than silently losing the fact that the
+    // child process produced no error output — empty stderr with a non-zero
+    // exit code is a signal of OS-level crash (OOM kill, worker thread fatal
+    // error) rather than a gsd-tools application error.
+    const error = stderrRaw || `${err.message} [stderr: (empty) exit:${err.status ?? 1}]`;
     return {
       success: false,
       output: err.stdout?.toString().trim() || '',
-      error: err.stderr?.toString().trim() || err.message,
+      error,
       exitCode: err.status ?? 1,
     };
   }
@@ -78,9 +87,7 @@ function createTempDir(prefix = 'gsd-test-') {
 
 // Create temp directory structure
 function createTempProject(prefix = 'gsd-test-') {
-  const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), prefix));
-  fs.mkdirSync(path.join(tmpDir, '.planning', 'phases'), { recursive: true });
-  return tmpDir;
+  return createFixture({ prefix, planning: true, git: false });
 }
 
 // Create temp directory with initialized git repo and at least one commit
@@ -92,7 +99,7 @@ function createTempGitProject(prefix = 'gsd-test-') {
   // (init + 3x config) now routes through `vcs.gitOnly.init()` and
   // `vcs.gitOnly.configSet(...)`, retiring the last 4 raw-git calls in this
   // function. After this commit createTempGitProject has zero raw-git
-  // invocations. The lazy `_loadVcs()` getter still defers the dist-cjs
+  // invocations. The lazy `_loadVcs()` getter still defers the built-lib
   // require until first call (pre-build-guard friendly for non-VCS tests).
   const { vcs: vcsLib } = _loadVcs();
   const vcs = vcsLib.createVcsAdapter(tmpDir, { kind: 'git' });
@@ -213,18 +220,19 @@ function isUsageOutput(text) {
 // ─── VCS adapter test harness (Phase 1 plan 04) ─────────────────────────────
 // RESEARCH Pitfall 1: two-runner trap — node --test has no describe.for / test.extend.
 // RESEARCH Pitfall 3: pre-build guard — fail loudly with a recovery instruction.
-// RESEARCH Pitfall 6: BACKENDS_AVAILABLE and parseBackendsEnv MUST come from sdk/dist-cjs (single source).
+// RESEARCH Pitfall 6: BACKENDS_AVAILABLE and parseBackendsEnv MUST come from the
+// built lib (gsd-core/bin/lib/vcs, emitted by `pnpm run build:lib`) — single source.
 
 let _vcsModule = null;
 let _backendsModule = null;
 function _loadVcs() {
   if (_vcsModule && _backendsModule) return { vcs: _vcsModule, backends: _backendsModule };
   try {
-    _vcsModule = require('../sdk/dist-cjs/vcs/index.js');
-    _backendsModule = require('../sdk/dist-cjs/vcs/backends.js');
+    _vcsModule = require('../gsd-core/bin/lib/vcs/index.cjs');
+    _backendsModule = require('../gsd-core/bin/lib/vcs/backends.cjs');
   } catch (err) {
     throw new Error(
-      'VCS adapter not built. Run: pnpm -F sdk build:cjs\n' +
+      'VCS adapter not built. Run: pnpm run build:lib\n' +
       '  Underlying error: ' + (err && err.message ? err.message : String(err))
     );
   }
@@ -394,14 +402,21 @@ function vcsMultiWsTest(kindOrKinds, n, suiteFn) {
   });
 }
 
-const _exports = {
-  runGsdTools, createTempDir, createTempProject, createTempGitProject, cleanup, parseFrontmatter, isUsageOutput, TOOLS_PATH,
-  vcsTest, vcsMultiWsTest,
-};
-Object.defineProperty(_exports, 'BACKENDS_AVAILABLE', { enumerable: true, get: () => _loadVcs().backends.BACKENDS_AVAILABLE });
-Object.defineProperty(_exports, 'BACKENDS_DECLARED', { enumerable: true, get: () => _loadVcs().backends.BACKENDS_DECLARED });
-Object.defineProperty(_exports, 'BACKENDS_AVAILABLE_FOR_VERB', { enumerable: true, get: () => _loadVcs().backends.BACKENDS_AVAILABLE_FOR_VERB });
-Object.defineProperty(_exports, 'parseBackendsEnv', { enumerable: true, get: () => _loadVcs().backends.parseBackendsEnv });
+/**
+ * Isolated HOME directory used by runNpm() for the lifetime of this process.
+ *
+ * npm reads $HOME/.npmrc (user config) and writes to $HOME/.npm (default cache)
+ * when these paths are not overridden. On Docker hosts the running user's HOME
+ * may be uninitialized, unwritable, or contain stale state from a prior run —
+ * any of which causes `npm pack` / `npm install -g` to fail. Fix: create a
+ * fresh temp directory once per process, redirect HOME + cache + userconfig into
+ * it, and clean up on process exit. This makes runNpm() independent of the
+ * caller's environment. (#131)
+ */
+const _npmIsolatedHome = fs.mkdtempSync(path.join(require('os').tmpdir(), 'npm-home-'));
+process.on('exit', () => {
+  try { fs.rmSync(_npmIsolatedHome, { recursive: true, force: true }); } catch (_) { /* best-effort */ }
+});
 
 /**
  * Run `fn` with console.log/warn/error captured, returning {stdout, stderr}
@@ -468,13 +483,120 @@ function toPosixPath(p) {
 function runNpm(args, options = {}) {
   const isWindows = process.platform === 'win32';
   const npmCmd = isWindows ? 'npm.cmd' : 'npm';
+  // Inject an isolated HOME so npm never reads from or writes to the caller's
+  // $HOME. This prevents failures on Docker hosts where HOME is unwritable or
+  // uninitialized. The caller may still pass { env: {...} } in options to
+  // further override specific variables — those overrides win because they are
+  // applied after the isolated env below (via the spread in the merge). (#131)
+  const isolatedEnv = {
+    ...process.env,
+    HOME: _npmIsolatedHome,
+    npm_config_cache: path.join(_npmIsolatedHome, '.npm'),
+    npm_config_userconfig: path.join(_npmIsolatedHome, '.npmrc'),
+  };
   const defaults = {
     encoding: 'utf-8',
     shell: isWindows,
     timeout: 180000,
+    env: isolatedEnv,
   };
-  return execFileSync(npmCmd, args, { ...defaults, ...options }).trim();
+  // Merge options; if caller passes their own env, merge it on top of isolatedEnv
+  // so the isolation is preserved unless the caller explicitly overrides HOME.
+  const { env: callerEnv, ...otherOptions } = options;
+  const mergedEnv = callerEnv ? { ...isolatedEnv, ...callerEnv } : isolatedEnv;
+  return execFileSync(npmCmd, args, { ...defaults, ...otherOptions, env: mergedEnv }).trim();
 }
 
-Object.assign(_exports, { captureConsole, toPosixPath, runNpm });
+/**
+ * Returns the isolated npm environment dict used by runNpm().
+ *
+ * Callers (e.g. runSmoke()) can spread this into a spawnSync env so that npm
+ * never reads from or writes to the caller's $HOME — the same guarantee
+ * runNpm() already provides. (#131)
+ *
+ * @returns {object} env dict with HOME, npm_config_cache, npm_config_userconfig
+ *   pointing into a process-scoped temp directory.
+ */
+function isolatedNpmEnv() {
+  return {
+    ...process.env,
+    HOME: _npmIsolatedHome,
+    npm_config_cache: path.join(_npmIsolatedHome, '.npm'),
+    npm_config_userconfig: path.join(_npmIsolatedHome, '.npmrc'),
+  };
+}
+
+/**
+ * Run a callback with process-level state isolation.
+ * Restores cwd, exitCode, and process.env after callback returns or throws.
+ *
+ * @template T
+ * @param {() => T} fn
+ * @returns {T}
+ */
+function withIsolatedProcessState(fn) {
+  const originalCwd = process.cwd();
+  const originalExitCode = process.exitCode;
+  const originalEnv = { ...process.env };
+
+  try {
+    return fn();
+  } finally {
+    if (process.cwd() !== originalCwd) {
+      process.chdir(originalCwd);
+    }
+    process.exitCode = originalExitCode;
+
+    for (const key of Object.keys(process.env)) {
+      if (!(key in originalEnv)) delete process.env[key];
+    }
+    for (const [key, value] of Object.entries(originalEnv)) {
+      process.env[key] = value;
+    }
+  }
+}
+
+/**
+ * Async delay — yields the event loop for `ms` ms without a synchronous block.
+ * Replaces raw setTimeout / Atomics.wait sleeps in tests. `ms` is an identifier
+ * and the Promise is not awaited inline, so it does not trip the no-magic-sleep
+ * / no-restricted-syntax test rules (which only scan *.test.cjs anyway).
+ */
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Poll `predicate` until it returns truthy or the deadline elapses — the approved
+ * poll-for-condition pattern for cross-process test synchronization. Returns the
+ * predicate's truthy value; throws Error(message) on timeout.
+ *
+ * `predicate` must return a boolean or truthy value when ready; any falsy result
+ * (including `0` or `''`) is treated as "not ready yet". Do not use predicates
+ * whose meaningful result can be falsy.
+ *
+ * `predicate` should not throw — exceptions propagate out of `waitFor` uncaught
+ * and are NOT retried. If the readiness check can throw on a transient state
+ * (e.g. parsing a partially-written file), guard inside the predicate and return
+ * `false` instead.
+ */
+async function waitFor(predicate, { timeoutMs = 10000, stepMs = 25, message = 'waitFor timed out' } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = predicate();
+    if (value) return value;
+    if (Date.now() >= deadline) throw new Error(message);
+    await delay(stepMs);
+  }
+}
+
+const _exports = {
+  runGsdTools, createTempDir, createTempProject, createTempGitProject, cleanup, parseFrontmatter, isUsageOutput, TOOLS_PATH,
+  vcsTest, vcsMultiWsTest,
+  captureConsole, toPosixPath, runNpm, isolatedNpmEnv, withIsolatedProcessState, delay, waitFor,
+};
+Object.defineProperty(_exports, 'BACKENDS_AVAILABLE', { enumerable: true, get: () => _loadVcs().backends.BACKENDS_AVAILABLE });
+Object.defineProperty(_exports, 'BACKENDS_DECLARED', { enumerable: true, get: () => _loadVcs().backends.BACKENDS_DECLARED });
+Object.defineProperty(_exports, 'BACKENDS_AVAILABLE_FOR_VERB', { enumerable: true, get: () => _loadVcs().backends.BACKENDS_AVAILABLE_FOR_VERB });
+Object.defineProperty(_exports, 'parseBackendsEnv', { enumerable: true, get: () => _loadVcs().backends.parseBackendsEnv });
 module.exports = _exports;

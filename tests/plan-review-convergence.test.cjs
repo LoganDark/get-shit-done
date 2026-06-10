@@ -28,8 +28,7 @@ const fs = require('fs');
 const path = require('path');
 
 const COMMAND_PATH = path.join(__dirname, '..', 'commands', 'gsd', 'plan-review-convergence.md');
-const WORKFLOW_PATH = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'plan-review-convergence.md');
-const SCHEMA_PATH = path.join(__dirname, '..', 'get-shit-done', 'bin', 'lib', 'config-schema.cjs');
+const WORKFLOW_PATH = path.join(__dirname, '..', 'gsd-core', 'workflows', 'plan-review-convergence.md');
 const CONFIG_DOC_PATH = path.join(__dirname, '..', 'docs', 'CONFIGURATION.md');
 
 // ─── Command source ────────────────────────────────────────────────────────
@@ -61,7 +60,7 @@ describe('plan-review-convergence command source (#2306)', () => {
 
   test('command references the workflow file via execution_context', () => {
     assert.ok(
-      command.includes('@$HOME/.claude/get-shit-done/workflows/plan-review-convergence.md'),
+      command.includes('@$HOME/.claude/gsd-core/workflows/plan-review-convergence.md'),
       'execution_context must reference the workflow file'
     );
   });
@@ -187,10 +186,10 @@ describe('plan-review-convergence workflow: initial planning gate (#2306)', () =
     );
   });
 
-  test('workflow spawns isolated planning agent when no plans exist', () => {
+  test('workflow runs gsd-plan-phase when no plans exist', () => {
     assert.ok(
       workflow.includes('gsd-plan-phase'),
-      'workflow must spawn Agent → gsd-plan-phase when no plans exist'
+      'workflow must invoke gsd-plan-phase when no plans exist'
     );
   });
 
@@ -480,7 +479,7 @@ describe('plan-review-convergence workflow: success criteria (#2306-v2)', () => 
 describe('plan-review-convergence config schema registration (#2306-v2)', () => {
   // After Cycle 5 (#3536), config-schema.cjs is a thin adapter sourcing from
   // the manifest. Use the runtime Set instead of text-parsing the source file.
-  const { VALID_CONFIG_KEYS } = require('../get-shit-done/bin/lib/config-schema.cjs');
+  const { VALID_CONFIG_KEYS } = require('../gsd-core/bin/lib/config-schema.cjs');
 
   test('workflow.plan_review_convergence is registered in config-schema.cjs', () => {
     assert.ok(
@@ -542,7 +541,7 @@ describe('plan-review-convergence local model reviewer flags (#2306-local)', () 
 describe('plan-review-convergence local model config schema registration (#2306-local)', () => {
   // After Cycle 5 (#3536), config-schema.cjs is a thin adapter sourcing from
   // the manifest. Use the runtime Set instead of text-parsing the source file.
-  const { VALID_CONFIG_KEYS } = require('../get-shit-done/bin/lib/config-schema.cjs');
+  const { VALID_CONFIG_KEYS } = require('../gsd-core/bin/lib/config-schema.cjs');
 
   test('review.ollama_host is registered in config-schema.cjs', () => {
     assert.ok(
@@ -562,6 +561,47 @@ describe('plan-review-convergence local model config schema registration (#2306-
     assert.ok(
       VALID_CONFIG_KEYS.has('review.llama_cpp_host'),
       "review.llama_cpp_host must be in VALID_CONFIG_KEYS so gsd config-set accepts it"
+    );
+  });
+});
+
+// ─── Workflow: source-grounding pass (#22) ───────────────────────────────────
+
+describe('plan-review-convergence workflow: source-grounding reviewer pass (#22)', () => {
+  const workflow = fs.readFileSync(WORKFLOW_PATH, 'utf8');
+
+  test('workflow documents plan_review.source_grounding config key (default on)', () => {
+    assert.ok(
+      workflow.includes('plan_review.source_grounding'),
+      'workflow must document the plan_review.source_grounding config key that gates the source-grounding pass (#22)'
+    );
+  });
+
+  test('workflow defines all four symbol verdicts: VERIFIED, MISSING, AMBIGUOUS, UNCHECKABLE', () => {
+    assert.ok(workflow.includes('VERIFIED'), 'workflow must define VERIFIED verdict');
+    assert.ok(workflow.includes('MISSING'), 'workflow must define MISSING verdict');
+    assert.ok(workflow.includes('AMBIGUOUS'), 'workflow must define AMBIGUOUS verdict');
+    assert.ok(workflow.includes('UNCHECKABLE'), 'workflow must define UNCHECKABLE verdict');
+  });
+
+  test('workflow specifies needs-acknowledgement gating for MISSING symbols', () => {
+    assert.ok(
+      workflow.includes('needs-acknowledgement'),
+      'workflow must specify needs-acknowledgement (not hard block) for MISSING at grep/intel authority (#22)'
+    );
+  });
+
+  test('workflow instructs reviewer to exclude symbols declared under "Artifacts this phase produces"', () => {
+    assert.ok(
+      workflow.includes('Artifacts this phase produces'),
+      'workflow must exclude new artifacts declared by the plan from symbol verification (#22)'
+    );
+  });
+
+  test('workflow requires "Verification coverage" section appended to REVIEWS.md', () => {
+    assert.ok(
+      workflow.includes('Verification coverage'),
+      'workflow must require a Verification coverage section in REVIEWS.md listing every UNCHECKABLE/skipped symbol (#22)'
     );
   });
 });
@@ -608,6 +648,98 @@ describe('plan-review-convergence local model CONFIGURATION.md documentation (#2
     assert.ok(
       configDoc.includes('review.models.llama_cpp'),
       'review.models.llama_cpp must be documented so users know how to configure the local model name'
+    );
+  });
+});
+
+// ─── Bug #936: plan-phase must run inline, not inside Agent() ─────────────
+//
+// Regression guard: inverted from the pre-#936 behavior that locked in the bug.
+// On Claude Code a depth-1 Agent has no Agent tool, so gsd-plan-phase wrapped in
+// Agent() cannot spawn gsd-planner / gsd-plan-checker → the replan loop breaks.
+// Fix: run plan-phase inline (bare Skill()) from the depth-0 convergence orchestrator.
+//
+// These tests FAIL on pre-fix code and PASS after the fix.
+
+describe('plan-review-convergence workflow: inline plan-phase dispatch (#936)', () => {
+  const workflow = fs.readFileSync(WORKFLOW_PATH, 'utf8');
+
+  // Helper: extract Agent() block bodies from workflow text
+  function extractAgentBlocks(content) {
+    const blocks = [];
+    let pos = 0;
+    while (pos < content.length) {
+      const start = content.indexOf('Agent(', pos);
+      if (start === -1) break;
+      let depth = 0;
+      let i = start + 'Agent('.length - 1;
+      for (; i < content.length; i++) {
+        if (content[i] === '(') depth++;
+        else if (content[i] === ')') { depth--; if (depth === 0) break; }
+      }
+      blocks.push({ start, end: i + 1, blockText: content.slice(start, i + 1) });
+      pos = i + 1;
+    }
+    return blocks;
+  }
+
+  test('initial planning does NOT wrap gsd-plan-phase inside Agent() (#936 fix)', () => {
+    // Pre-fix: Agent( ... Skill('gsd-plan-phase') ... ) in step 4
+    // Post-fix: bare Skill(skill="gsd-plan-phase") at orchestrator level
+    const blocks = extractAgentBlocks(workflow);
+    const wrapping = blocks.filter((b) =>
+      /Skill\(\s*skill=['"]gsd-plan-phase['"]/.test(b.blockText)
+    );
+    assert.deepStrictEqual(
+      wrapping.map((b) => b.blockText.slice(0, 80).replace(/\n/g, '\\n')),
+      [],
+      'Initial planning must NOT wrap gsd-plan-phase inside Agent() — run it inline so ' +
+      'it can spawn gsd-planner/gsd-plan-checker at depth 1. See: bug #936'
+    );
+  });
+
+  test('replan step does NOT wrap gsd-plan-phase inside Agent() (#936 fix)', () => {
+    // Same check as above; explicitly named for the replan site (step 5d)
+    const blocks = extractAgentBlocks(workflow);
+    const wrapping = blocks.filter((b) =>
+      /Skill\(\s*skill=['"]gsd-plan-phase['"]/.test(b.blockText) &&
+      /--reviews/.test(b.blockText)
+    );
+    assert.deepStrictEqual(
+      wrapping.map((b) => b.blockText.slice(0, 80).replace(/\n/g, '\\n')),
+      [],
+      'Replan step must NOT wrap gsd-plan-phase inside Agent() — the replan loop can ' +
+      'never produce a plan on Claude Code when plan-phase is at depth 1. See: bug #936'
+    );
+  });
+
+  test('workflow calls gsd-plan-phase inline (bare Skill outside Agent block) (#936 fix)', () => {
+    // After the fix there must be at least one bare Skill(skill="gsd-plan-phase")
+    // OUTSIDE any Agent() block.
+    const blocks = extractAgentBlocks(workflow);
+    let masked = workflow;
+    const sorted = [...blocks].sort((a, b) => b.start - a.start);
+    for (const b of sorted) {
+      masked = masked.slice(0, b.start) + ' '.repeat(b.end - b.start) + masked.slice(b.end);
+    }
+    assert.ok(
+      /Skill\(\s*skill=["']gsd-plan-phase["']/.test(masked),
+      'plan-review-convergence must contain at least one bare Skill(skill="gsd-plan-phase") ' +
+      'outside any Agent() block — the inline call that preserves depth-0 Agent availability. See: bug #936'
+    );
+  });
+
+  test('success_criteria describes inline plan-phase, not Agent → Skill (#936 fix)', () => {
+    const successBlock = workflow.slice(workflow.lastIndexOf('<success_criteria>'));
+    // The broken criterion said "Initial planning via Agent → Skill"
+    assert.ok(
+      !successBlock.includes('via Agent → Skill("gsd-plan-phase")'),
+      'success_criteria must NOT describe plan-phase as Agent → Skill — that was the broken pattern. See: bug #936'
+    );
+    // The broken criterion said "isolated, not inline" for the replan
+    assert.ok(
+      !successBlock.includes('isolated, not inline'),
+      'success_criteria must NOT say "isolated, not inline" for plan-phase — the fix makes it inline. See: bug #936'
     );
   });
 });

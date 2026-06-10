@@ -20,14 +20,16 @@
 
 'use strict';
 
-const { describe, test, beforeEach, afterEach } = require('node:test');
+const { describe, test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { execFileSync } = require('node:child_process');
 
-const gsdTools = path.resolve(__dirname, '..', 'get-shit-done', 'bin', 'gsd-tools.cjs');
+const { cleanup } = require('./helpers.cjs');
+
+const gsdTools = path.resolve(__dirname, '..', 'gsd-core', 'bin', 'gsd-tools.cjs');
 
 function run(args, cwd) {
   try {
@@ -159,8 +161,8 @@ function expectParity({ verbWithPadded, verbWithUnpadded, fixtureOpts }) {
 
     return { aRoadmap, bRoadmap, ra, rb };
   } finally {
-    fs.rmSync(tmpA, { recursive: true, force: true });
-    fs.rmSync(tmpB, { recursive: true, force: true });
+    cleanup(tmpA);
+    cleanup(tmpB);
   }
 }
 
@@ -207,7 +209,7 @@ describe('bug #3537: phase verbs accept padded ids against un-padded ROADMAP pro
         'verb must return non-empty section under both invocations'
       );
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      cleanup(tmp);
     }
   });
 
@@ -247,7 +249,7 @@ describe('bug #3537: phase verbs accept padded ids against un-padded ROADMAP pro
         'must not propose 2.1 when 2.7 already exists in ROADMAP'
       );
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      cleanup(tmp);
     }
   });
 
@@ -298,8 +300,8 @@ describe('bug #3537: phase verbs accept padded ids against un-padded ROADMAP pro
       // crash mid-run.
       assert.ok(fs.existsSync(path.join(tmpB, '.planning', 'ROADMAP.md')));
     } finally {
-      fs.rmSync(tmpA, { recursive: true, force: true });
-      fs.rmSync(tmpB, { recursive: true, force: true });
+      cleanup(tmpA);
+      cleanup(tmpB);
     }
   });
 
@@ -339,10 +341,10 @@ describe('bug #3537: phase verbs accept padded ids against un-padded ROADMAP pro
         // and to assert the run did not corrupt the rest of the file.
         assert.ok(before.length > 0);
       } finally {
-        fs.rmSync(tmp2, { recursive: true, force: true });
+        cleanup(tmp2);
       }
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      cleanup(tmp);
     }
   });
 

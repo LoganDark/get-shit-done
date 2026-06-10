@@ -26,13 +26,24 @@ const STAGE_DIR = path.join(HOOKS_DIR, `.dist-staging-${process.pid}`);
 const HOOKS_TO_COPY = [
   'gsd-check-update-worker.js',
   'gsd-check-update.js',
+  // Required by gsd-check-update-worker.js at runtime — must ship alongside it
+  // so require('./managed-hooks-registry.cjs') resolves in the installed hooks/ dir.
+  'managed-hooks-registry.cjs',
   'gsd-context-monitor.js',
+  // Cursor lifecycle hooks (issue #777): sessionStart context injection + postToolUse monitor
+  'gsd-cursor-session-start.js',
+  'gsd-cursor-post-tool.js',
+  // Claude Code FileChanged hook (#770) — hot-reloads gsd config when
+  // .planning/config.json changes mid-session. Must ship to dist so the
+  // installer can copy it to the target hooks/ dir and register FileChanged.
+  'gsd-config-reload.js',
   'gsd-prompt-guard.js',
   'gsd-read-guard.js',
   'gsd-read-injection-scanner.js',
   'gsd-statusline.js',
   'gsd-update-banner.js',
   'gsd-workflow-guard.js',
+  'gsd-worktree-path-guard.js',
   // Community hooks (bash, opt-in via .planning/config.json hooks.community)
   'gsd-session-state.sh',
   'gsd-validate-commit.sh',
@@ -224,4 +235,13 @@ function build() {
   console.log('\nBuild complete.');
 }
 
-build();
+// Export HOOKS_TO_COPY so tests can require() this file and assert against
+// the typed value instead of regex-parsing the source text (retires
+// pending-migration-to-typed-ir for orphaned-hooks.test.cjs, per #455).
+// Guard the build() call so requiring this file as a module does not trigger
+// a full build run (which copies files and writes to disk).
+if (require.main === module) {
+  build();
+}
+
+module.exports = { HOOKS_TO_COPY, HOOKS_SUBDIRS_TO_COPY };

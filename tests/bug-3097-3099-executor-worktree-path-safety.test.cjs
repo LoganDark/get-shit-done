@@ -30,7 +30,7 @@ const executorSrc = fs.readFileSync(
   path.join(ROOT, 'agents', 'gsd-executor.md'), 'utf8',
 );
 const executePhaseSrc = fs.readFileSync(
-  path.join(ROOT, 'get-shit-done', 'workflows', 'execute-phase.md'), 'utf8',
+  path.join(ROOT, 'gsd-core', 'workflows', 'execute-phase.md'), 'utf8',
 );
 
 describe('bug #3097: dispatched-cwd precondition guard in gsd-executor.md', () => {
@@ -88,14 +88,14 @@ describe('bug #3099: dispatch-cwd-safety reference + verb integration', () => {
 
   test('dispatch-cwd-safety.md reference file exists', () => {
     assert.ok(
-      fs.existsSync(path.join(ROOT, 'get-shit-done', 'references', 'dispatch-cwd-safety.md')),
-      'get-shit-done/references/dispatch-cwd-safety.md does not exist',
+      fs.existsSync(path.join(ROOT, 'gsd-core', 'references', 'dispatch-cwd-safety.md')),
+      'gsd-core/references/dispatch-cwd-safety.md does not exist',
     );
   });
 
   test('dispatch-cwd-safety.md documents the workspace.assert-dispatched-cwd verb', () => {
     const safetySrc = fs.readFileSync(
-      path.join(ROOT, 'get-shit-done', 'references', 'dispatch-cwd-safety.md'), 'utf8',
+      path.join(ROOT, 'gsd-core', 'references', 'dispatch-cwd-safety.md'), 'utf8',
     );
     assert.ok(
       safetySrc.includes('workspace.assert-dispatched-cwd'),

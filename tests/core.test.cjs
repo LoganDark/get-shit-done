@@ -1,7 +1,7 @@
-// allow-test-rule: pending-migration-to-typed-ir [#2974]
-// Tracked in #2974 for migration to typed-IR assertions per CONTRIBUTING.md
-// "Prohibited: Raw Text Matching on Test Outputs". Per-file review may
-// reclassify some entries as source-text-is-the-product during migration.
+// allow-test-rule: structural-regression-guard
+// Reads hook .js or bin/install.js source to assert structural invariants
+// (search array order, function wiring, path constants) that cannot be
+// verified by observing runtime outputs alone. Per CONTRIBUTING.md exception matrix.
 
 /**
  * GSD Tools Tests - core.cjs
@@ -22,9 +22,7 @@ const {
   resolveModelInternal,
   escapeRegex,
   generateSlugInternal,
-  normalizePhaseName,
   reapStaleTempFiles,
-  comparePhaseNum,
   pathExistsInternal,
   getMilestoneInfo,
   getMilestonePhaseFilter,
@@ -35,7 +33,7 @@ const {
   detectSubRepos,
   planningDir,
   timeAgo,
-} = require('../get-shit-done/bin/lib/core.cjs');
+} = require('../gsd-core/bin/lib/core.cjs');
 
 // ─── loadConfig ────────────────────────────────────────────────────────────────
 
@@ -162,7 +160,7 @@ describe('loadConfig', () => {
     // Verify that loadConfig's unknown-key check uses config-set's VALID_CONFIG_KEYS
     // as its source of truth. If a new key is added to config-set, it should
     // automatically be recognized by loadConfig without a separate update.
-    const { VALID_CONFIG_KEYS } = require('../get-shit-done/bin/lib/config.cjs');
+    const { VALID_CONFIG_KEYS } = require('../gsd-core/bin/lib/config.cjs');
     // Every top-level key from VALID_CONFIG_KEYS should be recognized
     const topLevelKeys = [...VALID_CONFIG_KEYS].map(k => k.split('.')[0]);
     // For value-validated keys (e.g. `runtime` enforces an enum at loadConfig
@@ -297,6 +295,19 @@ describe('loadConfig workstream config inheritance (#2714)', () => {
 
     assert.strictEqual(config.model_profile, 'quality');
     assert.strictEqual(process.env.GSD_WORKSTREAM, 'feature-f');
+  });
+
+  test('loadConfig accepts workstreamContext.ws without requiring env mutation', () => {
+    writeRootConfig({ model_profile: 'balanced' });
+    writeWorkstreamConfig('feature-g', { model_profile: 'quality' });
+    delete process.env.GSD_WORKSTREAM;
+
+    const config = loadConfig(tmpDir, {
+      workstreamContext: { ws: 'feature-g' },
+    });
+
+    assert.strictEqual(config.model_profile, 'quality');
+    assert.strictEqual(process.env.GSD_WORKSTREAM, undefined);
   });
 });
 
@@ -492,9 +503,9 @@ describe('resolveModelInternal', () => {
 
   describe('resolve_model_ids: true', () => {
     // Regression test for #2712: MODEL_ALIAS_MAP must track current model releases.
-    test('opus alias resolves to claude-opus-4-7', () => {
+    test('opus alias resolves to claude-opus-4-8', () => {
       writeConfig({ resolve_model_ids: true, model_profile: 'quality' });
-      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-planner'), 'claude-opus-4-7');
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-planner'), 'claude-opus-4-8');
     });
 
     test('sonnet alias resolves to claude-sonnet-4-6', () => {
@@ -1229,7 +1240,7 @@ describe('stale hook path', () => {
       path.join(__dirname, '..', 'hooks', 'gsd-check-update-worker.js'), 'utf-8'
     );
     // Hooks are installed at configDir/hooks/ (e.g. ~/.claude/hooks/),
-    // not configDir/get-shit-done/hooks/ which doesn't exist (#1421)
+    // not configDir/gsd-core/hooks/ which doesn't exist (#1421)
     assert.ok(
       content.includes("path.join(configDir, 'hooks')"),
       'stale hook check must look in configDir/hooks/ where hooks are actually installed'
@@ -1252,26 +1263,62 @@ describe('shared cache directory (#1421)', () => {
     );
   });
 
-  test('gsd-statusline.js checks shared cache first, falls back to legacy (#1421)', () => {
-    const content = fs.readFileSync(
+  test('gsd-statusline.js reads the per-package shared cache and rejects foreign lineage (#1421/#607)', () => {
+    const { evaluateUpdateCache } = require('../hooks/gsd-statusline.js');
+    const { updateCacheFileName, PACKAGE_NAME } = require('../gsd-core/bin/lib/package-identity.cjs');
+
+    // Per-package filename embeds the package identity — no generic fallback
+    assert.strictEqual(
+      updateCacheFileName,
+      'gsd-update-check-opengsd-gsd-core.json',
+      'updateCacheFileName must be the per-package filename'
+    );
+
+    // The statusline must NOT reference a legacyCacheFile — the legacy fallback was removed
+    // allow-test-rule: architectural-invariant
+    const statuslineSrc = fs.readFileSync(
       path.join(__dirname, '..', 'hooks', 'gsd-statusline.js'), 'utf-8'
     );
-    // Statusline must check the shared cache path first
     assert.ok(
-      content.includes("path.join(homeDir, '.cache', 'gsd', 'gsd-update-check.json')"),
-      'statusline must check shared cache at ~/.cache/gsd/gsd-update-check.json'
+      !statuslineSrc.includes('legacyCacheFile'),
+      'gsd-statusline.js must not reference legacyCacheFile — legacy fallback was removed in #607'
     );
-    // Must fall back to legacy runtime-specific cache for backward compat
     assert.ok(
-      content.includes("path.join(claudeDir, 'cache', 'gsd-update-check.json')"),
-      'statusline must fall back to legacy cache at claudeDir/cache/gsd-update-check.json'
+      statuslineSrc.includes(updateCacheFileName) || statuslineSrc.includes('updateCacheFileName'),
+      'gsd-statusline.js must reference the per-package updateCacheFileName'
     );
-    // Shared cache must be checked before legacy (existsSync order matters)
-    const sharedIdx = content.indexOf('sharedCacheFile');
-    const legacyIdx = content.indexOf('legacyCacheFile');
-    assert.ok(
-      sharedIdx < legacyIdx,
-      'shared cache must be defined and checked before legacy cache'
+
+    // evaluateUpdateCache: foreign package_name → no update shown
+    assert.deepStrictEqual(
+      evaluateUpdateCache({ package_name: 'other-package', update_available: true }),
+      { showUpdate: false, staleWarning: 'none' },
+      'foreign package_name must be rejected (lineage guard)'
+    );
+
+    // evaluateUpdateCache: absent package_name → no update shown
+    assert.deepStrictEqual(
+      evaluateUpdateCache({ update_available: true }),
+      { showUpdate: false, staleWarning: 'none' },
+      'absent package_name must be rejected (lineage guard)'
+    );
+
+    // evaluateUpdateCache: null cache → no update shown
+    assert.deepStrictEqual(
+      evaluateUpdateCache(null),
+      { showUpdate: false, staleWarning: 'none' },
+      'null cache must return no-update'
+    );
+
+    // evaluateUpdateCache: matching package_name + update_available:true → show update
+    const result = evaluateUpdateCache({ package_name: PACKAGE_NAME, update_available: true });
+    assert.strictEqual(result.showUpdate, true,
+      'matching package_name with update_available:true must set showUpdate=true'
+    );
+
+    // evaluateUpdateCache: matching package_name + update_available:false → no update
+    const noUpdate = evaluateUpdateCache({ package_name: PACKAGE_NAME, update_available: false });
+    assert.strictEqual(noUpdate.showUpdate, false,
+      'matching package_name with update_available:false must not show update'
     );
   });
 });
@@ -1279,7 +1326,7 @@ describe('shared cache directory (#1421)', () => {
 // ─── resolveWorktreeRoot ─────────────────────────────────────────────────────
 
 describe('resolveWorktreeRoot', () => {
-  const { resolveWorktreeRoot } = require('../get-shit-done/bin/lib/core.cjs');
+  const { resolveWorktreeRoot } = require('../gsd-core/bin/lib/core.cjs');
   let tmpDir;
 
   beforeEach(() => {
@@ -1304,7 +1351,7 @@ describe('resolveWorktreeRoot', () => {
 // ─── resolveWorktreeRoot — linked worktree with .planning/ (#1315) ───────────
 
 describe('resolveWorktreeRoot with linked worktree .planning/', () => {
-  const { resolveWorktreeRoot } = require('../get-shit-done/bin/lib/core.cjs');
+  const { resolveWorktreeRoot } = require('../gsd-core/bin/lib/core.cjs');
   const { execSync: execSyncLocal } = require('child_process');
   // On Windows CI, os.tmpdir() may return 8.3 short paths (RUNNER~1) while
   // git returns long paths (runneradmin). realpathSync.native resolves both.
@@ -1335,7 +1382,7 @@ describe('resolveWorktreeRoot with linked worktree .planning/', () => {
   afterEach(() => {
     if (worktreeDir) {
       try { execSyncLocal(`git worktree remove "${worktreeDir}" --force`, { cwd: mainDir, stdio: 'pipe' }); } catch { /* ok */ }
-      try { fs.rmSync(worktreeDir, { recursive: true, force: true }); } catch { /* ok */ }
+      cleanup(worktreeDir);
     }
     cleanup(mainDir);
   });
@@ -1346,7 +1393,7 @@ describe('resolveWorktreeRoot with linked worktree .planning/', () => {
 
     // Create a linked worktree
     worktreeDir = normalizePath(fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-wt-linked-')));
-    fs.rmSync(worktreeDir, { recursive: true, force: true });
+    cleanup(worktreeDir);
     execSyncLocal(`git worktree add "${worktreeDir}" -b test-linked`, { cwd: mainDir, stdio: 'pipe' });
 
     // Give the linked worktree its own .planning/
@@ -1361,7 +1408,7 @@ describe('resolveWorktreeRoot with linked worktree .planning/', () => {
   test('returns main repo root when linked worktree has no .planning/', () => {
     // Create a linked worktree (no .planning/ in main or worktree)
     worktreeDir = normalizePath(fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-wt-linked-')));
-    fs.rmSync(worktreeDir, { recursive: true, force: true });
+    cleanup(worktreeDir);
     execSyncLocal(`git worktree add "${worktreeDir}" -b test-linked-no-plan`, { cwd: mainDir, stdio: 'pipe' });
 
     // resolveWorktreeRoot should return the main repo root
@@ -1375,7 +1422,7 @@ describe('resolveWorktreeRoot with linked worktree .planning/', () => {
 // ─── monorepo worktree CWD preservation (#1283) ─────────────────────────────
 
 describe('monorepo worktree CWD preservation', () => {
-  const { resolveWorktreeRoot } = require('../get-shit-done/bin/lib/core.cjs');
+  const { resolveWorktreeRoot } = require('../gsd-core/bin/lib/core.cjs');
   let tmpDir;
 
   beforeEach(() => {
@@ -1412,7 +1459,7 @@ describe('monorepo worktree CWD preservation', () => {
 // ─── withPlanningLock ────────────────────────────────────────────────────────
 
 describe('withPlanningLock', () => {
-  const { withPlanningLock, planningDir } = require('../get-shit-done/bin/lib/core.cjs');
+  const { withPlanningLock, planningDir } = require('../gsd-core/bin/lib/core.cjs');
   let tmpDir;
 
   beforeEach(() => {
@@ -1460,7 +1507,7 @@ describe('detectSubRepos', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(projectRoot, { recursive: true, force: true });
+    cleanup(projectRoot);
   });
 
   test('returns empty array when no child directories have .git', () => {
@@ -1507,7 +1554,7 @@ describe('loadConfig sub_repos auto-sync', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(projectRoot, { recursive: true, force: true });
+    cleanup(projectRoot);
   });
 
   test('migrates multiRepo: true to sub_repos array', () => {
@@ -1577,7 +1624,7 @@ describe('findProjectRoot', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(projectRoot, { recursive: true, force: true });
+    cleanup(projectRoot);
   });
 
   test('returns startDir when no .planning/ exists anywhere', () => {

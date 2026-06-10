@@ -1,0 +1,106 @@
+/**
+ * stryker.config.mjs
+ *
+ * Mutation testing configuration for gsd-core.
+ *
+ * Test runner: 'command' (built into @stryker-mutator/core)
+ *   Runs: node --test over the lib test files via the repo's run-tests invocation.
+ *
+ * Mutate scope: bin/lib/**\/*.cjs, excluding generated files and test files.
+ *
+ * coverageAnalysis: 'off' — command runner does not support per-mutant coverage
+ * thresholds: high=80, low=60, break=50
+ * incremental: true — caches results; PR-scoped runs pass --mutate <changed-files>
+ *
+ * Reports:
+ *   - html: reports/mutation/mutation.html
+ *   - clear-text (console)
+ *   - progress (spinner)
+ *
+ * NOTE: This is incremental / changed-files-only in CI (--mutate <changed-files>)
+ * to stay bounded. Full runs are for local exploration only.
+ */
+
+// ADR-457: bin/lib/*.cjs are gitignored build artifacts (compiled from
+// src/*.cts by `npm run build:lib`, which the mutation CI job runs via `npm ci`
+// → prepare before Stryker). Stryker mutates the *built* .cjs directly — the
+// command runner runs the tests with NO rebuild, so each mutation to the
+// shipped artifact is seen by the tests. (Mutating src/*.cts instead would
+// force a full tsc rebuild per mutant — far too slow for the 30-min CI budget.)
+// Large/low-coverage modules are excluded (the command's test set does not
+// exercise them, so they would only ever produce survived mutants).
+const UNMUTATED = [
+  '!gsd-core/bin/lib/command-aliases.cjs',
+  '!gsd-core/bin/lib/commands.cjs',
+  '!gsd-core/bin/lib/core.cjs',
+  '!gsd-core/bin/lib/install-profiles.cjs',
+  '!gsd-core/bin/lib/installer-migrations.cjs',
+  '!gsd-core/bin/lib/phase.cjs',
+  '!gsd-core/bin/lib/profile-output.cjs',
+  '!gsd-core/bin/lib/state.cjs',
+  '!gsd-core/bin/lib/verify.cjs',
+  '!gsd-core/bin/lib/init.cjs',
+  '!gsd-core/bin/lib/audit.cjs',
+  '!gsd-core/bin/lib/gsd2-import.cjs',
+];
+
+// Full test command used by local runs and as the fallback when CI does not
+// inject a per-shard command via MUTATION_TEST_CMD.
+const DEFAULT_TEST_CMD = 'node --test tests/context-utilization.property.test.cjs tests/prompt-budget.property.test.cjs tests/frontmatter.property.test.cjs tests/adr-parser.property.test.cjs tests/config-schema.property.test.cjs tests/adr-parser.test.cjs tests/active-workstream-store.test.cjs tests/active-workstream-store.unit.test.cjs tests/prompt-budget.unit.test.cjs tests/adr-parser.unit.test.cjs tests/frontmatter.unit.test.cjs';
+
+/** @type {import('@stryker-mutator/core').PartialStrykerOptions} */
+export default {
+  // ── Test runner ──────────────────────────────────────────────────────────────
+  testRunner: 'command',
+  commandRunner: {
+    // Run property + unit tests over lib only (avoids the slow integration
+    // suite). NO build step here: Stryker mutates the already-built .cjs and the
+    // tests load it directly — adding a build would rebuild over the mutation.
+    // In CI each matrix shard injects MUTATION_TEST_CMD with only its own tests.
+    command: process.env.MUTATION_TEST_CMD || DEFAULT_TEST_CMD,
+  },
+
+  // ── Files to mutate ──────────────────────────────────────────────────────────
+  // The built bin/lib/*.cjs artifacts (ADR-457). CI overrides this with
+  // --mutate <changed, covered modules> computed in mutation.yml.
+  mutate: [
+    'gsd-core/bin/lib/**/*.cjs',
+    '!gsd-core/bin/lib/**/*.test.cjs',
+    ...UNMUTATED,
+  ],
+
+  // ── Coverage ─────────────────────────────────────────────────────────────────
+  // 'off' is required for the command test runner — it cannot instrument per-mutant.
+  coverageAnalysis: 'off',
+
+  // ── Thresholds ───────────────────────────────────────────────────────────────
+  thresholds: {
+    high: 80,
+    low: 60,
+    break: 50,
+  },
+
+  // ── Incremental mode ─────────────────────────────────────────────────────────
+  // Cache mutation results; re-run only changed mutants on subsequent calls.
+  // In CI the workflow computes changed files and passes: stryker run --incremental --mutate <list>
+  incremental: true,
+  incrementalFile: '.stryker-incremental.json',
+
+  // ── Reporters ────────────────────────────────────────────────────────────────
+  reporters: ['html', 'clear-text', 'progress'],
+  htmlReporter: {
+    fileName: 'reports/mutation/mutation.html',
+  },
+
+  // ── Temp directory ───────────────────────────────────────────────────────────
+  tempDirName: '.stryker-tmp',
+
+  // ── Ignore patterns ──────────────────────────────────────────────────────────
+  ignorePatterns: [
+    'node_modules',
+    'reports',
+    '.stryker-tmp',
+    'coverage',
+    'hooks/dist',
+  ],
+};

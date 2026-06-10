@@ -1,7 +1,7 @@
-// allow-test-rule: pending-migration-to-typed-ir [#2974]
-// Tracked in #2974 for migration to typed-IR assertions per CONTRIBUTING.md
-// "Prohibited: Raw Text Matching on Test Outputs". Per-file review may
-// reclassify some entries as source-text-is-the-product during migration.
+// allow-test-rule: source-text-is-the-product
+// Workflow .md / agent .md / command .md / reference .md files — their text
+// IS what the runtime loads. Testing text content tests the deployed contract.
+// Per CONTRIBUTING.md exception matrix.
 
 /**
  * Regression guard for #2012: AskUserQuestion is Claude Code-only — non-Claude
@@ -25,7 +25,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const WORKFLOWS_DIR = path.join(ROOT, 'get-shit-done', 'workflows');
+const WORKFLOWS_DIR = path.join(ROOT, 'gsd-core', 'workflows');
 
 /**
  * Return true if the file content contains a TEXT_MODE / text_mode fallback
@@ -81,7 +81,7 @@ describe('AskUserQuestion text-mode fallback (#2012)', () => {
         '  number.',
         '',
         'Workflows missing the fallback:',
-        ...violations.map(v => '  get-shit-done/workflows/' + v),
+        ...violations.map(v => '  gsd-core/workflows/' + v),
       ].join('\n')
     );
   });

@@ -7,7 +7,7 @@
  * Closes: #1469
  */
 
-const { test, describe, before, beforeEach, afterEach } = require('node:test');
+const { test, describe, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
@@ -19,12 +19,10 @@ function sha256(content) {
   return crypto.createHash('sha256').update(content).digest('hex');
 }
 
+const { cleanup } = require('./helpers.cjs');
+
 function createTempDir() {
   return fs.mkdtempSync(path.join(require('os').tmpdir(), 'gsd-patch-test-'));
-}
-
-function cleanup(dir) {
-  try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
 }
 
 /**
@@ -124,21 +122,21 @@ describe('saveLocalPatches — patch backup and pristine hash tracking (#1469)',
   test('detects modified files and backs them up', () => {
     simulateManifestAndPatch(tmpDir, {
       original: {
-        'get-shit-done/workflows/execute-phase.md': '# Execute Phase\nOriginal content\n',
-        'get-shit-done/workflows/plan-phase.md': '# Plan Phase\nOriginal content\n',
+        'gsd-core/workflows/execute-phase.md': '# Execute Phase\nOriginal content\n',
+        'gsd-core/workflows/plan-phase.md': '# Plan Phase\nOriginal content\n',
       },
       modified: {
-        'get-shit-done/workflows/execute-phase.md': '# Execute Phase\nOriginal content\n\n## My Custom Step\nDo something special\n',
+        'gsd-core/workflows/execute-phase.md': '# Execute Phase\nOriginal content\n\n## My Custom Step\nDo something special\n',
       },
     });
 
     const result = saveLocalPatches(tmpDir);
 
     assert.strictEqual(result.length, 1, 'should detect exactly one modified file');
-    assert.ok(result.includes('get-shit-done/workflows/execute-phase.md'));
+    assert.ok(result.includes('gsd-core/workflows/execute-phase.md'));
 
     // Verify backup exists
-    const backupPath = path.join(tmpDir, 'gsd-local-patches', 'get-shit-done/workflows/execute-phase.md');
+    const backupPath = path.join(tmpDir, 'gsd-local-patches', 'gsd-core/workflows/execute-phase.md');
     assert.ok(fs.existsSync(backupPath), 'backup file should exist');
 
     const backupContent = fs.readFileSync(backupPath, 'utf8');
@@ -149,10 +147,10 @@ describe('saveLocalPatches — patch backup and pristine hash tracking (#1469)',
     const originalContent = '# Execute Phase\nOriginal content\n';
     simulateManifestAndPatch(tmpDir, {
       original: {
-        'get-shit-done/workflows/execute-phase.md': originalContent,
+        'gsd-core/workflows/execute-phase.md': originalContent,
       },
       modified: {
-        'get-shit-done/workflows/execute-phase.md': originalContent + '\n## Custom\n',
+        'gsd-core/workflows/execute-phase.md': originalContent + '\n## Custom\n',
       },
     });
 
@@ -167,7 +165,7 @@ describe('saveLocalPatches — patch backup and pristine hash tracking (#1469)',
     assert.ok(meta.pristine_hashes, 'meta should have pristine_hashes field');
     const expectedHash = sha256(originalContent);
     assert.strictEqual(
-      meta.pristine_hashes['get-shit-done/workflows/execute-phase.md'],
+      meta.pristine_hashes['gsd-core/workflows/execute-phase.md'],
       expectedHash,
       'pristine hash should match SHA-256 of original file content'
     );
@@ -175,8 +173,8 @@ describe('saveLocalPatches — patch backup and pristine hash tracking (#1469)',
 
   test('backup-meta.json includes from_version and from_manifest_timestamp', () => {
     simulateManifestAndPatch(tmpDir, {
-      original: { 'get-shit-done/workflows/test.md': 'original' },
-      modified: { 'get-shit-done/workflows/test.md': 'modified' },
+      original: { 'gsd-core/workflows/test.md': 'original' },
+      modified: { 'gsd-core/workflows/test.md': 'modified' },
     });
 
     saveLocalPatches(tmpDir);
@@ -193,8 +191,8 @@ describe('saveLocalPatches — patch backup and pristine hash tracking (#1469)',
   test('unmodified files are not backed up', () => {
     simulateManifestAndPatch(tmpDir, {
       original: {
-        'get-shit-done/workflows/a.md': 'content A',
-        'get-shit-done/workflows/b.md': 'content B',
+        'gsd-core/workflows/a.md': 'content A',
+        'gsd-core/workflows/b.md': 'content B',
       },
       // No modifications
     });
@@ -207,13 +205,13 @@ describe('saveLocalPatches — patch backup and pristine hash tracking (#1469)',
   test('multiple modified files all get pristine hashes', () => {
     simulateManifestAndPatch(tmpDir, {
       original: {
-        'get-shit-done/workflows/a.md': 'original A',
-        'get-shit-done/workflows/b.md': 'original B',
-        'get-shit-done/workflows/c.md': 'original C',
+        'gsd-core/workflows/a.md': 'original A',
+        'gsd-core/workflows/b.md': 'original B',
+        'gsd-core/workflows/c.md': 'original C',
       },
       modified: {
-        'get-shit-done/workflows/a.md': 'modified A',
-        'get-shit-done/workflows/b.md': 'modified B',
+        'gsd-core/workflows/a.md': 'modified A',
+        'gsd-core/workflows/b.md': 'modified B',
       },
     });
 
@@ -225,10 +223,10 @@ describe('saveLocalPatches — patch backup and pristine hash tracking (#1469)',
     ));
 
     assert.strictEqual(Object.keys(meta.pristine_hashes).length, 2);
-    assert.strictEqual(meta.pristine_hashes['get-shit-done/workflows/a.md'], sha256('original A'));
-    assert.strictEqual(meta.pristine_hashes['get-shit-done/workflows/b.md'], sha256('original B'));
+    assert.strictEqual(meta.pristine_hashes['gsd-core/workflows/a.md'], sha256('original A'));
+    assert.strictEqual(meta.pristine_hashes['gsd-core/workflows/b.md'], sha256('original B'));
     // c.md should NOT have a pristine hash (it wasn't modified)
-    assert.strictEqual(meta.pristine_hashes['get-shit-done/workflows/c.md'], undefined);
+    assert.strictEqual(meta.pristine_hashes['gsd-core/workflows/c.md'], undefined);
   });
 
   test('returns empty array when no manifest exists', () => {
@@ -348,9 +346,9 @@ describe('reapply-patches workflow contract (#1469)', () => {
 
 // #2790: reapply-patches.md (the command file which contained the inline workflow)
 // was deleted. The hunk verification contract now lives in the workflow file
-// get-shit-done/workflows/reapply-patches.md, referenced via execution_context_extended.
+// gsd-core/workflows/reapply-patches.md, referenced via execution_context_extended.
 describe('reapply-patches gated hunk verification (#1999)', () => {
-  const workflowPath = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'reapply-patches.md');
+  const workflowPath = path.join(__dirname, '..', 'gsd-core', 'workflows', 'reapply-patches.md');
 
   test('reapply-patches.md command is deleted and absorbed into update.md (#2790)', () => {
     const oldPath = path.join(__dirname, '..', 'commands', 'gsd', 'reapply-patches.md');
@@ -358,7 +356,7 @@ describe('reapply-patches gated hunk verification (#1999)', () => {
   });
 
   test('reapply-patches workflow file exists (behavioral contract for --reapply)', () => {
-    assert.ok(fs.existsSync(workflowPath), 'get-shit-done/workflows/reapply-patches.md must exist');
+    assert.ok(fs.existsSync(workflowPath), 'gsd-core/workflows/reapply-patches.md must exist');
   });
 
   test('Step 4 declares a Hunk Verification Table with all required columns', () => {
@@ -383,7 +381,7 @@ describe('reapply-patches gated hunk verification (#1999)', () => {
     // assert it both names the table and defines an explicit gate
     // condition tied to the `verified` column.
     const content = fs.readFileSync(workflowPath, 'utf8');
-    const step5Match = content.match(/^##\s+Step 5[^\n]*\n([\s\S]*?)(?=^##\s|\Z)/m);
+    const step5Match = content.match(/^##\s+Step 5[^\n]*\n([\s\S]*?)(?=^##\s|Z)/m);
     assert.ok(step5Match, 'reapply-patches workflow must contain a "## Step 5" section');
     const step5 = step5Match[1];
     assert.ok(
@@ -407,7 +405,7 @@ describe('reapply-patches gated hunk verification (#1999)', () => {
   test('Step 5 also halts when the Hunk Verification Table is absent (Step 4 produced nothing)', () => {
     // Independent gate: missing-table is a separate halt path from any-no-row.
     const content = fs.readFileSync(workflowPath, 'utf8');
-    const step5Match = content.match(/^##\s+Step 5[^\n]*\n([\s\S]*?)(?=^##\s|\Z)/m);
+    const step5Match = content.match(/^##\s+Step 5[^\n]*\n([\s\S]*?)(?=^##\s|Z)/m);
     assert.ok(step5Match, 'Step 5 section must exist');
     const step5 = step5Match[1];
     const handlesAbsent = /(table is absent|table is missing|missing.*table|absent.*table)/i.test(step5);

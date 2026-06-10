@@ -6,7 +6,7 @@
  * Shape:
  *   1. Adapter translation — CLI args → hub dispatch shape
  *   2. Result translation — hub result → stdout / error callback
- *   3. Unsupported subcommands — SDK-only commands produce the documented error
+ *   3. Unsupported subcommands — scaffold produces the documented redirect
  *   4. Unknown subcommand — unmapped subcommands produce a well-formed error
  *   5. Integration — real hub + real CJS phase handler invocation
  *
@@ -20,7 +20,7 @@
 const { describe, test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { routePhaseCommand } = require('../get-shit-done/bin/lib/phase-command-router.cjs');
+const { routePhaseCommand } = require('../gsd-core/bin/lib/phase-command-router.cjs');
 
 // Force CJS path throughout: set GSD_WORKSTREAM so tryLoadSdk() is bypassed.
 // This makes unit-level assertions deterministic regardless of SDK build state.
@@ -104,7 +104,7 @@ describe('phase-command-router — CLI arg translation (CJS path)', () => {
   test('routes phase add-batch: --descriptions JSON array parses correctly', () => {
     const calls = [];
     const phase = makePhase({
-      cmdPhaseAddBatch: (cwd, descriptions, raw) => calls.push({ descriptions }),
+      cmdPhaseAddBatch: (cwd, descriptions, _raw) => calls.push({ descriptions }),
     });
 
     routePhaseCommand({
@@ -121,7 +121,7 @@ describe('phase-command-router — CLI arg translation (CJS path)', () => {
   test('routes phase add-batch: positional args used when --descriptions absent', () => {
     const calls = [];
     const phase = makePhase({
-      cmdPhaseAddBatch: (cwd, descriptions, raw) => calls.push({ descriptions }),
+      cmdPhaseAddBatch: (cwd, descriptions, _raw) => calls.push({ descriptions }),
     });
 
     routePhaseCommand({
@@ -162,7 +162,7 @@ describe('phase-command-router — CLI arg translation (CJS path)', () => {
   test('routes phase remove: --force flag sets opts.force:true', () => {
     const calls = [];
     const phase = makePhase({
-      cmdPhaseRemove: (cwd, phaseNum, opts, raw) => calls.push({ opts }),
+      cmdPhaseRemove: (cwd, phaseNum, opts, _raw) => calls.push({ opts }),
     });
 
     routePhaseCommand({ phase, args: ['phase', 'remove', '--force', '03'], cwd: '/p', raw: false, error: (m) => { throw new Error(m); } });
@@ -282,10 +282,10 @@ describe('phase-command-router — result translation (error path)', () => {
   });
 });
 
-// ─── 3. Unsupported (SDK-only) subcommands ────────────────────────────────────
+// ─── 3. Unsupported subcommands ────────────────────────────────────────────────
 
-describe('phase-command-router — SDK-only subcommands', () => {
-  test('phase list-plans calls error() with SDK-only message', () => {
+describe('phase-command-router — unsupported subcommands', () => {
+  test('phase list-plans resolves as unknown subcommand', () => {
     let msg = null;
     routePhaseCommand({
       phase: makePhase(),
@@ -296,11 +296,11 @@ describe('phase-command-router — SDK-only subcommands', () => {
     });
 
     assert.ok(msg !== null);
-    assert.ok(msg.includes('SDK-only'), `expected "SDK-only" in: ${msg}`);
-    assert.ok(msg.includes('list-plans'));
+    assert.ok(msg.includes('Unknown phase subcommand'));
+    assert.ok(msg.includes('Available:'), `expected "Available:" in: ${msg}`);
   });
 
-  test('phase list-artifacts calls error() with SDK-only message', () => {
+  test('phase list-artifacts resolves as unknown subcommand', () => {
     let msg = null;
     routePhaseCommand({
       phase: makePhase(),
@@ -311,8 +311,8 @@ describe('phase-command-router — SDK-only subcommands', () => {
     });
 
     assert.ok(msg !== null);
-    assert.ok(msg.includes('SDK-only'));
-    assert.ok(msg.includes('list-artifacts'));
+    assert.ok(msg.includes('Unknown phase subcommand'));
+    assert.ok(msg.includes('Available:'), `expected "Available:" in: ${msg}`);
   });
 
   test('phase scaffold calls error() with redirect message', () => {
@@ -363,7 +363,7 @@ describe('phase-command-router — unknown subcommand', () => {
 
     assert.ok(msg.includes('add'), `expected add in available list: ${msg}`);
     assert.ok(msg.includes('complete'), `expected complete in available list: ${msg}`);
-    assert.ok(!msg.includes('list-plans'), `list-plans (SDK-only) must not appear in available list: ${msg}`);
+    assert.ok(!msg.includes('list-plans'), `list-plans must not appear in available list: ${msg}`);
   });
 });
 
@@ -402,7 +402,7 @@ describe('phase-command-router — integration: real hub + CJS phase handler', (
   test('dispatches phase add-batch through real hub with --descriptions', () => {
     const calls = [];
     const phase = makePhase({
-      cmdPhaseAddBatch: (cwd, descriptions, raw) => calls.push({ descriptions }),
+      cmdPhaseAddBatch: (cwd, descriptions, _raw) => calls.push({ descriptions }),
     });
 
     let errorMsg = null;

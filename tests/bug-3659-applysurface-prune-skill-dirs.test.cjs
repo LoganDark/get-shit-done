@@ -33,10 +33,10 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { writeSurface, applySurface } = require('../get-shit-done/bin/lib/surface.cjs');
-const { loadSkillsManifest } = require('../get-shit-done/bin/lib/install-profiles.cjs');
-const { CLUSTERS } = require('../get-shit-done/bin/lib/clusters.cjs');
-const { resolveRuntimeArtifactLayout } = require('../get-shit-done/bin/lib/runtime-artifact-layout.cjs');
+const { writeSurface, applySurface } = require('../gsd-core/bin/lib/surface.cjs');
+const { loadSkillsManifest } = require('../gsd-core/bin/lib/install-profiles.cjs');
+const { CLUSTERS } = require('../gsd-core/bin/lib/clusters.cjs');
+const { resolveRuntimeArtifactLayout } = require('../gsd-core/bin/lib/runtime-artifact-layout.cjs');
 const { createTempDir, cleanup } = require('./helpers.cjs');
 
 const REAL_COMMANDS_DIR = path.join(__dirname, '..', 'commands', 'gsd');
@@ -84,7 +84,7 @@ function createFixtureWithUserGsdDir() {
 
 describe('bug-3659: applySurface prunes ~/.claude/skills/gsd-*/ on cluster disable', () => {
   test('(a) disabled cluster gsd-* dirs are removed from skills dir', (t) => {
-    const { configDir, skillsDir, gsdExplore, gsdHelp } = createFixture();
+    const { configDir, gsdExplore, gsdHelp } = createFixture();
     t.after(() => cleanup(configDir));
 
     // Surface state at configDir (= ~/.claude), NOT at skillsDir (= ~/.claude/skills).
@@ -116,7 +116,7 @@ describe('bug-3659: applySurface prunes ~/.claude/skills/gsd-*/ on cluster disab
   });
 
   test('(b) gsd-* dirs in retained clusters are preserved', (t) => {
-    const { configDir, skillsDir, gsdHelp } = createFixture();
+    const { configDir, gsdHelp } = createFixture();
     t.after(() => cleanup(configDir));
 
     // Disable a cluster that does NOT include help (core_loop has help)
@@ -138,7 +138,7 @@ describe('bug-3659: applySurface prunes ~/.claude/skills/gsd-*/ on cluster disab
   });
 
   test('(c) non-gsd user dirs are untouched', (t) => {
-    const { configDir, skillsDir, userSkill } = createFixture();
+    const { configDir, userSkill } = createFixture();
     t.after(() => cleanup(configDir));
 
     writeSurface(configDir, {
@@ -163,7 +163,7 @@ describe('bug-3659: applySurface prunes ~/.claude/skills/gsd-*/ on cluster disab
   });
 
   test('(d) idempotence: running applySurface twice produces identical on-disk state', (t) => {
-    const { configDir, skillsDir, gsdExplore, gsdHelp, userSkill } = createFixture();
+    const { configDir, skillsDir, gsdExplore, userSkill } = createFixture();
     t.after(() => cleanup(configDir));
 
     writeSurface(configDir, {
@@ -212,7 +212,7 @@ describe('bug-3659: applySurface prunes ~/.claude/skills/gsd-*/ on cluster disab
     //   2. gsd-help/    — GSD-owned, disabled cluster → REMOVED
     //   3. my-custom-skill/ — user-owned, no gsd- prefix → PRESERVED
     //   4. gsd-mything/ — prefix match but NOT in manifest → PRESERVED (Finding 1 fix)
-    const { configDir, skillsDir, gsdExplore, gsdHelp, userSkill, userGsdDir } =
+    const { configDir, gsdExplore, gsdHelp, userSkill, userGsdDir } =
       createFixtureWithUserGsdDir();
     t.after(() => cleanup(configDir));
 

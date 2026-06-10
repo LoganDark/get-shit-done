@@ -1,7 +1,7 @@
-// allow-test-rule: pending-migration-to-typed-ir [#2974]
-// Tracked in #2974 for migration to typed-IR assertions per CONTRIBUTING.md
-// "Prohibited: Raw Text Matching on Test Outputs". Per-file review may
-// reclassify some entries as source-text-is-the-product during migration.
+// allow-test-rule: source-text-is-the-product
+// Workflow .md / agent .md / command .md / reference .md files — their text
+// IS what the runtime loads. Testing text content tests the deployed contract.
+// Per CONTRIBUTING.md exception matrix.
 
 /**
  * Regression guard for #1759: the --no-input flag was removed from Claude Code
@@ -33,8 +33,8 @@ function collectMdFiles(dir) {
 }
 
 const SCAN_DIRS = [
-  path.join(ROOT, 'get-shit-done', 'workflows'),
-  path.join(ROOT, 'get-shit-done', 'references'),
+  path.join(ROOT, 'gsd-core', 'workflows'),
+  path.join(ROOT, 'gsd-core', 'references'),
   path.join(ROOT, 'commands', 'gsd'),
   path.join(ROOT, 'agents'),
 ];

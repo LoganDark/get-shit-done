@@ -1,9 +1,9 @@
+// allow-test-rule: source-text-is-the-product
+// Workflow .md / agent .md / command .md / reference .md files — their text
+// IS what the runtime loads. Testing text content tests the deployed contract.
+// Per CONTRIBUTING.md exception matrix.
 'use strict';
 
-// allow-test-rule: pending-migration-to-typed-ir [#2974]
-// Tracked in #2974 for migration to typed-IR assertions per CONTRIBUTING.md
-// "Prohibited: Raw Text Matching on Test Outputs". Per-file review may
-// reclassify some entries as source-text-is-the-product during migration.
 
 process.env.GSD_TEST_MODE = '1';
 
@@ -38,8 +38,8 @@ const COMMANDS_DIR = path.join(ROOT, 'commands', 'gsd');
 // After #3039, the canonical command reference is the `--full` mode file.
 // `workflows/help.md` is now a small dispatcher; the bidirectional parity
 // invariant lives with the comprehensive reference body.
-const HELP_MD = path.join(ROOT, 'get-shit-done', 'workflows', 'help', 'modes', 'full.md');
-const DO_MD = path.join(ROOT, 'get-shit-done', 'workflows', 'do.md');
+const HELP_MD = path.join(ROOT, 'gsd-core', 'workflows', 'help', 'modes', 'full.md');
+const DO_MD = path.join(ROOT, 'gsd-core', 'workflows', 'do.md');
 
 function parseFrontmatter(content) {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
@@ -77,7 +77,12 @@ function listShippedSlashBaseNames() {
 
 function extractSlashReferences(contents) {
   const names = new Set();
-  const tokenRe = /\/gsd[:-]([a-z][a-z0-9-]*)/g;
+  // Negative lookbehind: must not be preceded by a letter (avoids matching npm scope
+  // paths like @opengsd/gsd-core where `/gsd-` appears inside a package URL).
+  // Negative lookahead (?![\w-]*\/): excludes filesystem path segments like
+  // `/gsd-core/bin` where the captured name is followed by a `/`, which would
+  // be a directory segment rather than a slash command name.
+  const tokenRe = /(?<![a-z])\/gsd[:-]([a-z][a-z0-9-]*)(?![\w-]*\/)/g;
   let match;
   while ((match = tokenRe.exec(contents)) !== null) {
     names.add(match[1]);

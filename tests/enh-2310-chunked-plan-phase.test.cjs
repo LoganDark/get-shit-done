@@ -1,9 +1,9 @@
+// allow-test-rule: source-text-is-the-product
+// Workflow .md / agent .md / command .md / reference .md files — their text
+// IS what the runtime loads. Testing text content tests the deployed contract.
+// Per CONTRIBUTING.md exception matrix.
 'use strict';
 
-// allow-test-rule: pending-migration-to-typed-ir [#2974]
-// Tracked in #2974 for migration to typed-IR assertions per CONTRIBUTING.md
-// "Prohibited: Raw Text Matching on Test Outputs". Per-file review may
-// reclassify some entries as source-text-is-the-product during migration.
 
 /**
  * Tests for #2310: plan-phase chunked mode + filesystem fallback.
@@ -29,12 +29,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const PLAN_PHASE = path.join(
-  __dirname, '..', 'get-shit-done', 'workflows', 'plan-phase.md'
+  __dirname, '..', 'gsd-core', 'workflows', 'plan-phase.md'
 );
 
 const PLANNER_AGENT = path.join(__dirname, '..', 'agents', 'gsd-planner.md');
-const PLANNER_CHUNKED_REF = path.join(__dirname, '..', 'get-shit-done', 'references', 'planner-chunked.md');
-const CONFIG_SCHEMA = path.join(__dirname, '..', 'get-shit-done', 'bin', 'lib', 'config-schema.cjs');
+const PLANNER_CHUNKED_REF = path.join(__dirname, '..', 'gsd-core', 'references', 'planner-chunked.md');
+const CONFIG_SCHEMA = path.join(__dirname, '..', 'gsd-core', 'bin', 'lib', 'config-schema.cjs');
 const CONFIGURATION_MD = path.join(__dirname, '..', 'docs', 'CONFIGURATION.md');
 
 describe('plan-phase.md — filesystem fallback (#2310)', () => {

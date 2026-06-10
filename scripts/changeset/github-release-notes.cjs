@@ -1,9 +1,10 @@
 'use strict';
 
+const cp = require('node:child_process');
 const path = require('node:path');
 
 const { parseFragment } = require('./parse.cjs');
-const { createVcsAdapter, expr } = require('../../sdk/dist-cjs/vcs/index.js');
+const { packageName, repoSlug: defaultRepoSlug } = require('../../gsd-core/bin/lib/package-identity.cjs');
 
 const SECTION_ORDER = ['Fixed', 'Added', 'Changed', 'Deprecated', 'Removed', 'Security'];
 
@@ -29,18 +30,12 @@ const REMOVED_GROUPS = [
   },
 ];
 
-// Phase 7 MIGR-05: migrated to cross-backend VcsAdapter per D-17 / D-18 — the script
-// stays cross-backend (preserves upstream-mergeability) rather than being deleted.
-// The adapter is constructed lazily per repo path so callers in test fixtures can
-// operate on multiple repos within a single Node process.
-const adapterCache = new Map();
-function getVcs(repo) {
-  let vcs = adapterCache.get(repo);
-  if (!vcs) {
-    vcs = createVcsAdapter(repo, {});
-    adapterCache.set(repo, vcs);
-  }
-  return vcs;
+function runGit(repo, args) {
+  return cp.execFileSync('git', args, {
+    cwd: repo,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 }
 
 function validateGitRef({ repo, ref, label }) {
@@ -55,29 +50,22 @@ function validateGitRef({ repo, ref, label }) {
   ) {
     throw new Error(`Invalid git ref for ${label}: ${ref}`);
   }
-  const vcs = getVcs(repo);
-  if (!vcs.refs.exists(expr.bookmark(ref))) {
-    throw new Error(`Invalid git ref for ${label}: ${ref} (does not resolve)`);
-  }
+  runGit(repo, ['rev-parse', '--verify', `${ref}^{commit}`]);
   return ref;
 }
 
 function changedFragmentPaths({ repo, fromRef, toRef }) {
   const from = validateGitRef({ repo, ref: fromRef, label: 'fromRef' });
   const to = validateGitRef({ repo, ref: toRef, label: 'toRef' });
-  const vcs = getVcs(repo);
-  const diffResult = vcs.diff({
-    rev: expr.range(expr.bookmark(from), expr.bookmark(to)),
-    nameOnly: true,
-    paths: ['.changeset'],
-  });
-  const names = Array.isArray(diffResult.nameOnly) ? diffResult.nameOnly : [];
-  return names.filter((file) => /^\.changeset\/[^/]+\.md$/.test(file));
+  const out = runGit(repo, ['diff', '--name-only', `${from}..${to}`, '--', '.changeset']);
+  return out
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .filter((file) => /^\.changeset\/[^/]+\.md$/.test(file));
 }
 
 function readFileAtRef({ repo, ref, file }) {
-  const vcs = getVcs(repo);
-  return vcs.refs.readBlob(expr.bookmark(ref), file);
+  return runGit(repo, ['show', `${ref}:${file}`]);
 }
 
 function loadFragmentsFromRange({ repo, fromRef, toRef }) {
@@ -158,8 +146,8 @@ function serializeGithubReleaseNotes({
   ir,
   fromRef,
   toRef,
-  repoSlug = 'gsd-build/get-shit-done',
-  installCommand = 'npx get-shit-done-cc@latest',
+  repoSlug = defaultRepoSlug,
+  installCommand = `npx ${packageName}@latest`,
 }) {
   if (installCommand.includes('`')) {
     throw new Error('installCommand cannot contain backtick characters');

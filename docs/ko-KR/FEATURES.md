@@ -73,8 +73,6 @@
 - [v1.29 기능](#v129-기능)
   - [Windsurf 런타임 지원](#56-windsurf-런타임-지원)
   - [국제화 문서](#57-국제화-문서)
-- [v1.30 기능](#v130-기능)
-  - [GSD SDK](#58-gsd-sdk)
 - [v1.31 기능](#v131-기능)
   - [스키마 드리프트 감지](#59-스키마-드리프트-감지)
   - [보안 시행](#60-보안-시행)
@@ -1047,9 +1045,9 @@ fix(03-01): correct auth token expiry
 
 ### 42. Cross-AI Peer Review
 
-**명령어:** `/gsd-review --phase N [--gemini] [--claude] [--codex] [--coderabbit] [--opencode] [--qwen] [--cursor] [--all]`
+**명령어:** `/gsd-review --phase N [--gemini] [--claude] [--codex] [--coderabbit] [--opencode] [--qwen] [--cursor] [--agy] [--all]`
 
-**목적:** 외부 AI CLI(Gemini, Claude, Codex, CodeRabbit, OpenCode, Qwen Code, Cursor)를 호출하여 페이즈 계획을 독립적으로 검토합니다. 검토자별 피드백이 담긴 구조화된 REVIEWS.md를 생성합니다.
+**목적:** 외부 AI CLI(Gemini, Claude, Codex, CodeRabbit, OpenCode, Qwen Code, Cursor, Antigravity)를 호출하여 페이즈 계획을 독립적으로 검토합니다. 검토자별 피드백이 담긴 구조화된 REVIEWS.md를 생성합니다.
 
 **요구사항.**
 - REQ-REVIEW-01: 시스템에서 사용 가능한 AI CLI를 감지해야 합니다.
@@ -1308,7 +1306,7 @@ Claude가 GSD 워크플로우 컨텍스트 밖에서 파일 편집을 시도하�
 
 ### 55. Multi-Runtime Installer Selection
 
-**일부:** `npx get-shit-done-cc`
+**일부:** `npx @opengsd/gsd-core`
 
 **목적:** 단일 대화형 설치 세션에서 여러 런타임을 선택합니다.
 
@@ -1327,7 +1325,7 @@ Claude가 GSD 워크플로우 컨텍스트 밖에서 파일 편집을 시도하�
 
 ### 56. Windsurf 런타임 지원
 
-**대상:** `npx get-shit-done-cc`
+**대상:** `npx @opengsd/gsd-core`
 
 **목적:** Windsurf AI IDE 지원을 추가합니다.
 
@@ -1355,26 +1353,6 @@ Claude가 GSD 워크플로우 컨텍스트 밖에서 파일 편집을 시도하�
 **프로세스.**
 1. **번역** — 핵심 문서를 대상 언어로 변환
 2. **게시** — 번역된 문서를 영어 원본과 함께 접근 가능하게 제공
-
----
-
-## v1.30 기능
-
-### 58. GSD SDK
-
-**명령어:** 프로그래매틱 API (헤드리스)
-
-**목적:** CLI 세션 없이 프로그래밍 방식으로 GSD 워크플로우를 실행하기 위한 헤드리스 TypeScript SDK.
-
-**요구사항.**
-- REQ-SDK-01: SDK는 GSD 워크플로우 작업을 TypeScript 함수로 노출해야 합니다.
-- REQ-SDK-02: SDK는 대화형 프롬프트 없이 헤드리스 실행을 지원해야 합니다.
-- REQ-SDK-03: SDK는 CLI 기반 워크플로우와 동일한 아티팩트를 생성해야 합니다.
-
-**프로세스.**
-1. **임포트** — TypeScript/JavaScript 프로젝트에 GSD SDK 임포트
-2. **구성** — 프로젝트 경로와 워크플로우 옵션을 프로그래밍 방식으로 설정
-3. **실행** — API 호출로 GSD 페이즈(discuss, plan, execute) 실행
 
 ---
 
@@ -1568,7 +1546,7 @@ Claude가 GSD 워크플로우 컨텍스트 밖에서 파일 편집을 시도하�
 
 ### 68. Claude Code 스킬 마이그레이션
 
-**대상:** `npx get-shit-done-cc`
+**대상:** `npx @opengsd/gsd-core`
 
 **목적:** GSD 명령어를 하위 호환성을 유지하면서 Claude Code 2.1.88+ 스킬 형식으로 마이그레이션합니다.
 
@@ -1680,7 +1658,7 @@ Claude가 GSD 워크플로우 컨텍스트 밖에서 파일 편집을 시도하�
 
 ### 74. 컨텍스트 축소
 
-**대상:** GSD SDK 프롬프트 어셈블리
+**대상:** 프롬프트 어셈블리 파이프라인
 
 **목적:** Markdown 절삭 및 캐시 친화적 프롬프트 순서를 통해 컨텍스트 프롬프트 크기를 줄입니다.
 
@@ -1831,7 +1809,7 @@ Claude가 GSD 워크플로우 컨텍스트 밖에서 파일 편집을 시도하�
 
 ### 85. 신규 런타임 지원 (Trae, Cline, Augment Code)
 
-**대상:** `npx get-shit-done-cc`
+**대상:** `npx @opengsd/gsd-core`
 
 **목적:** Trae IDE, Cline, Augment Code 런타임으로 GSD 설치를 확장합니다.
 

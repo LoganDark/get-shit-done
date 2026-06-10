@@ -8,7 +8,7 @@
  * Tests for ROADMAP wave dependency surfacing (#2447).
  */
 
-const { test, describe, beforeEach, afterEach } = require('node:test');
+const { test, describe, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -217,9 +217,49 @@ Plans:
     assert.ok(typeof out.updated === 'boolean', 'should return a valid result object');
   });
 
+  test('#314 map-lookup: found-path uses plan wave, miss-path defaults to wave 1', () => {
+    // Behavior lock for the O(1) Map swap: asserts BOTH branches of the lookup.
+    // - 01-01-PLAN.md is in planData (wave 2) → checklist line must land under Wave 2.
+    // - 01-99-PLAN.md is NOT in planData → null-on-miss → defaults to wave 1.
+    tmpDir = makePlanProject({
+      '.planning/ROADMAP.md': `# Roadmap
+
+### Phase 1: Foundation
+**Goal:** Set up project
+**Plans:** 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Known plan
+- [ ] 01-99-PLAN.md — Unknown plan (no PLAN.md)
+`,
+      '.planning/phases/01-foundation/01-01-PLAN.md': PLAN_TEMPLATE(2),
+      // 01-99-PLAN.md intentionally absent — simulates a checklist entry with no backing plan file
+    });
+
+    const result = runGsdTools('roadmap annotate-dependencies 1', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const roadmap = fs.readFileSync(path.join(tmpDir, '.planning', 'ROADMAP.md'), 'utf-8');
+
+    // Both waves must be present (wave 1 from the miss, wave 2 from the found entry)
+    assert.ok(roadmap.includes('**Wave 1**'), 'Wave 1 header present (miss-path default)');
+    assert.ok(roadmap.includes('**Wave 2**'), 'Wave 2 header present (found-path)');
+
+    // Known plan (wave 2) must appear AFTER Wave 2 header
+    const wave2Idx = roadmap.indexOf('**Wave 2**');
+    const knownLineIdx = roadmap.indexOf('01-01-PLAN.md');
+    assert.ok(knownLineIdx > wave2Idx, 'known plan line grouped under Wave 2');
+
+    // Unknown plan (wave 1 default) must appear AFTER Wave 1 header and BEFORE Wave 2 header
+    const wave1Idx = roadmap.indexOf('**Wave 1**');
+    const unknownLineIdx = roadmap.indexOf('01-99-PLAN.md');
+    assert.ok(unknownLineIdx > wave1Idx, 'unknown plan line grouped under Wave 1');
+    assert.ok(unknownLineIdx < wave2Idx, 'unknown plan line appears before Wave 2 section');
+  });
+
   test('plan-phase.md documents annotate-dependencies step', () => {
     const planPhase = fs.readFileSync(
-      path.join(__dirname, '../get-shit-done/workflows/plan-phase.md'), 'utf-8'
+      path.join(__dirname, '../gsd-core/workflows/plan-phase.md'), 'utf-8'
     );
     assert.ok(planPhase.includes('annotate-dependencies'), 'plan-phase.md references annotate-dependencies command');
     assert.ok(planPhase.includes('13d'), 'plan-phase.md has step 13d');

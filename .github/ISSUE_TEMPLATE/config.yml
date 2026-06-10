@@ -1,8 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: File an issue on the active fork
-    url: https://github.com/GSD-redux/get-shit-done-redux/issues/new/choose
-    about: This repository is deprecated. Please file issues on the active fork.
-  - name: Why this repo is deprecated (notice)
-    url: https://github.com/gsd-build/get-shit-done#readme
-    about: "TÂCHES unreachable since 2026-04-01; $GSD token linked to rug-pull. See README banner."
+  - name: File an issue on this fork (Jujutsu support line)
+    url: https://github.com/LoganDark/get-shit-done/issues
+    about: This repository is the jj-support fork of GSD. File bugs and feature requests here, including anything found while using the Jujutsu backend.

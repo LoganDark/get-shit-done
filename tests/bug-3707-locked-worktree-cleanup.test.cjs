@@ -12,12 +12,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { execFileSync, spawnSync } = require('node:child_process');
+const { cleanup } = require('./helpers.cjs');
 
 const {
   executeWorktreeWaveCleanupPlan,
-  planWorktreeWaveCleanup,
   reapOrphanWorktrees,
-} = require('../get-shit-done/bin/lib/worktree-safety.cjs');
+} = require('../gsd-core/bin/lib/worktree-safety.cjs');
 
 // ─── PID helpers ──────────────────────────────────────────────────────────────
 
@@ -135,7 +135,7 @@ describe('bug-3707: executeWorktreeWaveCleanupPlan unlocks and retries on locked
   });
 
   afterEach(() => {
-    fs.rmSync(tmpBase, { recursive: true, force: true });
+    cleanup(tmpBase);
   });
 
   test('removes a locked worktree after unlock-retry (real-fs)', () => {
@@ -221,7 +221,7 @@ describe('bug-3707: reapOrphanWorktrees', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpBase, { recursive: true, force: true });
+    cleanup(tmpBase);
   });
 
   // ── Dead PID + merged branch → reap ────────────────────────────────────────
@@ -373,8 +373,8 @@ describe('bug-3707: reapOrphanWorktrees', () => {
 // ─── Suite 3: Structural — startup sweep wiring ───────────────────────────────
 
 describe('bug-3707: startup orphan sweep is wired into workflow entry points', () => {
-  const QUICK_PATH = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'quick.md');
-  const EXECUTE_PHASE_PATH = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'execute-phase.md');
+  const QUICK_PATH = path.join(__dirname, '..', 'gsd-core', 'workflows', 'quick.md');
+  const EXECUTE_PHASE_PATH = path.join(__dirname, '..', 'gsd-core', 'workflows', 'execute-phase.md');
 
   test('quick.md calls worktree.reap-orphans at startup when USE_WORKTREES is not false', () => {
     const content = fs.readFileSync(QUICK_PATH, 'utf8');
@@ -404,12 +404,12 @@ describe('bug-3707: startup orphan sweep is wired into workflow entry points', (
   });
 
   test('worktree-safety module exports reapOrphanWorktrees', () => {
-    const mod = require('../get-shit-done/bin/lib/worktree-safety.cjs');
+    const mod = require('../gsd-core/bin/lib/worktree-safety.cjs');
     assert.strictEqual(typeof mod.reapOrphanWorktrees, 'function');
   });
 
   test('worktree-safety module exports cmdWorktreeReapOrphans', () => {
-    const mod = require('../get-shit-done/bin/lib/worktree-safety.cjs');
+    const mod = require('../gsd-core/bin/lib/worktree-safety.cjs');
     assert.strictEqual(typeof mod.cmdWorktreeReapOrphans, 'function');
   });
 });
@@ -424,7 +424,7 @@ describe('bug-3707: reapOrphanWorktrees — adversarial edge cases', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpBase, { recursive: true, force: true });
+    cleanup(tmpBase);
   });
 
   // ── Gap 1: Non-numeric lock content (real Claude Code format) → ALIVE (fail-closed) ──

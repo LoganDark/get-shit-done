@@ -1,21 +1,5 @@
 name: Tests
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CI-03 (Phase 5 plan 05-05 — D-37 / D-38 docs decision):
-# GitHub Actions workflows themselves stay on git — GitHub *is* git. The jj
-# port covers the GSD CLI + SDK that USERS run locally / in workspaces; it
-# does NOT extend to the workflow runtime (canary.yml, release-sdk.yml,
-# hotfix.yml, branch-cleanup.yml, auto-branch.yml, and this file). These
-# workflows run on github.com infrastructure where the working repo is
-# always a git checkout, so the underlying git invocations in their shell
-# steps remain idiomatic and are NOT routed through the VCS adapter.
-#
-# This is a permanent architectural boundary, NOT a deferred port. The jj
-# backend's value is local developer ergonomics + parallel-workspace
-# performance; CI runners are ephemeral single-checkout containers where
-# that value does not apply.
-# ─────────────────────────────────────────────────────────────────────────────
-
 on:
   push:
     branches:
@@ -31,170 +15,439 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  # Static lint: no source-grep tests in the test suite.
-  # Runs once (not per matrix node version) since it is a file-content check.
-  lint-tests:
+  changes:
+    name: Detect test scope
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    outputs:
+      code_changed: ${{ steps.scope.outputs.code_changed }}
+      full_matrix: ${{ steps.scope.outputs.full_matrix }}
+      product_changed: ${{ steps.scope.outputs.product_changed }}
+      targeted_tests: ${{ steps.scope.outputs.targeted_tests }}
+      windows_tests: ${{ steps.scope.outputs.windows_tests }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
-          # W-3 (plan 01-04): full history so origin/main is reachable for
-          # scripts/check-skip-count.cjs. The script also enforces this under
-          # CI=true (defense in depth — both the workflow YAML and the script
-          # detect a missing baseline non-silently).
           fetch-depth: 0
+          persist-credentials: true
+          token: ${{ github.token }}
+
+      - name: Classify changed paths
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            {
+              echo "code_changed=true"
+              echo "product_changed=true"
+              echo "full_matrix=true"
+              echo "targeted_tests="
+              echo "windows_tests="
+            } >> "$GITHUB_OUTPUT"
+            {
+              echo "## Test scope"
+              echo ""
+              echo "- event: \`$EVENT_NAME\`"
+              echo "- code_changed: \`true\`"
+              echo "- full_matrix: \`true\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          node scripts/ci-test-scope.cjs --base "$BASE_SHA" --head "$HEAD_SHA" | tee ci-test-scope.json
+          node <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require('fs');
+          const result = JSON.parse(fs.readFileSync('ci-test-scope.json', 'utf8'));
+          console.log('## Test scope');
+          console.log('');
+          console.log(`- code_changed: \`${result.code_changed}\``);
+          console.log(`- full_matrix: \`${result.full_matrix}\``);
+          console.log(`- targeted_tests: \`${result.targeted_tests.length}\``);
+          console.log(`- windows_tests: \`${result.windows_tests.length}\``);
+          if (result.reasons.length > 0) {
+            console.log('');
+            console.log('### Reasons');
+            for (const reason of result.reasons) console.log(`- ${reason}`);
+          }
+          NODE
+
+  # Static lint: test-suite and PR-check contracts.
+  # Runs once, not per matrix lane.
+  lint-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: true
+          token: ${{ github.token }}
+      - name: Enable corepack (pnpm)
+        run: corepack enable
       - name: Set up Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
         with:
           node-version: 24
-      - name: Lint — no source-grep tests
-        shell: bash
-        run: node scripts/lint-no-source-grep.cjs
+      - name: Install dev dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      # ADR-457 build-at-publish: bin/lib/*.cjs are gitignored, built by tsc.
+      # --ignore-scripts skips the prepare build, but lint:skill-deps (and other
+      # lint scripts) require() the built modules — so build them explicitly.
+      - name: Build runtime lib (required by lint scripts)
+        run: pnpm run build:lib
+      - name: Lint — ESLint (source-grep + timing + no-only-tests + quality)
+        run: pnpm exec eslint . --cache --cache-location node_modules/.cache/eslint/
+      - name: Lint — skill dependency graph
+        run: pnpm run lint:skill-deps
+      - name: Lint — test file count per module
+        run: node scripts/lint-test-file-count.cjs
       - name: Lint — command contract (ADR-0002)
-        shell: bash
         run: node scripts/lint-command-contract.cjs
-      - name: Check — skip count must not increase from main
-        # W-3 fix: ensure origin/main is reachable. Two defenses:
-        # (a) the checkout step above uses `fetch-depth: 0` so the full
-        #     history is available;
-        # (b) under CI=true, scripts/check-skip-count.cjs exits 1 if origin/main
-        #     is still unreachable — i.e., if (a) was reverted or the fetch failed.
-        shell: bash
-        run: |
-          git fetch origin main --depth=1 || true
-          node scripts/check-skip-count.cjs
-      - name: Lint — no raw git in jj-reachable code
-        shell: bash
-        run: node scripts/lint-vcs-no-raw-git.cjs
-      - name: Lint — no commit_id leak from jj backend
-        shell: bash
-        run: node scripts/lint-vcs-no-commit-id.cjs
+      - name: Lint — PR checks use projectDir
+        run: node scripts/lint-pr-check-project-dir.cjs
+      - name: Lint — legacy directory name guard (#604)
+        run: pnpm run lint:legacy-name
 
   test:
+    name: test (${{ matrix.os }}, ${{ matrix.node-version }})
+    needs: changes
+    if: needs.changes.outputs.product_changed == 'true'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
-
-    # Phase 3 plan 03-07 (CI-01): the jj-colocated lane is allowed to fail —
-    # CI-01 graduates to required-blocking in Phase 5 (per D-11). Phase 4
-    # plan 01 (D-22) adds the jj-native lane with the same allow-failure
-    # posture; both graduate together in Phase 5.
-    #
-    # Phase 5 plan 05-05 (D-36 step 2): the flake-fix patches landed in
-    # commit df821bae across 7 jj-* test files. The soak window is tracked
-    # in .planning/intel/ci-jj-soak.md and graduation flips the conditional
-    # below to `false` once 10 consecutive green nightly runs land on both
-    # lanes. See the proposed-but-not-yet-landed flip in 05-05-SUMMARY.md.
-    # The CI-03 boundary (GitHub Actions stays on git) is documented in the
-    # header block at the top of this file.
-    continue-on-error: ${{ matrix.backend == 'jj-colocated' || matrix.backend == 'jj-native' }}
-
+    timeout-minutes: 15
+    env:
+      GSD_PLUGIN_ROOT: .ci-gsd-plugin-root-disabled
     strategy:
-      # Phase 3 plan 03-07 (CI-01 D-11): fail-fast disabled so a jj-colocated
-      # cell failure does NOT abort the git lane. The matrix
-      # `continue-on-error` flag above keeps the workflow green on jj-only
-      # failures while still reporting per-cell status.
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-        node-version: [22, 24]
-        # Phase 3 plan 03-07 (CI-01): jj-colocated backend lane added to the
-        # ubuntu-latest matrix. macOS stays git-only via the `include:` shape
-        # below — the jj install step targets `unknown-linux-musl` tarballs
-        # and would fail on the macOS runner.
-        # Phase 4 plan 01 (D-22): jj-native lane added with same allow-failure
-        # posture as jj-colocated; both use the same jj binary install step
-        # (lane difference is fixture init, not install).
-        backend: [git, jj-colocated, jj-native]
         include:
-          # Single macOS runner — verifies platform compatibility on the standard version
-          - os: macos-latest
+          # Required default PR lanes: fast signal, minimum runtime, primary runtime,
+          # and one Windows shell/path lane. The non-primary OS/runtime lanes run
+          # scoped tests from scripts/ci-test-scope.cjs; Ubuntu/Node 24 runs the
+          # broader default suite.
+          - os: ubuntu-latest
+            node-version: 22
+            scope: targeted
+          - os: ubuntu-latest
             node-version: 24
-            backend: git
-          # Windows path/separator coverage is handled by hardcoded-paths.test.cjs
-          # and windows-robustness.test.cjs (static analysis, runs on all platforms).
-          # A dedicated windows-compat workflow runs on a weekly schedule.
+            scope: full
+          - os: windows-latest
+            node-version: 24
+            scope: windows
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      # Windows lane on checkout v5.0.1 (drops includeIf; no auth flake, uses Node 24 natively).
+      # v6 uses includeIf.gitdir: for auth injection; on Windows git 2.54 the path comparison is
+      # unreliable (https://github.com/actions/checkout/pull/2425). v5 never used includeIf.
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1 (Windows)
+        if: runner.os == 'Windows'
         with:
-          # Fetch full history so we can merge origin/main for stale-base detection.
           fetch-depth: 0
+          persist-credentials: true
+          token: ${{ github.token }}
 
-      # GitHub's `refs/pull/N/merge` is cached against the recorded merge-base.
-      # When main advances after a PR is opened, the cache stays stale and CI
-      # runs against the pre-advance state — hiding bugs that are already fixed
-      # on trunk and surfacing type errors that were introduced and then patched
-      # on main in between. Explicitly merge current origin/main here so tests
-      # always run against the latest trunk.
-      - name: Rebase check — merge origin/main into PR head
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Linux/macOS)
+        if: runner.os != 'Windows'
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          token: ${{ github.token }}
+
+      - name: Guard — require GitHub-hosted runner
+        run: node scripts/ci-guard-runner.cjs
+
+      - name: Rebase check — merge PR base branch into PR head
         if: github.event_name == 'pull_request'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.email "ci@gsd-build"
-          git config user.name "CI Rebase Check"
-          git fetch origin main
-          if ! git merge --no-edit --no-ff origin/main; then
-            echo "::error::This PR cannot cleanly merge origin/main. Rebase your branch onto current main and push again."
-            echo "::error::Conflicting files:"
-            git diff --name-only --diff-filter=U
-            git merge --abort
-            exit 1
-          fi
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci-rebase-check.cjs
+
+      - name: Enable corepack (pnpm)
+        run: corepack enable
 
       - name: Set up Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+          cache: 'pnpm'
 
-      # Phase 3 plan 03-07 (CI-02 + D-14 + D-15): install jj 0.41.0 via the
-      # official GitHub release tarball when the matrix cell targets the
-      # jj-colocated backend. Pinned version is Renovate-bumpable; no
-      # `cargo install` (too slow, requires Rust toolchain). ubuntu-latest
-      # resolves `uname -m` to `x86_64`; the tarball provides a static
-      # `unknown-linux-musl` build that runs on any Linux distro.
-      - name: Install jj
-        if: matrix.backend == 'jj-colocated' || matrix.backend == 'jj-native'
-        shell: bash
+      - name: Environment check
+        run: pnpm run check:env
+
+      # pnpm fork: `pnpm install --frozen-lockfile` is the dependency integrity
+      # gate (fails on any lockfile/manifest drift); scripts/check-npm-integrity.cjs
+      # is npm-lockfile-specific and is not used here.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare scoped test list
+        if: matrix.scope != 'full'
+        env:
+          TEST_SCOPE: ${{ matrix.scope }}
+          TARGETED_TESTS: ${{ needs.changes.outputs.targeted_tests }}
+          WINDOWS_TESTS: ${{ needs.changes.outputs.windows_tests }}
+        run: node scripts/ci-prepare-test-scope.cjs
+
+      - name: Run scoped tests
+        if: matrix.scope != 'full'
+        run: node scripts/run-tests.cjs --files-from .ci-selected-tests.txt
+
+      - name: Run unit tests
+        if: matrix.scope == 'full'
+        run: pnpm run test:unit
+
+      - name: Run integration tests
+        if: matrix.scope == 'full'
+        run: pnpm run test:integration
+
+      - name: Run security tests
+        if: matrix.scope == 'full'
+        run: pnpm run test:security
+
+      - name: Run install tests
+        if: matrix.scope == 'full' && needs.changes.outputs.full_matrix == 'true'
+        run: pnpm run test:install
+
+      - name: Run slow tests
+        if: matrix.scope == 'full' && needs.changes.outputs.full_matrix == 'true'
+        run: pnpm run test:slow
+
+  test-inert:
+    name: test (inert CI)
+    needs: changes
+    if: needs.changes.outputs.code_changed == 'true' && needs.changes.outputs.product_changed != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GSD_PLUGIN_ROOT: .ci-gsd-plugin-root-disabled
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          token: ${{ github.token }}
+      - name: Guard — require GitHub-hosted runner
+        run: node scripts/ci-guard-runner.cjs
+      - name: Rebase check — merge PR base branch into PR head
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci-rebase-check.cjs
+      - name: Enable corepack (pnpm)
+        run: corepack enable
+      - name: Set up Node.js 22
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - name: Environment check
+        run: pnpm run check:env
+      # pnpm fork: frozen-lockfile install doubles as the dependency integrity gate.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Prepare scoped test list
+        env:
+          TEST_SCOPE: targeted
+          TARGETED_TESTS: ${{ needs.changes.outputs.targeted_tests }}
+          WINDOWS_TESTS: ${{ needs.changes.outputs.windows_tests }}
+        run: node scripts/ci-prepare-test-scope.cjs
+      - name: Run scoped tests
+        run: node scripts/run-tests.cjs --files-from .ci-selected-tests.txt
+
+  test-full:
+    name: full test (${{ matrix.os }}, ${{ matrix.node-version }})
+    needs: changes
+    if: needs.changes.outputs.code_changed == 'true' && needs.changes.outputs.full_matrix == 'true'
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    timeout-minutes: 15
+    env:
+      GSD_PLUGIN_ROOT: .ci-gsd-plugin-root-disabled
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            node-version: 22
+            shell: pwsh
+          - os: macos-latest
+            node-version: 22
+            shell: 'zsh {0}'
+          - os: macos-latest
+            node-version: 24
+            shell: 'zsh {0}'
+
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1 (Windows)
+        if: runner.os == 'Windows'
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          token: ${{ github.token }}
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Linux/macOS)
+        if: runner.os != 'Windows'
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          token: ${{ github.token }}
+
+      - name: Guard — require GitHub-hosted runner
+        run: node scripts/ci-guard-runner.cjs
+
+      - name: Rebase check — merge PR base branch into PR head
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci-rebase-check.cjs
+
+      - name: Enable corepack (pnpm)
+        run: corepack enable
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+
+      - name: Environment check
+        run: pnpm run check:env
+
+      # pnpm fork: `pnpm install --frozen-lockfile` is the dependency integrity
+      # gate (fails on any lockfile/manifest drift); scripts/check-npm-integrity.cjs
+      # is npm-lockfile-specific and is not used here.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run unit tests
+        run: pnpm run test:unit
+
+      - name: Run integration tests
+        run: pnpm run test:integration
+
+      - name: Run security tests
+        run: pnpm run test:security
+
+  coverage:
+    needs: changes
+    if: needs.changes.outputs.product_changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GSD_PLUGIN_ROOT: .ci-gsd-plugin-root-disabled
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          token: ${{ github.token }}
+      - name: Guard — require GitHub-hosted runner
+        run: node scripts/ci-guard-runner.cjs
+      - name: Rebase check — merge PR base branch into PR head
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci-rebase-check.cjs
+      - name: Enable corepack (pnpm)
+        run: corepack enable
+      - name: Set up Node.js 24
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+          cache: 'pnpm'
+      # pnpm fork: frozen-lockfile install doubles as the dependency integrity gate.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Unit coverage
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: pnpm run test:coverage:unit
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: coverage-unit
+          path: |
+            coverage/
+            .nyc_output/
+          if-no-files-found: ignore
+
+  required-tests:
+    name: Required tests
+    needs:
+      - changes
+      - lint-tests
+      - test
+      - test-inert
+      - test-full
+      - coverage
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Summarize required test gate
+        env:
+          CODE_CHANGED: ${{ needs.changes.outputs.code_changed }}
+          PRODUCT_CHANGED: ${{ needs.changes.outputs.product_changed }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          LINT_RESULT: ${{ needs.lint-tests.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          INERT_RESULT: ${{ needs.test-inert.result }}
+          FULL_TEST_RESULT: ${{ needs.test-full.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
         run: |
           set -euo pipefail
-          JJ_VERSION=v0.41.0
-          JJ_ARCH=$(uname -m)
-          curl -fsSL "https://github.com/jj-vcs/jj/releases/download/${JJ_VERSION}/jj-${JJ_VERSION#v}-${JJ_ARCH}-unknown-linux-musl.tar.gz" \
-            | tar xz -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/jj" --version
+          echo "code_changed=$CODE_CHANGED"
+          echo "product_changed=$PRODUCT_CHANGED"
+          echo "changes=$CHANGES_RESULT"
+          echo "lint-tests=$LINT_RESULT"
+          echo "test=$TEST_RESULT"
+          echo "test-inert=$INERT_RESULT"
+          echo "test-full=$FULL_TEST_RESULT"
+          echo "coverage=$COVERAGE_RESULT"
 
-      - name: Install dependencies
-        run: npm ci
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "::error::test scope detection did not pass"
+            exit 1
+          fi
 
-      - name: Build SDK dist (required by installer)
-        run: npm run build:sdk
+          if [ "$LINT_RESULT" != "success" ]; then
+            echo "::error::lint-tests did not pass"
+            exit 1
+          fi
 
-      # Seam contract gate: keep manifest -> generated aliases -> registry/CJS adapters aligned.
-      # Run once per workflow on the primary Linux node to avoid redundant matrix cost.
-      # Phase 3 plan 03-07: also gate on `backend == 'git'` so the jj-colocated
-      # cell at ubuntu-latest@24 does not re-run this seam check (it's a
-      # file-content gate; backend-independent).
-      - name: SDK seam coverage tests
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == 24 && matrix.backend == 'git'
-        shell: bash
-        run: cd sdk && npx vitest run src/query/command-seam-coverage.test.ts
+          if [ "$CODE_CHANGED" != "true" ]; then
+            echo "No code paths changed; matrix tests intentionally skipped."
+            exit 0
+          fi
 
-      - name: SDK generated alias artifact drift check
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == 24 && matrix.backend == 'git'
-        shell: bash
-        run: node sdk/scripts/check-command-aliases-fresh.mjs
+          if [ "$PRODUCT_CHANGED" = "true" ]; then
+            if [ "$TEST_RESULT" != "success" ]; then
+              echo "::error::test matrix did not pass"
+              exit 1
+            fi
+            if [ "$FULL_TEST_RESULT" != "success" ] && [ "$FULL_TEST_RESULT" != "skipped" ]; then
+              echo "::error::full parity matrix did not pass"
+              exit 1
+            fi
+            if [ "$COVERAGE_RESULT" != "success" ]; then
+              echo "::error::coverage did not pass"
+              exit 1
+            fi
+          else
+            if [ "$INERT_RESULT" != "success" ]; then
+              echo "::error::inert CI lane did not pass"
+              exit 1
+            fi
+          fi
 
-      - name: Run tests with coverage
-        shell: bash
-        # Phase 3 plan 03-07 (CI-01): GSD_TEST_BACKENDS filters the vcsTest
-        # matrix to the current cell's backend. Already plumbed through
-        # `parseBackendsEnv` in sdk/src/vcs/backends.ts (Phase 1 plan 01-02);
-        # no SDK change needed.
-        env:
-          GSD_TEST_BACKENDS: ${{ matrix.backend }}
-        run: npm run test:coverage
+          echo "Required test gate passed."

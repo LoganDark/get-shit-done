@@ -1,5 +1,5 @@
 // allow-test-rule: source-text-is-the-product
-// The commands/gsd/*.md and get-shit-done/workflows/*.md files are the
+// The commands/gsd/*.md and gsd-core/workflows/*.md files are the
 // installed agent stubs — their frontmatter and workflow body IS the
 // deployed contract. These assertions check structural fields (argument-hint,
 // description, early-exit prose) that govern runtime routing.
@@ -73,7 +73,7 @@ describe('skill frontmatter: /gsd-plan-phase --research-phase flag absorbs the s
   });
 
   test('workflows/plan-phase.md parses --research-phase and sets a research-only mode', () => {
-    const content = read('get-shit-done/workflows/plan-phase.md');
+    const content = read('gsd-core/workflows/plan-phase.md');
     // The arg-parsing section of the workflow must mention the new flag
     // by name. This is the structural seam the LLM follows.
     // Anchored to the argument/flags section to avoid false positives from prose.
@@ -87,7 +87,7 @@ describe('skill frontmatter: /gsd-plan-phase --research-phase flag absorbs the s
   });
 
   test('workflows/plan-phase.md skips planner/verifier when in research-only mode', () => {
-    const content = read('get-shit-done/workflows/plan-phase.md');
+    const content = read('gsd-core/workflows/plan-phase.md');
     // Look for explicit early-exit prose so the LLM knows to stop after
     // research. We accept any of: "research-only", "research only mode",
     // "skip if --research-phase", "RESEARCH_ONLY", "exit after research".
@@ -107,7 +107,7 @@ describe('skill frontmatter: /gsd-plan-phase --research-phase flag absorbs the s
 
   test('orphaned workflows/research-phase.md is removed', () => {
     assert.equal(
-      exists('get-shit-done/workflows/research-phase.md'),
+      exists('gsd-core/workflows/research-phase.md'),
       false,
       'workflows/research-phase.md must be removed; the capability now lives on /gsd-plan-phase --research-phase'
     );
@@ -124,7 +124,7 @@ describe('skill frontmatter: /gsd-plan-phase --research-phase flag absorbs the s
   });
 
   test('workflow handles --view by printing existing RESEARCH.md without spawning', () => {
-    const content = read('get-shit-done/workflows/plan-phase.md');
+    const content = read('gsd-core/workflows/plan-phase.md');
     // The workflow must reference the --view flag as a no-spawn mode
     // for research-only invocations. We accept any of: "view-only",
     // "VIEW_ONLY", "skip if --view", "no spawn" alongside --view.
@@ -148,7 +148,7 @@ describe('skill frontmatter: /gsd-plan-phase --research-phase flag absorbs the s
   });
 
   test('workflow uses --research as the force-refresh signal in research-only mode', () => {
-    const content = read('get-shit-done/workflows/plan-phase.md');
+    const content = read('gsd-core/workflows/plan-phase.md');
     // The plan-phase workflow already had a --research flag with
     // "force re-research" semantics. In research-only mode, that flag
     // must short-circuit the "RESEARCH.md exists, what do you want to
@@ -172,29 +172,42 @@ describe('skill frontmatter: /gsd-plan-phase --research-phase flag absorbs the s
     );
   });
 
-  test('workflow has an existing-RESEARCH.md prompt path (update/view/skip) within proximity', () => {
-    const content = read('get-shit-done/workflows/plan-phase.md');
-    // CR #3045 finding: the previous version of this test asserted
-    // `update`, `view`, `skip` appeared anywhere in the file, which was
-    // tautological — those words occur all over the workflow for
-    // unrelated reasons (--skip-research, --view flag declarations,
-    // etc.). Tighten to a proximity check: all three choice tokens
-    // must occur in a window of ~400 chars surrounding "RESEARCH.md
-    // already exists" / "Update — re-spawn" / equivalent prompt prose,
-    // proving the prompt section is genuinely present.
+  test('research-only mode auto-uses existing RESEARCH.md (no update/view/skip prompt)', () => {
+    const content = read('gsd-core/workflows/plan-phase.md');
+    // #159: the §5.0 existing-RESEARCH.md path no longer prompts
+    // update/view/skip. When RESEARCH.md exists and neither --research nor
+    // --view is set, the workflow emits a brief "using it" notice naming
+    // the two escape-hatch flags and exits cleanly — matching the
+    // promptless auto-use behavior of §5.1 standard mode.
     const idx = content.indexOf('RESEARCH.md already exists');
     assert.ok(
       idx >= 0,
-      'plan-phase workflow must contain the literal "RESEARCH.md already exists" prompt header in the research-only existing-artifact section'
+      'plan-phase workflow must contain the literal "RESEARCH.md already exists" notice in the research-only existing-artifact section'
     );
     const window = content.slice(idx, idx + 600);
-    const hasUpdate = /\b(?:update|refresh|re-spawn)\b/i.test(window);
-    const hasView = /\bview\b/i.test(window);
-    const hasSkip = /\bskip\b/i.test(window);
+    // Positive contract: an auto-use notice that names both recovery flags.
     assert.ok(
-      hasUpdate && hasView && hasSkip,
-      'prompt section near "RESEARCH.md already exists" must mention all three choices (update/refresh/re-spawn, view, skip); ' +
-        'got update=' + hasUpdate + ' view=' + hasView + ' skip=' + hasSkip
+      /using it/i.test(window),
+      'existing-RESEARCH.md notice must state the existing research is being used (e.g. "using it")'
+    );
+    assert.ok(
+      /--research\b/.test(window),
+      'notice must name --research as the force-refresh escape hatch'
+    );
+    assert.ok(
+      /--view\b/.test(window),
+      'notice must name --view as the print-existing escape hatch'
+    );
+    // Negative contract: the interactive three-choice prompt must be gone.
+    // Guard against reintroduction via prose, an AskUserQuestion call, or a
+    // lingering "skip" choice token. (The §5.1 "skip to step 6" text is ~805
+    // chars past the anchor, outside this 600-char window.)
+    assert.ok(
+      !/prompt the user/i.test(window) &&
+        !/three choices/i.test(window) &&
+        !/AskUserQuestion/i.test(window) &&
+        !/\bskip\b/i.test(window),
+      'existing-RESEARCH.md path must no longer present an interactive update/view/skip prompt'
     );
   });
 });

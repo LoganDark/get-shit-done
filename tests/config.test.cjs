@@ -11,7 +11,7 @@ const { test, describe, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { runGsdTools, createTempProject, cleanup } = require('./helpers.cjs');
+const { runGsdTools, createTempProject, cleanup, delay } = require('./helpers.cjs');
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -23,6 +23,51 @@ function readConfig(tmpDir) {
 function writeConfig(tmpDir, obj) {
   const configPath = path.join(tmpDir, '.planning', 'config.json');
   fs.writeFileSync(configPath, JSON.stringify(obj, null, 2), 'utf-8');
+}
+
+async function runConfigEnsureSectionWithRetry(tmpDir, attempts = 4) {
+  let last;
+  for (let i = 0; i < attempts; i += 1) {
+    last = runGsdTools('config-ensure-section', tmpDir);
+    if (last.success) return last;
+
+    const detail = `${last.error || ''}\n${last.output || ''}`;
+    const transient = /(EPERM|EBUSY|EACCES|ENOTEMPTY|resource busy|used by another process|permission denied)/i.test(detail);
+    if (!transient || i === attempts - 1) return last;
+    await delay(150 * (i + 1));
+  }
+  return last;
+}
+
+/**
+ * Seed `.planning/config.json` for a test and guarantee it lands on disk
+ * before the test body runs.
+ *
+ * `config-ensure-section` is invoked through a spawned `gsd-tools.cjs` child.
+ * On the scoped CI lane (`--test-concurrency=4`, config.test.cjs scheduled
+ * alongside the heavy install/tarball suites) that child can be transiently
+ * killed under resource pressure — surfacing as a non-zero exit with empty
+ * stderr (an OS-level kill, not a gsd-tools application error; see the
+ * `runGsdTools` catch). A bare `runGsdTools('config-ensure-section')` in
+ * `beforeEach` swallows that failure, leaving config.json absent so the first
+ * subtest's `readConfig()` throws a confusing ENOENT (#770 scoped-lane flake).
+ *
+ * This retries on ANY failure or missing file (not just the EPERM/EBUSY class
+ * `runConfigEnsureSectionWithRetry` covers) and throws a clear diagnostic if it
+ * still cannot create the file, so setup is deterministic under load.
+ */
+async function ensureConfigReady(tmpDir, attempts = 5) {
+  const configPath = path.join(tmpDir, '.planning', 'config.json');
+  let last;
+  for (let i = 0; i < attempts; i += 1) {
+    last = runGsdTools('config-ensure-section', tmpDir);
+    if (last.success && fs.existsSync(configPath)) return last;
+    if (i < attempts - 1) await delay(150 * (i + 1));
+  }
+  throw new Error(
+    `config-ensure-section failed to create ${configPath} after ${attempts} attempts: ` +
+      `${(last && last.error) || 'unknown error'}`,
+  );
 }
 
 // ─── config-ensure-section ───────────────────────────────────────────────────
@@ -63,13 +108,13 @@ describe('config-ensure-section command', () => {
     assert.ok('search_gitignored' in config, 'search_gitignored should exist');
   });
 
-  test('is idempotent — returns already_exists on second call', () => {
-    const first = runGsdTools('config-ensure-section', tmpDir);
+  test('is idempotent — returns already_exists on second call', async () => {
+    const first = await runConfigEnsureSectionWithRetry(tmpDir);
     assert.ok(first.success, `First call failed: ${first.error}`);
     const firstOutput = JSON.parse(first.output);
     assert.strictEqual(firstOutput.created, true);
 
-    const second = runGsdTools('config-ensure-section', tmpDir);
+    const second = await runConfigEnsureSectionWithRetry(tmpDir);
     assert.ok(second.success, `Second call failed: ${second.error}`);
     const secondOutput = JSON.parse(second.output);
     assert.strictEqual(secondOutput.created, false);
@@ -88,6 +133,118 @@ describe('config-ensure-section command', () => {
 
     const config = readConfig(tmpDir);
     assert.strictEqual(config.brave_search, true);
+  });
+
+  test('detects Tavily Search from env var', () => {
+    const result = runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir, TAVILY_API_KEY: 'test-key' });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.tavily_search, true);
+  });
+
+  test('tavily_search is false when env var absent and no key file', () => {
+    const result = runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir, TAVILY_API_KEY: '' });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.tavily_search, false);
+  });
+
+  test('detects Tavily Search from file-based key', () => {
+    const gsdDir = path.join(tmpDir, '.gsd');
+    fs.mkdirSync(gsdDir, { recursive: true });
+    fs.writeFileSync(path.join(gsdDir, 'tavily_api_key'), 'test-key', 'utf-8');
+
+    const result = runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir, TAVILY_API_KEY: '' });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.tavily_search, true);
+  });
+
+  test('detects Ref Search from env var', () => {
+    const result = runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir, REF_API_KEY: 'test-key' });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.ref_search, true);
+  });
+
+  test('ref_search is false when env var absent and no key file', () => {
+    const result = runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir, REF_API_KEY: '' });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.ref_search, false);
+  });
+
+  test('detects Ref Search from file-based key', () => {
+    const gsdDir = path.join(tmpDir, '.gsd');
+    fs.mkdirSync(gsdDir, { recursive: true });
+    fs.writeFileSync(path.join(gsdDir, 'ref_api_key'), 'test-key', 'utf-8');
+
+    const result = runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir, REF_API_KEY: '' });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.ref_search, true);
+  });
+
+  test('detects Perplexity from env var', () => {
+    const result = runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir, PERPLEXITY_API_KEY: 'test-key' });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.perplexity, true);
+  });
+
+  test('perplexity is false when env var absent and no key file', () => {
+    const result = runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir, PERPLEXITY_API_KEY: '' });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.perplexity, false);
+  });
+
+  test('detects Perplexity from file-based key', () => {
+    const gsdDir = path.join(tmpDir, '.gsd');
+    fs.mkdirSync(gsdDir, { recursive: true });
+    fs.writeFileSync(path.join(gsdDir, 'perplexity_api_key'), 'test-key', 'utf-8');
+
+    const result = runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir, PERPLEXITY_API_KEY: '' });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.perplexity, true);
+  });
+
+  test('detects Jina from env var', () => {
+    const result = runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir, JINA_API_KEY: 'test-key' });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.jina, true);
+  });
+
+  test('jina is false when env var absent and no key file', () => {
+    const result = runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir, JINA_API_KEY: '' });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.jina, false);
+  });
+
+  test('detects Jina from file-based key', () => {
+    const gsdDir = path.join(tmpDir, '.gsd');
+    fs.mkdirSync(gsdDir, { recursive: true });
+    fs.writeFileSync(path.join(gsdDir, 'jina_api_key'), 'test-key', 'utf-8');
+
+    const result = runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir, JINA_API_KEY: '' });
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.jina, true);
   });
 
   test('merges user defaults from defaults.json', () => {
@@ -929,7 +1086,7 @@ describe('config-set/config-get context', () => {
   });
 
   test('all three context profile files exist', () => {
-    const contextsDir = path.join(__dirname, '..', 'get-shit-done', 'contexts');
+    const contextsDir = path.join(__dirname, '..', 'gsd-core', 'contexts');
     assert.ok(fs.existsSync(path.join(contextsDir, 'dev.md')), 'dev.md should exist');
     assert.ok(fs.existsSync(path.join(contextsDir, 'research.md')), 'research.md should exist');
     assert.ok(fs.existsSync(path.join(contextsDir, 'review.md')), 'review.md should exist');
@@ -972,5 +1129,292 @@ describe('config-path command (#2282)', () => {
     const configPath = pathResult.output.trim();
     const configContent = JSON.parse(require('fs').readFileSync(configPath, 'utf-8'));
     assert.strictEqual(configContent.model_profile, 'quality', 'config-path should point to the file config-set wrote');
+  });
+});
+
+// ─── config-set prototype-pollution guard (#663) ─────────────────────────────
+
+describe('config-set prototype-pollution guard (#663)', () => {
+  let tmpDir;
+
+  beforeEach(async () => {
+    tmpDir = createTempProject();
+    // Initialise config so there is a config.json to write to. Retry + assert
+    // so a transient config-ensure-section child failure under scoped-lane load
+    // cannot leave config.json absent (#770).
+    await ensureConfigReady(tmpDir);
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('rejects __proto__ key segment and does not pollute Object.prototype', () => {
+    const result = runGsdTools('config-set __proto__.polluted true', tmpDir);
+
+    assert.strictEqual(result.success, false, `Expected failure but got: ${result.output}`);
+
+    // No prototype pollution.
+    assert.strictEqual(({}).polluted, undefined, '__proto__ pollution: {}.polluted should be undefined');
+    assert.strictEqual(Object.prototype.polluted, undefined, '__proto__ pollution: Object.prototype.polluted should be undefined');
+
+    // Confirm .planning/config.json does not have a 'polluted' property at any level.
+    const config = readConfig(tmpDir);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(config, 'polluted'), false,
+      'config.json root must not gain a "polluted" key');
+  });
+
+  test('rejects constructor.prototype key and does not pollute Object.prototype', () => {
+    const result = runGsdTools('config-set constructor.prototype.polluted2 true', tmpDir);
+
+    assert.strictEqual(result.success, false, `Expected failure but got: ${result.output}`);
+
+    assert.strictEqual(({}).polluted2, undefined, 'constructor chain pollution: {}.polluted2 should be undefined');
+    assert.strictEqual(Object.prototype.polluted2, undefined,
+      'constructor chain pollution: Object.prototype.polluted2 should be undefined');
+  });
+
+  test('rejects bare prototype key segment', () => {
+    const result = runGsdTools('config-set prototype.x true', tmpDir);
+
+    assert.strictEqual(result.success, false, `Expected failure but got: ${result.output}`);
+    assert.strictEqual(Object.prototype.x, undefined, 'prototype.x should not leak onto Object.prototype');
+  });
+
+  test('positive control: legitimate nested key workflow.research succeeds', () => {
+    const result = runGsdTools('config-set workflow.research true', tmpDir);
+
+    assert.ok(result.success, `Legitimate key rejected unexpectedly: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.workflow.research, true, 'workflow.research should be written to config.json');
+  });
+});
+
+// ─── config-set prototype-pollution guard via dynamic-key prefixes (alert #26) ─
+
+describe('config-set prototype-pollution guard via dynamic-key prefixes (alert #26)', () => {
+  let tmpDir;
+
+  beforeEach(async () => {
+    tmpDir = createTempProject();
+    // Initialise config so there is a config.json to write to. Retry + assert
+    // so a transient config-ensure-section child failure under scoped-lane load
+    // cannot leave config.json absent (#770).
+    await ensureConfigReady(tmpDir);
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('agent_skills.__proto__ is blocked by setConfigValue guard (not schema gate)', () => {
+    const result = runGsdTools('config-set agent_skills.__proto__ somevalue', tmpDir);
+
+    assert.strictEqual(result.success, false, `Expected failure but got: ${result.output}`);
+
+    // Must be the pollution guard, not the schema gate.
+    assert.ok(
+      result.error.includes('prototype pollution guard'),
+      `Expected "prototype pollution guard" in error, got: ${result.error}`,
+    );
+    // No schema-gate message.
+    assert.ok(
+      !result.error.includes('Unknown config key'),
+      `Should not hit schema gate, got: ${result.error}`,
+    );
+
+    // No prototype pollution occurred.
+    assert.strictEqual(({}).somevalue, undefined, 'agent_skills.__proto__: {}.somevalue should be undefined');
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(Object.prototype, 'somevalue'), false,
+      'agent_skills.__proto__: Object.prototype should not gain "somevalue"');
+  });
+
+  test('agent_skills.constructor is blocked by setConfigValue guard (not schema gate)', () => {
+    const result = runGsdTools('config-set agent_skills.constructor somevalue', tmpDir);
+
+    assert.strictEqual(result.success, false, `Expected failure but got: ${result.output}`);
+
+    assert.ok(
+      result.error.includes('prototype pollution guard'),
+      `Expected "prototype pollution guard" in error, got: ${result.error}`,
+    );
+    assert.ok(
+      !result.error.includes('Unknown config key'),
+      `Should not hit schema gate, got: ${result.error}`,
+    );
+
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(Object.prototype, 'somevalue'), false,
+      'agent_skills.constructor: Object.prototype should not gain "somevalue"');
+  });
+
+  test('agent_skills.prototype is blocked by setConfigValue guard (not schema gate)', () => {
+    const result = runGsdTools('config-set agent_skills.prototype somevalue', tmpDir);
+
+    assert.strictEqual(result.success, false, `Expected failure but got: ${result.output}`);
+
+    assert.ok(
+      result.error.includes('prototype pollution guard'),
+      `Expected "prototype pollution guard" in error, got: ${result.error}`,
+    );
+    assert.ok(
+      !result.error.includes('Unknown config key'),
+      `Should not hit schema gate, got: ${result.error}`,
+    );
+
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(Object.prototype, 'somevalue'), false,
+      'agent_skills.prototype: Object.prototype should not gain "somevalue"');
+  });
+
+  test('features.__proto__ is blocked by setConfigValue guard (not schema gate)', () => {
+    const result = runGsdTools('config-set features.__proto__ somevalue', tmpDir);
+
+    assert.strictEqual(result.success, false, `Expected failure but got: ${result.output}`);
+
+    assert.ok(
+      result.error.includes('prototype pollution guard'),
+      `Expected "prototype pollution guard" in error, got: ${result.error}`,
+    );
+    assert.ok(
+      !result.error.includes('Unknown config key'),
+      `Should not hit schema gate, got: ${result.error}`,
+    );
+
+    assert.strictEqual(({}).somevalue, undefined, 'features.__proto__: {}.somevalue should be undefined');
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(Object.prototype, 'somevalue'), false,
+      'features.__proto__: Object.prototype should not gain "somevalue"');
+  });
+
+  test('review.models.constructor is blocked by setConfigValue guard (not schema gate)', () => {
+    const result = runGsdTools('config-set review.models.constructor somevalue', tmpDir);
+
+    assert.strictEqual(result.success, false, `Expected failure but got: ${result.output}`);
+
+    assert.ok(
+      result.error.includes('prototype pollution guard'),
+      `Expected "prototype pollution guard" in error, got: ${result.error}`,
+    );
+    assert.ok(
+      !result.error.includes('Unknown config key'),
+      `Should not hit schema gate, got: ${result.error}`,
+    );
+
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(Object.prototype, 'somevalue'), false,
+      'review.models.constructor: Object.prototype should not gain "somevalue"');
+  });
+
+  test('positive control: agent_skills.sonnet-coder with valid value succeeds', () => {
+    const result = runGsdTools('config-set agent_skills.sonnet-coder true', tmpDir);
+
+    assert.ok(result.success, `Legitimate agent_skills key rejected unexpectedly: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.agent_skills['sonnet-coder'], true,
+      'agent_skills.sonnet-coder should be written to config.json');
+  });
+});
+
+// ─── plan_review.source_grounding + _authority (#22) ─────────────────────────
+
+describe('plan_review.source_grounding and plan_review.source_grounding_authority (#22)', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+    runGsdTools('config-ensure-section', tmpDir, { HOME: tmpDir, USERPROFILE: tmpDir });
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  // (a) Default of plan_review.source_grounding is true
+  test('plan_review.source_grounding defaults to true when not set in config.json', () => {
+    const config = readConfig(tmpDir);
+    assert.strictEqual(
+      config.plan_review?.source_grounding,
+      true,
+      'plan_review.source_grounding must default to true'
+    );
+  });
+
+  // (b) Default of plan_review.source_grounding_authority is "grep"
+  test('plan_review.source_grounding_authority defaults to "grep" when not set in config.json', () => {
+    const config = readConfig(tmpDir);
+    assert.strictEqual(
+      config.plan_review?.source_grounding_authority,
+      'grep',
+      'plan_review.source_grounding_authority must default to "grep"'
+    );
+  });
+
+  // (c) Both keys are recognized as valid config keys
+  test('plan_review.source_grounding is a valid config key accepted by config-set', () => {
+    const result = runGsdTools('config-set plan_review.source_grounding false', tmpDir);
+    assert.ok(result.success, `config-set plan_review.source_grounding failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.plan_review.source_grounding, false);
+  });
+
+  test('plan_review.source_grounding_authority is a valid config key accepted by config-set', () => {
+    const result = runGsdTools('config-set plan_review.source_grounding_authority intel', tmpDir);
+    assert.ok(result.success, `config-set plan_review.source_grounding_authority failed: ${result.error}`);
+
+    const config = readConfig(tmpDir);
+    assert.strictEqual(config.plan_review.source_grounding_authority, 'intel');
+  });
+
+  // Enum positive: all valid authority values
+  test('plan_review.source_grounding_authority accepts all valid enum values', () => {
+    const validValues = ['grep', 'intel', 'treesitter', 'lsp', 'scip'];
+    for (const v of validValues) {
+      const result = runGsdTools(`config-set plan_review.source_grounding_authority ${v}`, tmpDir);
+      assert.ok(result.success, `config-set plan_review.source_grounding_authority ${v} failed: ${result.error}`);
+      const config = readConfig(tmpDir);
+      assert.strictEqual(config.plan_review.source_grounding_authority, v);
+    }
+  });
+
+  // (d) NEGATIVE MATRIX — invalid enum values are rejected
+  test('plan_review.source_grounding_authority rejects invalid value "bogus"', () => {
+    const result = runGsdTools('config-set plan_review.source_grounding_authority bogus', tmpDir);
+    assert.strictEqual(result.success, false, 'bogus should be rejected');
+    assert.ok(
+      result.error.includes('Invalid plan_review.source_grounding_authority'),
+      `Expected "Invalid plan_review.source_grounding_authority" in error: ${result.error}`
+    );
+  });
+
+  test('plan_review.source_grounding_authority rejects flag-looking value "--grep"', () => {
+    const result = runGsdTools(['config-set', 'plan_review.source_grounding_authority', '--grep'], tmpDir);
+    assert.strictEqual(result.success, false, '--grep should be rejected');
+    assert.ok(
+      result.error.includes('Invalid plan_review.source_grounding_authority'),
+      `Expected "Invalid plan_review.source_grounding_authority" in error: ${result.error}`
+    );
+  });
+
+  test('plan_review.source_grounding_authority rejects empty string', () => {
+    const result = runGsdTools(['config-set', 'plan_review.source_grounding_authority', ''], tmpDir);
+    assert.strictEqual(result.success, false, 'empty string should be rejected');
+  });
+
+  test('plan_review.source_grounding rejects non-boolean value "yes"', () => {
+    const result = runGsdTools('config-set plan_review.source_grounding yes', tmpDir);
+    assert.strictEqual(result.success, false, '"yes" should be rejected as non-boolean');
+    assert.ok(
+      result.error.includes('Invalid plan_review.source_grounding'),
+      `Expected "Invalid plan_review.source_grounding" in error: ${result.error}`
+    );
+  });
+
+  test('plan_review.source_grounding rejects numeric value 1', () => {
+    const result = runGsdTools('config-set plan_review.source_grounding 1', tmpDir);
+    assert.strictEqual(result.success, false, 'numeric 1 should be rejected as non-boolean');
+    assert.ok(
+      result.error.includes('Invalid plan_review.source_grounding'),
+      `Expected "Invalid plan_review.source_grounding" in error: ${result.error}`
+    );
   });
 });

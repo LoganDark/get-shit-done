@@ -44,7 +44,7 @@ function collectSourceFiles(dir) {
 }
 
 // Scan source dirs only — exclude tests/ which may contain intentional fixtures
-const sourceDirs = ['bin', 'scripts', 'hooks', path.join('get-shit-done', 'bin')].map(
+const sourceDirs = ['bin', 'scripts', 'hooks', path.join('gsd-core', 'bin')].map(
   d => path.join(repoRoot, d)
 );
 const sourceFiles = sourceDirs.flatMap(collectSourceFiles);
@@ -55,7 +55,7 @@ const sourceFiles = sourceDirs.flatMap(collectSourceFiles);
  * Scan files for a pattern, skipping comment lines.
  * Returns an array of human-readable failure strings.
  */
-function scanFiles(files, pattern, description) {
+function scanFiles(files, pattern, _description) {
   const failures = [];
   for (const file of files) {
     const content = fs.readFileSync(file, 'utf8');

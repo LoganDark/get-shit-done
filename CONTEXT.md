@@ -9,13 +9,13 @@
 ## Glossary — Domain modules and seams
 
 ### Milestone Module
-Module owning `milestone complete` (archive roadmap/requirements/phases, build MILESTONES.md entry, update STATE.md), `requirements mark-complete` (checkbox + table update with regex-global-state fix), and `phases clear`. Key behaviors: milestone-phase scoping (extract phases from ROADMAP.md milestone slice, support project-code-prefix dirs e.g. CK-01-name, exclude prior-milestone phases), milestone-archive layout (resolve phase dirs from `.planning/milestones/v*-phases/` when `.planning/phases/` absent), fenced-code-block boundary tracking in `extractCurrentMilestone`. Source of truth: `get-shit-done/bin/lib/milestone.cjs`; SDK surface: `sdk/src/query/milestone.ts` (query handlers for `milestone.complete`, `phases.archive`). SDK milestone runner (`GSD.run()`) lives in `sdk/src/index.ts` — discovers phases via `roadmapAnalyze`, runs each incomplete phase, emits `MilestoneStart`/`MilestoneComplete` events. Test consolidation: PR #3753 (10 files → 4).
+Module owning `milestone complete` (archive roadmap/requirements/phases, build MILESTONES.md entry, update STATE.md), `requirements mark-complete` (checkbox + table update with regex-global-state fix), and `phases clear`. Key behaviors: milestone-phase scoping (extract phases from ROADMAP.md milestone slice, support project-code-prefix dirs e.g. CK-01-name, exclude prior-milestone phases), milestone-archive layout (resolve phase dirs from `.planning/milestones/v*-phases/` when `.planning/phases/` absent), fenced-code-block boundary tracking in `extractCurrentMilestone`. Source of truth: `gsd-core/bin/lib/milestone.cjs` (query handlers for `milestone.complete`, `phases.archive`). Test consolidation: PR #3753 (10 files → 4). (The SDK milestone surface and `GSD.run()` milestone runner were retired with the SDK package per ADR-0174.)
 
 ### Dispatch Pipeline Module
-Module that composes Dispatch Policy Module, Query Execution Policy Module, and per-stage handlers (input-validation, plan, execution, result-builder, formatting, error-mapping, observability) into the end-to-end pipeline that produces a `QueryDispatchResult`. Entry point: `sdk/src/query/query-dispatch.ts`. Typed contract: `sdk/src/query/query-dispatch-contract.ts`.
+Module that composes Dispatch Policy Module, Query Execution Policy Module, and per-stage handlers (input-validation, plan, execution, result-builder, formatting, error-mapping, observability) into the end-to-end pipeline that produces a `QueryDispatchResult`. The SDK-era pipeline collapsed onto the Command Routing Hub per ADR-0174; current dispatch seam: `gsd-core/bin/lib/command-routing-hub.cjs` (see Command Routing Hub below).
 
 ### Phase Lifecycle Module
-Module owning phase create, rename, complete, remove, list, and plan-index operations, plus phase-dir prefix validation, STATE.md staleness detection, and auto-prune behaviour. Entry points: `get-shit-done/bin/lib/phase.cjs` (CJS surface) and `sdk/src/query/phase.ts` (SDK native query). Typed events: `GSDPhaseStartEvent`, `GSDPhaseStepStartEvent`, `GSDPhaseStepCompleteEvent`, `GSDPhaseCompleteEvent` (see `sdk/src/types.ts`). Phase execution is driven by `sdk/src/phase-runner.ts`; prompt construction by `sdk/src/phase-prompt.ts`.
+Module owning phase create, rename, complete, remove, list, and plan-index operations, plus phase-dir prefix validation, STATE.md staleness detection, and auto-prune behaviour. Entry point: `gsd-core/bin/lib/phase.cjs` (CJS surface). Typed phase events: `GSDPhaseStartEvent`, `GSDPhaseStepStartEvent`, `GSDPhaseStepCompleteEvent`, `GSDPhaseCompleteEvent`. (The SDK native-query surface, the `types.ts` event definitions, `phase-runner.ts`, and `phase-prompt.ts` were retired with the SDK package per ADR-0174.)
 
 ### Dispatch Policy Module
 Module owning dispatch error mapping, fallback policy, timeout classification, and CLI exit mapping contract.
@@ -27,9 +27,6 @@ Canonical error kind set:
 - `fallback_failure`
 - `validation_error`
 - `internal_error`
-
-### Sync Runtime Bridge Module
-SDK Module exposing `executeForCjs(input: RuntimeBridgeExecuteInput): RuntimeBridgeSyncResult` — a synchronous-friendly entry point on top of the async `QueryRuntimeBridge`. Enables the CJS dispatcher (`bin/gsd-tools.cjs` and per-family `*-command-router.cjs` files) to invoke SDK query handlers in-process — no subprocess hop — while preserving the synchronous contract that ~21 CJS test files and 100+ consumers depend on. Implementation uses `synckit` (Atomics.wait on a SharedArrayBuffer in a pooled Worker thread). First-call cost ~80ms (Worker startup + native bridge construction); steady-state ~0.1ms per call after the worker warms. Maps the async bridge's exceptions into a typed sync result `{ ok: true, data, exitCode: 0 } | { ok: false, exitCode, errorKind, errorDetails?, stderrLines }` aligned with the Dispatch Policy Module's error taxonomy from ADR-0001 (`unknown_command`, `native_failure`, `native_timeout`, `fallback_failure`, `validation_error`, `internal_error`). Subprocess fallback is disabled by design inside the sync bridge — unknown commands surface as `unknown_command` rather than spawning `gsd-sdk`. Source: `sdk/src/runtime-bridge-sync/index.ts` + `sdk/src/runtime-bridge-sync/worker.ts`.
 
 ### Command Definition Module
 Canonical command metadata Interface powering alias, catalog, and semantics generation.
@@ -44,7 +41,7 @@ Adapter Module that satisfies native query dispatch at the Dispatch Policy seam,
 Module owning projection from dispatch results/errors to CLI `{ exitCode, stdoutChunks, stderrLines }` output contract.
 
 ### STATE.md Document Module
-Shared CJS/SDK pure transform Module owning STATE.md parse, field extraction, field replacement, status normalization, and frontmatter reconstruction. It does not scan `.planning/phases` and does not own persistence or locking; phase/plan/summary counts arrive from inventory/progress Modules as inputs, and CJS/SDK read-modify-write paths remain Adapters. Source of truth: `sdk/src/query/state-document.ts`; CJS callers consume the generator-emitted `get-shit-done/bin/lib/state-document.generated.cjs` via the thin re-export at `get-shit-done/bin/lib/state-document.cjs`.
+Module owning STATE.md parse, field extraction, field replacement, status normalization, and frontmatter reconstruction. It does not scan `.planning/phases` and does not own persistence or locking; phase/plan/summary counts arrive from inventory/progress Modules as inputs, and read-modify-write paths remain Adapters. Source of truth: `gsd-core/bin/lib/state-document.cjs`.
 
 ### Query Execution Policy Module
 Module owning query transport routing policy projection (`preferNative`, fallback policy, workstream subprocess forcing) at execution seam.
@@ -59,61 +56,93 @@ Canonical command normalization and resolution Interface (`query-command-resolut
 Module owning command resolution, policy projection (`mutation`, `output_mode`), unknown-command diagnosis, and handler Adapter binding at one seam for query dispatch.
 
 ### Init Command Module
-SDK Module owning the `init.*` family of query handlers that compose atomic SDK queries into the flat JSON bundles consumed by init workflows (`/gsd-execute-phase`, `/gsd-plan-phase`, `/gsd-verify-work`, `/gsd-new-project`, `/gsd-manager`, `/gsd-progress`, `/gsd-resume`, etc.). Divided into two source files: `sdk/src/query/init.ts` (13 basic handlers plus `withProjectRoot` project-identity injection) and `sdk/src/query/init-complex.ts` (the 3 heavyweight handlers: `initNewProject`, `initProgress`, `initManager`). All handlers return `{ data: <flat JSON> }` aligned with the CJS `bin/lib/init.cjs` surface. Test seams: `sdk/src/query/init.test.ts` (basic handlers + withProjectRoot precedence), `sdk/src/query/init-complex.test.ts` (complex handlers + progress/manager precedence regression #2674 + workstream scoping regression #3196), `sdk/src/query/init-workstream-milestone-op.test.ts` (initMilestoneOp + roadmapAnalyze + resolveQueryRuntimeContext workstream fallback). CJS CLI surface tested in `tests/init.test.cjs` and `tests/init-manager.test.cjs` (includes cross-milestone dependency regression #2267).
-
-### CJS Command Router Adapter Module
-Compatibility Adapter Module for `gsd-tools.cjs` command families. Uses generated command metadata plus small argument shapers to route to CJS handlers, rather than calling SDK Command Topology directly. Preserves CJS compatibility startup while reducing hand-written router drift. Per-family migration to call the **Sync Runtime Bridge Module**'s `executeForCjs` in-process — eliminating the remaining parallel CJS handler implementations — is the active work of #3524 Phase 5; the primitive itself ships in #3555, with each canonical command family (`state.*`, `verify.*`, `init.*`, `phase.*`, `phases.*`, `validate.*`, `roadmap.*`, `frontmatter.*`, `config.*`) routing through `executeForCjs` in its own follow-up enhancement.
+Module owning the `init.*` family of query handlers that compose atomic queries into the flat JSON bundles consumed by init workflows (`/gsd-execute-phase`, `/gsd-plan-phase`, `/gsd-verify-work`, `/gsd-new-project`, `/gsd-manager`, `/gsd-progress`, `/gsd-resume`, etc.). Source of truth: `gsd-core/bin/lib/init.cjs` — the basic handlers (plus `withProjectRoot` project-identity injection) and the 3 heavyweight handlers (`initNewProject`, `initProgress`, `initManager`). All handlers return `{ data: <flat JSON> }`. Test seams: `tests/init.test.cjs` and `tests/init-manager.test.cjs` (cover withProjectRoot precedence, progress/manager precedence regression #2674, workstream scoping regression #3196, and cross-milestone dependency regression #2267). (The SDK `handlers/init/*.ts` sources and the `init*.test.ts` seams were retired with the SDK package per ADR-0174.)
 
 ### Command Routing Hub
-Single dispatch seam (`get-shit-done/bin/lib/command-routing-hub.cjs`) that centralizes mode selection (sdk vs cjs), the no-throw pure-result contract, and the closed 6-value `errorKind` enum for all CJS command family router adapters. Interface: `createHub({ mode, sdkLoader, cjsRegistry, manifest }) → hub`; `hub.dispatch({ family, subcommand, args, cwd, raw }) → Result` where `Result = { ok: true, data } | { ok: false, errorKind, message, details? }` and `errorKind ∈ { UnknownCommand, InvalidArgs, HandlerRefusal, HandlerFailure, SdkLoadFailed, SdkDispatchFailed }`. Mode is fixed at construction; hub never prints, never exits, never throws. No transparent fallback: SDK crash → `SdkDispatchFailed`, not CJS retry. Adapters call `createHub`, dispatch, then translate the pure Result to `output()`/`error()` calls. Proof-of-concept migration: `phase-command-router.cjs` (#3788). ADR: `docs/adr/0012-command-routing-hub.md`.
+Single dispatch seam (`gsd-core/bin/lib/command-routing-hub.cjs`) that centralizes CJS routing, the no-throw pure-result contract, typed error variants, and dispatch-event emission for all command family adapters. Interface: `createHub({ cjsRegistry, manifest, logger }) → hub`; `hub.dispatch({ family, subcommand, args, cwd, raw, parentTraceId? }) → Result` where `Result = { ok: true, data } | { ok: false, kind, ...typedPayload }` and `kind ∈ { UnknownCommand, InvalidArgs, HandlerRefusal, HandlerFailure }`. The Hub is single-runtime (no mode selection, no sdkLoader), never prints, never exits, never throws. Adapters call `createHub`, dispatch, then translate the pure Result to `output()`/`error()` calls. Source: `gsd-core/bin/lib/command-routing-hub.cjs`; ADR: `docs/adr/0174-retire-gsd-sdk-package-boundary.md`.
+
+### Runtime Source Layout Module
+Single-runtime seam layout for this repository after SDK retirement. Runtime execution paths live under `gsd-core/bin/lib/` and are grouped by seam concern (dispatch, manifest, handlers, runtime, observability, installer). ADR-0174 preserves the seam vocabulary and defines the canonical long-term shape as a seam-aligned TypeScript `src/` tree (`src/dispatch/`, `src/handlers/`, `src/errors/`, `src/manifest/`, `src/config/`, `src/state/`, `src/workstream/`, `src/runtime/`, `src/cli/`, `src/observability/`) compiled to CJS.
+
+### Runtime Launcher Module
+Canonical space-safe shell preamble (`gsd_run`) used by every workflow bash block to invoke the GSD runtime CLI. Resolves `gsd-core/bin/gsd-tools.cjs` via `node` when present, falls back to a `gsd-tools` binary on PATH, else errors. Single source of truth: `gsd-core/workflows/_runtime-launcher.snippet.sh`; propagated by `scripts/sync-runtime-launcher.cjs`; enforced by `tests/runtime-launcher-parity.test.cjs`. Replaced the retired unquoted `$GSD_SDK` variable (#373).
+
+### Dispatch Observability Module
+Module owning dispatch-event creation, redaction, and logger behavior for the Command Routing Hub. Core files: `gsd-core/bin/lib/observability/event.cjs`, `gsd-core/bin/lib/observability/logger.cjs`, `gsd-core/bin/lib/observability/redaction.cjs`. Contract: silent on success by default, structured JSON to stderr on error, and opt-in audit trail at `.planning/.gsd-trace.jsonl` via `GSD_AUDIT=1` or config (`audit.enabled`). Each dispatch carries a `traceId`; composed dispatches set `parentTraceId` for correlation.
 
 ### Query Pre-Project Config Policy Module
 Module policy that defines query-time behavior when `.planning/config.json` is absent: use built-in defaults for parity-sensitive query Interfaces, and emit parity-aligned empty model ids for pre-project model resolution surfaces.
 
 ### Configuration Module
-Shared CJS/SDK Module owning config load, legacy-key normalization, defaults merge, and explicit on-disk migration for `.planning/config.json`. Interface: `loadConfig(cwd) → MergedConfig` (pure read, never writes disk), `normalizeLegacyKeys(parsed) → { parsed, normalizations[] }` (idempotent, pure, returns the list of normalizations applied), `mergeDefaults(parsed) → MergedConfig` (deep-merge of parsed config over canonical defaults), `migrateOnDisk(cwd) → MigrationReport` (explicit, opt-in, called by the installer and by `gsd-tools migrate-config`). Invariants: never mutates disk inside `loadConfig`; legacy top-level keys (`branching_strategy`, `sub_repos`, `multiRepo`, `depth`) are normalized into their canonical nested locations in the returned value; defaults come from the shared `sdk/shared/config-defaults.manifest.json`; schema (`VALID_CONFIG_KEYS`, `RUNTIME_STATE_KEYS`, `DYNAMIC_KEY_PATTERNS`) comes from `sdk/shared/config-schema.manifest.json`. Source of truth: `sdk/src/configuration/index.ts`; CJS callers consume the generator-emitted `get-shit-done/bin/lib/configuration.generated.cjs` via the thin Adapters at `bin/lib/core.cjs:loadConfig` and `bin/lib/config-schema.cjs`. Eliminates the recurring #3523-class drift bug structurally.
+Module owning config load, legacy-key normalization, defaults merge, and explicit on-disk migration for `.planning/config.json`. Interface: `loadConfig(cwd) → MergedConfig` (pure read, never writes disk), `normalizeLegacyKeys(parsed) → { parsed, normalizations[] }` (idempotent, pure, returns the list of normalizations applied), `mergeDefaults(parsed) → MergedConfig` (deep-merge of parsed config over canonical defaults), `migrateOnDisk(cwd) → MigrationReport` (explicit, opt-in, called by the installer and by `gsd-tools migrate-config`). Invariants: never mutates disk inside `loadConfig`; legacy top-level keys (`branching_strategy`, `sub_repos`, `multiRepo`, `depth`) are normalized into their canonical nested locations in the returned value; defaults come from the shared `gsd-core/bin/shared/config-defaults.manifest.json`; schema (`VALID_CONFIG_KEYS`, `RUNTIME_STATE_KEYS`, `DYNAMIC_KEY_PATTERNS`) comes from `gsd-core/bin/shared/config-schema.manifest.json`. Source of truth: `gsd-core/bin/lib/configuration.cjs`, consumed via the thin Adapters at `bin/lib/core.cjs:loadConfig` and `bin/lib/config-schema.cjs`. Eliminates the recurring #3523-class drift bug structurally.
 
 ### Planning Workspace Module
 Module owning `.planning` path resolution, active workstream pointer policy (`session-scoped > shared`), pointer self-heal behavior, and planning lock semantics for workstream-aware execution.
 
 ### Workstream Inventory Module
-Shared CJS/SDK Module owning workstream directory discovery, per-workstream state projection, phase/plan/summary counting, roadmap-declared phase count, active marker projection, and active-workstream collision inputs. Command handlers render list/status/progress outputs from this inventory instead of rescanning `.planning/workstreams/*` directly. Source of truth for the pure projection is `sdk/src/workstream-inventory/builder.ts` (a Builder Module emitted to `get-shit-done/bin/lib/workstream-inventory-builder.generated.cjs` via the generator pattern); per-side Reader Adapters (`bin/lib/workstream-inventory.cjs` sync, `sdk/src/query/workstream-inventory.ts` async-ready) collect filesystem inputs and delegate projection to the Builder.
+Module owning workstream directory discovery, per-workstream state projection, phase/plan/summary counting, roadmap-declared phase count, active marker projection, and active-workstream collision inputs. Command handlers render list/status/progress outputs from this inventory instead of rescanning `.planning/workstreams/*` directly. Source of truth for the pure projection is `gsd-core/bin/lib/workstream-inventory-builder.cjs` (a Builder Module); the Reader Adapter `gsd-core/bin/lib/workstream-inventory.cjs` collects filesystem inputs and delegates projection to the Builder.
 
 ### Project-Root Resolution Module
-Shared CJS/SDK Module owning project-root resolution from any starting directory. Walks the ancestor chain (bounded by `FIND_PROJECT_ROOT_MAX_DEPTH = 10`) applying four heuristics in order: (0) own `.planning/` guard (#1362), (1) parent `.planning/config.json` `sub_repos` traversal, (2) legacy `multiRepo: true` boolean + ancestor `.git`, (3) `.git` heuristic with parent `.planning/`. Returns `startDir` when no ancestor qualifies. Sync `node:fs` I/O. Source of truth: `sdk/src/project-root/index.ts`; CJS callers consume the generator-emitted `get-shit-done/bin/lib/project-root.generated.cjs` via thin re-exports at `get-shit-done/bin/lib/core.cjs` and `sdk/src/query/helpers.ts`.
+Module owning project-root resolution from any starting directory. Walks the ancestor chain (bounded by `FIND_PROJECT_ROOT_MAX_DEPTH = 10`) applying four heuristics in order: (0) own `.planning/` guard (#1362), (1) parent `.planning/config.json` `sub_repos` traversal, (2) legacy `multiRepo: true` boolean + ancestor `.git`, (3) `.git` heuristic with parent `.planning/`. Returns `startDir` when no ancestor qualifies. Sync `node:fs` I/O. Source of truth: `gsd-core/bin/lib/project-root.cjs`; consumed via a thin re-export at `gsd-core/bin/lib/core.cjs`.
 
 ### Planning Path Projection Module
 SDK query Module owning projection from project/workstream context to concrete `.planning` paths. Policy precedence is `explicit workstream > env workstream > env project > root`. Invalid workspace context is a validation error at this seam rather than a silent fallback.
 
 ### Worktree Safety Policy Module
-CJS Module owning worktree lifecycle safety policy for the GSD orchestration layer. Interface: `resolveWorktreeContext(cwd, deps) → WorktreeContext` (linked-worktree root mapping), `parseWorktreePorcelain(output) → WorktreeEntry[]` (porcelain parser, skips detached HEAD), `planWorktreePrune(repoRoot, opts, deps) → PrunePlan` (metadata-prune plan, never destructive by default), `executeWorktreePrunePlan(plan, deps) → PruneResult` (executes prune; degrades gracefully on git timeout), `listLinkedWorktreePaths(repoRoot, deps) → LinkedPathsResult`, `inspectWorktreeHealth(repoRoot, opts, deps) → HealthResult` (orphan + stale detection), `snapshotWorktreeInventory(repoRoot, opts, deps) → InventoryResult`, `planWorktreeWaveCleanup(repoRoot, manifest) → CleanupPlan` (manifest-scoped, fail-closed), `executeWorktreeWaveCleanupPlan(plan, deps) → CleanupResult`. Source of truth: `get-shit-done/bin/lib/worktree-safety.cjs`. Timeout path: all git subprocess calls are bounded; callers receive `ok:false, reason:'git_timed_out'` rather than a thrown exception. Test anchor: `tests/worktree-safety.test.cjs`.
+CJS Module owning worktree lifecycle safety policy for the GSD orchestration layer. Interface: `resolveWorktreeContext(cwd, deps) → WorktreeContext` (linked-worktree root mapping), `parseWorktreePorcelain(output) → WorktreeEntry[]` (porcelain parser, skips detached HEAD), `planWorktreePrune(repoRoot, opts, deps) → PrunePlan` (metadata-prune plan, never destructive by default), `executeWorktreePrunePlan(plan, deps) → PruneResult` (executes prune; degrades gracefully on git timeout), `listLinkedWorktreePaths(repoRoot, deps) → LinkedPathsResult`, `inspectWorktreeHealth(repoRoot, opts, deps) → HealthResult` (orphan + stale detection), `snapshotWorktreeInventory(repoRoot, opts, deps) → InventoryResult`, `planWorktreeWaveCleanup(repoRoot, manifest) → CleanupPlan` (manifest-scoped, fail-closed), `executeWorktreeWaveCleanupPlan(plan, deps) → CleanupResult`. Source of truth: `gsd-core/bin/lib/worktree-safety.cjs`. Timeout path: all git subprocess calls are bounded; callers receive `ok:false, reason:'git_timed_out'` rather than a thrown exception. Test anchor: `tests/worktree-safety.test.cjs`.
 
 ### Worktree Lifecycle Module
-Workflow contract seam covering agent worktree lifecycle orchestration rules embedded in `get-shit-done/workflows/execute-phase.md`, `quick.md`, `execute-plan.md`, and `agents/gsd-executor.md`. Key invariants: `worktree_branch_check` uses `git reset --hard` (not `--soft`); HEAD attachment verified via `git symbolic-ref` before any reset; positive allow-list `^worktree-agent-*` enforced; `git update-ref` on protected refs is prohibited; cleanup is manifest-scoped (`WAVE_WORKTREE_MANIFEST`) not global-discovery-based; worktree spawning is sequential (one `run_in_background` at a time to avoid `config.lock` contention). Test anchor: `tests/worktree.test.cjs`.
+Workflow contract seam covering agent worktree lifecycle orchestration rules. The `worktree_branch_check` block lives in one canonical fragment (`gsd-core/references/worktree-branch-check.md`) that `execute-phase.md`, `quick.md`, `diagnose-issues.md`, and `execute-plan.md` embed at dispatch. Key invariants: `worktree_branch_check` is **verify-only and fail-closed** — the orchestrator owns worktree lifecycle and base recovery, so the sub-agent holds no state-correction primitives; HEAD attachment verified via `git symbolic-ref`; positive allow-list `^worktree-agent-*` enforced; `git update-ref` on protected refs is prohibited; on base mismatch the sub-agent halts with `exit 42` and surfaces to the orchestrator (#48); the orchestrator runs a cwd-drift guard at `execute_waves` entry that resolves the worktree root and refuses drift into an agent worktree (#48); cleanup is manifest-scoped (`WAVE_WORKTREE_MANIFEST`) not global-discovery-based; worktree spawning is sequential (one `run_in_background` at a time to avoid `config.lock` contention). Test anchor: `tests/worktree.test.cjs`.
 
 ### Worktree Root Resolution Adapter Module
 Adapter Module owning linked-worktree root mapping and metadata-prune policy (`git worktree prune` non-destructive default) for planning/workstream callers.
 
-### SDK Package Seam Module
-Module owning SDK-to-`get-shit-done-cc` compatibility policy: legacy asset discovery, install-layout probing, transition-only error messaging, and thin Adapter access for CJS-era assets that native SDK Modules have not replaced yet.
-
-### Runtime-Global Skills Policy Module
-Module owning runtime-aware global skills directory policy for SDK query surfaces. Resolves runtime-global skills bases/skill paths from runtime + env precedence, renders display paths for warnings/manifests, and reports unsupported runtimes with no skills directory.
+### Runtime Name Policy Module
+Module owning runtime identity normalization at runtime-selection seams. Canonicalizes alias signals from env/config (`GSD_RUNTIME`, `.planning/config.json:runtime`) to supported runtime IDs so output emitters and query runtime gates stay consistent across naming variants (for example `codex-app`/`codex-cli` -> `codex`). Sources: `gsd-core/bin/lib/runtime-name-policy.cjs`, alias manifest `gsd-core/bin/shared/runtime-aliases.manifest.json`.
 
 ### Installer Migration Authoring Guard Module
 Module owning validation for Installer Migration Module records and planned actions. It enforces migration metadata, explicit install scopes, ownership evidence for destructive/config actions, and runtime contract citations for runtime config rewrites before a migration can enter planning or apply.
 
 ### Installer Module
-Primary installer for all runtimes. Single production file: `bin/install.js` (generated). Exports: `install(isGlobal, runtime[, configDir])` → typed result `{ runtime, configDir, settingsPath, settings, statuslineCommand, updateBannerCommand }`; `uninstall(isGlobal, runtime[, configDir])`; `installRuntimeArtifacts(runtime, configDir, scope, resolvedProfile)`; `uninstallRuntimeArtifacts(runtime, configDir, scope)`; `writeManifest(configDir, runtime)`. Runtime enum: `allRuntimes` (15 values: claude, antigravity, augment, cline, codebuddy, codex, copilot, cursor, gemini, hermes, kilo, opencode, qwen, trae, windsurf). Directory helpers: `getDirName(runtime)` → local dir name; `getGlobalDir(runtime[, explicitDir])` → global path (env-var–aware per runtime); `getConfigDirFromHome(runtime, isGlobal)` → shell-quoted path fragment. Runtime-specific helpers: `resolveKiloConfigPath(configDir)`, `configureKiloPermissions(isGlobal[, explicitDir])`. Layout-driven artifact copy/removal delegates to `get-shit-done/bin/lib/runtime-artifact-layout.cjs:resolveRuntimeArtifactLayout` (throws `TypeError` for unknown runtimes). Hermes uses nested `skills/gsd/<stem>/` layout (prefix: ''); other skill-runtimes use flat `skills/gsd-<stem>/` layout. See Skill Surface Budget Module and Runtime Artifact Layout Module.
+Primary installer for all runtimes. Single production file: `bin/install.js` (generated). Exports: `install(isGlobal, runtime[, configDir])` → typed result `{ runtime, configDir, settingsPath, settings, statuslineCommand, updateBannerCommand }`; `uninstall(isGlobal, runtime[, configDir])`; `installRuntimeArtifacts(runtime, configDir, scope, resolvedProfile)`; `uninstallRuntimeArtifacts(runtime, configDir, scope)`; `writeManifest(configDir, runtime)`. Runtime enum: `allRuntimes` (15 values: claude, antigravity, augment, cline, codebuddy, codex, copilot, cursor, gemini, hermes, kilo, opencode, qwen, trae, windsurf). Directory helpers: `getDirName(runtime)` → local dir name; `getConfigDirFromHome(runtime, isGlobal)` → shell-quoted path fragment. Per-runtime global config-dir resolution is delegated to `gsd-core/bin/lib/runtime-homes.cjs:getGlobalConfigDir(runtime[, explicitDir])` — the canonical, env-var–aware projection (`explicitDir` override + opencode/kilo `*_CONFIG` file-path precedence); the legacy in-installer `getGlobalDir`/`getOpencodeGlobalDir`/`getKiloGlobalDir` were retired into it (#56). Runtime-specific helpers: `resolveKiloConfigPath(configDir)`, `configureKiloPermissions(isGlobal[, explicitDir])`. Claude-specific permission helpers: `mergeClaudePermissions(settings)` — non-destructively appends GSD-owned allow/deny entries (see `GSD_CLAUDE_ALLOW_PERMISSIONS`, `GSD_CLAUDE_DENY_PERMISSIONS` constants) to a Claude Code settings object; called from `finishInstall` for `runtime === 'claude'` only; uninstall removes exactly these entries (#768). Layout-driven artifact copy/removal delegates to `gsd-core/bin/lib/runtime-artifact-layout.cjs:resolveRuntimeArtifactLayout` (throws `TypeError` for unknown runtimes). Hermes uses nested `skills/gsd/<stem>/` layout (prefix: ''); other skill-runtimes use flat `skills/gsd-<stem>/` layout. See Skill Surface Budget Module and Runtime Artifact Layout Module.
+
+### Package Identity Module [Planned]
+Single seam owning GSD's published-package coordinates so a repoint/rename is a one-line change instead of a tree-wide sweep. Source of truth is `package.json`; values are *derived*, not re-typed: `packageName` (`.name` → `@opengsd/get-shit-done-redux`), `binName` (`Object.keys(.bin)[0]` → `get-shit-done-redux`), `repoSlug` (parsed from `.repository.url` → `open-gsd/get-shit-done-redux`), plus derived `changelogRawUrl` and `manualInstallCommand({ scope, runtime })`. Generated `.cjs` per ADR-457 (generated-single-source); shipped under `gsd-core/bin/lib/`. Three consumer worlds: **Node** consumers `require()` it at runtime (worker, `check-latest-version.cjs`, `bin/install.js`); the **bash launcher** snippet receives the literal injected by `scripts/sync-runtime-launcher.cjs` at sync time; **prose/help** literals (`update.md`, installer help) carry a committed copy. A drift-guard lint (`scripts/lint-package-identity-drift.cjs`, sibling to `check:alias-drift`) fails CI on any raw package/repo literal outside `package.json`, the generated module, and the value-checked materialization sites — this is what keeps the seam real (`two adapters`, not one). Replaces the contradictory pair it consolidates: the runtime-broken `require('../package.json').name` in `hooks/gsd-check-update-worker.js` (#378, resolves to `undefined` post-install) and the hardcoded constant in `check-latest-version.cjs` (#2992). _Avoid_: "package name string", "the npm name" (when you mean the seam). See ADR-457 and Installer Module.
+
+### Update Context Module [Planned]
+Module owning install detection for `/gsd:update`. `resolveUpdateContext({ home, cwd, env, fs, preferredConfigDir, preferredRuntime })` is a pure, injected-fs port of update.md's former ~280-line `get_installed_version` bash; it reproduces the full precedence cascade — preferred-config-dir fast path, local-over-global probe with same-path dedup, env-var overrides (`CLAUDE_CONFIG_DIR`, `OPENCODE_CONFIG`, `KILO_CONFIG`, `XDG_CONFIG_HOME`, `CODEX_HOME`, …), and semver validation — and returns the 4-field contract `{ installedVersion, scope, runtime, gsdDir }` (scope ∈ `LOCAL`/`GLOBAL`/`UNKNOWN`). Antigravity is modelled first-class (its `.gemini/antigravity{,-ide,-cli}` dirs probe before bare `.gemini`; #3608). Exposed to the workflow as `gsd-tools update-context [--config-dir <d>] [--runtime <r>] --json`; `loadUpdateContext` wires the real fs. The workflow keeps only the execution_context path → `PREFERRED_*` derivation (the one input it alone knows). Source: `gsd-core/bin/lib/update-context.cjs`; tests: `tests/issue-498-update-context.test.cjs`. See Installer Module and Package Identity Module.
 
 ### Skill Surface Budget Module
-Module owning which skills and agents are written to runtime config directories at install time (Phase 1) and at runtime via cluster-level toggles (Phase 2). Phase 1: `get-shit-done/bin/lib/install-profiles.cjs` defines named profiles (`core`, `standard`, `full`), computes transitive closure over `requires:` frontmatter, stages skills/agents to runtime config dirs, and persists the chosen profile in a `.gsd-profile` marker. Profile resolution precedence: explicit `--profile=` flag > `.gsd-profile` marker > `full`. `--minimal`/`--core-only` are back-compat aliases for `--profile=core`. Phase 2: `get-shit-done/bin/lib/surface.cjs` implements the `/gsd:surface` slash command for cluster-level enable/disable without reinstall; cluster definitions live in `get-shit-done/bin/lib/clusters.cjs`; per-runtime state persists in `<runtimeConfigDir>/.gsd-surface.json` independent from the `.gsd-profile` marker. See ADR-0011.
+Module owning which skills and agents are written to runtime config directories at install time (Phase 1) and at runtime via cluster-level toggles (Phase 2). Phase 1: `gsd-core/bin/lib/install-profiles.cjs` defines named profiles (`core`, `standard`, `full`), computes transitive closure over `requires:` frontmatter, stages skills/agents to runtime config dirs, and persists the chosen profile in a `.gsd-profile` marker. Profile resolution precedence: explicit `--profile=` flag > `.gsd-profile` marker > `full`. `--minimal`/`--core-only` are back-compat aliases for `--profile=core`. Phase 2: `gsd-core/bin/lib/surface.cjs` implements the `/gsd:surface` slash command for cluster-level enable/disable without reinstall; cluster definitions live in `gsd-core/bin/lib/clusters.cjs`; per-runtime state persists in `<runtimeConfigDir>/.gsd-surface.json` independent from the `.gsd-profile` marker. See ADR-0011.
 
 ### Runtime Artifact Layout Module
-Module owning the per-runtime mapping from artifact kind to filesystem placement. ADR-3660 defines the typed `kinds` per runtime (`commands`, `agents`, `skills`) with destination subpath, prefix, and stage adapter (with per-runtime converters in `bin/install.js`: `convertClaudeCommandToClaudeSkill`, `…CodexSkill`, `…CopilotSkill`, `…AntigravitySkill`). Phase 1 applies this seam to the Runtime Surface Module (`surface.cjs:applySurface`). Phase 2 is planned to migrate install/uninstall in `bin/install.js` so all lifecycle sites iterate one shared layout table instead of re-encoding runtime layout logic. This design is intended to remove the #3659 class of omissions. Migrations remain under the Installer Migration Module (ADR-0008). See ADR-3660.
+Module owning the per-runtime mapping from artifact kind to filesystem placement. ADR-3660 defines the typed `kinds` per runtime (`commands`, `agents`, `skills`) with destination subpath, prefix, and stage adapter (with per-runtime converters in `bin/install.js`: `convertClaudeCommandToClaudeSkill`, `…CodexSkill`, `…CopilotSkill`, `…AntigravitySkill`). Phase 1 applies this seam to the Runtime Surface Module (`surface.cjs:applySurface`); as of #813, `applySurface` applies the same per-runtime skill-body path rewrites as `installRuntimeArtifacts` for `skills` kinds — re-surfacing no longer overwrites installed SKILL.md bodies with converter-default `~/.claude` paths. The shared accessor `getInstallExports` (exported from `runtime-artifact-layout.cjs`) is the single-source seam through which `surface.cjs` reaches `computePathPrefix` and `applyRuntimeContentRewritesInPlace`; the resolved `scope` (`'local'`|`'global'`) is now carried on the `Layout` object returned by `resolveRuntimeArtifactLayout` so `applySurface` derives the same `pathPrefix` (global `$HOME` form vs. absolute) as a fresh install. Phase 2 is planned to migrate install/uninstall in `bin/install.js` so all lifecycle sites iterate one shared layout table instead of re-encoding runtime layout logic. This design is intended to remove the #3659 class of omissions. Migrations remain under the Installer Migration Module (ADR-0008). See ADR-3660.
+
+### Runtime Install Policy Module
+Projects a pure, typed install plan for a given runtime by composing artifact placements (Runtime Artifact Layout Module), command text (Shell Command Projection Module), and per-runtime config intentions — with no filesystem IO or format-specific serialization. Runtime-specific adapters consume the plan and execute concrete file mutations and config rendering. See ADR-58.
+
+### Runtime Config Adapter Registry
+Module owning the explicit per-runtime config-mutation dispatch table for the installer. `resolveRuntimeConfigIntent(runtime)` projects a typed config intent — `installSurface` (`settings-json` | `codex-toml` | `copilot-instructions` | `cline-rules` | `cursor-hooks-json` | `profile-marker-only`), `writesSharedSettings` (the `finishInstall` shared-settings write gate), and `finishPermissionWriter` (`opencode` | `kilo` | none) — that `bin/install.js` dispatches on instead of inline `runtime === '...'` branching. Owns adapter selection only: it performs no filesystem IO and does not execute config mutations (the install/finishInstall handlers and the per-runtime writers do that). Unknown runtimes fail loudly with a `TypeError`, guarded by an `Object.hasOwn` own-property check so prototype-chain keys (`__proto__`, `constructor`) also throw. Realizes the adapter-selection half of the Runtime Install Policy Module boundary. Source: `gsd-core/bin/lib/runtime-config-adapter-registry.cjs`. See ADR-58, #60.
+
+### Claude Code Plugin Manifest Module
+Module owning the projection of gsd-core's artifact surfaces (`commands`, `agents`, hooks) onto the Claude Code plugin contract (`.claude-plugin/plugin.json` + `hooks/hooks.json`) — the plugin-contract sibling of the Runtime Artifact Layout Module (which projects the same surfaces onto filesystem placements). Defined mapping: `name`=`binName` (drives the `/gsd-core:` command namespace), `repository`/`homepage`=`repoUrl` (Package Identity Module), `version`/`description`/`license` from `package.json` (`version` is required for `claude plugin validate --strict`), `commands`=`./commands/gsd/`, agents via Claude Code's default `agents/` discovery (the explicit string form is schema-rejected), `hooks`=`./hooks/hooks.json`. The hook projection carries ONLY the always-on subset of the Installer Module's Claude `settings.json` wiring (check-update, context-monitor, prompt-guard, read-guard, worktree-path-guard, read-injection-scanner) via `${CLAUDE_PLUGIN_ROOT}`; config-gated opt-in hooks are excluded because a static manifest cannot honor per-project config gates, and plugin-shipped agents cannot carry hook frontmatter (so all plugin-path hook wiring lives in hooks.json). `hooks.json` covers all seven Claude Code lifecycle events: SessionStart, PreToolUse, PostToolUse, SubagentStop, Stop, PreCompact (all wired to context-monitor for context-headroom awareness), and FileChanged (matcher: `config.json` → config-reload, injects `additionalContext` when `.planning/config.json` changes mid-session). Additive — the file-copy path (Runtime Artifact Layout / Install Policy / Installer Modules) is unchanged. Conformance is validated by `claude plugin validate --strict` plus the in-repo drift-guard `tests/issue-766-plugin-manifest.test.cjs`. _Avoid_: "the plugin API", "the plugin file" (when you mean the seam). See ADR-766 and Runtime Artifact Layout Module.
+
+### Gemini Extension Package
+The repo-root `gemini-extension.json` + `GEMINI.md` pair that projects gsd-core onto the Gemini CLI extension contract, enabling one-step lifecycle management via `gemini extensions install <git-url>` / `update` / `remove` (and `gemini extensions link <path>` for dev). The Gemini-CLI sibling of the Claude Code Plugin Manifest Module — same additive idea, different runtime package format. Defined mapping: `name`=`binName` (`gsd-core`; lowercase-dashes per Gemini's extension naming rule), `version` tracks `package.json` (Gemini's `gemini extensions update` keys off the manifest `version` field), `description` (required by the manifest schema), `contextFileName`=`GEMINI.md` (the extension's context payload, loaded into every Gemini session). Intentionally minimal: no `mcpServers` (gsd-core ships no MCP server). Slash-command / agent / hook projection into the extension (which would require committing the Gemini-format TOML/agent conversions the Installer Module produces at `--gemini` install time) is deferred — the manual `npx gsd-core --gemini` path remains the way to install the `/gsd:*` commands, and is unchanged (additive, no breaking change). Conformance is guarded by the in-repo drift test `tests/issue-775-gemini-extension.test.cjs` (manifest validity, `version`↔`package.json` parity, `contextFileName` existence, `files[]` publication). _Avoid_: "the Gemini plugin" (Gemini calls them extensions, not plugins). See #775, ADR-766, Claude Code Plugin Manifest Module, and Runtime Artifact Layout Module.
 
 ### Knowledge Graph Module
-Module owning the graphify integration: config gate (`isGraphifyEnabled`), disabled response (`disabledResponse`), subprocess helper (`execGraphify`, typed `GRAPHIFY_REASON` enum), presence detection (`checkGraphifyInstalled`), version checking (`checkGraphifyVersion`), query surface (`graphifyQuery` — BFS seed-expand + budget trim), status surface (`graphifyStatus` — node/edge counts, mtime staleness, commit-staleness tri-state via `built_at_commit`/`commits_behind`/`commit_stale`), diff surface (`graphifyDiff` — added/removed/changed nodes+edges), build pre-flight (`graphifyBuild`), snapshot management (`writeSnapshot`). Reads `.planning/config.json:graphify.enabled` as config gate; writes to `.planning/graphs/`. Auto-update hook (`hooks/gsd-graphify-update.sh`) triggers a detached background rebuild after HEAD-advancing git operations on the default branch when `graphify.auto_update=true`. Status file `.planning/graphs/.last-build-status.json` carries `{ ts, status, exit_code, duration_ms, head_at_build, graphify_version }`. Graph IR uses `nodes[]`, `edges[]` (or `links[]` for graphify ≥0.7 compat), `hyperedges[]`, `built_at_commit`. `commit_stale` is tri-state: `false` (known fresh), `true` (stale), `null` (unknown — no git or pre-v0.7 graph). Source: `get-shit-done/bin/lib/graphify.cjs`. Skill: `commands/gsd/graphify.md`.
+Module owning the graphify integration: config gate (`isGraphifyEnabled`), disabled response (`disabledResponse`), subprocess helper (`execGraphify`, typed `GRAPHIFY_REASON` enum), presence detection (`checkGraphifyInstalled`), version checking (`checkGraphifyVersion`), query surface (`graphifyQuery` — BFS seed-expand + budget trim), status surface (`graphifyStatus` — node/edge counts, mtime staleness, commit-staleness tri-state via `built_at_commit`/`commits_behind`/`commit_stale`), diff surface (`graphifyDiff` — added/removed/changed nodes+edges), build pre-flight (`graphifyBuild`), snapshot management (`writeSnapshot`). Reads `.planning/config.json:graphify.enabled` as config gate; writes to `.planning/graphs/`. Auto-update hook (`hooks/gsd-graphify-update.sh`) triggers a detached background rebuild after HEAD-advancing git operations on the default branch when `graphify.auto_update=true`. Status file `.planning/graphs/.last-build-status.json` carries `{ ts, status, exit_code, duration_ms, head_at_build, graphify_version }`. Graph IR uses `nodes[]`, `edges[]` (or `links[]` for graphify ≥0.7 compat), `hyperedges[]`, `built_at_commit`. `commit_stale` is tri-state: `false` (known fresh), `true` (stale), `null` (unknown — no git or pre-v0.7 graph). Source: `gsd-core/bin/lib/graphify.cjs`. Skill: `commands/gsd/graphify.md`.
+
+### Research Module
+The GSD-RESEARCH capability behind an L2-hybrid seam: code owns cache + provider policy + package legitimacy; MCP owns the actual fetch. Reachable via `gsd-tools query research-plan|research-store|package-legitimacy`. Source: `src/research-{store,provider}.cts` + `src/package-legitimacy.cts` (generated to `gsd-core/bin/lib/*.cjs` per ADR-457). Replaces the prose provider-waterfall duplicated across the researcher agents and the pip-install `slopcheck` bolt-on.
+
+- `GSD-RESEARCH.MODULE.research-store=content-addressed cache; key=sha256(ecosystem+library+version+query+kind); getResearch->{hit,stale} never throws (mirrors graphify staleness); ttlForSource curated HIGH 30d|MED 7d|web LOW 1d; tiers: curated-doc kinds -> ~/.gsd/research-cache (cross-project), web/synthesis -> project .planning/research/.cache`
+- `GSD-RESEARCH.MODULE.research-provider=single source of truth PROVIDER_WATERFALL (docs Context7->Ref->Jina->websearch; web Exa->Tavily->Perplexity->Brave->websearch; scrape Firecrawl->Jina); planResearch returns cache-hits+fetch-plan; classifyConfidence stamps HIGH|MEDIUM|LOW by provider AUTHORITY + verification EVIDENCE (HIGH requires code-computed ground-truth corroboration e.g. legitimacyVerdict OK; provider authority alone caps at MEDIUM; SLOP caps at LOW); Firecrawl is scrape-only (not in docs/web discovery)`
+- `GSD-RESEARCH.MODULE.package-legitimacy=registry-API verdicts (npm/PyPI/crates.io injectable adapters) computed from thresholds {minAgeDays:30,minWeeklyDownloads:1000,requireRepo:true}; verdict OK|SUS|SLOP per package; slopcheck=optional adapter that can only escalate, never the install-or-degrade gate`
+- `GSD-RESEARCH.INTEGRATION.L2-hybrid=code owns cache+legitimacy+confidence+provider-pick (gsd-tools query research-plan/research-store/package-legitimacy); MCP owns the fetch; agent returns RESEARCH.md path, never raw fetches`
+- `GSD-RESEARCH.PROVIDER.availability=config flags brave_search/exa_search/firecrawl/tavily_search/ref_search/perplexity/jina (env <X>_API_KEY or ~/.gsd/<x>_api_key); context7/jina/websearch always available; planResearch falls through waterfall to websearch terminal`
+- `GSD-RESEARCH.CONTEXT-DISCIPLINE=less-context levers: subagent isolation + compact provider output + fetches-to-disk + cache-returns-digest; API clear_tool_uses/memory tool are the conceptual model, not a Claude Code harness knob`
+- `DEFECT.RESEARCH-PROVIDER-PROSE-DRIFT=provider waterfall duplicated across N researcher agent .md files drifts independently (META.RULE.brief-no-paraphrase); fix-forward=research-provider.cjs single source of truth + generated agents (#657)`
 
 ### MVP Mode
 Phase-level planning mode that frames work as a vertical slice (UI → API → DB) of one user-visible capability instead of horizontal layers. Resolved at workflow init via the precedence chain: `--mvp` CLI flag → ROADMAP.md `**Mode:** mvp` field → `workflow.mvp_mode` config → false. All-or-nothing per phase (PRD #2826 Q1). Surfaced as `MVP_MODE=true|false` to the planner, executor, verifier, and discovery surfaces (progress, stats, graphify). Canonical parser: `roadmap.cjs` `**Mode:**` field; canonical resolution chain documented in `workflows/plan-phase.md`. Concept index: `references/mvp-concepts.md`.
@@ -134,7 +163,22 @@ Predicate over a PLAN.md task: `tdd="true"` frontmatter AND `<behavior>` block n
 Per-task runtime gate in `/gsd-execute-phase` that, when both `MVP_MODE` and `TDD_MODE` are true, refuses to advance a Behavior-Adding Task until a failing-test commit (`test({phase}-{plan})`) exists for it. The `tdd_review_checkpoint` end-of-phase review escalates from advisory to blocking under the same condition. Documented contract: `references/execute-mvp-tdd.md`. Reserved escape hatch `--force-mvp-gate` is documented but not implemented.
 
 ### SPIDR Splitting
-Five-axis story decomposition discipline (**S**pike, **P**aths, **I**nterfaces, **D**ata, **R**ules) used by `/gsd-mvp-phase` when a User Story is too large for one phase. Full interactive flow per PRD #2826 Q3 (not a lightweight filter). Reference: `get-shit-done/references/spidr-splitting.md`.
+Five-axis story decomposition discipline (**S**pike, **P**aths, **I**nterfaces, **D**ata, **R**ules) used by `/gsd-mvp-phase` when a User Story is too large for one phase. Full interactive flow per PRD #2826 Q3 (not a lightweight filter). Reference: `gsd-core/references/spidr-splitting.md`.
+
+### Clock seam
+An injectable time abstraction accepted as an optional parameter by production code (`{ clock = Date } = {}`). Test code substitutes `node:test` `mock.timers` to control time deterministically without waiting for real OS scheduler events. Canonical pattern established by ADR 456 (`docs/adr/456-test-rigor-architecture.md`).
+
+### Deterministic scheduler
+Test-execution model in which all timing and concurrency outcomes are fully controlled by the test (via clock seam, explicit `await` ordering, or synchronous stepping) rather than by the OS thread scheduler. Opposed to real-race tests, which are non-deterministic on loaded CI runners.
+
+### Property-based test
+A test that generates many adversarial inputs automatically (via `fast-check`) and asserts that a stated invariant holds for all of them, rather than asserting on a fixed set of hand-chosen examples. Invariant categories used in this codebase: round-trip, monotonicity, boundary containment, idempotency. See `RULESET.TESTS.property-based-testing`.
+
+### Mutation testing / mutation score
+Stryker injects small code mutations (e.g., flipping a `>` to `>=`, deleting a `return` statement) and reruns the test suite for each. A mutation is "killed" if at least one test fails; "surviving" if all tests pass despite the mutation. Mutation score = killed / total. Score below 80 % on the changed scope blocks PR merge. See `RULESET.TESTS.mutation-score`.
+
+### ESLint harness
+The canonical lint infrastructure adopted in ADR 452 (`docs/adr/452-eslint-lint-harness.md`): ESLint flat config (`eslint.config.mjs`) with `typescript-eslint`, `eslint-plugin-n`, `eslint-plugin-no-only-tests`, and a local AST-rule plugin at `scripts/eslint-rules/`. Replaces the homegrown `scripts/lint-*.cjs` regex scanners. The three custom test-rigor rules (`local/no-source-grep`, `local/no-magic-sleep-in-tests`, `local/no-elapsed-assertion`) initially ship at `warn`; they become `error` after the cleanup sweep tracked at issue #453 merges.
 
 ---
 
@@ -155,8 +199,15 @@ Five-axis story decomposition discipline (**S**pike, **P**aths, **I**nterfaces, 
 `RULESET.TESTS.boundary-coverage.anti-pattern=test suites that pair budget:1_000_000 (trivially fits) with budget:1 (trivially overflows) and skip the boundary region; failure mode that shipped PR #3708 UNNEEDED_TRIM + FALSE_HARDFAIL regressions (commit 2df566ed, fixed bde1ae8f)`
 `LEARNING.prompt-budget.boundary-gap=PR #3708 commit 2df566ed reserved NOTE_RESERVE_TOKENS in pressure-threshold AND in minSet pre-check; both buggy paths only fire when baseTokens ∈ (effectiveBudget - NOTE_RESERVE_TOKENS, effectiveBudget]; original test suite used budgets far from that band so neither path was exercised; fix bde1ae8f confines NOTE_RESERVE accounting to post-trim assembly path only; future budget/limit code MUST add boundary fixtures per RULESET.TESTS.boundary-coverage.fixtures`
 
+`RULESET.TESTS.no-timing-assertion=do not assert on wall-clock elapsed time (Date.now() delta, performance.now(), process.hrtime() comparison); such assertions test the host machine not the SUT and flake on loaded CI runners; enforcement: local/no-elapsed-assertion ESLint rule (warn → error after #453); canonical replacement: clock-seam pattern with node:test mock.timers`
+`RULESET.TESTS.clock-seam=concurrency logic must accept an optional {clock=Date} parameter; tests control time via t.mock.timers.enable(['Date']) + t.mock.timers.setTime(0) + t.mock.timers.tick(N); real OS scheduler races are not a permitted test pattern after ADR 456 (2026-05-28); real-race tests are deleted once deterministic seam tests cover the same logical path; clock.cjs realClock adds nowIso() (→ new Date(this.now()).toISOString()) and today() (→ nowIso().split('T')[0]) so all date-stamping in state.cjs routes through the seam; subprocess time-pin adapter: set GSD_TEST_MODE=1 + GSD_NOW_MS=<epoch-ms> in runGsdTools env to pin the date written by the SUT without touching real wall-clock (issue #474)`
+`RULESET.TESTS.property-based-testing=modules implementing parsing / transformation / budget-limit / bijective contracts must include at least one fast-check (fc) property test asserting a domain invariant; invariant categories: round-trip, monotonicity, boundary-containment, idempotency; property tests live in *.test.cjs alongside unit tests; CI signal: Stryker mutation score below 80% blocks merge`
+`RULESET.TESTS.mutation-score=Stryker runs incremental (--since origin/next) on ubuntu-latest/Node24 CI leg; default threshold 80% killed/total; surviving mutants in scope block merge unless path is listed in stryker.config.mjs with documented reason; treat surviving mutant as a failing test specification`
+`RULESET.TESTS.delete-bad-tests=pass-always / vacuous-truth / source-grep / elapsed-time / real-race / permanent-allow-test-rule tests are DELETED and replaced with compliant tests in the same PR; not skipped, not commented out, not permanently exempted; replacement must cover the same logical path via typed-surface assertion or clock-seam pattern`
+`RULESET.TESTS.eslint-harness=ADR 452 (2026-05-28): ESLint flat config + typescript-eslint + eslint-plugin-n + eslint-plugin-no-only-tests + local plugin at scripts/eslint-rules/; replaces scripts/lint-*.cjs regex scanners; three test-rigor rules (local/no-source-grep, local/no-magic-sleep-in-tests, local/no-elapsed-assertion) ship at warn, promoted to error after #453 cleanup sweep merges`
+
 `RULESET.WORKFLOW_MARKDOWN.FENCES=preserve opening language fence when editing shell snippets in workflow markdown; malformed fence creates fresh CR threads (MD040)`
-`RULESET.WORKFLOW_SIZE_BUDGET=workflow-size-budget can fail otherwise-valid review fixes; XL workflows <=1800 lines or trim prose before final checks`
+`RULESET.WORKFLOW_SIZE_BUDGET=workflow-size-budget (#717) measures BYTES not lines; tiers XL<=90000 / LARGE<=54000 / DEFAULT<=38000 bytes, discuss-phase<30000; can fail otherwise-valid review fixes — trim prose or extract LAZILY-loaded content (eager @-imports don't reduce loaded context) before final checks`
 `RULESET.WORKFLOW_FILE_NAMES=workflow files use hyphens; <step name="..."> XML attributes must match (extract-learnings not extract_learnings); tests should pin exact hyphenated name`
 `RULESET.WORKFLOW_EXECUTION_CONTEXT=@-ref in commands/gsd/*.md must resolve to an existing file on disk; regression test in tests/bug-3135-capture-backlog-workflow.test.cjs; INVENTORY.md row + INVENTORY-MANIFEST.json families.workflows must stay in sync; "Invoked by" attribution must move when a flag absorbs a micro-skill`
 `RULESET.WORKFLOW_EXECUTE_END_TO_END=ADR-0002 standard for single-workflow commands is "Execute end-to-end." (no bolded **Follow the X workflow** fragments); flag-dispatch routing uses "execute the X workflow end-to-end." in routing bullets`
@@ -170,8 +221,6 @@ Five-axis story decomposition discipline (**S**pike, **P**aths, **I**nterfaces, 
 
 `RULESET.ADR-HEADER=every docs/adr/NNNN-*.md must open with - **Status:** Accepted|Proposed|Deprecated + - **Date:** YYYY-MM-DD immediately after title`
 `RULESET.MANIFEST-CANONICAL-KEY=docs/INVENTORY-MANIFEST.json — only families.workflows is canonical (read by tooling); top-level workflows key is stale, delete if present`
-
-`RULESET.SDK-ONLY-VERBS.exemption=any gsd-sdk query verb implemented only in SDK native registry (no gsd-tools.cjs mirror) must be added to NO_CJS_SUBPROCESS_REASON in sdk/src/golden/golden-policy.ts — otherwise golden-policy test fails treating verb as missing implementation`
 
 `RULESET.PR-SCOPE.one-concern-per-pr=split unrelated changes into separate PRs; cherry-pick doc changes to dedicated docs/ branch immediately, then force-push original to remove the commit`
 
@@ -193,7 +242,7 @@ Five-axis story decomposition discipline (**S**pike, **P**aths, **I**nterfaces, 
 ## Workspace seams (machine-oriented predicates)
 
 `RULESET.GH.AUTH.DEFAULT=source .envrc GITHUB_TOKEN before gh; exception=ambient allowed only when user explicitly says machine-only fallback`
-`RULESET.CODERABBIT.GUARD.OPEN_PRS=gh pr list --repo gsd-build/get-shit-done --author @me --state open; repeat near end because open PR set can change mid-run`
+`RULESET.CODERABBIT.GUARD.OPEN_PRS=gh pr list --repo open-gsd/gsd-core --author @me --state open; repeat near end because open PR set can change mid-run`
 `RULESET.CODERABBIT.GUARD.COMPLETE=required_checks_green && coderabbit_check_pass && graphQL(reviewThreads.unresolved_count)==0`
 `RULESET.CODERABBIT.GUARD.GRAPHQL=reviewThreads(first:100){nodes{id isResolved comments{nodes{author body path line originalLine url}}}}; use unresolved threads as authoritative, not badge text alone`
 `RULESET.CODERABBIT.GUARD.RERUN=after every push wait for CodeRabbit completion, then re-query unresolved threads; CodeRabbit can add new findings after earlier threads were resolved`
@@ -201,7 +250,6 @@ Five-axis story decomposition discipline (**S**pike, **P**aths, **I**nterfaces, 
 `RULESET.CODERABBIT.GUARD.SCOPE=if a new @me open PR appears during final list, include it in the same guard pass before declaring all-open-PRs complete`
 `RULESET.TESTS.CODERABBIT_FIX=prefer exported-function behavioral tests over source-grep; lint-no-source-grep rejects readFileSync source assertions without allow-test-rule`
 `RULESET.WORKFLOW_MARKDOWN.FENCES=when editing shell snippets inside workflow markdown, preserve the opening language fence; malformed fence can create fresh CodeRabbit threads`
-`RULESET.WORKFLOW_SIZE_BUDGET=workflow-size-budget can fail otherwise-valid review fixes; keep XL workflows <=1800 lines or trim prose in same PR before final checks`
 `RULESET.GEMINI.TOOLS.ask_user=Gemini CLI has no ask_user tool; filter both AskUserQuestion and lowercase ask_user from tools frontmatter and neutralize both names in Gemini body text`
 `RULESET.GEMINI.TEST_SENTINEL=convertClaudeToGeminiAgent regression should assert tools excludes ask_user, body excludes AskUserQuestion/ask_user, and Read still maps to read_file`
 
@@ -213,7 +261,7 @@ Five-axis story decomposition discipline (**S**pike, **P**aths, **I**nterfaces, 
 `PR.3267.POSTMORTEM.recovery=[issue#3270 created, label approved-enhancement applied, PR reopened, body includes "Closes #3270", label no-changelog applied]`
 
 `WORKTREE.SEAM.current=Worktree Safety Policy Module`
-`WORKTREE.SEAM.files=[get-shit-done/bin/lib/worktree-safety.cjs, get-shit-done/bin/lib/core.cjs]`
+`WORKTREE.SEAM.files=[gsd-core/bin/lib/worktree-safety.cjs, gsd-core/bin/lib/core.cjs]`
 `WORKTREE.SEAM.interface=[resolveWorktreeContext, parseWorktreePorcelain, planWorktreePrune, executeWorktreePrunePlan]`
 `WORKTREE.SEAM.default-prune-policy=metadata_prune_only (non-destructive)`
 `WORKTREE.SEAM.decision-1=retain non-destructive default; destructive path only as explicit future opt-in scaffold`
@@ -235,8 +283,8 @@ Five-axis story decomposition discipline (**S**pike, **P**aths, **I**nterfaces, 
 `PLANNING.PATH.PARITY.sdk-project-scope=.planning/<project> (never .planning/projects/<project>); mirror planning-workspace.cjs planningDir()`
 `PLANNING.PATH.SEAM.sdk=helpers.planningPaths delegates to workspacePlanningPaths + resolveWorkspaceContext; precedence explicit-ws > env-ws > env-project > root`
 `PLANNING.PATH.SEAM.init-handlers=[initExecutePhase, initPlanPhase, initPhaseOp, initMilestoneOp] consume helpers.planningPaths().planning (no direct relPlanningPath join)`
-`WORKSTREAM.NAME.POLICY.cjs-module=get-shit-done/bin/lib/workstream-name-policy.cjs owns toWorkstreamSlug + active-name/path-segment validation`
-`WORKSTREAM.POINTER.SEAM.sdk-module=sdk/src/query/active-workstream-store.ts owns read/write self-heal for .planning/active-workstream`
+`WORKSTREAM.NAME.POLICY.cjs-module=gsd-core/bin/lib/workstream-name-policy.cjs owns toWorkstreamSlug + active-name/path-segment validation`
+`WORKSTREAM.POINTER.SEAM.cjs-module=gsd-core/bin/lib/active-workstream-store.cjs owns read/write self-heal for .planning/active-workstream`
 `CONFIG.SEAM.loadConfig-context=loadConfig(cwd,{workstream}) replaces env-mutation fallback; no temporary process.env GSD_WORKSTREAM rewrites`
 
 ---
@@ -253,10 +301,9 @@ Five-axis story decomposition discipline (**S**pike, **P**aths, **I**nterfaces, 
 `RELEASE-NOTES.STANDARD.heading-level=## for category, ### for subgroup (area), - for bullet`
 `RELEASE-NOTES.STANDARD.bullet-shape=**Bold user-visible change** — explanation of what was broken or what's new, leading with symptom not implementation. Trailing (#NNN) PR ref.`
 `RELEASE-NOTES.STANDARD.subgroups=phase-planning-state | workstream | query-dispatch-cli | code-review | install | capture | docs | architecture | security`
-`RELEASE-NOTES.STANDARD.footer.hotfix=Install/upgrade: \`npx get-shit-done-cc@latest\``
-`RELEASE-NOTES.STANDARD.footer.rc=Install for testing: \`npx get-shit-done-cc@next\` (per branch->dist-tag policy)`
-`RELEASE-NOTES.STANDARD.footer.canary=Install: \`npx get-shit-done-cc@canary\``
-`RELEASE-NOTES.STANDARD.footer.full-changelog=**Full Changelog**: https://github.com/gsd-build/get-shit-done/compare/<prev>...<this>`
+`RELEASE-NOTES.STANDARD.footer.hotfix=Install/upgrade: \`npx @opengsd/gsd-core@latest\``
+`RELEASE-NOTES.STANDARD.footer.rc=Install for testing: \`npx @opengsd/gsd-core@next\` (per branch->dist-tag policy)`
+`RELEASE-NOTES.STANDARD.footer.full-changelog=**Full Changelog**: https://github.com/open-gsd/gsd-core/compare/<prev>...<this>`
 `RELEASE-NOTES.STANDARD.intro=optional one-paragraph framing for RC/feature releases; omit for pure-fix hotfixes`
 
 `RELEASE-NOTES.SOURCE.commits=git log <prev-tag>..<this-tag> --pretty=format:'%s%n%n%b' --no-merges`
@@ -273,16 +320,15 @@ Five-axis story decomposition discipline (**S**pike, **P**aths, **I**nterfaces, 
 `RELEASE-NOTES.ANTI-PATTERN.implementation-first=do not lead bullet with file path or function name; lead with symptom/user-visible behavior`
 `RELEASE-NOTES.ANTI-PATTERN.risk-commentary=do not include "may break", "be careful", "test thoroughly" - per global CLAUDE.md no-risk-commentary rule`
 
-`RELEASE-NOTES.EXAMPLE.hotfix=v1.41.1 (https://github.com/gsd-build/get-shit-done/releases/tag/v1.41.1) - 14 fixes grouped by 6 subgroups`
-`RELEASE-NOTES.EXAMPLE.rc=v1.42.0-rc1 (https://github.com/gsd-build/get-shit-done/releases/tag/v1.42.0-rc1) - intro + Added/Changed/Fixed/Documentation taxonomy`
+`RELEASE-NOTES.EXAMPLE.hotfix=v1.41.1 (https://github.com/open-gsd/gsd-core/releases/tag/v1.41.1) - 14 fixes grouped by 6 subgroups`
+`RELEASE-NOTES.EXAMPLE.rc=v1.42.0-rc1 (https://github.com/open-gsd/gsd-core/releases/tag/v1.42.0-rc1) - intro + Added/Changed/Fixed/Documentation taxonomy`
 `RELEASE-NOTES.EXAMPLE.minor-auto-acceptable=v1.41.0 - kept auto-generated body; many small fixes with clean conventional-commit titles`
 
-`RELEASE-NOTES.TEMPLATE.hotfix=## Fixed\n\n### <subgroup>\n- **<bold change>** — <explanation>. (#<PR>)\n\n---\n\nInstall/upgrade: \`npx get-shit-done-cc@latest\`\n\n**Full Changelog**: <compare-url>`
-`RELEASE-NOTES.TEMPLATE.rc=<one-paragraph intro>\n\n## Added\n### <subgroup>\n- **<change>** — <explanation>. (#<PR>)\n\n## Changed\n### Architecture\n- **<refactor>** — <user-visible benefit>. (#<PR>)\n\n## Fixed\n### <subgroup>\n- **<fix>** — <explanation>. (#<PR>)\n\n## Documentation\n- **<docs change>** — <reason>. (#<PR>)\n\n---\n\nThis is a release candidate. Install for testing:\n\`\`\`bash\nnpx get-shit-done-cc@next\n\`\`\`\n\n**Full Changelog**: <compare-url>`
+`RELEASE-NOTES.TEMPLATE.hotfix=## Fixed\n\n### <subgroup>\n- **<bold change>** — <explanation>. (#<PR>)\n\n---\n\nInstall/upgrade: \`npx @opengsd/gsd-core@latest\`\n\n**Full Changelog**: <compare-url>`
+`RELEASE-NOTES.TEMPLATE.rc=<one-paragraph intro>\n\n## Added\n### <subgroup>\n- **<change>** — <explanation>. (#<PR>)\n\n## Changed\n### Architecture\n- **<refactor>** — <user-visible benefit>. (#<PR>)\n\n## Fixed\n### <subgroup>\n- **<fix>** — <explanation>. (#<PR>)\n\n## Documentation\n- **<docs change>** — <reason>. (#<PR>)\n\n---\n\nThis is a release candidate. Install for testing:\n\`\`\`bash\nnpx @opengsd/gsd-core@next\n\`\`\`\n\n**Full Changelog**: <compare-url>`
 
-`RELEASE-NOTES.RELEASE-STREAM.dev-branch=canary dist-tag (only); install via @canary`
 `RELEASE-NOTES.RELEASE-STREAM.main-branch=next (RCs) + latest (stable); install via @next or @latest`
-`RELEASE-NOTES.RELEASE-STREAM.rule=streams do not mix; do not document @canary install in RC notes or @next in canary notes`
+`RELEASE-NOTES.RELEASE-STREAM.rule=streams do not mix; do not document @next in hotfix/stable notes`
 
 ---
 
@@ -301,7 +347,7 @@ Five-axis story decomposition discipline (**S**pike, **P**aths, **I**nterfaces, 
 `PRED.k320.types=Added|Changed|Deprecated|Removed|Fixed|Security`
 `PRED.k320.opt-out-label=no-changelog`
 `PRED.k320.ci-enforcement=scripts/changeset/lint.cjs`
-`PRED.k320.ci-paths-monitored=bin/ get-shit-done/ agents/ commands/ hooks/ sdk/src/`
+`PRED.k320.ci-paths-monitored=bin/ gsd-core/ agents/ commands/ docs/ hooks/ tests/ scripts/`
 `PRED.k320.recovery=open Removed-typed cleanup PR deleting only the redundant row`
 `PRED.k320.evidence=PR #3302 merge-conflict against #3308 CHANGELOG.md row 2026-05-09`
 
@@ -398,15 +444,9 @@ Five-axis story decomposition discipline (**S**pike, **P**aths, **I**nterfaces, 
 `DEFECT.SCOPE.window=PRs #3306..#3325 + sibling fixes #3240/#3242/#3245/#3257/#3261/#3267/#3286/#3287`
 `DEFECT.FORMAT=class.sub-key=value | classes are greppable; each class carries detect / fix / anchor sub-keys when applicable`
 
-`DEFECT.PORT-DRIFT.cjs-sdk.symptom=SDK port (sdk/src/query/*.ts) cites bin/lib/*.cjs source in docstring; CJS gets a fix or new constant; SDK lags silently`
-`DEFECT.PORT-DRIFT.cjs-sdk.examples=#3317 (skills missing from SDK GSD_MANAGED_DIRS), #3240 (extractFrontmatter anchor), #3226 (phase.add --dry-run), #3243 (cjs dotted canonical), #3229 (model catalog source-of-truth)`
-`DEFECT.PORT-DRIFT.cjs-sdk.detect=grep canonical constant in CJS, then in SDK; if both present compare values; if only CJS present treat as port-gap until proven intentional`
-`DEFECT.PORT-DRIFT.cjs-sdk.fix-forward=add SDK-side behavioral test mirroring the CJS test; or extract shared JSON/TS module if both runtimes can consume it`
-`DEFECT.PORT-DRIFT.cjs-sdk.anchor=tests/config-schema-sdk-parity.test.cjs is the canonical pattern — replicate per port-pair`
-
-`DEFECT.REMOVED-BUT-NEEDED.symptom=file/key removed because "scoped under sdk/" or "no longer used" without verifying every consumer (workflows, docs, manifests, npm scripts)`
+`DEFECT.REMOVED-BUT-NEEDED.symptom=file/key removed because "no longer used" without verifying every consumer (workflows, docs, manifests, npm scripts)`
 `DEFECT.REMOVED-BUT-NEEDED.examples=#3316 root package-lock.json (root package.json declares deps; workflows use cache:'npm' + npm ci), e3b52c70 docs referenced removed /gsd-new-workspace`
-`DEFECT.REMOVED-BUT-NEEDED.detect=before deletion, grep filename across .github/workflows, get-shit-done/, docs/, package.json scripts, sdk/scripts; if any reference exists removal is incomplete`
+`DEFECT.REMOVED-BUT-NEEDED.detect=before deletion, grep filename across .github/workflows, gsd-core/, docs/, package.json scripts; if any reference exists removal is incomplete`
 `DEFECT.REMOVED-BUT-NEEDED.fix-forward=restore the file or update every consumer in the same commit; do not paper over with --no-package-lock or workflow workarounds that lose reproducibility`
 
 `DEFECT.STATE-TRAMPLE.symptom=state-mutation paths overwrite curated values when body-derived computation is narrower than what's stored in frontmatter`
@@ -440,7 +480,7 @@ Five-axis story decomposition discipline (**S**pike, **P**aths, **I**nterfaces, 
 `DEFECT.PROMPT-INJECTION-SCAN-COLLISION.detect=any new bare <system|assistant|human|user> tag in agents/*.md`
 `DEFECT.PROMPT-INJECTION-SCAN-COLLISION.fix-forward=hyphenate the tag (<human-check>, <assistant-prompt>) — scanner regex matches bare names only`
 
-`DEFECT.INVENTORY-DRIFT.symptom=new file added under get-shit-done/references/ or get-shit-done/workflows/ without updating docs/INVENTORY.md count + row AND docs/INVENTORY-MANIFEST.json`
+`DEFECT.INVENTORY-DRIFT.symptom=new file added under gsd-core/references/ or gsd-core/workflows/ without updating docs/INVENTORY.md count + row AND docs/INVENTORY-MANIFEST.json`
 `DEFECT.INVENTORY-DRIFT.examples=#3309 planner-human-verify-mode.md (caught by tests/inventory-counts.test.cjs + tests/inventory-manifest-sync.test.cjs)`
 `DEFECT.INVENTORY-DRIFT.detect=tests/inventory-* fails with "References (N shipped) disagrees with filesystem" or "New surfaces not in manifest"`
 `DEFECT.INVENTORY-DRIFT.fix-forward=update INVENTORY.md headline count + row entry + footnote count; run node scripts/gen-inventory-manifest.cjs --write to regen INVENTORY-MANIFEST.json; only families.workflows is canonical (top-level workflows key is stale)`
@@ -448,7 +488,7 @@ Five-axis story decomposition discipline (**S**pike, **P**aths, **I**nterfaces, 
 `DEFECT.AGENT-FILE-SIZE-CAP-BREACH.symptom=adding to agents/gsd-planner.md (or other large agent files) exceeds the 45K char extraction-evidence threshold`
 `DEFECT.AGENT-FILE-SIZE-CAP-BREACH.state=gsd-planner.md is already 49,121 chars on main (over 45K); test fails on main; net-new content makes it strictly worse`
 `DEFECT.AGENT-FILE-SIZE-CAP-BREACH.detect=tests/planner-decomposition.test.cjs ("planner is under 45K chars (proves mode sections were extracted)") and tests/reachability-check.test.cjs ("file stays under 50000 char limit")`
-`DEFECT.AGENT-FILE-SIZE-CAP-BREACH.fix-forward=mirror MVP mode pattern — extract full rules to get-shit-done/references/planner-<mode>.md, leave a slim Detection section in the agent file with @-reference to the new file`
+`DEFECT.AGENT-FILE-SIZE-CAP-BREACH.fix-forward=mirror MVP mode pattern — extract full rules to gsd-core/references/planner-<mode>.md, leave a slim Detection section in the agent file with @-reference to the new file`
 
 `DEFECT.CHANGESET-PR-FIELD-DRIFT.symptom=.changeset/*.md frontmatter pr: value is the issue number, a guess made before PR opened, or a stale stacked-PR number`
 `DEFECT.CHANGESET-PR-FIELD-DRIFT.examples=#3316 (pr:3312 was the issue), #3325 (pr:3319 was a guess); already covered in CONTEXT.md L94 + L186 but recurs every cycle`
@@ -491,19 +531,28 @@ Five-axis story decomposition discipline (**S**pike, **P**aths, **I**nterfaces, 
 `DEFECT.DEFAULT-FLIP-DOCUMENTATION.fix-forward=template — "new default takes effect when .planning/config.json is rewritten (config-set, fresh project, regenerated config); existing artifacts continue to work; opt-back-in: gsd config-set <key> <old-value>"`
 
 `DEFECT.SOURCE-GREP-IN-NEW-TESTS.symptom=new test file uses readFileSync + .includes() / .match() against source code (CONTEXT.md L82); contradicts the test rule lint script`
-`DEFECT.SOURCE-GREP-IN-NEW-TESTS.detect=scripts/lint-no-source-grep.cjs (npm run lint:tests) fails with line-number-precise violation; or test reads sdk/dist/* artifacts in CI where dist may not exist`
+`DEFECT.SOURCE-GREP-IN-NEW-TESTS.detect=scripts/lint-no-source-grep.cjs (npm run lint:tests) fails with line-number-precise violation`
 `DEFECT.SOURCE-GREP-IN-NEW-TESTS.fix-forward=replace with runGsdTools(...) behavioral test capturing JSON; if asserting agent .md content (which IS the runtime contract) add // allow-test-rule: source-text-is-the-product with one-line justification`
 
 `DEFECT.GENERATIVE-PRIORITY=these defect classes share a common root: parallel implementations diverge silently because no parity test enforces equality at the test layer`
-`DEFECT.GENERATIVE-FIX=for any new constant/array/parser shared between CJS and SDK (or between two workflow surfaces), the same commit MUST add a parity assertion that fails when the two diverge`
-`DEFECT.GENERATIVE-EXEMPLAR=tests/config-schema-sdk-parity.test.cjs (asserts SDK VALID_CONFIG_KEYS == CJS VALID_CONFIG_KEYS); tests/bug-3298-phase-dir-prefix-drift-in-workflows.test.cjs (asserts every workflow surface uses expected_phase_dir)`
+`DEFECT.GENERATIVE-FIX=for any new constant/array/parser shared between two parallel surfaces (two workflow surfaces, or a generated artifact and its hand-authored source), the same commit MUST add a parity assertion that fails when the two diverge`
+`DEFECT.GENERATIVE-EXEMPLAR=tests/runtime-launcher-parity.test.cjs (asserts every workflow bash block uses the canonical gsd_run launcher — the in-repo pattern for enforcing equality across parallel surfaces)`
+
+`DEFECT.FRONTMATTER-SCALAR-BROAD-GREP.symptom=a YAML-frontmatter scalar (e.g. VERIFICATION.md status) read with grep "^key:" over the WHOLE markdown report instead of the frontmatter block; a key: line in the body (code block, copied artifact, example) returns extra matches that concatenate after cut|tr into a value matching no expected token, so a valid state is misrouted`
+`DEFECT.FRONTMATTER-SCALAR-BROAD-GREP.examples=#586/PR #650 ship.md verification gate — grep "^status:" also matched body status: lines, yielding passed+gaps_found+human_needed instead of passed and blocking a passed phase; the same broad-grep still lives in execute-phase.md (consolidation tracked by #651)`
+`DEFECT.FRONTMATTER-SCALAR-BROAD-GREP.detect=grep "^<key>:" on a *.md whose result is compared to exact tokens, with no frontmatter scoping and no -m1; one body line beginning <key>: is enough to break it`
+`DEFECT.FRONTMATTER-SCALAR-BROAD-GREP.fix-forward=scope to the leading frontmatter block and take the first match: sed -n '/^---$/,/^---$/p' "$f" | grep -m1 "^<key>:" | cut -d: -f2 | tr -d ' '; fix every parallel copy in the same change or consolidate behind one queryable seam (#651)`
+`DEFECT.TEST-SHELL-PIPELINE-NONPORTABLE.symptom=a test that parses a workflow bash block out of a *.md and runs it via execFileSync('bash',...) breaks on Windows two ways: the fence regex uses a literal \n after the bash fence that will not match CRLF and trips windows-test-parity-guard (fenceRegexLiteralNewline); and git-bash exists so a bash-presence probe is true, but an os.tmpdir() Windows path (C:\...) is un-globbable in bash so the pipeline returns empty and assertions fail`
+`DEFECT.TEST-SHELL-PIPELINE-NONPORTABLE.examples=#586/PR #650 tests/ship-586-verification-routing.test.cjs — the fence \n offender failed ubuntu-24/macos/coverage, then the Windows tmpdir-path glob failed full test (windows-latest,22) at fail 3; both were invisible to file-scoped gsd-test-both runs because the parity guard is only scanned by the full suite`
+`DEFECT.TEST-SHELL-PIPELINE-NONPORTABLE.detect=test does readFileSync(md).match for a bash fence with literal \n, OR execFileSync('bash',...) gated only on a bash-presence probe; also verifying a new test with a file-scoped run instead of the full suite hides repo-wide static guards`
+`DEFECT.TEST-SHELL-PIPELINE-NONPORTABLE.fix-forward=match the fence with \r?\n and normalize the captured block to LF; gate pipeline execution on process.platform !== 'win32' && hasBash since the extraction LOGIC is platform-independent and POSIX coverage suffices; run the full suite (or the parity/lint guards) before push when adding a test file`
 
 
 ---
 
 ## Shell Command Projection Module (expanded glossary entry, 2026-05-13)
 
-Module owning all OS-facing I/O for the tool: runtime-aware command-text rendering (hook commands, PATH action lines, shim scripts), subprocess dispatch (run-git, run-npm, run-tool, probeTty), and platform file I/O (platformWriteSync, platformReadSync, platformEnsureDir). Single seam for platform-conditional logic — one place to fix any shell or file write regression across Windows, macOS, and Linux. Lives in `get-shit-done/bin/lib/shell-command-projection.cjs`. See ADR-0009 (superseded "does not execute" constraint) and ADR-0010 (superseded File Operation Engine).
+Module owning all OS-facing I/O for the tool: runtime-aware command-text rendering (hook commands, PATH action lines, shim scripts), subprocess dispatch (run-git, run-npm, run-tool, probeTty), and platform file I/O (platformWriteSync, platformReadSync, platformEnsureDir). Single seam for platform-conditional logic — one place to fix any shell or file write regression across Windows, macOS, and Linux. Lives in `gsd-core/bin/lib/shell-command-projection.cjs`. See ADR-0009 (superseded "does not execute" constraint) and ADR-0010 (superseded File Operation Engine).
 
 Invariants:
 - Result shape: all run-* return `{ exitCode, stdout, stderr }`; never throw on non-zero exit code.
@@ -534,10 +583,10 @@ Migration plan: Phase 1 (#3465) seam additions complete; Phase 2 (#3466) targets
 `SESSION.2026-05-15.parallel-fix-dispatch=[#3542/PR #3546 prohibit git stash family in executor agents (shared refs/stash across worktrees); #3541/PR #3547 non-TTY resolution for installer prompt-user actions (default remove for SDK build artifacts, keep for skills/gsd-*/SKILL.md); #3545 filed for gsd-test-summary concurrent /tmp output collision; new predicates DEFECT.HOOK-OVER-ENFORCEMENT.read-tool-tracking, DEFECT.GSD-TEST-CONCURRENT-OUTPUT-COLLISION, DEFECT.SUBAGENT-LONG-RUNNING-BG-STALL, DEFECT.AGENT-RETIRED-SLASH-SYNTAX-DRIFT, PROC.PARALLEL-FIX-DISPATCH; agent-trust-but-verify caught /gsd-update retired-syntax comment slip in #3541 implementation before PR open]`
 `SESSION.2026-05-16=[multi-PR triage wave (#3577/3581/3640/3641/3642/3648/3649/3637/3639). Established global PreToolUse hook ~/.claude/hooks/test-memory-guard.sh denying new node/test spawns when sum(RSS of node|vitest|jest|...) >= 4 GiB on the 24 GB Mac OR when a same-runner process is already in argv[0] — hard deny via hookSpecificOutput.permissionDecision=deny. PR #3577 fix: revert config-ensure-section dispatch to CJS cmdConfigEnsureSection (SDK author wrote single-section semantics under a name whose legacy callers expect full-default config init); plus 3 SDK parity carve-outs (configNewProject defaults align with sdk/shared/config-defaults.manifest.json, return relative .planning/config.json path, drop quotes from Unknown config key, lead malformed-JSON error with "Failed to read config.json:"). PR #3649 fix: chunk node --test spawn at 28K argv ceiling (Windows CreateProcess lpCommandLine cap 32,767 was instantly aborting unchunked spawn of 546 paths). Chunking fix surfaced 14 pre-existing Windows-only test bugs (4010 pass / 14 fail; vs 0/0 before — entire suite was un-runnable on Windows). PRs #3639 + #3637 confirmed unable to stand alone (legitimately depend on Phase 6 scaffolding only present on feat/3575-enforcement-hardening) — user decision: cherry-pick into #3577 and close. Five other PRs each had ≤1 unresolved CR thread of the changeset-pr-number / null-vs-throw / implicit-Claude-runtime / docs-stale-guidance / hardcoded-tests-path family — all quick wins. New predicates: DEFECT.SDK-PORT-NAME-COLLISION, DEFECT.WINDOWS-ARGV-OVERFLOW, DEFECT.STACKED-PR-CANNOT-STAND-ALONE, DEFECT.CANARY-VERSION-LEAK, DEFECT.GSD-TEST-HOST-MID-RUN-DEATH, RULESET.HARNESS.test-memory-guard, RULESET.PR-FLOW.docker-before-push, RULESET.PR-FLOW.templates-mandatory]`
 
-`DEFECT.SDK-PORT-NAME-COLLISION.symptom=SDK author writes new handler with same canonical name as legacy CJS command but different positional-arg shape; Phase-N router migration silently rebinds CLI dispatch to the new SDK function and every legacy no-arg / wrong-arg caller errors out at the handler's own validation throw`
-`DEFECT.SDK-PORT-NAME-COLLISION.examples=#3577 config-ensure-section (legacy CJS = no-arg full-default init via ensureConfigFile→buildNewProjectConfig; new SDK configEnsureSection = single-section ensure requiring args[0]; all CLI callers pass no args; SDK throws "Usage: config-ensure-section <section>")`
-`DEFECT.SDK-PORT-NAME-COLLISION.detect=grep new-handler name in sdk/src/query/command-static-catalog-foundation.ts catalog → trace every CLI/test caller of the canonical name → if any caller's argv shape differs from the new SDK handler's args[0] expectation, the migration broke the legacy contract`
-`DEFECT.SDK-PORT-NAME-COLLISION.fix-forward=either (a) bind the catalog entry to a SDK handler whose body mirrors legacy semantics (e.g. configNewProject when no args), or (b) keep the dispatch case calling the CJS handler directly and remove the SDK-bridge attempt (precedent: 7d5dfa9d codex runtime carve-out). Whichever path, add a behavioral test that round-trips the legacy invocation shape to lock the contract`
+`DEFECT.NAME-COLLISION.symptom=a router migration rebinds CLI dispatch for a canonical command name to a handler with a different positional-arg shape; every legacy no-arg / wrong-arg caller then errors out at the new handler's own validation throw`
+`DEFECT.NAME-COLLISION.examples=#3577 config-ensure-section (legacy = no-arg full-default init via ensureConfigFile→buildNewProjectConfig; the rebound configEnsureSection = single-section ensure requiring args[0]; all CLI callers pass no args; handler throws "Usage: config-ensure-section <section>")`
+`DEFECT.NAME-COLLISION.detect=trace every CLI/test caller of the canonical name → if any caller's argv shape differs from the rebound handler's args[0] expectation, the migration broke the legacy contract`
+`DEFECT.NAME-COLLISION.fix-forward=either (a) bind the dispatch to a handler whose body mirrors legacy semantics (e.g. configNewProject when no args), or (b) keep the dispatch case calling the original handler directly (precedent: 7d5dfa9d codex runtime carve-out). Whichever path, add a behavioral test that round-trips the legacy invocation shape to lock the contract`
 `DEFECT.SDK-PORT-NAME-COLLISION.generative-tie=instance of DEFECT.GENERATIVE-PRIORITY — parity assertion at the test layer between CJS handler shape and SDK handler shape would have failed at PR open`
 
 `DEFECT.WINDOWS-ARGV-OVERFLOW.symptom=execFileSync(node, ['--test', ...N paths]) succeeds on Linux/macOS, instantly exits with code 1 and no test output on Windows when N×avg(path_len) exceeds 32,767 chars (CreateProcess lpCommandLine cap)`
@@ -553,11 +602,9 @@ Migration plan: Phase 1 (#3465) seam additions complete; Phase 2 (#3466) targets
 `DEFECT.STACKED-PR-CANNOT-STAND-ALONE.anti-pattern=blindly running git rebase --onto origin/main on the patch branch — produces "conflicts" that are really "the scaffolding doesn't exist yet"; resolving them means reinventing the upstream PR's contribution, which duplicates work and creates merge hazards. Recognize the shape early via cat-file probe before rebasing`
 
 `DEFECT.CANARY-VERSION-LEAK.symptom=package.json version on main carries a -canary.<N> suffix that per release policy belongs to the dev branch only; nothing publishable depends on the version string at runtime, but every consumer of the version metadata (release flow, install banners, statusline) sees the dev-channel label`
-`DEFECT.CANARY-VERSION-LEAK.examples=2026-05-16 audit found origin/main + origin/feat/3575-enforcement-hardening both at "version": "1.50.0-canary.0" in sdk/package.json AND root package.json; npm view @gsd-build/sdk versions returned ["0.1.0"] only, dist-tag latest=0.1.0, @1.50.0-canary.0 404 — confirms the string is metadata-only, never published. git log -S '"version": "1.50.0-canary.0"' origin/main blamed commit 2d32ad82 fix(plan-phase)... (#3206), a fix PR that accidentally carried the version bump from a dev-branch base`
-`DEFECT.CANARY-VERSION-LEAK.detect=jq -r .version package.json sdk/package.json on origin/main shows a -canary suffix; OR npm view <pkg> dist-tags shows latest != main's version`
+`DEFECT.CANARY-VERSION-LEAK.examples=2026-05-16 audit found origin/main + origin/feat/3575-enforcement-hardening both at "version": "1.50.0-canary.0" in sdk/package.json AND root package.json; npm view @opengsd/gsd-sdk versions returned ["0.1.0"] only, dist-tag latest=0.1.0, @1.50.0-canary.0 404 — confirms the string is metadata-only, never published. git log -S '"version": "1.50.0-canary.0"' origin/main blamed commit 2d32ad82 fix(plan-phase)... (#3206), a fix PR that accidentally carried the version bump from a dev-branch base`
+`DEFECT.CANARY-VERSION-LEAK.detect=jq -r .version package.json on origin/main shows a -canary suffix; OR npm view <pkg> dist-tags shows latest != main's version`
 `DEFECT.CANARY-VERSION-LEAK.fix-forward=open a chore/* PR against main that resets the version strings to the canonical pre-canary stable; rebase open PRs to pick it up; gate at PR open with a CI check that rejects -canary versions on PRs targeting main`
-`DEFECT.CANARY-VERSION-LEAK.cross-ref=RELEASE-NOTES.RELEASE-STREAM.dev-branch=canary dist-tag (only); this defect is the live counter-example to that rule`
-
 `DEFECT.GSD-TEST-HOST-MID-RUN-DEATH.symptom=pick_host succeeds at probe time (ssh -o ConnectTimeout=3 -o BatchMode=yes "$h" true); subsequent ssh "$h" 'docker run ...' hangs indefinitely because the chosen host went unreachable between probe and exec; gsd-test-summary buffers stderr until the wrapper exits, so the operator sees no progress at all`
 `DEFECT.GSD-TEST-HOST-MID-RUN-DEATH.examples=2026-05-16 redshirt probed up at 12:48 UTC, gsd-test-summary picked it, docker container spawned, then redshirt's ssh daemon stopped responding — banner-exchange timeout. Test stalled 20+ minutes with the wrapper's output file at 0 bytes`
 `DEFECT.GSD-TEST-HOST-MID-RUN-DEATH.detect=gsd-test-summary's task output file at /private/tmp/claude-*/tasks/<id>.output stays 0 bytes for >5 min after launch; ps shows the test still alive; ssh -o ConnectTimeout=5 <probed-host> true now times out`
@@ -574,8 +621,8 @@ Migration plan: Phase 1 (#3465) seam additions complete; Phase 2 (#3466) targets
 
 ## Executor failure classification (#3095 / PR #3490)
 
-`EXEC.CLASSIFY.handler=sdk/src/query/agent-failure-classifier.ts (registered in command-static-catalog-foundation.ts DECISION_ROUTING_STATIC_CATALOG and command-manifest.non-family.ts mutation:false outputMode:json)`
-`EXEC.CLASSIFY.workflow=get-shit-done/workflows/execute-phase.md step 7; class-distinct prompts (quota-to-wait-for-reset; classify-handoff-bug-to-spot-check; unknown-to-continue/stop)`
+`EXEC.CLASSIFY.handler=gsd-core/bin/lib/agent-command-router.cjs:classifyAgentFailure (registered via command-aliases.cjs; mutation:false outputMode:json)`
+`EXEC.CLASSIFY.workflow=gsd-core/workflows/execute-phase.md step 7; class-distinct prompts (quota-to-wait-for-reset; classify-handoff-bug-to-spot-check; unknown-to-continue/stop)`
 `EXEC.CLASSIFY.classes={class:'quota-exceeded'|'classify-handoff-bug'|'unknown-failure', sentinel?, retryAfterSeconds?}`
 `EXEC.CLASSIFY.sentinel-order=most specific first: 429 beats too-many-requests; quota beats resource_exhausted; case-insensitive; canonical sentinel value is lower-cased form`
 `EXEC.CLASSIFY.cross-runtime=Anthropic/CC: usage limit|rate limit|quota|429|retry-after; Copilot CLI: rate_limit (stem); Codex CLI: 429|usage_limit_reached|too many requests; Gemini CLI: RESOURCE_EXHAUSTED|exceeded your`
@@ -586,7 +633,7 @@ Migration plan: Phase 1 (#3465) seam additions complete; Phase 2 (#3466) targets
 `DEFECT.GSD-TEST-MIRROR-POISONED.symptom=gsd-test-summary --both exits docker=23 (rsync partial transfer) with mkstemp Permission denied on remote mirror files; mirror has root-owned artifacts from prior cold runs`
 `DEFECT.GSD-TEST-MIRROR-POISONED.detect=docker stderr shows rsync: [generator] delete_file: unlink(...) failed: Permission denied (13) OR [receiver] mkstemp ".gsd-*.<suffix>" failed`
 `DEFECT.GSD-TEST-MIRROR-POISONED.root-cause=container ran without --user; build:hooks wrote into bind-mount as root; chown-back-before-exec patch closes forward path but not legacy hosts`
-`DEFECT.GSD-TEST-MIRROR-POISONED.recovery=ssh <host> 'docker run --rm -v ~/gsd-mirror-get-shit-done:/work gsd-test:node22 chown -R <remote-uid>:<remote-gid> /work'; remote-uid is the SSH user's uid on the remote (1000 on holodeck, NOT local Mac 501)`
+`DEFECT.GSD-TEST-MIRROR-POISONED.recovery=ssh <host> 'docker run --rm -v ~/gsd-mirror-gsd-core:/work gsd-test:node22 chown -R <remote-uid>:<remote-gid> /work'; remote-uid is the SSH user's uid on the remote (1000 on holodeck, NOT local Mac 501)`
 `DEFECT.GSD-TEST-MIRROR-POISONED.upstream=trek-e/gsd-test-runner#1 — proposes self-healing init-time chown probe`
 
 `DEFECT.HOOK-OVER-ENFORCEMENT.read-tool-tracking=gh-templates-first PreToolUse hook tracks Read tool invocations specifically; Bash cat/head of the same file does NOT satisfy the hook; future-self must use Read tool from the first contact with template files`
@@ -594,7 +641,7 @@ Migration plan: Phase 1 (#3465) seam additions complete; Phase 2 (#3466) targets
 `DEFECT.GSD-TEST-CONCURRENT-OUTPUT-COLLISION.root-cause=gsd-test-summary lines 126-127 default LOCAL_OUT/DOCKER_OUT to fixed /tmp/gsd-test-{local,docker}.jsonl; concurrent line-buffered writers interleave bytes mid-multibyte → split UTF-8 sequence → decoder explodes on f.read()`
 `DEFECT.GSD-TEST-CONCURRENT-OUTPUT-COLLISION.detect=two gsd-test-summary --both runs in flight; UnicodeDecodeError in parse_events_from_string traceback; /tmp/gsd-test-*.jsonl size mismatch vs total events emitted`
 `DEFECT.GSD-TEST-CONCURRENT-OUTPUT-COLLISION.fix-forward=set per-invocation LOCAL_OUT=/tmp/gsd-test-<tag>-local.jsonl DOCKER_OUT=/tmp/gsd-test-<tag>-docker.jsonl env vars; or serialize the runs; upstream fix tracked in #3545 (default to tempfile.mkstemp + advisory flock)`
-`DEFECT.GSD-TEST-CONCURRENT-OUTPUT-COLLISION.upstream=gsd-build/get-shit-done#3545`
+`DEFECT.GSD-TEST-CONCURRENT-OUTPUT-COLLISION.upstream=open-gsd/gsd-core#3545`
 `DEFECT.SUBAGENT-LONG-RUNNING-BG-STALL.symptom=spawned sub-agent kicks off gsd-test-summary --both via Bash run_in_background, then stops on the harness "you will be notified" message; never receives the notification because cross-turn task-notifications are only delivered to the top-level orchestrator`
 `DEFECT.SUBAGENT-LONG-RUNNING-BG-STALL.detect=sub-agent returns prematurely with text like "I should wait for the notification per CLAUDE.md" and incomplete work in its worktree (commits absent, push absent, PR absent)`
 `DEFECT.SUBAGENT-LONG-RUNNING-BG-STALL.fix-forward=keep gsd-test-summary --both at the top-level orchestrator; sub-agents either run it foreground with timeout: 1500000 (25min) and block, OR delegate the test step back to the orchestrator (write commits + return); never have a sub-agent fire-and-await a backgrounded long task`
@@ -613,3 +660,63 @@ Migration plan: Phase 1 (#3465) seam additions complete; Phase 2 (#3466) targets
 `PROC.TRIAGE.routing-incoming=stale-bug-already-fixed to close as duplicate of originating issue + cite fix PR + first stable tag; release-publish-or-backport to ready-for-human; reporter-can-self-test to awaiting-retest`
 `PROC.TRIAGE.comment-shape=lead with "duplicate of #NNNN, fixed by PR #MMMM, in v1.X.Y"; show current code snippet proving bug-surface gone; give @latest and @next upgrade commands; close`
 `PROC.TRIAGE.no-duplicate-label=this repo has no duplicate label; framing lives in comment text + closing the issue`
+
+---
+
+## PR fix discipline — patterns observed 2026-05-23
+
+Full detail in `~/.claude/skills/gsd-pr-fix-discipline/SKILL.md`. AI agents MUST check this section before pushing to `open-gsd/gsd-core`.
+
+### INVENTORY / manifest drift
+
+- **Symptom:** `inventory-counts.test.cjs` fails — `"<dir> (N shipped)" disagrees with filesystem (N+1)`
+- **Affected this session:** #154, #156, #143, #155, #169
+- **Fix:** Add row to `docs/INVENTORY.md` CLI Modules table + increment headline count + `node scripts/gen-inventory-manifest.cjs --write`
+
+### Slash command two-tier confusion
+
+- **Symptom:** `tests/bug-2543-gsd-slash-namespace.test.cjs` or `tests/bug-3584-runtime-slash-emitters.test.cjs` fails
+- **Affected this session:** #154 (three passes), #164 (added the authoritative matrix)
+- **Fix:** Consult `## Slash-command form` section of this file before touching any `/gsd-` or `/gsd:` token — colon for `agents/`/`commands/`, hyphen for runtime emitters
+
+### Concurrency cancel-in-progress masking real CI state
+
+- **Symptom:** `gh pr checks` shows failures but the latest commit SHA's run was cancelled before Tests even started
+- **Affected this session:** #154, #136
+- **Fix:** `gh workflow run Tests --repo open-gsd/gsd-core --ref <branch>`; verify with `gh run list --branch <branch> --workflow Tests --limit 1 --json status,conclusion,headSha`
+
+### Missing changeset fragment
+
+- **Symptom:** `changeset-lint` fails with `fail_missing_fragment` (~5s)
+- **Affected this session:** #156, #143, #164
+- **Fix:** `node scripts/changeset/new.cjs --type <Type> --pr <N> --body "..."` or apply `no-changelog` label for doc-only PRs
+
+### Cross-platform Windows / Node 24 hazards
+
+- **Symptom:** Windows CI leg fails; Mac/Linux green — POSIX paths in `node -e`, hardcoded `.nvmrc` fixtures, 2000ms wall-clock budget flakes, `synckit` uncaught Worker exception
+- **Affected this session:** #157
+- **Fix:** Use `./package.json` not `$PWD/package.json`; write `.nvmrc` dynamically in `before()` hook; use 5000ms budget; wrap `getExecuteForCjs()` in `try/catch`
+
+### Sub-agent rubber-duck stall
+
+- **Symptom:** Sub-agent returns a question list and halts; no commits or push in the worktree
+- **Affected this session:** Multiple agents mid-session
+- **Fix:** Every sub-agent brief must include: `Skill rubber-duck is BANNED in this sub-agent. Convert to internal monologue and proceed.`
+
+### Stacked PR squash-merge breakage
+
+- **Symptom:** After base PR squash-merges, stacked PR shows conflicts or wrong diff; GitHub auto-retarget fails
+- **Affected this session:** #158 stacked on #156
+- **Fix:** `git rebase --onto main <old-base> <stacked-branch>` then force-push and `gh pr edit --base main`
+
+### `tee` pipe swallowing exit codes
+
+- **Symptom:** `gsd-test-summary --both 2>&1 | tee /tmp/log` returns `0` even when Docker reports failures
+- **Affected this session:** Session-wide risk
+- **Fix:** Run un-piped, or `set -o pipefail` before the pipe
+
+### Auto-merge disabled
+
+- **Symptom:** `gh pr merge --auto` returns `GraphQL: Auto merge is not allowed for this repository`
+- **Affected this session:** All stacked PRs
+- **Fix:** Merge manually by hand in dependency order once CI greens; `gh pr merge <N> --squash --repo open-gsd/gsd-core`

@@ -23,12 +23,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { cleanup } = require('./helpers.cjs');
 
 const ROOT = path.join(__dirname, '..');
 
 // Load the state.cjs module internals via the command router
 function requireStateCjs() {
-  return require(path.join(ROOT, 'get-shit-done', 'bin', 'lib', 'state.cjs'));
+  return require(path.join(ROOT, 'gsd-core', 'bin', 'lib', 'state.cjs'));
 }
 
 function makeTempPlanning(stateContent) {
@@ -105,7 +106,7 @@ describe('bug #3127: state.begin-phase idempotency guard', () => {
           'begin-phase reset Current Plan to 1 on a mid-flight phase — idempotency guard not applied');
       }
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -123,7 +124,7 @@ describe('bug #3127: state.begin-phase idempotency guard', () => {
         'begin-phase overwrote stopped_at narrative on a mid-flight phase',
       );
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -142,25 +143,37 @@ describe('bug #3127: state.begin-phase idempotency guard', () => {
           'begin-phase should set Current Plan to 1 on a fresh phase');
       }
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
-  test('begin-phase always updates Last Activity date (safe on resume)', () => {
+  test('begin-phase always updates Last Activity date (safe on resume, pinned via GSD_NOW_MS)', () => {
     const stateModule = requireStateCjs();
     const { cmdStateBeginPhase } = stateModule;
     if (!cmdStateBeginPhase) return;
     const dir = makeTempPlanning(MID_FLIGHT_STATE);
+
+    const PINNED_MS = Date.parse('2020-11-25T09:00:00.000Z');
+    const PINNED_DATE = '2020-11-25';
+    // Pin the in-process clock via env vars before calling the function directly.
+    const origTestMode = process.env.GSD_TEST_MODE;
+    const origNowMs = process.env.GSD_NOW_MS;
+    process.env.GSD_TEST_MODE = '1';
+    process.env.GSD_NOW_MS = String(PINNED_MS);
     try {
       cmdStateBeginPhase(dir, '5', 'test-phase', 8, false);
       const after = fs.readFileSync(path.join(dir, '.planning', 'STATE.md'), 'utf8');
-      const today = new Date().toISOString().split('T')[0];
       assert.ok(
-        after.includes(today),
-        'begin-phase must update Last Activity date even on resume (safe field)',
+        after.includes(PINNED_DATE),
+        `begin-phase must update Last Activity date to the pinned date ${PINNED_DATE} even on resume (safe field)`,
       );
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      // Restore env vars before cleanup to avoid leaking state to other tests.
+      if (origTestMode === undefined) delete process.env.GSD_TEST_MODE;
+      else process.env.GSD_TEST_MODE = origTestMode;
+      if (origNowMs === undefined) delete process.env.GSD_NOW_MS;
+      else process.env.GSD_NOW_MS = origNowMs;
+      cleanup(dir);
     }
   });
 });

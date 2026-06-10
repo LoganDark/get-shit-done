@@ -423,6 +423,61 @@ one-liner: Minimal summary
     assert.deepStrictEqual(output.requirements_completed, [], 'requirements_completed defaults to empty');
   });
 
+  test('reads requirements in snake_case form the tool itself emits (#628)', () => {
+    // Regression: the tool's JSON output key and the milestone-audit `--pick` both use the
+    // snake form `requirements_completed`, so operators naturally write that into SUMMARY
+    // frontmatter. The reader must accept it, not silently drop it to [].
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '01-foundation');
+    fs.mkdirSync(phaseDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(phaseDir, '01-01-SUMMARY.md'),
+      `---
+one-liner: Snake-keyed summary
+requirements_completed:
+  - REQ-1
+  - REQ-2
+---
+
+# Summary
+`
+    );
+
+    const result = runGsdTools('summary-extract .planning/phases/01-foundation/01-01-SUMMARY.md', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.deepStrictEqual(output.requirements_completed, ['REQ-1', 'REQ-2'],
+      'snake-case requirements_completed should be read, not dropped to []');
+  });
+
+  test('prefers kebab requirements-completed when both key forms are present (#628)', () => {
+    // kebab is the documented template form and must win the tolerance fallback.
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '01-foundation');
+    fs.mkdirSync(phaseDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(phaseDir, '01-01-SUMMARY.md'),
+      `---
+one-liner: Both key forms present
+requirements-completed:
+  - KEBAB-1
+requirements_completed:
+  - SNAKE-1
+---
+
+# Summary
+`
+    );
+
+    const result = runGsdTools('summary-extract .planning/phases/01-foundation/01-01-SUMMARY.md', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.deepStrictEqual(output.requirements_completed, ['KEBAB-1'],
+      'kebab key should take precedence over snake when both are present');
+  });
+
   test('parses key-decisions with rationale', () => {
     const phaseDir = path.join(tmpDir, '.planning', 'phases', '01-foundation');
     fs.mkdirSync(phaseDir, { recursive: true });
@@ -887,6 +942,24 @@ describe('current-timestamp command', () => {
     const output = JSON.parse(result.output);
     assert.match(output.timestamp, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/, 'default should be full ISO format');
   });
+
+  test('dispatches directly to CJS handler (no SDK bridge) to avoid Windows native crash path', () => {
+    const sourcePath = path.join(__dirname, '..', 'gsd-core', 'bin', 'gsd-tools.cjs');
+    const source = fs.readFileSync(sourcePath, 'utf8');
+    const match = source.match(/case 'current-timestamp':\s*\{[\s\S]*?\r?\n\s*break;\r?\n\s*\}/);
+
+    assert.ok(match, 'current-timestamp case block must exist in gsd-tools.cjs');
+
+    const block = match[0];
+    assert.ok(
+      !block.includes('_dispatchNonFamily('),
+      'current-timestamp must not route through SDK bridge'
+    );
+    assert.ok(
+      block.includes("commands.cmdCurrentTimestamp(args[1] || 'full', raw);"),
+      'current-timestamp must call the CJS handler directly'
+    );
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1116,7 +1189,10 @@ describe('resolve-model command', () => {
     assert.ok(output.model, 'should resolve a model');
   });
 
-  test('includes reasoning_effort when selected runtime supports it', () => {
+  // #443: resolve-model now emits unified `effort` instead of `reasoning_effort`.
+  // reasoning_effort was flavor-text (resolved but consumed by nobody); effort is
+  // the wired, config-driven universal effort string for all runtimes.
+  test('emits unified effort (not reasoning_effort) when runtime supports tiered effort', () => {
     fs.writeFileSync(path.join(tmpDir, '.planning', 'config.json'), JSON.stringify({
       model_profile: 'balanced',
       runtime: 'codex',
@@ -1126,12 +1202,16 @@ describe('resolve-model command', () => {
     assert.ok(result.success, `Command failed: ${result.error}`);
 
     const output = JSON.parse(result.output);
-    assert.strictEqual(output.model, 'gpt-5.4');
+    assert.strictEqual(output.model, 'gpt-5.5');
     assert.strictEqual(output.profile, 'balanced');
-    assert.strictEqual(output.reasoning_effort, 'xhigh');
+    // #443: effort is now the unified field (xhigh for gsd-planner heavy tier default)
+    assert.strictEqual(output.effort, 'xhigh');
+    // reasoning_effort must be absent — replaced by unified effort
+    assert.ok(!Object.prototype.hasOwnProperty.call(output, 'reasoning_effort'),
+      'reasoning_effort must not appear in resolve-model output (replaced by effort)');
   });
 
-  test('does not include reasoning_effort for unsupported runtime overrides', () => {
+  test('does not include reasoning_effort for unsupported runtime overrides (effort present instead)', () => {
     fs.writeFileSync(path.join(tmpDir, '.planning', 'config.json'), JSON.stringify({
       model_profile: 'balanced',
       runtime: 'opencode',
@@ -1148,10 +1228,13 @@ describe('resolve-model command', () => {
     const output = JSON.parse(result.output);
     assert.strictEqual(output.model, 'openrouter/openai/gpt-5.5');
     assert.strictEqual(output.profile, 'balanced');
-    assert.ok(!Object.prototype.hasOwnProperty.call(output, 'reasoning_effort'));
+    // #443: effort always present; reasoning_effort never present
+    assert.ok(Object.prototype.hasOwnProperty.call(output, 'effort'), 'effort must be present');
+    assert.ok(!Object.prototype.hasOwnProperty.call(output, 'reasoning_effort'),
+      'reasoning_effort must not appear (replaced by unified effort)');
   });
 
-  test('does not include reasoning_effort for per-agent model_overrides', () => {
+  test('does not include reasoning_effort for per-agent model_overrides (effort present instead)', () => {
     fs.writeFileSync(path.join(tmpDir, '.planning', 'config.json'), JSON.stringify({
       model_profile: 'balanced',
       runtime: 'codex',
@@ -1164,7 +1247,10 @@ describe('resolve-model command', () => {
     const output = JSON.parse(result.output);
     assert.strictEqual(output.model, 'gpt-5.5');
     assert.strictEqual(output.profile, 'balanced');
-    assert.ok(!Object.prototype.hasOwnProperty.call(output, 'reasoning_effort'));
+    // #443: effort always present; reasoning_effort never present
+    assert.ok(Object.prototype.hasOwnProperty.call(output, 'effort'), 'effort must be present');
+    assert.ok(!Object.prototype.hasOwnProperty.call(output, 'reasoning_effort'),
+      'reasoning_effort must not appear (replaced by unified effort)');
   });
 
   test('fails when no agent-type provided', () => {
@@ -1383,11 +1469,81 @@ describe('commit command', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// groupFilesBySubrepo tests (#311)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('groupFilesBySubrepo (#311)', () => {
+  const { groupFilesBySubrepo } = require('../gsd-core/bin/lib/commands.cjs');
+
+  test('single-segment subrepos route files correctly and unmatched collected', () => {
+    const result = groupFilesBySubrepo(
+      ['packages/a.js', 'docs/x.md', 'README.md'],
+      ['packages', 'docs']
+    );
+    assert.deepStrictEqual(result.grouped, { packages: ['packages/a.js'], docs: ['docs/x.md'] });
+    assert.deepStrictEqual(result.unmatched, ['README.md']);
+  });
+
+  test('multi-segment subrepo matches deep files, not shallow sibling', () => {
+    const result = groupFilesBySubrepo(
+      ['vendor/pkg/x.js', 'vendor/other.js', 'vendor/pkg/y.js'],
+      ['vendor/pkg']
+    );
+    assert.deepStrictEqual(result.grouped, { 'vendor/pkg': ['vendor/pkg/x.js', 'vendor/pkg/y.js'] });
+    assert.deepStrictEqual(result.unmatched, ['vendor/other.js']);
+  });
+
+  test('first-match-in-array-order wins (not longest-prefix)', () => {
+    // 'app' comes before 'app/sub' in subRepos array; 'app/sub/f.js' matches 'app' first
+    const result = groupFilesBySubrepo(
+      ['app/sub/f.js'],
+      ['app', 'app/sub']
+    );
+    assert.deepStrictEqual(result.grouped, { app: ['app/sub/f.js'] });
+    assert.deepStrictEqual(result.unmatched, []);
+  });
+
+  test('file with no slash does not match a same-name subrepo', () => {
+    const result = groupFilesBySubrepo(['top'], ['top']);
+    assert.deepStrictEqual(result.grouped, {});
+    assert.deepStrictEqual(result.unmatched, ['top']);
+  });
+
+  test('file with slash after prefix routes correctly', () => {
+    const result = groupFilesBySubrepo(['top/a'], ['top']);
+    assert.deepStrictEqual(result.grouped, { top: ['top/a'] });
+    assert.deepStrictEqual(result.unmatched, []);
+  });
+
+  test('empty files list returns empty grouped and unmatched', () => {
+    const result = groupFilesBySubrepo([], ['a']);
+    assert.deepStrictEqual(result.grouped, {});
+    assert.deepStrictEqual(result.unmatched, []);
+  });
+
+  test('empty subRepos list puts all files in unmatched', () => {
+    const result = groupFilesBySubrepo(['a/b'], []);
+    assert.deepStrictEqual(result.grouped, {});
+    assert.deepStrictEqual(result.unmatched, ['a/b']);
+  });
+
+  test('non-string subRepos entry does not throw and string entries still route (#311)', () => {
+    // Old inline code coerced non-string repos via `repo + '/'` and never threw.
+    let result;
+    assert.doesNotThrow(() => {
+      result = groupFilesBySubrepo(['a/b', 'README.md'], [null, 'a']);
+    });
+    assert.deepStrictEqual(result.grouped, { a: ['a/b'] });
+    assert.deepStrictEqual(result.unmatched, ['README.md']);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // cmdWebsearch tests (CMD-05)
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('websearch command', () => {
-  const { cmdWebsearch } = require('../get-shit-done/bin/lib/commands.cjs');
+  const { cmdWebsearch } = require('../gsd-core/bin/lib/commands.cjs');
   let origFetch;
   let origApiKey;
   let origWriteSync;
@@ -1482,14 +1638,15 @@ describe('websearch command', () => {
 
     global.fetch = async () => ({
       ok: false,
-      status: 429,
+      status: 401,
+      headers: { get: () => null },
     });
 
     await cmdWebsearch('test query', {}, false);
 
     const output = JSON.parse(captured);
     assert.strictEqual(output.available, false);
-    assert.ok(output.error.includes('429'), 'error should include status code');
+    assert.ok(output.error.includes('401'), 'error should include status code');
   });
 
   test('handles network failure', async () => {
@@ -1504,6 +1661,113 @@ describe('websearch command', () => {
     const output = JSON.parse(captured);
     assert.strictEqual(output.available, false);
     assert.strictEqual(output.error, 'Network timeout');
+  });
+
+  // ── New retry/timeout tests (A–E) ──────────────────────────────────────────
+
+  test('A. timeout is bounded: AbortSignal fires, resolves with available=false and attempts field', async (t) => {
+    process.env.BRAVE_API_KEY = 'test-key';
+    process.env.GSD_WEBSEARCH_TIMEOUT_MS = '20';
+    t.after(() => { delete process.env.GSD_WEBSEARCH_TIMEOUT_MS; });
+
+    global.fetch = async (_url, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+    });
+
+    await cmdWebsearch('q', {}, false);
+
+    const output = JSON.parse(captured);
+    assert.strictEqual(output.available, false, 'should be available=false after timeout exhaustion');
+    assert.ok(typeof output.attempts === 'number', 'should include attempts field');
+  });
+
+  test('B. retry on 503 then success: succeeds on 2nd attempt, fetch called exactly twice', async () => {
+    process.env.BRAVE_API_KEY = 'test-key';
+    let callCount = 0;
+
+    global.fetch = async () => {
+      callCount++;
+      if (callCount === 1) {
+        return { ok: false, status: 503, headers: { get: () => null } };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          web: { results: [{ title: 'T', url: 'https://example.com', description: 'D' }] },
+        }),
+      };
+    };
+
+    await cmdWebsearch('test query', {}, false);
+
+    const output = JSON.parse(captured);
+    assert.strictEqual(output.available, true, 'should succeed after retry');
+    assert.strictEqual(output.results.length, 1, 'should have one result');
+    assert.strictEqual(callCount, 2, 'fetch should be called exactly twice');
+  });
+
+  test('C. 429 honors Retry-After then succeeds on 2nd call, fetch called exactly twice', async () => {
+    process.env.BRAVE_API_KEY = 'test-key';
+    let callCount = 0;
+
+    global.fetch = async () => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          ok: false,
+          status: 429,
+          headers: { get: (h) => h.toLowerCase() === 'retry-after' ? '0' : null },
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          web: { results: [{ title: 'T', url: 'https://example.com', description: 'D' }] },
+        }),
+      };
+    };
+
+    await cmdWebsearch('test query', {}, false);
+
+    const output = JSON.parse(captured);
+    assert.strictEqual(output.available, true, 'should succeed after 429 retry');
+    assert.strictEqual(callCount, 2, 'fetch should be called exactly twice');
+  });
+
+  test('D. no retry on 401: fails immediately, fetch called exactly once', async () => {
+    process.env.BRAVE_API_KEY = 'test-key';
+    let callCount = 0;
+
+    global.fetch = async () => {
+      callCount++;
+      return { ok: false, status: 401, headers: { get: () => null } };
+    };
+
+    await cmdWebsearch('test query', {}, false);
+
+    const output = JSON.parse(captured);
+    assert.strictEqual(output.available, false, 'should be available=false');
+    assert.strictEqual(output.error, 'API error: 401', 'error should be API error: 401');
+    assert.strictEqual(output.attempts, undefined, 'should NOT have attempts field on immediate fail');
+    assert.strictEqual(callCount, 1, 'fetch should be called exactly once');
+  });
+
+  test('E. network error retried then exhausted: attempts=3, fetch called 3 times', async () => {
+    process.env.BRAVE_API_KEY = 'test-key';
+    let callCount = 0;
+
+    global.fetch = async () => {
+      callCount++;
+      throw new Error('boom');
+    };
+
+    await cmdWebsearch('test query', {}, false);
+
+    const output = JSON.parse(captured);
+    assert.strictEqual(output.available, false, 'should be available=false');
+    assert.ok(output.error.includes('boom'), 'error should include boom');
+    assert.strictEqual(output.attempts, 3, 'attempts should be 3');
+    assert.strictEqual(callCount, 3, 'fetch should be called 3 times');
   });
 });
 
@@ -1896,5 +2160,52 @@ describe('check-commit command', () => {
     assert.ok(!result.success, 'should block commit');
     assert.ok(result.error.includes('.planning/'), 'error should mention .planning/ files');
     assert.ok(result.error.includes('unstage'), 'error should suggest unstage command');
+  });
+});
+
+describe('_wsParseRetryAfter (#308)', () => {
+  const { _wsParseRetryAfter } = require('../gsd-core/bin/lib/commands.cjs');
+
+  test('integer seconds: "120" → 60000 (capped at 60s)', () => {
+    assert.strictEqual(_wsParseRetryAfter('120'), 60000);
+  });
+
+  test('leading zero: "01" → 1000', () => {
+    assert.strictEqual(_wsParseRetryAfter('01'), 1000);
+  });
+
+  test('whitespace: " 5 " → 5000', () => {
+    assert.strictEqual(_wsParseRetryAfter(' 5 '), 5000);
+  });
+
+  test('"0" → 0', () => {
+    assert.strictEqual(_wsParseRetryAfter('0'), 0);
+  });
+
+  test('value > 60s cap: "120000" → 60000', () => {
+    assert.strictEqual(_wsParseRetryAfter('120000'), 60000);
+  });
+
+  test('future HTTP-date → value in (0, 60000]', () => {
+    const futureDate = new Date(Date.now() + 5000).toUTCString();
+    const v = _wsParseRetryAfter(futureDate);
+    assert.ok(typeof v === 'number' && v > 0 && v <= 60000, `expected (0,60000], got ${v}`);
+  });
+
+  test('past HTTP-date → 0', () => {
+    const pastDate = new Date(Date.now() - 5000).toUTCString();
+    assert.strictEqual(_wsParseRetryAfter(pastDate), 0);
+  });
+
+  test('"garbage" → null', () => {
+    assert.strictEqual(_wsParseRetryAfter('garbage'), null);
+  });
+
+  test('"" → null', () => {
+    assert.strictEqual(_wsParseRetryAfter(''), null);
+  });
+
+  test('null → null', () => {
+    assert.strictEqual(_wsParseRetryAfter(null), null);
   });
 });

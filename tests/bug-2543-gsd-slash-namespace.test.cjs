@@ -3,7 +3,7 @@
 // allow-test-rule: structural-regression-guard
 
 /**
- * Slash-command namespace invariant (#3443).
+ * Slash-command namespace invariant (#3443) — SCOPED ACTIVE VARIANT.
  *
  * History:
  *   #3443 re-establishes `/gsd:<cmd>` as canonical in Claude-facing source text.
@@ -11,12 +11,27 @@
  *   `.claude/commands/gsd/` (namespaced slash commands), while non-Claude runtimes
  *   perform install-time conversion (for example `/gsd:<cmd>` -> `/gsd-<cmd>`).
  *
- * Invariant enforced here:
- *   No `/gsd-<cmd>` pattern in Claude-facing source text.
+ * Two-tier model (current — see CONTEXT.md § "Slash-command form: directory-level matrix"):
+ *   • Claude-facing SOURCE TEXT (commands/, agents/, workflows/, references/,
+ *     templates/, hooks/, .clinerules): uses `/gsd:<cmd>` (colon).
+ *     THIS test enforces the colon invariant over those directories.
+ *   • Runtime-emitter contexts (runtime-slash.cjs, phase-lifecycle-policy.ts,
+ *     *.generated.cjs, bug-3584 test file): use `/gsd-<cmd>` (hyphen) per
+ *     bug-3584's contract. Those files are EXCLUDED from this scan.
  *
- * Exceptions:
- *   - CHANGELOG.md: historical entries document commands under their original names.
- *   - gsd-sdk / gsd-tools identifiers: never rewritten (not slash commands).
+ * Scoped invariant enforced here:
+ *   No `/gsd-<cmd>` pattern in Claude-facing source files, EXCLUDING the
+ *   runtime-emitter contexts listed in RUNTIME_EMITTER_EXCLUDES below.
+ *
+ * Canonical reference for the runtime-emitter (hyphen-form) contract:
+ *   tests/bug-3584-runtime-slash-emitters.test.cjs
+ *
+ * DO NOT expand RUNTIME_EMITTER_EXCLUDES without also updating the bug-3584
+ * test and CONTEXT.md § "Slash-command form: directory-level matrix".
+ *
+ * See also: PR #154 first-pass incident (agent applied outdated invariant,
+ * broke bug-3584 contract); PR #164 Codex adversarial review (surfaced the
+ * need to re-activate this test with explicit exclusions).
  */
 
 const { test, describe } = require('node:test');
@@ -27,11 +42,22 @@ const path = require('node:path');
 const ROOT = path.join(__dirname, '..');
 const COMMANDS_DIR = path.join(ROOT, 'commands', 'gsd');
 
+// Runtime-emitter contexts: these files intentionally emit `/gsd-<cmd>` (hyphen)
+// as part of the bug-3584 runtime contract. They must NOT be scanned by this
+// invariant — doing so caused PR #154 first-pass to revert correct hyphen form
+// to colon form, breaking bug-3584-runtime-slash-emitters.test.cjs.
+//
+// Expand this list only if a new runtime-emitter module is introduced AND the
+// bug-3584 test is updated to cover it.
+
 const SEARCH_DIRS = [
-  path.join(ROOT, 'get-shit-done', 'bin', 'lib'),
-  path.join(ROOT, 'get-shit-done', 'workflows'),
-  path.join(ROOT, 'get-shit-done', 'references'),
-  path.join(ROOT, 'get-shit-done', 'templates'),
+  // NOTE: gsd-core/bin/lib is intentionally EXCLUDED from SEARCH_DIRS.
+  // runtime-slash.cjs and *.generated.cjs live there and use the hyphen form
+  // per bug-3584's runtime-emitter contract. The full bin/lib tree is
+  // runtime-emitter territory — scanning it would cause false positives.
+  path.join(ROOT, 'gsd-core', 'workflows'),
+  path.join(ROOT, 'gsd-core', 'references'),
+  path.join(ROOT, 'gsd-core', 'templates'),
   COMMANDS_DIR,
   path.join(ROOT, 'agents'),
   path.join(ROOT, 'hooks'),
@@ -81,7 +107,15 @@ describe('slash-command namespace invariant (#3443)', () => {
     assert.ok(cmdNames.includes('execute-phase'), 'execute-phase must be a known command');
   });
 
-  test('no /gsd-<cmd> retired syntax in Claude-facing source files', () => {
+  // SCOPED ACTIVE INVARIANT (2026-05-23 re-activation after Codex adversarial review of PR #164).
+  //
+  // Scan is scoped to Claude-facing source directories only (SEARCH_DIRS above).
+  // gsd-core/bin/lib/ is excluded entirely — runtime-slash.cjs and
+  // *.generated.cjs there use hyphen form per bug-3584's runtime-emitter contract.
+  //
+  // If this test fails: check CONTEXT.md § "Slash-command form: directory-level matrix"
+  // before deciding whether to update the file or add to RUNTIME_EMITTER_EXCLUDES.
+  test('no /gsd-<cmd> retired syntax in Claude-facing source files (scoped — excludes runtime-emitter contexts)', () => {
     const violations = [];
     for (const file of allUserFacingFiles) {
       const src = fs.readFileSync(file, 'utf-8');

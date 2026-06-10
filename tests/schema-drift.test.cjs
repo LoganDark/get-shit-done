@@ -9,12 +9,12 @@ const { test, describe, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { createTempProject, createTempGitProject, cleanup, runGsdTools } = require('./helpers.cjs');
+const { createTempGitProject, cleanup, runGsdTools } = require('./helpers.cjs');
 
 // ─── Unit: detectSchemaFiles ─────────────────────────────────────────────────
 
 const { detectSchemaFiles, detectSchemaOrm, checkSchemaDrift } = require(
-  path.join(__dirname, '..', 'get-shit-done', 'bin', 'lib', 'schema-detect.cjs')
+  path.join(__dirname, '..', 'gsd-core', 'bin', 'lib', 'schema-detect.cjs')
 );
 
 describe('detectSchemaFiles', () => {

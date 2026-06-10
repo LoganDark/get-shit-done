@@ -1,9 +1,10 @@
 /**
- * Tests for get-shit-done/bin/lib/intel.cjs
+ * Tests for gsd-core/bin/lib/intel.cjs
  *
  * Covers: query, status, diff, validate, snapshot, patch-meta,
  * extract-exports, enabled/disabled gating, and CLI routing via gsd-tools.
  */
+// allow-test-rule: source-text-is-the-product — readFileSync assertions target API-SURFACE.md, which is the generated product of intelApiSurface; asserting on its text content is the only way to verify correct generation.
 
 'use strict';
 
@@ -21,10 +22,10 @@ const {
   intelSnapshot,
   intelPatchMeta,
   intelExtractExports,
+  intelApiSurface,
   ensureIntelDir,
   isIntelEnabled,
-  INTEL_FILES,
-} = require('../get-shit-done/bin/lib/intel.cjs');
+} = require('../gsd-core/bin/lib/intel.cjs');
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ function writeIntelJson(planningDir, filename, data) {
   );
 }
 
-function writeIntelMd(planningDir, filename, content) {
+function _writeIntelMd(planningDir, filename, content) {
   const intelPath = path.join(planningDir, 'intel');
   fs.mkdirSync(intelPath, { recursive: true });
   fs.writeFileSync(path.join(intelPath, filename), content, 'utf8');
@@ -558,6 +559,105 @@ describe('intelExtractExports', () => {
     assert.deepStrictEqual(result.exports, []);
     assert.strictEqual(result.method, 'none');
   });
+
+  // ── Behavior-lock: dedup + order (green before AND after Set conversion) ──
+
+  test('dedup: duplicate exports.X assignments yield each name exactly once', () => {
+    // exports.foo appears twice — result must contain 'foo' exactly once
+    const filePath = path.join(tmpDir, 'dedup-exports-x.cjs');
+    fs.writeFileSync(filePath, [
+      "'use strict';",
+      'exports.foo = 1;',
+      'exports.bar = 2;',
+      'exports.foo = 3;',
+    ].join('\n'), 'utf8');
+
+    const result = intelExtractExports(filePath);
+    assert.strictEqual(result.method, 'exports.X');
+    assert.deepStrictEqual(result.exports, ['foo', 'bar']);
+  });
+
+  test('order: CJS exports.X preserves first-seen insertion order', () => {
+    // Names appear in source order: charlie, alpha, bravo
+    const filePath = path.join(tmpDir, 'order-cjs.cjs');
+    fs.writeFileSync(filePath, [
+      "'use strict';",
+      'exports.charlie = 1;',
+      'exports.alpha = 2;',
+      'exports.bravo = 3;',
+    ].join('\n'), 'utf8');
+
+    const result = intelExtractExports(filePath);
+    assert.strictEqual(result.method, 'exports.X');
+    assert.deepStrictEqual(result.exports, ['charlie', 'alpha', 'bravo']);
+  });
+
+  test('dedup: ESM export block with repeated name yields name exactly once', () => {
+    // export { foo, foo } — foo must appear once
+    const filePath = path.join(tmpDir, 'dedup-esm-block.mjs');
+    fs.writeFileSync(filePath, [
+      'function foo() {}',
+      'export { foo, foo };',
+    ].join('\n'), 'utf8');
+
+    const result = intelExtractExports(filePath);
+    assert.strictEqual(result.method, 'esm');
+    assert.deepStrictEqual(result.exports, ['foo']);
+  });
+
+  test('merge order: CJS exports appear before ESM exports, each name once', () => {
+    // exports.X = CJS side; export function / export const = ESM side
+    // Expected order: CJS-first then ESM additions
+    const filePath = path.join(tmpDir, 'merge-order.mjs');
+    fs.writeFileSync(filePath, [
+      "exports.cjsFirst = 1;",
+      "export function esmSecond() {}",
+      "export const esmThird = 3;",
+    ].join('\n'), 'utf8');
+
+    const result = intelExtractExports(filePath);
+    assert.strictEqual(result.method, 'mixed');
+    assert.deepStrictEqual(result.exports, ['cjsFirst', 'esmSecond', 'esmThird']);
+  });
+
+  test('export default collapse: only export default (anon) yields ["default"]', () => {
+    // A file with only `export default <value>` — no named exports, no default fn/class
+    // The collapse guard (esmExports.length === 0 at time of check) produces ["default"]
+    const filePath = path.join(tmpDir, 'default-only.mjs');
+    fs.writeFileSync(filePath, 'export default 42;', 'utf8');
+
+    const result = intelExtractExports(filePath);
+    assert.strictEqual(result.method, 'esm');
+    assert.deepStrictEqual(result.exports, ['default']);
+  });
+
+  test('export default collapse: export default fn + named exports — no "default" collapse', () => {
+    // export default function myFunc() {} → myFunc is extracted (named default fn)
+    // export const named → also extracted
+    // "default" literal does NOT appear because esmExports is not empty when anon-default check runs
+    const filePath = path.join(tmpDir, 'default-fn-plus-named.mjs');
+    fs.writeFileSync(filePath, [
+      'export default function myFunc() {}',
+      'export const named = 1;',
+    ].join('\n'), 'utf8');
+
+    const result = intelExtractExports(filePath);
+    assert.strictEqual(result.method, 'esm');
+    assert.deepStrictEqual(result.exports, ['myFunc', 'named']);
+  });
+
+  test('return shape: exports is a plain Array (callers use .includes/.length)', () => {
+    const filePath = path.join(tmpDir, 'shape-check.cjs');
+    fs.writeFileSync(filePath, [
+      "'use strict';",
+      'exports.foo = 1;',
+    ].join('\n'), 'utf8');
+
+    const result = intelExtractExports(filePath);
+    assert.ok(Array.isArray(result.exports), 'exports must be a plain Array');
+    assert.ok('file' in result, 'result must have file field');
+    assert.ok('method' in result, 'result must have method field');
+  });
 });
 
 // ─── CLI routing via gsd-tools ──────────────────────────────────────────────
@@ -603,5 +703,146 @@ describe('gsd-tools intel subcommands', () => {
     const output = JSON.parse(result.output);
     assert.strictEqual(output.valid, false);
     assert.ok(output.errors.length > 0);
+  });
+
+  test('unknown intel subcommand error lists api-surface', () => {
+    const result = runGsdTools(['intel', 'nonexistent-subcmd'], tmpDir);
+    assert.strictEqual(result.success, false);
+    const errorText = result.error || '';
+    assert.ok(errorText.includes('api-surface'), 'error message must list api-surface');
+  });
+
+  test('flag-looking intel subcommand treated as unknown, not crash', () => {
+    const result = runGsdTools(['intel', '--api-surface'], tmpDir);
+    assert.strictEqual(result.success, false);
+    const errorText = result.error || '';
+    assert.ok(errorText.includes('Unknown intel subcommand'), 'must emit typed unknown-subcommand error');
+  });
+
+  test('intel api-surface returns disabled message when not enabled', () => {
+    const result = runGsdTools(['intel', 'api-surface'], tmpDir);
+    assert.strictEqual(result.success, true);
+    const output = JSON.parse(result.output);
+    assert.strictEqual(output.disabled, true);
+  });
+
+  test('intel api-surface writes API-SURFACE.md when enabled with populated api-map.json', () => {
+    const planningDir = path.join(tmpDir, '.planning');
+    enableIntel(planningDir);
+    writeIntelJson(planningDir, 'api-map.json', {
+      _meta: { updated_at: new Date().toISOString() },
+      entries: {
+        'intelQuery': { method: 'function', handler: 'intelQuery', role: 'query intel files' },
+        'intelStatus': { method: 'function', handler: 'intelStatus', role: 'report freshness' },
+      },
+    });
+    const result = runGsdTools(['intel', 'api-surface'], tmpDir);
+    assert.strictEqual(result.success, true);
+    const output = JSON.parse(result.output);
+    assert.ok(output.written, 'result must include written path');
+    assert.strictEqual(output.symbolCount, 2);
+    const mdContent = fs.readFileSync(output.written, 'utf8');
+    assert.ok(mdContent.includes('intelQuery'), 'API-SURFACE.md must list intelQuery symbol');
+    assert.ok(mdContent.includes('intelStatus'), 'API-SURFACE.md must list intelStatus symbol');
+  });
+});
+
+// ─── intelApiSurface ────────────────────────────────────────────────────────
+
+describe('intelApiSurface', () => {
+  let tmpDir;
+  let planningDir;
+
+  beforeEach(() => {
+    tmpDir = createTempProject();
+    planningDir = path.join(tmpDir, '.planning');
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('returns disabled response when intel is off', () => {
+    const result = intelApiSurface(planningDir);
+    assert.strictEqual(result.disabled, true);
+    assert.ok(result.message.includes('disabled'));
+  });
+
+  test('writes API-SURFACE.md with symbol entries from api-map.json', () => {
+    enableIntel(planningDir);
+    writeIntelJson(planningDir, 'api-map.json', {
+      _meta: { updated_at: new Date().toISOString() },
+      entries: {
+        'authenticate': { method: 'POST', handler: 'authController', role: 'user login' },
+        'createUser': { method: 'POST', handler: 'userController', role: 'user registration' },
+      },
+    });
+
+    const result = intelApiSurface(planningDir);
+    assert.strictEqual(result.symbolCount, 2);
+    assert.ok(result.written.endsWith('API-SURFACE.md'));
+
+    const content = fs.readFileSync(result.written, 'utf8');
+    assert.ok(content.includes('authenticate'), 'must include symbol name authenticate');
+    assert.ok(content.includes('createUser'), 'must include symbol name createUser');
+    assert.ok(content.includes('authController'), 'must include field value authController');
+  });
+
+  test('writes API-SURFACE.md with incomplete banner when api-map.json is absent', () => {
+    enableIntel(planningDir);
+    // No api-map.json written
+
+    const result = intelApiSurface(planningDir);
+    assert.strictEqual(result.symbolCount, 0);
+    assert.ok(result.written.endsWith('API-SURFACE.md'));
+
+    const content = fs.readFileSync(result.written, 'utf8');
+    assert.ok(content.includes('Incomplete'), 'must contain Incomplete banner when no entries');
+    assert.ok(content.includes('unknown'), 'must say treat absence as "unknown"');
+  });
+
+  test('writes API-SURFACE.md with incomplete banner when entries is empty object', () => {
+    enableIntel(planningDir);
+    writeIntelJson(planningDir, 'api-map.json', {
+      _meta: { updated_at: new Date().toISOString() },
+      entries: {},
+    });
+
+    const result = intelApiSurface(planningDir);
+    assert.strictEqual(result.symbolCount, 0);
+
+    const content = fs.readFileSync(result.written, 'utf8');
+    assert.ok(content.includes('Incomplete'), 'empty entries must still emit incomplete banner');
+  });
+
+  test('returns stale=false for fresh api-map.json', () => {
+    enableIntel(planningDir);
+    writeIntelJson(planningDir, 'api-map.json', {
+      _meta: { updated_at: new Date().toISOString() },
+      entries: { 'myFunc': { method: 'function' } },
+    });
+
+    const result = intelApiSurface(planningDir);
+    assert.strictEqual(result.stale, false);
+  });
+
+  test('returns stale=true for old api-map.json', () => {
+    enableIntel(planningDir);
+    const oldDate = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    writeIntelJson(planningDir, 'api-map.json', {
+      _meta: { updated_at: oldDate },
+      entries: { 'myFunc': { method: 'function' } },
+    });
+
+    const result = intelApiSurface(planningDir);
+    assert.strictEqual(result.stale, true);
+  });
+
+  test('return shape has written, symbolCount, stale fields', () => {
+    enableIntel(planningDir);
+    const result = intelApiSurface(planningDir);
+    assert.ok('written' in result, 'result must have written field');
+    assert.ok('symbolCount' in result, 'result must have symbolCount field');
+    assert.ok('stale' in result, 'result must have stale field');
   });
 });

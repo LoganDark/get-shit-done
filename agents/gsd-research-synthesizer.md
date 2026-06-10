@@ -1,7 +1,7 @@
 ---
 name: gsd-research-synthesizer
 description: Synthesizes research outputs from parallel researcher agents into SUMMARY.md. Spawned by /gsd:new-project after 4 researcher agents complete.
-tools: Read, Edit, Bash
+tools: Read, Write, Edit, Bash
 color: purple
 # hooks:
 #   PostToolUse:
@@ -28,7 +28,7 @@ If the prompt contains a `<required_reading>` block, you MUST use the `Read` too
 - Synthesize findings into executive summary
 - Derive roadmap implications from combined research
 - Identify confidence levels and gaps
-- Populate the pre-created SUMMARY.md via the Edit tool (see Step 6)
+- Write SUMMARY.md
 - Commit ALL research files (researchers write but don't commit — you commit everything)
 </role>
 
@@ -58,7 +58,7 @@ cat .planning/research/FEATURES.md
 cat .planning/research/ARCHITECTURE.md
 cat .planning/research/PITFALLS.md
 
-# Planning config loaded via gsd-sdk query (or gsd-tools.cjs) in commit step
+# Planning config loaded via gsd-tools query (or gsd-tools.cjs) in commit step
 ```
 
 Parse each file to extract:
@@ -126,23 +126,36 @@ This is the most important section. Based on combined research:
 
 Identify gaps that couldn't be resolved and need attention during planning.
 
-## Step 6: Populate SUMMARY.md (via Edit, not Write)
+## Step 6: Write SUMMARY.md
 
-The orchestrator has already created an **empty** `.planning/research/SUMMARY.md`. Populate it with the **Edit** tool — NOT the Write tool, and NOT a `Bash` heredoc/redirect:
+**This is the canonical output of this agent. The orchestrator depends on `.planning/research/SUMMARY.md` existing on disk after you return; it does NOT read your return message for content.**
 
-1. **Read** `.planning/research/SUMMARY.md` in its entirety first. It is empty; the Read still satisfies the read-before-edit requirement (and avoids a "modified since read" error).
-2. **Edit** that file with an **empty `old_string`** and your full synthesized content as the `new_string`.
+**Hard rules (must follow):**
 
-**Why Edit instead of Write:** Claude Code (v2.1+) blocks the `Write` tool for subagents whose target basename matches `^(summary|report|findings|analysis).*\.md$` (case-insensitive; telemetry event `tengu_subagent_md_report_blocked`). `SUMMARY.md` matches, so a `Write` call fails with _"Subagents should return findings as text, not write report files."_ The `Edit` tool is not gated, which is why the orchestrator seeds the empty file for you to edit.
+1. **Use the `Write` tool** to write the file. The `Write` tool is in your `tools:` allowlist; there are no restrictions on it. Do not assume restrictions that the frontmatter does not impose.
+2. **Do NOT return the SUMMARY.md content in your response.** Your return message is a brief confirmation (see `<structured_returns>` below); the content lives on disk.
+3. **Do NOT ask permission to write.** Writing `.planning/research/SUMMARY.md` is the explicit purpose of this agent. Asking the orchestrator to do it instead is a failure mode that can cause downstream `SUMMARY.md not found` failures.
+4. **Do NOT use `Bash(cat << 'EOF')` or heredoc** for file creation. Use the `Write` tool. In short: **never use `Bash(cat << 'EOF')` or heredoc**.
+5. **If the Write tool errors,** surface the actual error in your return message. Do not silently fall back to returning content; that hides the failure from the orchestrator.
+6. **Large-file / truncation fallback.** Default: write the whole file in a single `Write` call — that is correct and reliable on most runtimes. But some runtimes (e.g. OpenCode) cap tool-call output, and a single oversized `Write` is truncated mid-payload — surfacing a tool error such as `JSON Parse error: Expected '}'`. If a `Write` fails with a truncation / invalid-tool error, **do NOT retry the same oversized call** (that loops forever). Instead build the file incrementally so no single tool call carries the whole payload:
+   - `Write` the file with only the first section, ending with the sentinel line `<!-- gsd:write-continue -->`.
+   - `Read` the file, then `Edit` it, replacing `<!-- gsd:write-continue -->` with the next section followed by the sentinel again. Repeat, one section per `Edit`.
+   - On the final section, replace the sentinel with the closing content and no trailing sentinel.
+7. **Claude Code subagent report-file gate (jj-fork guarantee, 2026-05-29).** Claude Code (v2.1+) blocks the `Write` tool for subagents whose target basename matches `^(summary|report|findings|analysis).*\.md$` (case-insensitive; telemetry event `tengu_subagent_md_report_blocked`) — `SUMMARY.md` matches, so on that runtime the `Write` call from rule 1 fails with _"Subagents should return findings as text, not write report files."_ This is a hard runtime gate, NOT the truncation case from rule 6 — do not retry `Write`, and per rule 5 do not fall back to returning content. Instead use the pre-seeded-file Edit path:
+   - The orchestrator may have pre-created an **empty** `.planning/research/SUMMARY.md` for exactly this case. If it does not exist, create the empty file with `Bash(touch .planning/research/SUMMARY.md)` (an empty `touch` is not the heredoc pattern rule 4 forbids — the content still goes through a tool call).
+   - `Read` `.planning/research/SUMMARY.md` in its entirety first (the Read satisfies the read-before-edit requirement even on an empty file).
+   - `Edit` the file with an **empty `old_string`** and your full synthesized content as the `new_string` (the `Edit` tool is not gated). For oversized content, fall back to the sentinel-chunked `Edit` sequence from rule 6.
 
-Use template: ~/.claude/get-shit-done/templates/research-project/SUMMARY.md (structural guide for the content you insert via Edit)
+Use template: ~/.claude/gsd-core/templates/research-project/SUMMARY.md
+
+Write to `.planning/research/SUMMARY.md`.
 
 ## Step 7: Commit All Research
 
 The 4 parallel researcher agents write files but do NOT commit. You commit everything together.
 
 ```bash
-gsd-sdk query commit "docs: complete project research" --files .planning/research/
+gsd-tools query commit "docs: complete project research" --files .planning/research/
 ```
 
 ## Step 8: Return Summary
@@ -153,7 +166,7 @@ Return brief confirmation with key points for the orchestrator.
 
 <output_format>
 
-Use template: ~/.claude/get-shit-done/templates/research-project/SUMMARY.md
+Use template: ~/.claude/gsd-core/templates/research-project/SUMMARY.md
 
 Key sections:
 - Executive Summary (2-3 paragraphs)

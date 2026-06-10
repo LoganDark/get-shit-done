@@ -15,7 +15,13 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { parseStateMd, formatGsdState, readGsdState } = require('../hooks/gsd-statusline.js');
+const {
+  parseStateMd,
+  formatGsdState,
+  readGsdState,
+  isInstalledAheadOfLatest,
+} = require('../hooks/gsd-statusline.js');
+const { cleanup } = require('./helpers.cjs');
 
 // ─── parseStateMd ───────────────────────────────────────────────────────────
 
@@ -217,6 +223,16 @@ describe('formatGsdState', () => {
   });
 });
 
+describe('isInstalledAheadOfLatest', () => {
+  test('treats prerelease patch increment as ahead of prior stable', () => {
+    assert.equal(isInstalledAheadOfLatest('1.2.1-beta.1', '1.2.0'), true);
+  });
+
+  test('treats equal base version prerelease as not ahead', () => {
+    assert.equal(isInstalledAheadOfLatest('1.2.0-rc.1', '1.2.0'), false);
+  });
+});
+
 // ─── readGsdState ───────────────────────────────────────────────────────────
 
 describe('readGsdState', () => {
@@ -318,6 +334,7 @@ describe('context meter respects CLAUDE_CODE_AUTO_COMPACT_WINDOW (#2219)', () =>
 
     // Parse normalized used% from the statusline bar output (e.g. "60%")
     // Strip ANSI escape codes then extract the percentage digit(s) before "%"
+    // eslint-disable-next-line no-control-regex -- \x1b (ESC) is the required leading byte of ANSI SGR color sequences; matching it is the purpose of stripping ANSI codes from captured CLI/console output
     const clean = stdout.replace(/\x1b\[[0-9;]*m/g, '');
     const match = clean.match(/(\d+)%/);
     const normalizedUsed = match ? parseInt(match[1], 10) : null;
@@ -369,5 +386,85 @@ describe('context meter respects CLAUDE_CODE_AUTO_COMPACT_WINDOW (#2219)', () =>
     const { rawUsedPct } = runHook(50, 1_000_000, 400_000);
     assert.strictEqual(rawUsedPct, 50,
       'bridge used_pct must be raw (100-50=50) regardless of CLAUDE_CODE_AUTO_COMPACT_WINDOW');
+  });
+});
+
+// ─── todo-resolution path (#305) ────────────────────────────────────────────
+
+describe('todo-resolution: resolves in_progress task from the newest matching todos file (#305)', () => {
+  const { execFileSync } = require('node:child_process');
+  const hookPath = path.join(__dirname, '..', 'hooks', 'gsd-statusline.js');
+
+  test('resolves in_progress task from the newest matching todos file (#305)', (t) => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-305-'));
+    t.after(() => {
+      cleanup(tempDir);
+    });
+
+    const todosDir = path.join(tempDir, 'todos');
+    fs.mkdirSync(todosDir, { recursive: true });
+
+    const session = `sess-305-${Math.random().toString(36).slice(2)}`;
+    const now = Date.now() / 1000; // seconds for utimesSync
+
+    // Older matching file — should NOT be selected
+    const olderPath = path.join(todosDir, `${session}-agent-A.json`);
+    fs.writeFileSync(olderPath, JSON.stringify([
+      { content: 'old task', status: 'in_progress', activeForm: 'OLDER TASK 305' },
+    ]));
+    const olderTime = now - 10000;
+    fs.utimesSync(olderPath, olderTime, olderTime);
+
+    // Newer matching file — should be selected
+    const newerPath = path.join(todosDir, `${session}-agent-B.json`);
+    fs.writeFileSync(newerPath, JSON.stringify([
+      { content: 'new task', status: 'in_progress', activeForm: 'NEWER TASK 305' },
+    ]));
+    const newerTime = now - 1000;
+    fs.utimesSync(newerPath, newerTime, newerTime);
+
+    // Distractor: different session prefix — must be ignored even with very-new mtime
+    const wrongSessPath = path.join(todosDir, 'other-sess-agent-Z.json');
+    fs.writeFileSync(wrongSessPath, JSON.stringify([
+      { content: 'wrong session', status: 'in_progress', activeForm: 'WRONG SESSION 305' },
+    ]));
+    fs.utimesSync(wrongSessPath, now, now);
+
+    // Distractor: matches session + .json but lacks -agent- — must be ignored
+    const notAgentPath = path.join(todosDir, `${session}-notagent.json`);
+    fs.writeFileSync(notAgentPath, JSON.stringify([
+      { content: 'not agent', status: 'in_progress', activeForm: 'NOT AGENT 305' },
+    ]));
+    fs.utimesSync(notAgentPath, now, now);
+
+    const payload = JSON.stringify({
+      model: { display_name: 'Claude' },
+      workspace: { current_dir: os.tmpdir() },
+      session_id: session,
+      context_window: { remaining_percentage: 80, total_tokens: 1_000_000 },
+    });
+
+    const env = { ...process.env, CLAUDE_CONFIG_DIR: tempDir };
+
+    let stdout = '';
+    try {
+      stdout = execFileSync(process.execPath, [hookPath], {
+        input: payload,
+        env,
+        encoding: 'utf8',
+        timeout: 4000,
+      });
+    } catch (e) {
+      stdout = e.stdout || '';
+    }
+
+    assert.ok(stdout.includes('NEWER TASK 305'),
+      `expected stdout to contain "NEWER TASK 305", got: ${stdout}`);
+    assert.ok(!stdout.includes('OLDER TASK 305'),
+      `stdout must NOT contain "OLDER TASK 305", got: ${stdout}`);
+    assert.ok(!stdout.includes('WRONG SESSION 305'),
+      `stdout must NOT contain "WRONG SESSION 305", got: ${stdout}`);
+    assert.ok(!stdout.includes('NOT AGENT 305'),
+      `stdout must NOT contain "NOT AGENT 305", got: ${stdout}`);
   });
 });

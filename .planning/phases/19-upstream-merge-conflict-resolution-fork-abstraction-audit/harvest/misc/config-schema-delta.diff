@@ -1,0 +1,82 @@
+--- fork/c7bd6bee/sdk/shared/config-schema.manifest.json
++++ working-copy/gsd-core/bin/shared/config-schema.manifest.json
+@@ -1,5 +1,5 @@
+ {
+-  "_comment": "Canonical schema manifest for valid config key paths. validKeys is the union of CJS config-schema.cjs and SDK query/config-schema.ts (they are enforced set-equal by tests/config-schema-sdk-parity.test.cjs). runtimeStateKeys mirrors RUNTIME_STATE_KEYS. dynamicKeyPatterns mirrors DYNAMIC_KEY_PATTERNS from SDK (which includes the canonical 'source' regex strings). The .test function is reconstructed at runtime from new RegExp(source).",
++  "_comment": "Canonical schema manifest for valid config key paths. This manifest is the single CJS source of truth for valid config keys; dynamicKeyPatterns source strings are recompiled to RegExp at runtime by config-schema.cjs. runtimeStateKeys mirrors RUNTIME_STATE_KEYS.",
+   "validKeys": [
+     "mode",
+     "granularity",
+@@ -83,6 +83,7 @@
+     "features.global_learnings",
+     "learnings.max_inject",
+     "project_code",
++    "phase_id_convention",
+     "phase_naming",
+     "manager.flags.discuss",
+     "manager.flags.plan",
+@@ -97,7 +98,16 @@
+     "claude_md_assembly.mode",
+     "runtime",
+     "resolve_model_ids",
+-    "vcs.adapter"
++    "effort.default",
++    "fast_mode.enabled",
++    "plan_review.source_grounding",
++    "plan_review.source_grounding_authority",
++    "model_policy.provider",
++    "model_policy.budget",
++    "model_policy.high",
++    "model_policy.medium",
++    "model_policy.low",
++    "agent_skills_security.trusted_global_roots"
+   ],
+   "runtimeStateKeys": [
+     "workflow._auto_chain_active"
+@@ -134,6 +144,11 @@
+       "description": "models.<planning|discuss|research|execution|verification|completion>"
+     },
+     {
++      "topLevel": "granularities",
++      "source": "^granularities\\.(planning|discuss|research|execution|verification|completion)$",
++      "description": "granularities.<planning|discuss|research|execution|verification|completion>"
++    },
++    {
+       "topLevel": "dynamic_routing",
+       "source": "^dynamic_routing\\.(enabled|escalate_on_failure|max_escalations|tier_models\\.(light|standard|heavy))$",
+       "description": "dynamic_routing.<enabled|escalate_on_failure|max_escalations|tier_models.<light|standard|heavy>>"
+@@ -144,9 +159,34 @@
+       "description": "model_overrides.<agent-id>"
+     },
+     {
++      "topLevel": "effort",
++      "source": "^effort\\.routing_tier_defaults\\.(light|standard|heavy)$",
++      "description": "effort.routing_tier_defaults.<light|standard|heavy>"
++    },
++    {
++      "topLevel": "effort",
++      "source": "^effort\\.agent_overrides\\.[a-zA-Z0-9_-]+$",
++      "description": "effort.agent_overrides.<agent-id>"
++    },
++    {
++      "topLevel": "fast_mode",
++      "source": "^fast_mode\\.routing_tier_defaults\\.(light|standard|heavy)$",
++      "description": "fast_mode.routing_tier_defaults.<light|standard|heavy>"
++    },
++    {
++      "topLevel": "fast_mode",
++      "source": "^fast_mode\\.agent_overrides\\.[a-zA-Z0-9_-]+$",
++      "description": "fast_mode.agent_overrides.<agent-id>"
++    },
++    {
+       "topLevel": "review",
+       "source": "^review\\.max_prompt_tokens_per_reviewer\\.[a-zA-Z0-9_-]+$",
+       "description": "review.max_prompt_tokens_per_reviewer.<reviewer-slug>"
++    },
++    {
++      "topLevel": "model_policy",
++      "source": "^model_policy\\.runtime_tiers\\.[a-zA-Z0-9_-]+\\.(opus|sonnet|haiku)$",
++      "description": "model_policy.runtime_tiers.<runtime>.<opus|sonnet|haiku>"
+     }
+   ]
+ }

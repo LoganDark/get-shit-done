@@ -1,9 +1,9 @@
+// allow-test-rule: source-text-is-the-product
+// Workflow .md / agent .md / command .md / reference .md files — their text
+// IS what the runtime loads. Testing text content tests the deployed contract.
+// Per CONTRIBUTING.md exception matrix.
 'use strict';
 
-// allow-test-rule: pending-migration-to-typed-ir [#2974]
-// Tracked in #2974 for migration to typed-IR assertions per CONTRIBUTING.md
-// "Prohibited: Raw Text Matching on Test Outputs". Per-file review may
-// reclassify some entries as source-text-is-the-product during migration.
 
 /**
  * Regression test for #2470.
@@ -21,7 +21,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const UPDATE_MD = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'update.md');
+const UPDATE_MD = path.join(__dirname, '..', 'gsd-core', 'workflows', 'update.md');
 
 describe('update.md — no bare ~.claude path references (#2470)', () => {
   const content = fs.readFileSync(UPDATE_MD, 'utf-8');
@@ -35,7 +35,7 @@ describe('update.md — no bare ~.claude path references (#2470)', () => {
     assert.strictEqual(
       matches,
       null,
-      `update.md must not contain bare ~/\.claude (without trailing slash) — installer scanner flags these as unresolved path refs: ${JSON.stringify(matches)}`
+      `update.md must not contain bare ~/.claude (without trailing slash) — installer scanner flags these as unresolved path refs: ${JSON.stringify(matches)}`
     );
   });
 });

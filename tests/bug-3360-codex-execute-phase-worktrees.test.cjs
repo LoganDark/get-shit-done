@@ -17,7 +17,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
-const EXECUTE_PHASE = path.join(ROOT, 'get-shit-done', 'workflows', 'execute-phase.md');
+const EXECUTE_PHASE = path.join(ROOT, 'gsd-core', 'workflows', 'execute-phase.md');
 const { getCodexSkillAdapterHeader } = require('../bin/install.js');
 
 function parseWorkflowSteps(content) {
@@ -26,7 +26,8 @@ function parseWorkflowSteps(content) {
       const body = match[2];
       return {
         name: match[1],
-        readsRuntimeConfig: body.includes('RUNTIME=$(gsd-sdk query config-get runtime --default claude'),
+        // After #3797 architectural fix, callsites use gsd_run
+        readsRuntimeConfig: body.includes('RUNTIME=$(gsd_run query config-get runtime --default claude'),
         codexWorktreeGuard: body.includes('Codex execute-phase worktree isolation is unsupported'),
         worktreeDispatchGuidance: body.includes('isolation="worktree"'),
       };

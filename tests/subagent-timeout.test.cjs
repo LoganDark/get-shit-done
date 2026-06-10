@@ -1,7 +1,7 @@
-// allow-test-rule: pending-migration-to-typed-ir [#2974]
-// Tracked in #2974 for migration to typed-IR assertions per CONTRIBUTING.md
-// "Prohibited: Raw Text Matching on Test Outputs". Per-file review may
-// reclassify some entries as source-text-is-the-product during migration.
+// Migrated (#455): all runGsdTools assertions parse JSON and assert on typed
+// fields (parsed.subagent_timeout, parsed.context_window). The workflow/reference
+// file checks are source-text-is-the-product (deployed file content is the product).
+// allow-test-rule: source-text-is-the-product
 
 /**
  * GSD Tools Tests - subagent timeout configuration
@@ -85,7 +85,7 @@ describe('workflow.subagent_timeout config key (#1472)', () => {
 
 describe('map-codebase workflow references configurable timeout (#1472)', () => {
   test('workflow file references subagent_timeout from init context', () => {
-    const workflowPath = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'map-codebase.md');
+    const workflowPath = path.join(__dirname, '..', 'gsd-core', 'workflows', 'map-codebase.md');
     const content = fs.readFileSync(workflowPath, 'utf8');
 
     assert.ok(
@@ -99,7 +99,7 @@ describe('map-codebase workflow references configurable timeout (#1472)', () => 
   });
 
   test('workflow file no longer has hardcoded 300000 timeout', () => {
-    const workflowPath = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'map-codebase.md');
+    const workflowPath = path.join(__dirname, '..', 'gsd-core', 'workflows', 'map-codebase.md');
     const content = fs.readFileSync(workflowPath, 'utf8');
 
     // The timeout line should reference the config variable, not a hardcoded value
@@ -115,7 +115,7 @@ describe('map-codebase workflow references configurable timeout (#1472)', () => 
 
 describe('planning-config.md documents subagent_timeout (#1472)', () => {
   test('reference doc includes subagent_timeout entry', () => {
-    const refPath = path.join(__dirname, '..', 'get-shit-done', 'references', 'planning-config.md');
+    const refPath = path.join(__dirname, '..', 'gsd-core', 'references', 'planning-config.md');
     const content = fs.readFileSync(refPath, 'utf8');
 
     assert.ok(

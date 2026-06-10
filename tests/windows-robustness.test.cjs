@@ -14,7 +14,7 @@
  * 4. findProjectRoot detects .git at same level as .planning/
  * 5. @file: handoff present in all workflows that call init
  *
- * Regression tests for: https://github.com/gsd-build/get-shit-done/issues/1343
+ * Regression tests for: https://github.com/open-gsd/gsd-core/issues/1343
  */
 
 const { test, describe } = require('node:test');
@@ -22,7 +22,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const WORKFLOWS_DIR = path.join(__dirname, '..', 'get-shit-done', 'workflows');
+const WORKFLOWS_DIR = path.join(__dirname, '..', 'gsd-core', 'workflows');
 const HOOKS_DIR = path.join(__dirname, '..', 'hooks');
 
 /**
@@ -85,9 +85,6 @@ function findUnguardedInfoCommands(code) {
 // ─── Workflow Shell Robustness ────────────────────────────────────────────────
 
 describe('workflow shell robustness', () => {
-  const workflowFiles = fs.readdirSync(WORKFLOWS_DIR)
-    .filter(f => f.endsWith('.md'));
-
   // Key workflow files that must have || true guards on informational commands
   const criticalWorkflows = [
     'resume-project.md',

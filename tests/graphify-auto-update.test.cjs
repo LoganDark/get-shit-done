@@ -13,20 +13,20 @@ const fs = require('fs');
 const path = require('path');
 const os = require('node:os');
 const { execFileSync, spawnSync } = require('child_process');
-const { createTempProject, cleanup, runGsdTools } = require('./helpers.cjs');
+const { createTempProject, cleanup, runGsdTools, delay } = require('./helpers.cjs');
 
 const {
   graphifyStatus,
-} = require('../get-shit-done/bin/lib/graphify.cjs');
+} = require('../gsd-core/bin/lib/graphify.cjs');
 
 const {
   VALID_CONFIG_KEYS,
   isValidConfigKey,
-} = require('../get-shit-done/bin/lib/config-schema.cjs');
+} = require('../gsd-core/bin/lib/config-schema.cjs');
 
 const {
   CONFIG_DEFAULTS: CANONICAL_CONFIG_DEFAULTS,
-} = require('../get-shit-done/bin/lib/configuration.generated.cjs');
+} = require('../gsd-core/bin/lib/configuration.cjs');
 
 const {
   makeStatusProject,
@@ -130,7 +130,7 @@ describe('auto-update', () => {
         head_at_build: 'abcdef0',
         graphify_version: null,
       });
-      t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+      t.after(() => cleanup(tmpDir));
       const s = graphifyStatus(tmpDir);
       assert.strictEqual(s.stale, true, 'auto-build failure must set stale=true');
       assert.ok(s.last_build_auto_update, 'last_build_auto_update must be exposed');
@@ -147,7 +147,7 @@ describe('auto-update', () => {
         head_at_build: 'abcdef0',
         graphify_version: null,
       });
-      t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+      t.after(() => cleanup(tmpDir));
       const s = graphifyStatus(tmpDir);
       assert.strictEqual(s.stale, true, 'auto-build in-flight must set stale=true');
       assert.strictEqual(s.last_build_auto_update.status, 'running');
@@ -162,7 +162,7 @@ describe('auto-update', () => {
         head_at_build: 'abcdef0',
         graphify_version: null,
       });
-      t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+      t.after(() => cleanup(tmpDir));
       const s = graphifyStatus(tmpDir);
       assert.strictEqual(s.stale, false, 'fresh graph + ok auto-build => not stale');
       assert.strictEqual(s.last_build_auto_update.status, 'ok');
@@ -170,7 +170,7 @@ describe('auto-update', () => {
 
     test('graphifyStatus exposes last_build_auto_update: null when status file absent', (t) => {
       const tmpDir = makeStatusProject(null);
-      t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+      t.after(() => cleanup(tmpDir));
       const s = graphifyStatus(tmpDir);
       assert.strictEqual(s.last_build_auto_update, null);
       assert.strictEqual(s.stale, false, 'no status file => stale follows mtime only');
@@ -263,13 +263,37 @@ describe('auto-update', () => {
     });
   }
 
-  function cleanupHookRepo(tmpDir) {
+  // Wait until the detached rebuild writes a terminal status, with a generous
+  // deadline. The detached subprocess can be slow under contended Docker; all
+  // assertions here are outcome-based, so we wait for the real terminal state
+  // rather than guessing a tight wall-clock budget (#382).
+  async function waitForBuildStatus(statusPath, terminal /* e.g. new Set(['ok']) */, { deadlineMs = 30000, stepMs = 25 } = {}) {
+    const deadline = Date.now() + deadlineMs;
+    let status;
+    while (Date.now() < deadline) {
+      if (fs.existsSync(statusPath)) {
+        try {
+          const parsed = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+          status = parsed;
+          if (parsed && terminal.has(parsed.status)) return parsed;
+        } catch { /* detached writer can briefly expose a partial JSON write */ }
+      }
+      await delay(stepMs);
+    }
+    return status; // last seen (may be undefined / non-terminal) — assertions below will report
+  }
+
+  async function cleanupHookRepo(tmpDir) {
     // The hook detaches a graphify-rebuild subprocess that may still be writing
-    // into tmpDir when the test body returns. Wait briefly for its lock file to
-    // disappear (rebuild process exit trap removes it), then retry rmSync to
+    // into tmpDir when the test body returns. Wait for the rebuild PID to exit
+    // (lock file disappears on subprocess EXIT trap), then retry rmSync to
     // absorb any remaining transient ENOTEMPTY race.
+    //
+    // Uses delay() instead of Atomics.wait so we yield the event loop
+    // without blocking the thread.  Budget: 15 s — bumped from 4 s to give
+    // the detached child more time to exit under contended Docker (#382).
     const lockPath = path.join(tmpDir, '.planning/graphs/.rebuild.lock');
-    const lockDeadline = Date.now() + 4000;
+    const lockDeadline = Date.now() + 15000;
     while (Date.now() < lockDeadline) {
       if (!fs.existsSync(lockPath)) break;
       try {
@@ -279,9 +303,12 @@ describe('auto-update', () => {
       } catch {
         break; // PID dead → safe to clean up
       }
-      execFileSync('sleep', ['0.05']);
+      await delay(50); // yield 50 ms, then re-check
     }
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 100 });
+    try {
+      // eslint-disable-next-line local/no-raw-rmsync-in-tests -- best-effort teardown: error is swallowed so cleanup() (which propagates) cannot be used here; a residual temp dir after a detached-subprocess race is harmless (#382)
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 100 });
+    } catch { /* best-effort teardown: a residual temp dir is harmless; never fail the test (#382) */ }
   }
 
   describe('hook — bail paths (no side effects)',
@@ -410,7 +437,7 @@ describe('auto-update', () => {
       assert.ok(/^[0-9a-f]{7,40}$/.test(status.head_at_build), 'head_at_build must be a commit sha');
     });
 
-    test('completes to status=ok after detached graphify run succeeds', (t) => {
+    test('completes to status=ok after detached graphify run succeeds', async (t) => {
       const tmpDir = createTempGitRepo({
         config: { graphify: { enabled: true, auto_update: true } },
       });
@@ -423,28 +450,19 @@ describe('auto-update', () => {
         { pathPrepend: mockBin },
       );
 
-      // Wait up to 5s for the detached process to finish updating the status
+      // Wait for the detached rebuild process to write the final status file.
+      // Uses waitForBuildStatus with a generous 30 s deadline so contended
+      // Docker is never racing a tight budget (#382). All assertions are
+      // outcome-based; the deadline is deterministic, not a timing assertion.
       const statusPath = path.join(tmpDir, '.planning/graphs/.last-build-status.json');
-      const deadline = Date.now() + 15000;
-      let status;
-      while (Date.now() < deadline) {
-        if (fs.existsSync(statusPath)) {
-          try {
-            status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
-            if (status.status === 'ok') break;
-          } catch {
-            // Detached writer can briefly expose a partial JSON write.
-          }
-        }
-        execFileSync('sleep', ['0.1']);
-      }
+      const status = await waitForBuildStatus(statusPath, new Set(['ok']));
       assert.ok(status, 'status file must exist after dispatch');
       assert.strictEqual(status.status, 'ok', 'mock graphify exit=0 → status ok');
       assert.strictEqual(status.exit_code, 0);
       assert.ok(typeof status.duration_ms === 'number' && status.duration_ms >= 0);
     });
 
-    test('completes to status=failed when graphify exits non-zero', (t) => {
+    test('completes to status=failed when graphify exits non-zero', async (t) => {
       const tmpDir = createTempGitRepo({
         config: { graphify: { enabled: true, auto_update: true } },
       });
@@ -457,20 +475,12 @@ describe('auto-update', () => {
         { pathPrepend: mockBin },
       );
 
+      // Wait for the detached rebuild process to write the final status file.
+      // Uses waitForBuildStatus with a generous 30 s deadline so contended
+      // Docker is never racing a tight budget (#382). All assertions are
+      // outcome-based; the deadline is deterministic, not a timing assertion.
       const statusPath = path.join(tmpDir, '.planning/graphs/.last-build-status.json');
-      const deadline = Date.now() + 15000;
-      let status;
-      while (Date.now() < deadline) {
-        if (fs.existsSync(statusPath)) {
-          try {
-            status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
-            if (status.status === 'failed') break;
-          } catch {
-            // Detached writer can briefly expose a partial JSON write.
-          }
-        }
-        execFileSync('sleep', ['0.1']);
-      }
+      const status = await waitForBuildStatus(statusPath, new Set(['failed']));
       assert.ok(status, 'status file must exist after dispatch');
       assert.strictEqual(status.status, 'failed', 'mock graphify exit=1 → status failed');
       assert.strictEqual(status.exit_code, 1);
@@ -552,13 +562,13 @@ describe('auto-update', () => {
       'git pull --ff-only',
       'git rebase --continue',
       'git cherry-pick abc123',
-      // #3653 — `gsd-sdk query commit` invokes git via spawnSync('git', [...]),
+      // #3653 — `gsd-tools query commit` invokes git via spawnSync('git', [...]),
       // so the substring "git commit" never appears in tool_input.command.
       // The hook must match the user-facing SDK invocation directly.
-      'gsd-sdk query commit "docs: probe" --files .planning/STATE.md',
-      'npx gsd-sdk query commit "docs: probe" --files .planning/STATE.md',
+      'gsd-tools query commit "docs: probe" --files .planning/STATE.md',
+      'npx gsd-tools query commit "docs: probe" --files .planning/STATE.md',
     ]) {
-      test(`dispatches on: ${cmd}`, (t) => {
+      test(`dispatches on: ${cmd}`, async (t) => {
         const tmpDir = createTempGitRepo({
           config: { graphify: { enabled: true, auto_update: true } },
         });
@@ -569,8 +579,12 @@ describe('auto-update', () => {
           { tool_name: 'Bash', tool_input: { command: cmd } },
           { pathPrepend: mockBin },
         );
+        const statusPath = path.join(tmpDir, '.planning/graphs/.last-build-status.json');
+        // Wait for any terminal status; we only assert the file exists,
+        // not which terminal value it holds (#382: generous deadline).
+        await waitForBuildStatus(statusPath, new Set(['ok', 'failed']));
         assert.ok(
-          fs.existsSync(path.join(tmpDir, '.planning/graphs/.last-build-status.json')),
+          fs.existsSync(statusPath),
           `must dispatch for HEAD-advancing op: ${cmd}`,
         );
       });
@@ -587,7 +601,7 @@ describe('auto-update', () => {
         {
           tool_name: 'Bash',
           tool_input: {
-            command: 'gsd-sdk query commit-to-subrepo "msg" --files packages/foo',
+            command: 'gsd-tools query commit-to-subrepo "msg" --files packages/foo',
           },
         },
         { pathPrepend: mockBin },
@@ -600,13 +614,13 @@ describe('auto-update', () => {
     });
 
     // #3653 — only the SDK `commit` verb invokes git internally. Other
-    // `gsd-sdk query` verbs (phase.complete, roadmap.update-plan-progress,
+    // `gsd-tools query` verbs (phase.complete, roadmap.update-plan-progress,
     // state.begin-phase) mutate .md files but do NOT advance HEAD; matching
     // them would cause a spurious rebuild per state mutation.
     for (const cmd of [
-      'gsd-sdk query phase.complete 109',
-      'gsd-sdk query roadmap.update-plan-progress 109 W001',
-      'gsd-sdk query state.begin-phase 110',
+      'gsd-tools query phase.complete 109',
+      'gsd-tools query roadmap.update-plan-progress 109 W001',
+      'gsd-tools query state.begin-phase 110',
     ]) {
       test(`does NOT dispatch on non-HEAD-advancing SDK verb: ${cmd}`, (t) => {
         const tmpDir = createTempGitRepo({

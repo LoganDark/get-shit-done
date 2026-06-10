@@ -1,0 +1,75 @@
+"use strict";
+/**
+ * RevisionExpr → jj CLI dialect translator (stub; Phase 3 fills in production use).
+ * Phase 1 ships the locked mappings per REQUIREMENTS.md VCS-05; Phase 3 wires it
+ * into the jj backend.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.toJjRev = toJjRev;
+const expr_cjs_1 = require("../expr.cjs");
+function toJjRev(rev) {
+    // Plan 02-03 Task 2 — same range/rev handling as toGitRev. jj uses '..'
+    // for ranges and resolves revisions verbatim, so the per-backend output
+    // shape is structurally identical for these two kinds (only the inner
+    // head/parent translations differ — '@' vs 'HEAD').
+    // Phase 2.1 D-13: `commit:` brand prefix renamed to `rev:`.
+    const encoded = rev;
+    if (encoded.startsWith('range:')) {
+        const inner = encoded.slice('range:'.length);
+        const sepIdx = inner.indexOf('..');
+        if (sepIdx < 0)
+            throw new Error(`Malformed range RevisionExpr: '${encoded}'`);
+        const fromEnc = inner.slice(0, sepIdx);
+        const toEnc = inner.slice(sepIdx + 2);
+        return `${toJjRev(fromEnc)}..${toJjRev(toEnc)}`;
+    }
+    if (encoded.startsWith('rev:')) {
+        return encoded.slice('rev:'.length); // emit change_id (or SHA) prefix verbatim
+    }
+    // 19-review WR-05 — 'ancestor:<n>' translates to the n-fold parent
+    // operator: '@', '@-', '@--', … jj resolves the walk itself. Caveat: on a
+    // merge change, '<rev>-' is the SET of all parents (jj has no first-parent
+    // operator), so '@--' may resolve to multiple revisions where git's
+    // 'HEAD~2' picks the first-parent path — still strictly better than the
+    // prior log-row-index approximation, which was wrong on BOTH backends for
+    // merge-bearing histories.
+    if (encoded.startsWith('ancestor:')) {
+        const n = Number(encoded.slice('ancestor:'.length));
+        if (!Number.isInteger(n) || n < 0) {
+            throw new Error(`Malformed ancestor RevisionExpr: '${encoded}'`);
+        }
+        return `@${'-'.repeat(n)}`;
+    }
+    // Plan 06-01 Task 2 — 'children:<inner>' translates to jj revset 'x+'
+    // (direct children, depth-1 — empirically verified by jj-children-probe.test.ts).
+    if (encoded.startsWith('children:')) {
+        const innerEncoded = encoded.slice('children:'.length);
+        const innerTranslated = toJjRev(innerEncoded); // recursion
+        return `${innerTranslated}+`;
+    }
+    // Plan 06-01 Task 2 — 'parents:<inner>' translates to jj revset 'x-'.
+    // Parenthesise the inner expression so suffix-operator precedence is
+    // unambiguous when inner itself is a compound revset.
+    if (encoded.startsWith('parents:')) {
+        const innerEncoded = encoded.slice('parents:'.length);
+        const innerTranslated = toJjRev(innerEncoded);
+        return `(${innerTranslated})-`;
+    }
+    const p = (0, expr_cjs_1.parseExpr)(rev);
+    switch (p.kind) {
+        case 'head':
+            return '@';
+        case 'parent':
+            return '@-';
+        case 'bookmark':
+            return p.name;
+        case 'remote':
+            return `${p.name}@${p.remote}`;
+        // Plan 06-01 Task 2 — children/parents kinds are handled by the string-prefix
+        // branches above (children: → <inner>+; parents: → (<inner>)-). These cases
+        // are unreachable but keep the switch exhaustive for TypeScript.
+        case 'children':
+        case 'parents':
+            throw new Error(`parse/jj-rev: unreachable — '${p.kind}:' should have been handled by prefix branch`);
+    }
+}

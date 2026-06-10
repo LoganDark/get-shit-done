@@ -1,7 +1,7 @@
-// allow-test-rule: pending-migration-to-typed-ir [#2974]
-// Tracked in #2974 for migration to typed-IR assertions per CONTRIBUTING.md
-// "Prohibited: Raw Text Matching on Test Outputs". Per-file review may
-// reclassify some entries as source-text-is-the-product during migration.
+// allow-test-rule: structural-regression-guard
+// Reads hook .js or bin/install.js source to assert structural invariants
+// (search array order, function wiring, path constants) that cannot be
+// verified by observing runtime outputs alone. Per CONTRIBUTING.md exception matrix.
 
 /**
  * Regression guard for #1767: gsd-workflow-guard.js must be registered in settings.json
@@ -54,15 +54,23 @@ describe('workflow-guard hook registration (#1767)', () => {
 
   test('install.js pushes workflow-guard entry with correct matcher', () => {
     const content = fs.readFileSync(INSTALL_JS, 'utf-8');
-    // Extract the section between "workflow-guard" command construction
-    // and the next console.log confirmation. The push block should have:
-    // matcher: 'Write|Edit' and command referencing workflow-guard
+    // Extract the workflow-guard registration section. It should install the
+    // Bash-aware matcher and upgrade old edit-only entries on reinstall.
     const workflowGuardSection = content.match(
-      /workflowGuardCommand[\s\S]*?console\.log\([^)]*workflow.guard/i
+      /workflowGuardCommand[\s\S]*?Configure commit validation hook/i
     );
     assert.ok(
       workflowGuardSection,
       'install.js must have a push block for workflow-guard with a console.log confirmation'
+    );
+    assert.ok(
+      workflowGuardSection[0].includes("const workflowGuardMatcher = 'Bash|Edit|Write|MultiEdit'") &&
+        workflowGuardSection[0].includes('matcher: workflowGuardMatcher'),
+      'workflow guard must be registered for Bash so worktree-agent git safety checks can run'
+    );
+    assert.ok(
+      workflowGuardSection[0].includes('workflowGuardHookEntry.matcher = workflowGuardMatcher'),
+      'installer must upgrade existing workflow guard hook entries to the Bash-aware matcher'
     );
   });
 });
@@ -70,21 +78,16 @@ describe('workflow-guard hook registration (#1767)', () => {
 describe('hook registration completeness anti-pattern guard', () => {
   test('every JS hook in gsdHooks has a command construction in install.js', () => {
     const content = fs.readFileSync(INSTALL_JS, 'utf-8');
-    // Extract gsdHooks array entries
-    const hooksMatch = content.match(/gsdHooks\s*=\s*\[([^\]]+)\]/);
-    assert.ok(hooksMatch, 'gsdHooks array must exist in install.js');
+    // Use the typed export instead of source-grep regex (branch #455: retire source-grep)
+    const { GSD_UNINSTALL_HOOKS } = require('../bin/install.js');
+    assert.ok(Array.isArray(GSD_UNINSTALL_HOOKS), 'GSD_UNINSTALL_HOOKS must be exported from install.js');
 
-    const hookNames = hooksMatch[1]
-      .match(/'([^']+)'/g)
-      .map(h => h.replace(/'/g, ''));
-
-    const jsHooks = hookNames.filter(h => h.endsWith('.js'));
+    const jsHooks = GSD_UNINSTALL_HOOKS.filter(h => h.endsWith('.js'));
 
     const missing = [];
     for (const hook of jsHooks) {
       // Each JS hook should have a buildHookCommand or 'node ' command construction
       // that references the hook filename (not just the gsdHooks array or uninstall filter)
-      const hookBase = hook.replace('.js', '');
       const lines = content.split('\n').filter(line =>
         line.includes(hook) &&
         (line.includes('buildHookCommand') || line.includes("'node '"))

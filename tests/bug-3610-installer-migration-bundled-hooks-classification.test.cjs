@@ -1,5 +1,5 @@
 /**
- * Regression test for #3610: fresh `npx get-shit-done-cc@latest --codex`
+ * Regression test for #3610: fresh `npx @opengsd/gsd-core@latest --codex`
  * hard-aborts when the target ~/.codex/hooks/ contains the bundled GSD
  * hook files (`gsd-check-update-worker.js`, `gsd-prompt-guard.js`, …)
  * left over from a previous version. The installer-migration report
@@ -27,16 +27,15 @@ const { describe, test, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const crypto = require('node:crypto');
 
 const {
   runInstallerMigrations,
-} = require('../get-shit-done/bin/lib/installer-migrations.cjs');
+} = require('../gsd-core/bin/lib/installer-migrations.cjs');
 const {
   assertInstallerMigrationsUnblocked,
   resolveInstallerMigrationPromptsForNonTty,
   classifyPromptUserAction,
-} = require('../get-shit-done/bin/lib/installer-migration-report.cjs');
+} = require('../gsd-core/bin/lib/installer-migration-report.cjs');
 const { createTempDir, cleanup } = require('./helpers.cjs');
 
 function writeFile(root, relPath, content) {

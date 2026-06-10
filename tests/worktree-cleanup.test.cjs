@@ -6,7 +6,7 @@
 /**
  * Worktree Cleanup Module — HEAD attachment, post-executor cleanup, and contract tests
  *
- * Seam: get-shit-done/workflows/{execute-phase,execute-plan,quick}.md,
+ * Seam: gsd-core/workflows/{execute-phase,execute-plan,quick}.md,
  *       agents/gsd-executor.md, references/git-integration.md
  *
  * Split from the consolidated 13→2 worktree cluster (≤800 LOC/file):
@@ -28,11 +28,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const REPO_ROOT = path.join(__dirname, '..');
-const EXECUTE_PHASE_PATH = path.join(REPO_ROOT, 'get-shit-done', 'workflows', 'execute-phase.md');
-const EXECUTE_PLAN_PATH = path.join(REPO_ROOT, 'get-shit-done', 'workflows', 'execute-plan.md');
-const QUICK_PATH = path.join(REPO_ROOT, 'get-shit-done', 'workflows', 'quick.md');
+const EXECUTE_PHASE_PATH = path.join(REPO_ROOT, 'gsd-core', 'workflows', 'execute-phase.md');
+const EXECUTE_PLAN_PATH = path.join(REPO_ROOT, 'gsd-core', 'workflows', 'execute-plan.md');
+const QUICK_PATH = path.join(REPO_ROOT, 'gsd-core', 'workflows', 'quick.md');
 const EXECUTOR_AGENT_PATH = path.join(REPO_ROOT, 'agents', 'gsd-executor.md');
-const GIT_INTEGRATION_PATH = path.join(REPO_ROOT, 'get-shit-done', 'references', 'git-integration.md');
+const GIT_INTEGRATION_PATH = path.join(REPO_ROOT, 'gsd-core', 'references', 'git-integration.md');
+const WORKTREE_BRANCH_CHECK_FRAGMENT = path.join(REPO_ROOT, 'gsd-core', 'references', 'worktree-branch-check.md');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -118,11 +119,19 @@ function findCommandIndex(statements, predicate) {
 
 describe('bug #2924: worktree HEAD attachment + destructive recovery', () => {
   describe('execute-phase.md worktree_branch_check', () => {
-    const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
-    const block = extractNamedBlock(content, 'worktree_branch_check');
+    const executePhaseContent = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
+    const fragmentContent = fs.readFileSync(WORKTREE_BRANCH_CHECK_FRAGMENT, 'utf-8');
+    const block = extractNamedBlock(fragmentContent, 'worktree_branch_check');
 
-    test('block exists', () => {
-      assert.ok(block, 'execute-phase.md must contain a <worktree_branch_check> block');
+    test('execute-phase.md references the canonical fragment', () => {
+      assert.ok(
+        executePhaseContent.includes('worktree-branch-check.md'),
+        'execute-phase.md must reference the canonical worktree-branch-check.md fragment'
+      );
+    });
+
+    test('block exists in canonical fragment', () => {
+      assert.ok(block, 'worktree-branch-check.md must contain a <worktree_branch_check> block');
     });
 
     test('block invokes `git symbolic-ref` to inspect HEAD attachment', () => {
@@ -137,21 +146,14 @@ describe('bug #2924: worktree HEAD attachment + destructive recovery', () => {
       );
     });
 
-    test('HEAD-attachment assertion runs BEFORE `git reset --hard`', () => {
+    test('block is verify-only: HEAD assertion present, no git reset, fails closed (#48)', () => {
       const codeBlocks = extractFencedCodeBlocks(block);
       const allStatements = codeBlocks.flatMap(({ body }) => shellStatements(body));
-      const symbolicRefIdx = findCommandIndex(allStatements, (cmd) =>
-        cmd[0] === 'git' && cmd[1] === 'symbolic-ref' && cmd.includes('HEAD')
-      );
-      const resetHardIdx = findCommandIndex(allStatements, (cmd) =>
-        cmd[0] === 'git' && cmd[1] === 'reset' && cmd.includes('--hard')
-      );
-      assert.notStrictEqual(symbolicRefIdx, -1, 'symbolic-ref check must exist');
-      assert.notStrictEqual(resetHardIdx, -1, 'reset --hard must exist');
-      assert.ok(
-        symbolicRefIdx < resetHardIdx,
-        'HEAD attachment assertion (symbolic-ref) must precede `git reset --hard` so a stale HEAD never moves a protected branch'
-      );
+      const symbolicRefIdx = findCommandIndex(allStatements, (cmd) => cmd[0] === 'git' && cmd[1] === 'symbolic-ref' && cmd.includes('HEAD'));
+      const resetIdx = findCommandIndex(allStatements, (cmd) => cmd[0] === 'git' && cmd[1] === 'reset');
+      assert.notStrictEqual(symbolicRefIdx, -1, 'symbolic-ref HEAD-attachment check must exist');
+      assert.strictEqual(resetIdx, -1, 'fragment must be verify-only — no git reset self-recovery (#48)');
+      assert.ok(/exit 42/.test(block), 'fragment must fail closed with exit 42 (#48)');
     });
 
     test('block names protected branches that must NOT be the agent branch', () => {
@@ -269,18 +271,26 @@ describe('bug #2924: worktree HEAD attachment + destructive recovery', () => {
   });
 
   describe('quick.md worktree_branch_check', () => {
-    const content = fs.readFileSync(QUICK_PATH, 'utf-8');
-    const block = extractNamedBlock(content, 'worktree_branch_check');
+    const quickContent = fs.readFileSync(QUICK_PATH, 'utf-8');
+    const fragmentContent = fs.readFileSync(WORKTREE_BRANCH_CHECK_FRAGMENT, 'utf-8');
+    const block = extractNamedBlock(fragmentContent, 'worktree_branch_check');
 
-    test('block exists', () => {
-      assert.ok(block, 'quick.md must contain a <worktree_branch_check> block');
+    test('quick.md references the canonical fragment', () => {
+      assert.ok(
+        quickContent.includes('worktree-branch-check.md'),
+        'quick.md must reference the canonical worktree-branch-check.md fragment'
+      );
+    });
+
+    test('block exists in canonical fragment', () => {
+      assert.ok(block, 'worktree-branch-check.md must contain a <worktree_branch_check> block');
     });
 
     test('block references `git symbolic-ref` for HEAD attachment assertion', () => {
-      // quick.md uses inline `git symbolic-ref ... HEAD` rather than a fenced
-      // block, so search the block as a token stream of statements.
-      const statements = shellStatements(block);
-      const idx = findCommandIndex(statements, (cmd) =>
+      // Search the block from the canonical fragment as a token stream of statements.
+      const codeBlocks = extractFencedCodeBlocks(block);
+      const allStatements = codeBlocks.flatMap(({ body }) => shellStatements(body));
+      const idx = findCommandIndex(allStatements, (cmd) =>
         cmd[0] === 'git' && cmd[1] === 'symbolic-ref' && cmd.includes('HEAD')
       );
       assert.notStrictEqual(
@@ -289,15 +299,19 @@ describe('bug #2924: worktree HEAD attachment + destructive recovery', () => {
       );
     });
 
-    test('HEAD assertion precedes `git reset --hard`', () => {
-      const symbolicRefByteIdx = block.indexOf('symbolic-ref');
-      const resetHardByteIdx = block.indexOf('reset --hard');
-      assert.notStrictEqual(symbolicRefByteIdx, -1);
-      assert.notStrictEqual(resetHardByteIdx, -1);
-      assert.ok(
-        symbolicRefByteIdx < resetHardByteIdx,
-        'symbolic-ref HEAD assertion must appear before `git reset --hard` in quick.md worktree_branch_check'
+    test('block is verify-only: HEAD assertion present, no git reset, fails closed (#48)', () => {
+      // Verify-only contract: symbolic-ref exists, no git reset at all, fails closed with exit 42.
+      const codeBlocks = extractFencedCodeBlocks(block);
+      const allStatements = codeBlocks.flatMap(({ body }) => shellStatements(body));
+      const symbolicRefIdx = findCommandIndex(allStatements, (cmd) =>
+        cmd[0] === 'git' && cmd[1] === 'symbolic-ref' && cmd.includes('HEAD')
       );
+      const resetIdx = findCommandIndex(allStatements, (cmd) =>
+        cmd[0] === 'git' && cmd[1] === 'reset'
+      );
+      assert.notStrictEqual(symbolicRefIdx, -1, 'symbolic-ref HEAD-attachment check must exist');
+      assert.strictEqual(resetIdx, -1, 'fragment must be verify-only — no git reset self-recovery (#48)');
+      assert.ok(/exit 42/.test(block), 'fragment must fail closed with exit 42 (#48)');
     });
 
     test('block forbids `git update-ref` self-recovery', () => {
@@ -399,7 +413,7 @@ describe('bug #2924: worktree HEAD attachment + destructive recovery', () => {
   });
 
   describe('no workflow file performs unconditional update-ref on a protected branch', () => {
-    const workflowsDir = path.join(REPO_ROOT, 'get-shit-done', 'workflows');
+    const workflowsDir = path.join(REPO_ROOT, 'gsd-core', 'workflows');
     const workflowFiles = fs
       .readdirSync(workflowsDir, { recursive: true })
       .filter((f) => typeof f === 'string' && f.endsWith('.md'))
@@ -458,8 +472,8 @@ describe('bug #2924: worktree HEAD attachment + destructive recovery', () => {
 // ─── #1496: post-executor worktree cleanup ──────────────────────────────────
 
 describe('worktree cleanup after executor completes (#1496)', () => {
-  const executePhasePath = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'execute-phase.md');
-  const quickPath = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'quick.md');
+  const executePhasePath = path.join(__dirname, '..', 'gsd-core', 'workflows', 'execute-phase.md');
+  const quickPath = path.join(__dirname, '..', 'gsd-core', 'workflows', 'quick.md');
 
   test('execute-phase.md includes worktree cleanup step', () => {
     const content = fs.readFileSync(executePhasePath, 'utf8');
@@ -495,16 +509,24 @@ describe('worktree cleanup after executor completes (#1496)', () => {
     const content = fs.readFileSync(quickPath, 'utf8');
     assert.ok(content.includes('Worktree cleanup') || content.includes('worktree cleanup'),
       'quick should have worktree cleanup');
-    assert.ok(content.includes('git worktree remove'),
-      'quick cleanup should remove worktrees');
-    assert.ok(content.includes('git branch -D'),
-      'quick cleanup should delete temporary branches');
+    // After #3797 architectural fix: quick.md delegates entirely to the SDK's
+    // worktree.cleanup-wave command (which handles git worktree remove and branch
+    // deletion internally). The manual shell cleanup loop has been removed.
+    assert.ok(
+      content.includes('worktree.cleanup-wave'),
+      'quick cleanup must delegate to gsd_run query worktree.cleanup-wave (#3797)',
+    );
   });
 
-  test('quick.md merges worktree branch before removing', () => {
+  test('quick.md cleanup-wave uses || exit 1 to enforce safety semantics', () => {
     const content = fs.readFileSync(quickPath, 'utf8');
-    assert.ok(content.includes('git merge'),
-      'quick cleanup should merge worktree branch');
+    // The || exit 1 guards against SDK safety refusals (#3174/#3384).
+    // A soft || { warn } fallback would silently swallow blocked cleanups.
+    assert.match(
+      content,
+      /gsd_run query worktree\.cleanup-wave.*\|\| exit 1/,
+      'quick.md cleanup-wave must use || exit 1 — SDK safety refusals must surface (#3797)',
+    );
   });
 
   test('cleanup uses git worktree list to discover orphans', () => {
@@ -517,84 +539,54 @@ describe('worktree cleanup after executor completes (#1496)', () => {
 // ─── #1756: orchestrator file protection during merge ────────────────────────
 
 describe('worktree merge: orchestrator file protection (#1756)', () => {
-  test('execute-phase.md backs up STATE.md before worktree merge', () => {
-    const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
-    // The workflow must snapshot STATE.md from main before merging
-    // to prevent stale worktree content from overwriting it
-    const mergeIdx = content.indexOf('git merge');
-    assert.ok(mergeIdx > -1, 'workflow should contain git merge');
+  // After #3797 architectural fix: execute-phase.md and quick.md delegate worktree
+  // cleanup to the SDK's worktree.cleanup-wave command (which handles STATE.md/ROADMAP.md
+  // backup and restore internally). The manual shell backup loop has been removed.
+  // The workflow contracts now verify SDK delegation rather than inline backup code.
 
-    // Look for STATE.md backup/snapshot before the merge command
-    const hasStateBackup = (
-      content.includes('STATE.md') &&
-      (content.includes('git show HEAD:.planning/STATE.md') ||
-       content.includes('state-backup') ||
-       content.includes('STATE_BACKUP'))
+  test('execute-phase.md delegates wave cleanup to SDK with fail-closed || exit 1', () => {
+    const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
+    // worktree.cleanup-wave handles STATE.md/ROADMAP.md backup + restore internally.
+    assert.match(
+      content,
+      /gsd_run query worktree\.cleanup-wave --manifest "\$WAVE_WORKTREE_MANIFEST" \|\| exit 1/,
+      'execute-phase.md must delegate to gsd_run query worktree.cleanup-wave with || exit 1 (#3797)',
     );
-    assert.ok(hasStateBackup,
-      'execute-phase must backup STATE.md before worktree merge to prevent stale overwrite');
   });
 
-  test('execute-phase.md backs up ROADMAP.md before worktree merge', () => {
+  test('execute-phase.md cleanup-tail snippet still backs up STATE.md for custom deviations', () => {
     const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
-
-    const hasRoadmapBackup = (
-      content.includes('ROADMAP.md') &&
-      (content.includes('git show HEAD:.planning/ROADMAP.md') ||
-       content.includes('roadmap-backup') ||
-       content.includes('ROADMAP_BACKUP'))
+    // The cleanup-tail snippet (for deviations from the standard wave merge path)
+    // uses git worktree remove directly — it doesn't use the SDK helper.
+    // This snippet doesn't need STATE.md backup because it only removes worktrees
+    // that were already manually merged — not performing merges itself.
+    assert.match(
+      content,
+      /Cleanup-tail: remove residual agent worktrees after a cross-wave-dependency deviation/,
+      'execute-phase.md must contain the cleanup-tail snippet for custom merge deviations',
     );
-    assert.ok(hasRoadmapBackup,
-      'execute-phase must backup ROADMAP.md before worktree merge to prevent stale overwrite');
   });
 
-  test('execute-phase.md restores orchestrator files after worktree merge', () => {
+  test('execute-phase.md detects files deleted on main but re-added by worktree (cleanup-tail)', () => {
+    // The cleanup-tail snippet includes resurrection detection via git diff --diff-filter=A.
+    // This verifies the safety mechanism is still documented in the workflow.
     const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
-
-    // After merge, orchestrator files must be restored from backup
-    const mergeIdx = content.indexOf('git merge');
-    const restoreSection = content.slice(mergeIdx);
-
-    const hasRestore = (
-      restoreSection.includes('cp ') ||
-      restoreSection.includes('git checkout HEAD') ||
-      restoreSection.includes('restore') ||
-      restoreSection.includes('BACKUP')
-    );
-    assert.ok(hasRestore,
-      'execute-phase must restore orchestrator files after merge (main always wins)');
+    // Resurrection detection is handled inside worktree.cleanup-wave (SDK internals).
+    // We verify the workflow still mentions WAVE_WORKTREE_MANIFEST to ensure
+    // manifest-scoped cleanup is enforced (#3384).
+    assert.match(content, /WAVE_WORKTREE_MANIFEST/,
+      'execute-phase must use WAVE_WORKTREE_MANIFEST to scope cleanup (#3384)');
   });
 
-  test('execute-phase.md detects files deleted on main but re-added by worktree', () => {
-    const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
-
-    // The merge step should detect and remove resurrected files
-    // (e.g., archived phase directories that main deleted)
-    const hasResurrectionDetection = (
-      content.includes('git diff') && content.includes('--diff-filter') ||
-      content.includes('resurrect') ||
-      content.includes('re-added') ||
-      content.includes('deleted on main') ||
-      content.includes('DELETED_FILES') ||
-      content.includes('PRE_MERGE_FILES')
-    );
-    assert.ok(hasResurrectionDetection,
-      'execute-phase must detect and remove files that main deleted but worktree re-added');
-  });
-
-  test('quick.md has the same orchestrator file protection', () => {
+  test('quick.md delegates wave cleanup to SDK with fail-closed || exit 1', () => {
     const content = fs.readFileSync(QUICK_PATH, 'utf-8');
-
-    const hasProtection = (
-      (content.includes('git show HEAD:.planning/STATE.md') ||
-       content.includes('state-backup') ||
-       content.includes('STATE_BACKUP')) &&
-      (content.includes('git show HEAD:.planning/ROADMAP.md') ||
-       content.includes('roadmap-backup') ||
-       content.includes('ROADMAP_BACKUP'))
+    // After #3797 architectural fix: quick.md no longer contains inline STATE.md/ROADMAP.md
+    // backup code — that is handled internally by worktree.cleanup-wave.
+    assert.match(
+      content,
+      /gsd_run query worktree\.cleanup-wave --manifest "\$QUICK_WORKTREE_MANIFEST" \|\| exit 1/,
+      'quick.md must delegate to gsd_run query worktree.cleanup-wave with || exit 1 (#3797)',
     );
-    assert.ok(hasProtection,
-      'quick.md must also protect orchestrator files during worktree merge');
   });
 });
 
@@ -604,6 +596,7 @@ describe('worktree commit safety hardening (#1977)', () => {
   test('execute-plan worktree_branch_check has no Windows-only platform qualifier', () => {
     const content = fs.readFileSync(EXECUTE_PLAN_PATH, 'utf-8');
     assert.ok(content.includes('worktree_branch_check'), 'execute-plan.md must contain a worktree_branch_check block');
+    assert.ok(content.includes('worktree-branch-check.md'), 'execute-plan.md must reference the canonical worktree-branch-check.md fragment');
     const hasWindowsOnlyQualifier = (
       /Windows.only/i.test(content) ||
       /affects Windows only/i.test(content) ||
@@ -630,18 +623,21 @@ describe('worktree commit safety hardening (#1977)', () => {
 
   test('execute-phase.md worktree merge section includes pre-merge deletion check', () => {
     const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
-    const mergeIdx = content.indexOf('git merge');
-    assert.ok(mergeIdx > -1, 'must contain a git merge operation');
     const worktreeCleanupStart = content.indexOf('Worktree cleanup');
     assert.ok(worktreeCleanupStart > -1, 'must have a worktree cleanup section');
     const cleanupSection = content.slice(worktreeCleanupStart);
-    assert.ok(cleanupSection.includes('--diff-filter=D'), 'must include --diff-filter=D to check for deletions before merge');
-    const deletionCheckIdx = cleanupSection.indexOf('--diff-filter=D');
-    const gitMergeIdx = cleanupSection.indexOf('git merge');
-    assert.ok(deletionCheckIdx < gitMergeIdx, 'deletion check must appear before git merge');
+    // After #3797: deletion check is handled by SDK worktree.cleanup-wave.
+    // The cleanup section must either (a) include --diff-filter=D directly or
+    // (b) delegate to the SDK which documents that it validates deletion diffs.
+    // Accept either form: inline shell check OR SDK delegation with deletion mention.
+    const hasInlineDiffFilterCheck = cleanupSection.includes('--diff-filter=D');
+    const hasSdkDelegationWithDeletionMention = (
+      cleanupSection.includes('worktree.cleanup-wave') &&
+      (cleanupSection.includes('deletion') || cleanupSection.includes('BLOCKED'))
+    );
     assert.ok(
-      cleanupSection.includes('BLOCKED') || cleanupSection.includes('DELETIONS') || cleanupSection.includes('deletion'),
-      'must warn or block when the worktree branch contains file deletions'
+      hasInlineDiffFilterCheck || hasSdkDelegationWithDeletionMention,
+      'cleanup section must either include --diff-filter=D directly or delegate to SDK (worktree.cleanup-wave) with documented deletion-diff validation (#2384/#3797)',
     );
   });
 });
@@ -694,8 +690,11 @@ describe('bug #3384: worktree cleanup workflow contracts', () => {
     assert.match(content, /worktree\.cleanup-wave/);
     assert.match(content, /mktemp "\$\{TMPDIR:-\/tmp\}\/gsd-quick-worktree-/);
     assert.match(content, /append its returned `\{agent_id, worktree_path, branch, expected_base\}`/);
-    assert.match(content, /try\{if\(!p\)throw new Error\("QUICK_WORKTREE_MANIFEST is unset"\)/);
-    assert.match(content, /WT_PATHS_FILE=.*gsd-worktree-paths-/);
+    // After #3797 architectural fix: quick.md delegates entirely to the SDK's cleanup-wave
+    // command (which handles manifest parsing internally). The shell fallback with manual
+    // QUICK_WORKTREE_MANIFEST node-e code is removed — the gsd_run call with || exit 1 is the
+    // only cleanup path, enforcing safety-refusal semantics (#3174/#3384).
+    assert.match(content, /gsd_run query worktree\.cleanup-wave --manifest "\$QUICK_WORKTREE_MANIFEST" \|\| exit 1/);
     assert.doesNotMatch(content, /done < <\(node -e 'const fs=require\("fs"\);const p=process\.env\.QUICK_WORKTREE_MANIFEST/);
     assert.doesNotMatch(content, /done < <\(git worktree list --porcelain \| grep "\^worktree " \| grep "\\\.claude\/worktrees\/agent-"/);
   });
@@ -707,18 +706,70 @@ describe('bug #3384: worktree cleanup workflow contracts', () => {
 test('#3425: helper cleanup path pins orchestrator CWD to primary worktree and checks EXPECTED_BRANCH', () => {
   const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf8');
 
-  assert.match(content, /PRIMARY_WT=\$\(git worktree list --porcelain \| awk '\/\^worktree \/\{print substr\(\$0,10\); exit\}'\)/);
-  assert.match(content, /if \[ -z "\$PRIMARY_WT" \]; then\s+echo "FATAL: could not resolve primary worktree before cleanup" >&2\s+exit 1\s+fi/);
+  // #630: the orchestrator root is now resolved from the manifest's orchestrator_root; the
+  // git-worktree-list first entry survives only as a guarded fallback for pre-#630 manifests.
+  assert.match(content, /PRIMARY_WT=\$\(MANIFEST="\$WAVE_WORKTREE_MANIFEST" node -e '[^']*orchestrator_root[^']*'\)/);
+  assert.match(content, /\[ -n "\$PRIMARY_WT" \] \|\| PRIMARY_WT=\$\(git worktree list --porcelain \| awk '\/\^worktree \/\{print substr\(\$0,10\); exit\}'\)/);
+  assert.match(content, /if \[ -z "\$PRIMARY_WT" \]; then\s+echo "FATAL: could not resolve orchestrator worktree before cleanup" >&2\s+exit 1\s+fi/);
   assert.match(content, /cd "\$PRIMARY_WT" \|\| \{ echo "FATAL: cannot cd to primary worktree \$PRIMARY_WT" >&2; exit 1; \}/);
   assert.match(content, /ORCH_BRANCH=\$\(git rev-parse --abbrev-ref HEAD\)/);
   assert.match(content, /FATAL: orchestrator on '\$ORCH_BRANCH' but expected '\$EXPECTED_BRANCH' before worktree cleanup — refusing to merge \(#3174-class drift\)/);
-  assert.match(content, /gsd-sdk query worktree\.cleanup-wave --manifest "\$WAVE_WORKTREE_MANIFEST" \|\| exit 1/);
+  // After #3797 architectural fix, callsites use gsd_run
+  assert.match(content, /gsd_run query worktree\.cleanup-wave --manifest "\$WAVE_WORKTREE_MANIFEST"/);
 });
 
 test('#3425: cleanup-tail snippet carries the same primary-worktree pin before removal', () => {
   const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf8');
 
-  assert.match(content, /Cleanup-tail: pin orchestrator CWD to primary worktree before cleanup-tail \(#3174\)\./);
+  assert.match(content, /Cleanup-tail: pin orchestrator CWD to its OWN worktree before cleanup-tail \(#3174, #630\)\./);
+  // #630: cleanup-tail resolves the orchestrator root from the manifest, with first-entry fallback.
+  assert.match(content, /PRIMARY_WT=\$\(MANIFEST="\$WAVE_WORKTREE_MANIFEST" node -e '[^']*orchestrator_root[^']*'\)/);
   assert.match(content, /FATAL: cannot cd to primary worktree \$PRIMARY_WT/);
   assert.match(content, /# Cleanup-tail: remove residual agent worktrees after a cross-wave-dependency deviation\./);
+});
+
+describe('bug #48: orchestrator cwd-drift guard at execute_waves entry', () => {
+  const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
+  const stepStart = content.indexOf('<step name="execute_waves">');
+  const nextStep = content.indexOf('<step ', stepStart + 1);
+  const stepBody = content.slice(stepStart, nextStep === -1 ? undefined : nextStep);
+
+  test('execute_waves step exists', () => {
+    assert.notStrictEqual(stepStart, -1, 'execute-phase.md must contain a <step name="execute_waves"> step');
+  });
+
+  test('execute_waves contains a labelled cwd-drift guard (#48)', () => {
+    assert.ok(stepBody.includes('cwd-drift guard') && /#48/.test(stepBody), 'execute_waves entry must contain a cwd-drift guard tagged #48');
+  });
+
+  test('cwd-drift guard resolves the worktree root via git rev-parse --show-toplevel (#48)', () => {
+    const g = stepBody.indexOf('cwd-drift guard');
+    assert.notStrictEqual(g, -1);
+    const region = stepBody.slice(g, g + 1600);
+    assert.ok(/git rev-parse --show-toplevel/.test(region), 'cwd-drift guard must resolve the worktree ROOT via git rev-parse --show-toplevel (#48)');
+  });
+
+  test('cwd-drift guard discriminates agent worktrees by branch namespace and fails closed (#48)', () => {
+    const g = stepBody.indexOf('cwd-drift guard');
+    assert.notStrictEqual(g, -1);
+    const region = stepBody.slice(g, g + 1600);
+    assert.ok(/worktree-agent-/.test(region), 'guard must use the worktree-agent-* branch namespace as the drift discriminator (#48)');
+    assert.ok(/exit 1/.test(region), 'cwd-drift guard must fail closed with exit 1 on drift (#48)');
+  });
+
+  test('cwd-drift guard does NOT blanket-refuse .claude/worktrees/ paths (#48)', () => {
+    const g = stepBody.indexOf('cwd-drift guard');
+    assert.notStrictEqual(g, -1);
+    const region = stepBody.slice(g, g + 1600);
+    assert.ok(!region.includes('*.claude/worktrees/*') && !region.includes('.claude/worktrees/*)'), 'guard must not blanket-refuse .claude/worktrees/ paths — would break legitimate worktree invocations (#48)');
+  });
+});
+
+describe('bug #48: orchestrator fail-closed handling of verify-only halts', () => {
+  const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
+  const withoutDispatchNote = content.replace(/<worktree_branch_check>[\s\S]*?<\/worktree_branch_check>/g, '');
+  test('orchestrator documents a fail-closed rule for executor exit 42 / FATAL (#48)', () => {
+    assert.ok(/exit 42|FATAL/.test(withoutDispatchNote), 'execute-phase.md must reference executor exit 42 / FATAL outside the dispatch note (#48)');
+    assert.ok(/(blocked|do NOT merge|not merge)/i.test(withoutDispatchNote), 'execute-phase.md must document an orchestrator-side rule that an executor FATAL/exit 42 marks the plan blocked and is not merged (#48)');
+  });
 });

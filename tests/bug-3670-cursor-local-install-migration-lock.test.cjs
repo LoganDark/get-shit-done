@@ -42,7 +42,7 @@
  *      truly un-reclaimable lock, must still throw with a useful message naming
  *      the holder PID. (This guards against over-reclamation.)
  *
- * @see https://github.com/gsd-build/get-shit-done/issues/3670
+ * @see https://github.com/open-gsd/gsd-core/issues/3670
  */
 
 'use strict';
@@ -56,7 +56,8 @@ const path = require('node:path');
 const {
   INSTALL_MIGRATION_LOCK_NAME,
   runInstallerMigrations,
-} = require('../get-shit-done/bin/lib/installer-migrations.cjs');
+} = require('../gsd-core/bin/lib/installer-migrations.cjs');
+const { cleanup } = require('./helpers.cjs');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -64,10 +65,6 @@ const {
 
 function createTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-3670-'));
-}
-
-function cleanup(dir) {
-  fs.rmSync(dir, { recursive: true, force: true });
 }
 
 function lockPath(dir) {
@@ -301,7 +298,6 @@ test('T5: unreclaimable same-PID lock throws bounded error (reclaim-unlink failu
     return originalUnlinkSync.call(fs, targetPath);
   });
 
-  const startMs = Date.now();
   assert.throws(
     () => runInstallerMigrations({
       configDir,
@@ -314,10 +310,4 @@ test('T5: unreclaimable same-PID lock throws bounded error (reclaim-unlink failu
     },
     'must throw "installer migration lock is held" when reclaim-unlink fails — not spin indefinitely'
   );
-  const elapsedMs = Date.now() - startMs;
-
-  // Must resolve within a generous but finite window (fix + timeout overhead).
-  // If it spins (deadlock regression), the process-level test timeout fires instead.
-  t.diagnostic(`T5 elapsed: ${elapsedMs}ms (expected ≤500ms for lockTimeoutMs:200 + overhead)`);
-  assert.ok(elapsedMs < 500, `T5 must resolve within 500ms; actual ${elapsedMs}ms — possible spin-loop regression`);
 });

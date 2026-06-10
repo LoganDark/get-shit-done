@@ -1,7 +1,7 @@
-// allow-test-rule: pending-migration-to-typed-ir [#2974]
-// Tracked in #2974 for migration to typed-IR assertions per CONTRIBUTING.md
-// "Prohibited: Raw Text Matching on Test Outputs". Per-file review may
-// reclassify some entries as source-text-is-the-product during migration.
+// allow-test-rule: source-text-is-the-product
+// Workflow .md / agent .md / command .md / reference .md files — their text
+// IS what the runtime loads. Testing text content tests the deployed contract.
+// Per CONTRIBUTING.md exception matrix.
 
 /**
  * Agent size budget.
@@ -17,21 +17,35 @@
  *
  * Raising a budget is a deliberate choice — adjust the constant, write a
  * rationale in the PR, and make sure the bloat is not duplicated content
- * that belongs in `get-shit-done/references/`.
+ * that belongs in `gsd-core/references/`.
  *
- * See: https://github.com/gsd-build/get-shit-done/issues/2361
+ * Tighten-only invariant (issue #597): ceilings track the tier high-water mark
+ * within GRACE lines. Budgets may only decrease, never silently creep upward.
+ * The assertTightCeiling() call below enforces this automatically.
+ *
+ * See: https://github.com/open-gsd/gsd-core/issues/2361
  */
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { assertTightCeiling } = require('../scripts/lib/allowlist-ratchet.cjs');
 
 const AGENTS_DIR = path.join(__dirname, '..', 'agents');
 
-const XL_BUDGET = 1600;
+// Ceilings tightened to actualMax + GRACE per the ratchet-down rule (#597).
+// XL ceiling lowered from 1600 → 1512 (actualMax=1452, gsd-debugger).
+const XL_BUDGET = 1512;
+// LARGE ceiling kept at 1000 (actualMax=978, slack=22 ≤ GRACE=60).
 const LARGE_BUDGET = 1000;
+// DEFAULT ceiling kept at 500 (actualMax=495, slack=5 ≤ GRACE=60).
 const DEFAULT_BUDGET = 500;
+
+// Grace band: maximum allowed slack (ceiling − actualMax) before a ceiling is
+// considered too loose. 60 lines gives one reasonable screen of breathing room
+// without permitting gross inflation.
+const GRACE = 60;
 
 const XL_AGENTS = new Set([
   'gsd-debugger',
@@ -76,11 +90,40 @@ describe('SIZE: agent line-count budget', () => {
       assert.ok(
         lines <= limit,
         `${agent}.md has ${lines} lines — exceeds ${tier} budget of ${limit}. ` +
-        `Extract shared boilerplate to get-shit-done/references/ or raise the budget ` +
+        `Extract shared boilerplate to gsd-core/references/ or raise the budget ` +
         `in tests/agent-size-budget.test.cjs with a rationale.`
       );
     });
   }
+});
+
+describe('SIZE: tier anti-creep (tighten-only ceilings, issue #597)', () => {
+  // For each tier, compute the high-water mark across all files in that tier
+  // and assert the ceiling stays tight. Prevents budgets from silently drifting
+  // upward: ceiling − actualMax must not exceed GRACE.
+  test('XL tier: ceiling tracks high-water mark within GRACE', () => {
+    const values = ALL_AGENTS
+      .filter(a => XL_AGENTS.has(a))
+      .map(a => lineCount(path.join(AGENTS_DIR, a + '.md')));
+    const actualMax = Math.max(...values);
+    assertTightCeiling({ label: 'XL', actualMax, ceiling: XL_BUDGET, grace: GRACE, fail: assert.fail });
+  });
+
+  test('LARGE tier: ceiling tracks high-water mark within GRACE', () => {
+    const values = ALL_AGENTS
+      .filter(a => LARGE_AGENTS.has(a))
+      .map(a => lineCount(path.join(AGENTS_DIR, a + '.md')));
+    const actualMax = Math.max(...values);
+    assertTightCeiling({ label: 'LARGE', actualMax, ceiling: LARGE_BUDGET, grace: GRACE, fail: assert.fail });
+  });
+
+  test('DEFAULT tier: ceiling tracks high-water mark within GRACE', () => {
+    const values = ALL_AGENTS
+      .filter(a => !XL_AGENTS.has(a) && !LARGE_AGENTS.has(a))
+      .map(a => lineCount(path.join(AGENTS_DIR, a + '.md')));
+    const actualMax = Math.max(...values);
+    assertTightCeiling({ label: 'DEFAULT', actualMax, ceiling: DEFAULT_BUDGET, grace: GRACE, fail: assert.fail });
+  });
 });
 
 describe('SIZE: every agent is classified', () => {

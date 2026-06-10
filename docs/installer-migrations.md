@@ -121,9 +121,17 @@ Required fields:
 }
 ```
 
-The checksum is calculated from the migration definition. If an applied
-migration's checksum changes, the installer must warn and refuse to silently
-re-run it. Fix-forward migrations should use a new migration id.
+The checksum is calculated from the migration definition.
+
+An already-applied migration is never re-run, so a drifted checksum is
+tolerated at runtime: it is collected in `plan.checksumDrift` and reconciled
+into install state on the next write, rather than aborting the user's upgrade
+(this unblocks upgrades — see issue #670).
+
+The "shipped migration bodies are immutable" rule is enforced in CI by a
+committed checksum-baseline test in `tests/installer-migrations.test.cjs`.
+If you need to change the behaviour of a released migration, add a NEW
+fix-forward migration id instead of editing the shipped body.
 
 ## Migration Record
 
@@ -360,9 +368,9 @@ for the new shape before changing migration behavior.
 | Kilo | OpenCode-style flat markdown commands in `command/gsd-*.md`; agents in `agents/gsd-*.md`; config updates in `kilo.json` or `kilo.jsonc` | Global `KILO_CONFIG_DIR`, `dirname(KILO_CONFIG)`, `XDG_CONFIG_HOME/kilo`, or `~/.config/kilo`; local `./.kilo` | GSD owns generated command/agent files and GSD entries in structured config only | [Custom subagents](https://docs.kilo.ai/docs/customize/custom-subagents); docs not versioned, checked 2026-05-11 |
 | Gemini CLI | TOML slash commands in `commands/gsd/*.toml`; agents in `agents/gsd-*.md`; `settings.json` feature flag, hooks, and statusline | Global `GEMINI_CONFIG_DIR` or `~/.gemini`; local `./.gemini` | GSD owns generated commands/agents/hooks and only GSD settings entries; local command copy may be skipped when global GSD commands already exist | [Custom commands](https://google-gemini.github.io/gemini-cli/docs/cli/custom-commands.html), [configuration](https://google-gemini.github.io/gemini-cli/docs/cli/configuration.html); docs checked 2026-05-11 |
 | Codex | Skills in `skills/gsd-*/SKILL.md`; agents as source markdown plus per-agent TOML in `agents/`; `[agents.gsd-*]` and hooks in `config.toml` | Global `CODEX_HOME` or `~/.codex`; local `./.codex` | GSD owns generated skills, generated agent TOML, `agents.gsd-*` config sections, `[features].hooks` when added by GSD (canonical; legacy alias `codex_hooks` is recognized and migrated forward, #3566), and GSD hook entries | [Codex config schema](https://developers.openai.com/codex/config-schema.json), [Codex developer docs](https://developers.openai.com/codex/); docs not versioned, checked 2026-05-15; installer compatibility sentinel: Codex 0.130.0 features.hooks key (legacy `codex_hooks` recognized) |
-| GitHub Copilot | Skills in `skills/gsd-*/SKILL.md`; agents as `.agent.md`; repository instructions in `copilot-instructions.md` | Global `COPILOT_CONFIG_DIR` or `~/.copilot`; local `./.github` | GSD owns generated skill/agent files and GSD-authored instruction files; no hook/statusline ownership | [Repository custom instructions](https://docs.github.com/en/copilot/how-tos/configure-custom-instructions/add-repository-instructions), [Copilot CLI custom instructions](https://docs.github.com/en/copilot/how-tos/copilot-cli/add-custom-instructions); GitHub Docs product docs, checked 2026-05-11 |
+| GitHub Copilot | Skills in `skills/gsd-*/SKILL.md`; agents as `.agent.md`; repository instructions in `copilot-instructions.md` | Global `COPILOT_CONFIG_DIR`, `COPILOT_HOME`, or `~/.copilot`; local `./.github` | GSD owns generated skill/agent files and GSD-authored instruction files; no hook/statusline ownership | [Repository custom instructions](https://docs.github.com/en/copilot/how-tos/configure-custom-instructions/add-repository-instructions), [Copilot CLI custom instructions](https://docs.github.com/en/copilot/how-tos/copilot-cli/add-custom-instructions); GitHub Docs product docs, checked 2026-05-11 |
 | Antigravity | Skills in `skills/gsd-*/SKILL.md`; agents in `agents/`; Gemini-style `settings.json` hooks when installed by GSD | Global `ANTIGRAVITY_CONFIG_DIR` or `~/.gemini/antigravity`; local `./.agent` | GSD owns generated skills/agents/hooks and GSD settings entries only | Public Antigravity install/config docs for this file layout were not stable or complete as of 2026-05-11; installer compatibility therefore uses GSD's Gemini-compatible settings policy, documented shim baseline. |
-| Cursor | Skills in `skills/gsd-*/SKILL.md`; agents in `agents/`; rule references under `rules/` | Global `CURSOR_CONFIG_DIR` or `~/.cursor`; local `./.cursor` | GSD owns generated skills/agents and GSD rule files or references; no hook/statusline ownership | [Cursor rules](https://docs.cursor.com/context/rules); docs not versioned, checked 2026-05-11 |
+| Cursor | Skills in `skills/gsd-*/SKILL.md`; agents in `agents/`; rule references under `rules/`; lifecycle hooks via `hooks.json` (sessionStart + postToolUse, #777) | Global `CURSOR_CONFIG_DIR` or `~/.cursor`; local `./.cursor` | GSD owns generated skills/agents, GSD rule files or references, and GSD-managed `hooks.json` entries (sentinel `gsd-managed:true`); no statusline ownership | [Cursor rules](https://docs.cursor.com/context/rules); [Cursor hooks](https://docs.cursor.com/context/hooks); docs not versioned, checked 2026-06-07 |
 | Windsurf | Skills in `skills/gsd-*/SKILL.md`; agents in `agents/`; rule references under `rules/` | Global `WINDSURF_CONFIG_DIR` or `~/.codeium/windsurf`; local `./.windsurf` | GSD owns generated skills/agents and GSD rule files or references; no hook/statusline ownership | Windsurf public rule docs were source-limited in search results as of 2026-05-11; installer targets the common workspace rules convention `./.windsurf/rules` and must be rechecked before migrations rewrite rules |
 | Augment Code | Skills in `skills/gsd-*/SKILL.md`; agents in `agents/` | Global `AUGMENT_CONFIG_DIR` or `~/.augment`; local `./.augment` | GSD owns generated skills/agents only; no hook/statusline ownership | [Augment Agent Skills](https://docs.augmentcode.com/cli/skills), [Augment IDE skills](https://docs.augmentcode.com/using-augment/skills); IDE skills public beta in VS Code 0.789.0+, checked 2026-05-11 |
 | Trae | Skills in `skills/gsd-*/SKILL.md`; agents in `agents/`; rule references under `rules/` | Global `TRAE_CONFIG_DIR` or `~/.trae`; local `./.trae` | GSD owns generated skills/agents and GSD rule files or references; no hook/statusline ownership | Public Trae docs expose AI settings and `.rules` announcements, but no stable skills/config API was found as of 2026-05-11; migrations must treat this row as source-limited |
@@ -480,6 +488,17 @@ Every migration runner change should cover:
 This sequence keeps the first implementation small: the existing installer
 continues to materialize files, while the migration runner takes ownership of
 cleanup, classification, and reviewable destructive changes.
+
+## Shipped Migrations
+
+Each row corresponds to one migration record in `src/installer-migrations/`.
+
+| ID | File | Introduced In | Scopes | Destructive | Summary |
+|----|------|---------------|--------|-------------|---------|
+| `2026-05-11-first-time-baseline-scan` | `000-first-time-baseline.cts` | 1.50.0 | global, local | No | Records classification baseline for existing installs before destructive migrations run. |
+| `2026-05-11-legacy-orphan-files` | `001-legacy-orphan-files.cts` | 1.50.0 | global, local | Yes | Removes manifest-managed legacy orphan hook files (`hooks/gsd-notify.sh`, `hooks/statusline.js`) retired by the installer. |
+| `2026-05-11-codex-legacy-hooks-json` | `002-codex-legacy-hooks-json.cts` | 1.50.0 | global, local | Yes | Removes legacy GSD hook registrations from Codex `hooks.json` after the `config.toml` migration. |
+| `2026-06-02-rename-get-shit-done-to-gsd-core` | `003-rename-get-shit-done-to-gsd-core.cts` | 1.2.0 | global, local | Yes | Removes managed files from the stale `get-shit-done/` runtime directory after the rename to `gsd-core/` (#604). User-added files are preserved; emptied directories may remain (framework limitation). <!-- gsd-allow-legacy-name --> |
 
 ## Prior Art
 

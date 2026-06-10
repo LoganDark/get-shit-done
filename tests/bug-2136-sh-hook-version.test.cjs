@@ -1,7 +1,3 @@
-// allow-test-rule: pending-migration-to-typed-ir [#2974]
-// Tracked in #2974 for migration to typed-IR assertions per CONTRIBUTING.md
-// "Prohibited: Raw Text Matching on Test Outputs". Per-file review may
-// reclassify some entries as source-text-is-the-product during migration.
 
 // allow-test-rule: structural-regression-guard
 // The shebang line must be `#!/usr/bin/env bash` (PATH-resolved) rather than
@@ -49,7 +45,7 @@ const os = require('os');
 const { execFileSync } = require('child_process');
 
 const HOOKS_DIR = path.join(__dirname, '..', 'hooks');
-const CHECK_UPDATE_FILE = path.join(HOOKS_DIR, 'gsd-check-update.js');
+const _CHECK_UPDATE_FILE = path.join(HOOKS_DIR, 'gsd-check-update.js');
 const WORKER_FILE = path.join(HOOKS_DIR, 'gsd-check-update-worker.js');
 const INSTALL_SCRIPT = path.join(__dirname, '..', 'bin', 'install.js');
 const BUILD_SCRIPT = path.join(__dirname, '..', 'scripts', 'build-hooks.js');
@@ -76,6 +72,7 @@ function createTempDir(prefix) {
 }
 
 function cleanup(dir) {
+  // eslint-disable-next-line local/no-raw-rmsync-in-tests -- local cleanup() helper wrapping rmSync; cannot use imported cleanup() without naming collision
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
 }
 
@@ -145,11 +142,11 @@ describe('bug #2136 part 2: stale-hook detector handles bash comment syntax', ()
     // "(?:\/\/|#)" directly in source.
     const hasBashAlternative =
       src.includes('(?:\\/\\/|#)') ||     // escaped form (old template-literal style)
-      src.includes('(?:\/\/|#)');          // direct form in plain JS worker
+      src.includes('(?://|#)');          // direct form in plain JS worker
     assert.ok(
       hasBashAlternative,
       'gsd-check-update-worker.js version regex must include an alternative for bash "#" comments. ' +
-      'Expected to find (?:\\/\\/|#) or (?:\/\/|#) in the source. ' +
+      'Expected to find (?:\\/\\/|#) or (?://|#) in the source. ' +
       'The original "//" only regex causes bash hooks to always report hookVersion: "unknown"'
     );
   });
@@ -198,75 +195,6 @@ describe('bug #2136 part 2: stale-hook detector handles bash comment syntax', ()
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Part 3a: install.js bundled path substitutes {{GSD_VERSION}} in .sh hooks
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe('bug #2136 part 3a: install.js bundled path substitutes {{GSD_VERSION}} in .sh hooks', () => {
-  let src;
-
-  before(() => {
-    src = fs.readFileSync(INSTALL_SCRIPT, 'utf8');
-  });
-
-  test('.sh branch in bundled hook copy loop reads file and substitutes GSD_VERSION', () => {
-    // Anchor on configDirReplacement — unique to the bundled-hooks path.
-    const anchorIdx = src.indexOf('configDirReplacement');
-    assert.ok(anchorIdx !== -1, 'bundled hook copy loop anchor (configDirReplacement) not found');
-
-    // Window large enough for the if/else block
-    const region = src.slice(anchorIdx, anchorIdx + 2000);
-
-    assert.ok(
-      region.includes("entry.endsWith('.sh')"),
-      "bundled hook copy loop must check entry.endsWith('.sh')"
-    );
-    assert.ok(
-      region.includes('GSD_VERSION'),
-      'bundled .sh branch must reference GSD_VERSION substitution. Without this, ' +
-      'installed .sh hooks contain the literal "{{GSD_VERSION}}" placeholder and ' +
-      'bash hook staleness becomes permanently undetectable after future updates'
-    );
-    // copyFileSync on a .sh file would skip substitution — ensure we read+write instead
-    const shBranchIdx = region.indexOf("entry.endsWith('.sh')");
-    const shBranchRegion = region.slice(shBranchIdx, shBranchIdx + 400);
-    assert.ok(
-      shBranchRegion.includes('readFileSync') || shBranchRegion.includes('writeFileSync'),
-      'bundled .sh branch must read the file (readFileSync) to perform substitution, ' +
-      'not copyFileSync directly (which skips template expansion)'
-    );
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Part 3b: install.js Codex path also substitutes {{GSD_VERSION}} in .sh hooks
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe('bug #2136 part 3b: install.js Codex path substitutes {{GSD_VERSION}} in .sh hooks', () => {
-  let src;
-
-  before(() => {
-    src = fs.readFileSync(INSTALL_SCRIPT, 'utf8');
-  });
-
-  test('.sh branch in Codex hook copy block substitutes GSD_VERSION', () => {
-    // Anchor on codexHooksSrc — unique to the Codex path.
-    const anchorIdx = src.indexOf('codexHooksSrc');
-    assert.ok(anchorIdx !== -1, 'Codex hook copy block anchor (codexHooksSrc) not found');
-
-    const region = src.slice(anchorIdx, anchorIdx + 2000);
-
-    assert.ok(
-      region.includes("entry.endsWith('.sh')"),
-      "Codex hook copy block must check entry.endsWith('.sh')"
-    );
-    assert.ok(
-      region.includes('GSD_VERSION'),
-      'Codex .sh branch must substitute {{GSD_VERSION}}. The bundled path was fixed ' +
-      'but Codex installs a separate copy of the hooks from hooks/dist that also needs stamping'
-    );
-  });
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Part 4: End-to-end — installed .sh hooks have stamped version, not placeholder

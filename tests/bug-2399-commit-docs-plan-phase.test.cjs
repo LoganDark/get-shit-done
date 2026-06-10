@@ -1,7 +1,7 @@
-// allow-test-rule: pending-migration-to-typed-ir [#2974]
-// Tracked in #2974 for migration to typed-IR assertions per CONTRIBUTING.md
-// "Prohibited: Raw Text Matching on Test Outputs". Per-file review may
-// reclassify some entries as source-text-is-the-product during migration.
+// allow-test-rule: source-text-is-the-product
+// Workflow .md / agent .md / command .md / reference .md files — their text
+// IS what the runtime loads. Testing text content tests the deployed contract.
+// Per CONTRIBUTING.md exception matrix.
 
 /**
  * Bug #2399: commit_docs:true is ignored in plan-phase
@@ -16,11 +16,11 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const PLAN_PHASE_PATH = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'plan-phase.md');
+const PLAN_PHASE_PATH = path.join(__dirname, '..', 'gsd-core', 'workflows', 'plan-phase.md');
 
 describe('plan-phase commit_docs support (#2399)', () => {
   test('plan-phase.md exists', () => {
-    assert.ok(fs.existsSync(PLAN_PHASE_PATH), 'get-shit-done/workflows/plan-phase.md must exist');
+    assert.ok(fs.existsSync(PLAN_PHASE_PATH), 'gsd-core/workflows/plan-phase.md must exist');
   });
 
   test('plan-phase.md has a commit step for plan artifacts', () => {

@@ -16,7 +16,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const WORKFLOWS_DIR = path.join(__dirname, '../get-shit-done/workflows');
+const WORKFLOWS_DIR = path.join(__dirname, '../gsd-core/workflows');
 
 function readWorkflow(name) {
   return fs.readFileSync(path.join(WORKFLOWS_DIR, name), 'utf-8');
@@ -35,7 +35,7 @@ describe('enh-2430 Part A — plan-phase LEARNINGS.md context load', () => {
 
   test('plan-phase.md LEARNINGS load is inside the 1M context-window gate', () => {
     content = content || readWorkflow('plan-phase.md');
-    const windowBlock = content.match(/\$\{CONTEXT_WINDOW >= 500000[\s\S]*?\` : ''\}/);
+    const windowBlock = content.match(/\$\{CONTEXT_WINDOW >= 500000[\s\S]*?` : ''\}/);
     assert.ok(windowBlock, 'CONTEXT_WINDOW gate block must exist');
     assert.ok(
       windowBlock[0].includes('LEARNINGS.md'),
@@ -62,7 +62,7 @@ describe('enh-2430 Part A — plan-phase LEARNINGS.md context load', () => {
 
   test('plan-phase.md LEARNINGS load includes Depends-on chain', () => {
     content = content || readWorkflow('plan-phase.md');
-    const dependsSection = content.match(/Depends on.*?(\n.*?)+/);
+    content.match(/Depends on.*?(\n.*?)+/);
     assert.ok(
       content.includes('LEARNINGS.md from any phases listed in'),
       'plan-phase.md must load LEARNINGS.md for Depends on chain phases'

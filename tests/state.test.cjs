@@ -10,13 +10,14 @@ const { test, describe, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { runGsdTools, createTempProject, cleanup } = require('./helpers.cjs');
+const { runGsdTools, cleanup } = require('./helpers.cjs');
+const { createFixture } = require('./fixtures/index.cjs');
 
 describe('state-snapshot command', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -197,7 +198,7 @@ describe('state-snapshot — bug #3265 frontmatter precedence', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -287,7 +288,7 @@ describe('state mutation commands', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -408,7 +409,7 @@ describe('state json command', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -513,7 +514,7 @@ describe('STATE.md frontmatter sync', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -633,7 +634,7 @@ milestone: v1.0
 // stateExtractField and stateReplaceField helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-const { stateExtractField, stateReplaceField, stateReplaceFieldWithFallback } = require('../get-shit-done/bin/lib/state.cjs');
+const { stateExtractField, stateReplaceField, stateReplaceFieldWithFallback } = require('../gsd-core/bin/lib/state.cjs');
 
 describe('stateExtractField and stateReplaceField helpers', () => {
   // stateExtractField tests
@@ -759,7 +760,7 @@ describe('cmdStateLoad (state load)', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -821,7 +822,7 @@ describe('cmdStateGet (state get)', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -903,7 +904,7 @@ describe('cmdStatePatch and cmdStateUpdate (state patch, state update)', () => {
   ].join('\n') + '\n';
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -919,6 +920,27 @@ describe('cmdStatePatch and cmdStateUpdate (state patch, state update)', () => {
     const updated = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
     assert.ok(updated.includes('**Status:** Complete'), 'Status should be updated to Complete');
     assert.ok(updated.includes('**Last Activity:** 2024-01-15'), 'Last Activity should be unchanged');
+  });
+
+  test('state patch accepts JSON object input from workflows', () => {
+    fs.writeFileSync(path.join(tmpDir, '.planning', 'STATE.md'), stateMd);
+
+    const result = runGsdTools([
+      'query',
+      'state.patch',
+      JSON.stringify({
+        Status: 'Complete',
+        'Current Phase': '04',
+      }),
+    ], tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.deepEqual(output.updated.sort(), ['Current Phase', 'Status'].sort());
+
+    const updated = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
+    assert.ok(updated.includes('**Status:** Complete'), 'Status should be updated to Complete');
+    assert.ok(updated.includes('**Current Phase:** 04'), 'Current Phase should be updated to 04');
   });
 
   test('state patch reports failed fields that do not exist', () => {
@@ -990,7 +1012,7 @@ describe('cmdStateAdvancePlan (state advance-plan)', () => {
   ].join('\n') + '\n';
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -1000,8 +1022,12 @@ describe('cmdStateAdvancePlan (state advance-plan)', () => {
   test('advances plan counter when not on last plan', () => {
     fs.writeFileSync(path.join(tmpDir, '.planning', 'STATE.md'), advanceFixture);
 
-    const before = new Date().toISOString().split('T')[0];
-    const result = runGsdTools('state advance-plan', tmpDir);
+    const PINNED_MS = Date.parse('2020-06-15T12:00:00.000Z');
+    const PINNED_DATE = '2020-06-15';
+    const result = runGsdTools('state advance-plan', tmpDir, {
+      GSD_TEST_MODE: '1',
+      GSD_NOW_MS: String(PINNED_MS),
+    });
     assert.ok(result.success, `Command failed: ${result.error}`);
 
     const output = JSON.parse(result.output);
@@ -1013,10 +1039,9 @@ describe('cmdStateAdvancePlan (state advance-plan)', () => {
     const updated = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
     assert.ok(updated.includes('**Current Plan:** 2'), 'Current Plan should be updated to 2');
     assert.ok(updated.includes('**Status:** Ready to execute'), 'Status should be Ready to execute');
-    const after = new Date().toISOString().split('T')[0];
     assert.ok(
-      updated.includes(`**Last Activity:** ${before}`) || updated.includes(`**Last Activity:** ${after}`),
-      `Last Activity should be today (${before}) or next day if midnight boundary (${after})`
+      updated.includes(`**Last Activity:** ${PINNED_DATE}`),
+      `Last Activity should be the pinned date ${PINNED_DATE}`,
     );
   });
 
@@ -1115,7 +1140,7 @@ describe('cmdStateRecordMetric (state record-metric)', () => {
   ].join('\n') + '\n';
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -1186,7 +1211,7 @@ describe('cmdStateUpdateProgress (state update-progress)', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -1280,7 +1305,7 @@ describe('cmdStateResolveBlocker (state resolve-blocker)', () => {
   ].join('\n') + '\n';
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -1374,7 +1399,7 @@ describe('cmdStateRecordSession (state record-session)', () => {
   ].join('\n') + '\n';
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -1384,9 +1409,12 @@ describe('cmdStateRecordSession (state record-session)', () => {
   test('updates session fields with stopped-at and resume-file', () => {
     fs.writeFileSync(path.join(tmpDir, '.planning', 'STATE.md'), sessionFixture);
 
+    const PINNED_MS = Date.parse('2020-07-20T10:00:00.000Z');
+    const PINNED_ISO = '2020-07-20T10:00:00.000Z';
     const result = runGsdTools(
       'state record-session --stopped-at "Phase 3, Plan 2" --resume-file ".planning/phases/03/03-02-PLAN.md"',
-      tmpDir
+      tmpDir,
+      { GSD_TEST_MODE: '1', GSD_NOW_MS: String(PINNED_MS) },
     );
     assert.ok(result.success, `Command failed: ${result.error}`);
 
@@ -1397,23 +1425,25 @@ describe('cmdStateRecordSession (state record-session)', () => {
     const updated = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
     assert.ok(updated.includes('Phase 3, Plan 2'), 'Stopped at should be updated');
     assert.ok(updated.includes('.planning/phases/03/03-02-PLAN.md'), 'Resume file should be updated');
-
-    const today = new Date().toISOString().split('T')[0];
-    assert.ok(updated.includes(today), 'Last session should be updated to today');
+    assert.ok(updated.includes(PINNED_ISO), `Last session should be the pinned ISO timestamp ${PINNED_ISO}`);
   });
 
   test('updates Last session timestamp even with no other options', () => {
     fs.writeFileSync(path.join(tmpDir, '.planning', 'STATE.md'), sessionFixture);
 
-    const result = runGsdTools('state record-session', tmpDir);
+    const PINNED_MS = Date.parse('2020-08-01T08:30:00.000Z');
+    const PINNED_ISO = '2020-08-01T08:30:00.000Z';
+    const result = runGsdTools('state record-session', tmpDir, {
+      GSD_TEST_MODE: '1',
+      GSD_NOW_MS: String(PINNED_MS),
+    });
     assert.ok(result.success, `Command failed: ${result.error}`);
 
     const output = JSON.parse(result.output);
     assert.strictEqual(output.recorded, true, 'recorded should be true');
 
     const updated = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
-    const today = new Date().toISOString().split('T')[0];
-    assert.ok(updated.includes(today), 'Last session should contain today\'s date');
+    assert.ok(updated.includes(PINNED_ISO), `Last session should contain the pinned ISO timestamp ${PINNED_ISO}`);
   });
 
   test('sets Resume file to None when not specified', () => {
@@ -1462,7 +1492,7 @@ describe('milestone-scoped phase counting in frontmatter', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -1586,7 +1616,7 @@ describe('state begin-phase preserves Current Position fields (#1365)', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -1710,7 +1740,7 @@ describe('progress counters correct after plan execution (#1589)', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -1843,7 +1873,7 @@ describe('updatePerformanceMetricsSection', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -2003,6 +2033,60 @@ describe('updatePerformanceMetricsSection', () => {
     const phase5Rows = (afterSecond.match(/\|\s*5\s*\|/g) || []).length;
     assert.ok(phase5Rows <= 1, 'Phase 5 should appear at most once in By Phase table (no duplicates)');
   });
+
+  test('byPhaseTablePattern behavior-lock (#320): By Phase table header preserved and phase row upserted after hoist to module scope', () => {
+    // Exercises the byPhaseTablePattern match path directly: header must be preserved,
+    // an existing phase row must be replaced (not duplicated), and a new phase row inserted.
+    const content = `# Project State
+
+**Current Phase:** 06
+**Status:** Executing Phase 6
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: 1
+- Average duration: 5 min
+- Total execution time: 0.1 hours
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| 6 | 1 | 5 min | 5 min |
+
+## Accumulated Context
+`;
+    const statePath = path.join(tmpDir, '.planning', 'STATE.md');
+    fs.writeFileSync(statePath, content);
+
+    const phaseDir = path.join(tmpDir, '.planning', 'phases', '06-lock');
+    fs.mkdirSync(phaseDir, { recursive: true });
+    fs.writeFileSync(path.join(phaseDir, '06-01-PLAN.md'), '# Plan\n');
+    fs.writeFileSync(path.join(phaseDir, '06-02-PLAN.md'), '# Plan 2\n');
+    fs.writeFileSync(path.join(phaseDir, '06-01-SUMMARY.md'), '# Summary\n');
+    fs.writeFileSync(path.join(phaseDir, '06-02-SUMMARY.md'), '# Summary 2\n');
+
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'ROADMAP.md'),
+      `# Roadmap\n\n## Phase 6: Lock\n\n- [ ] Phase 6: Lock\n`
+    );
+
+    const result = runGsdTools('phase complete 6', tmpDir);
+    assert.ok(result.success, `phase complete failed: ${result.error}`);
+
+    const stateAfter = fs.readFileSync(statePath, 'utf-8');
+
+    // Header must be preserved
+    assert.ok(stateAfter.includes('| Phase | Plans | Total | Avg/Plan |'), 'By Phase table header must be preserved');
+
+    // Phase 6 row must appear exactly once (upserted, not duplicated)
+    const phase6Rows = (stateAfter.match(/\|\s*6\s*\|/g) || []).length;
+    assert.strictEqual(phase6Rows, 1, 'Phase 6 row must appear exactly once in By Phase table (upsert, not append)');
+
+    // Total plans count updated correctly (1 pre-existing + 2 new summaries)
+    assert.ok(stateAfter.match(/Total plans completed:\s*3/), 'Total plans completed should be 3 after upsert');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2013,7 +2097,7 @@ describe('state planned-phase command', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -2046,18 +2130,26 @@ describe('state planned-phase command', () => {
     assert.ok(stateContent.match(/Total Plans in Phase.*7/), 'Total Plans should be 7');
   });
 
-  test('after call: Last Activity is today\'s date', () => {
+  test('after call: Last Activity is the pinned date (deterministic via GSD_NOW_MS)', () => {
     fs.writeFileSync(
       path.join(tmpDir, '.planning', 'STATE.md'),
       `# Project State\n\n**Status:** Planning\n**Total Plans in Phase:** 0\n**Last Activity:** 2024-01-01\n**Current Phase:** 1\n`
     );
 
-    const result = runGsdTools(['state', 'planned-phase', '--phase', '1', '--name', 'Setup', '--plans', '3'], tmpDir);
+    const PINNED_MS = Date.parse('2020-09-10T15:00:00.000Z');
+    const PINNED_DATE = '2020-09-10';
+    const result = runGsdTools(
+      ['state', 'planned-phase', '--phase', '1', '--name', 'Setup', '--plans', '3'],
+      tmpDir,
+      { GSD_TEST_MODE: '1', GSD_NOW_MS: String(PINNED_MS) },
+    );
     assert.ok(result.success, `Command failed: ${result.error}`);
 
-    const today = new Date().toISOString().split('T')[0];
     const stateContent = fs.readFileSync(path.join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
-    assert.ok(stateContent.includes(today), `Last Activity should contain today's date (${today})`);
+    assert.ok(
+      stateContent.includes(PINNED_DATE),
+      `Last Activity should contain the pinned date ${PINNED_DATE}`,
+    );
   });
 
   test('missing STATE.md returns graceful error', () => {
@@ -2077,7 +2169,7 @@ describe('state validate command', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -2161,7 +2253,7 @@ describe('state sync command', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -2252,7 +2344,7 @@ describe('stopped_at frontmatter not overwritten by historical prose (bug #2444)
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -2351,7 +2443,7 @@ describe('stale phase dirs do not corrupt phase counts (bug #2445)', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {
@@ -2480,7 +2572,7 @@ describe('state complete-phase: decorated Phase fallback (#2761 nitpick)', () =>
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempProject();
+    tmpDir = createFixture();
   });
 
   afterEach(() => {

@@ -2,7 +2,7 @@
 name: gsd-eval-auditor
 description: Retroactive audit of an implemented AI phase's evaluation coverage. Checks implementation against the AI-SPEC.md evaluation plan. Scores each eval dimension as COVERED/PARTIAL/MISSING. Produces a scored EVAL-REVIEW.md with findings, gaps, and remediation guidance. Spawned by /gsd:eval-review orchestrator.
 tools: Read, Write, Bash, Grep, Glob
-color: "#EF4444"
+color: red
 # hooks:
 #   PostToolUse:
 #     - matcher: "Write|Edit"
@@ -33,7 +33,7 @@ Every planned eval dimension must resolve to COVERED, PARTIAL (WARNING), or MISS
 </adversarial_stance>
 
 <required_reading>
-Read `~/.claude/get-shit-done/references/ai-evals.md` before auditing. This is your scoring framework.
+Read `~/.claude/gsd-core/references/ai-evals.md` before auditing. This is your scoring framework.
 </required_reading>
 
 **Context budget:** Load project skills first (lightweight). Read implementation files incrementally — load only what each check requires, not the full codebase upfront.

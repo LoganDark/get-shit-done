@@ -12,10 +12,10 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const { writeSurface, readSurface, resolveSurface, listSurface, applySurface } = require('../get-shit-done/bin/lib/surface.cjs');
-const { loadSkillsManifest, writeActiveProfile, resolveProfile } = require('../get-shit-done/bin/lib/install-profiles.cjs');
-const { resolveRuntimeArtifactLayout } = require('../get-shit-done/bin/lib/runtime-artifact-layout.cjs');
-const { CLUSTERS, allClusteredSkills } = require('../get-shit-done/bin/lib/clusters.cjs');
+const { writeSurface, readSurface, resolveSurface, listSurface, applySurface } = require('../gsd-core/bin/lib/surface.cjs');
+const { loadSkillsManifest, writeActiveProfile, resolveProfile } = require('../gsd-core/bin/lib/install-profiles.cjs');
+const { resolveRuntimeArtifactLayout } = require('../gsd-core/bin/lib/runtime-artifact-layout.cjs');
+const { CLUSTERS, allClusteredSkills } = require('../gsd-core/bin/lib/clusters.cjs');
 const { createTempDir, cleanup } = require('./helpers.cjs');
 
 const REAL_COMMANDS_DIR = path.join(__dirname, '..', 'commands', 'gsd');
@@ -172,7 +172,7 @@ describe('applySurface', () => {
   });
 
   test('_syncGsdDir skills kind: adds missing skill dirs, removes stale prefix-matched dirs, preserves foreign dirs', (t) => {
-    const { _syncGsdDir } = require('../get-shit-done/bin/lib/surface.cjs');
+    const { _syncGsdDir } = require('../gsd-core/bin/lib/surface.cjs');
 
     const base = createTempDir('gsd-surface-skills-');
     t.after(() => cleanup(base));
@@ -239,7 +239,7 @@ describe('applySurface', () => {
   });
 
   test('Hermes profile shrink: stale GSD skill dirs are removed; user skills preserved', (t) => {
-    const { _syncGsdDir } = require('../get-shit-done/bin/lib/surface.cjs');
+    const { _syncGsdDir } = require('../gsd-core/bin/lib/surface.cjs');
 
     const base = createTempDir('gsd-surface-hermes-shrink-');
     t.after(() => cleanup(base));
@@ -280,7 +280,7 @@ describe('applySurface', () => {
   });
 
   test('_syncGsdDir skills kind (hermes): preserves non-GSD user dir under skills/gsd/ when kindPrefix is empty', (t) => {
-    const { _syncGsdDir } = require('../get-shit-done/bin/lib/surface.cjs');
+    const { _syncGsdDir } = require('../gsd-core/bin/lib/surface.cjs');
 
     const base = createTempDir('gsd-surface-hermes-');
     t.after(() => cleanup(base));
@@ -302,6 +302,227 @@ describe('applySurface', () => {
     assert.ok(fs.existsSync(userDir), 'user-custom-skill dir must be preserved when kindPrefix is empty (Hermes)');
     assert.ok(fs.existsSync(path.join(destDir, stem1, 'SKILL.md')), 'GSD help/SKILL.md must be copied');
   });
+
+  // Regression guard for #816: applySurface must write gsd-prefixed command files
+  // (matching installRuntimeArtifacts/_copyStaged behaviour) and must NOT prune
+  // user-created command files that install would preserve.
+  //
+  // Affected runtimes have a FLAT command dir (opencode `command/`, cursor
+  // `commands/`, augment `commands/`, kilo `command/`) with kind.prefix='gsd-'.
+  // _copyStaged names files `gsd-<stem>.md` but the buggy _syncGsdDir copies
+  // them as `<stem>.md` (unprefixed) and also deletes ALL .md files not in the
+  // staged set, including user files.
+  test('applySurface writes gsd-prefixed command files matching install and preserves user commands (#816)', (t) => {
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-surface-816-'));
+    t.after(() => cleanup(configDir));
+
+    writeActiveProfile(configDir, 'standard');
+    writeSurface(configDir, {
+      baseProfile: 'standard',
+      disabledClusters: [],
+      explicitAdds: [],
+      explicitRemoves: [],
+    });
+
+    // Determine the command dest dir for opencode: commandsKind destSubpath='command'
+    const layout = resolveRuntimeArtifactLayout('opencode', configDir, 'global');
+    const commandsKind = layout.kinds.find(k => k.kind === 'commands');
+    assert.ok(commandsKind, 'opencode layout must have a commands kind');
+    const commandDir = path.join(configDir, commandsKind.destSubpath);
+
+    // Pre-seed a user command file BEFORE applySurface — install would preserve it
+    fs.mkdirSync(commandDir, { recursive: true });
+    fs.writeFileSync(path.join(commandDir, 'my-user-cmd.md'), '# user custom command\n', 'utf8');
+
+    const manifest = loadSkillsManifest(REAL_COMMANDS_DIR);
+    applySurface(configDir, layout, manifest, CLUSTERS);
+
+    const files = fs.readdirSync(commandDir).filter(f => f.endsWith('.md'));
+
+    // (a) At least one gsd-prefixed command file must exist — on buggy code only
+    //     unprefixed files like 'help.md' are written, so this assertion fails.
+    assert.ok(
+      files.some(f => f.startsWith('gsd-') && f.endsWith('.md')),
+      '#816: applySurface must write at least one gsd-prefixed command file ' +
+      '(e.g. gsd-help.md) to match installRuntimeArtifacts/_copyStaged behaviour. ' +
+      `Actual files: [${files.join(', ')}]`
+    );
+
+    // (b) Every GSD-owned command file must be prefixed — no bare <stem>.md files
+    //     allowed among GSD-owned output (excluding the user file).
+    const gsdFiles = files.filter(f => f !== 'my-user-cmd.md');
+    const unprefixed = gsdFiles.filter(f => !f.startsWith('gsd-'));
+    assert.deepStrictEqual(
+      unprefixed,
+      [],
+      '#816: all GSD-owned command files must start with gsd- to match install. ' +
+      `Found unprefixed: [${unprefixed.join(', ')}]`
+    );
+
+    // (c) The pre-seeded user file must survive applySurface — on buggy code the
+    //     commands-kind pruning loop deletes ALL .md files not in the staged set,
+    //     which wipes user files that installRuntimeArtifacts would never touch.
+    assert.ok(
+      files.includes('my-user-cmd.md'),
+      '#816: applySurface must preserve user command file my-user-cmd.md that was ' +
+      'present before sync — _syncGsdDir must not prune files not owned by GSD. ' +
+      `Actual files: [${files.join(', ')}]`
+    );
+  });
+
+  // Parity regression guard for #816: applySurface command-dir filenames must
+  // match a fresh installRuntimeArtifacts for every command runtime. Guards
+  // against future drift between _syncGsdDir (surface) and _copyStaged (install)
+  // command-naming logic.
+  //
+  // Matrix: opencode/kilo = flat command/ + prefix gsd-;
+  //         cursor/augment = flat commands/ + prefix gsd-;
+  //         gemini = namespaced commands/gsd/ (no file prefix — dir is namespace).
+  // For each runtime we: run install into installDir, run applySurface into
+  // surfaceDir (same 'standard' profile both sides), then compare sorted .md
+  // filename sets in the commands dest dir. On a fresh dir (no superseded files)
+  // both paths must produce identical sets.
+  test('applySurface command-dir filenames match a fresh install for every command runtime (#816 parity)', async (t) => {
+    process.env.GSD_TEST_MODE = '1';
+    const { installRuntimeArtifacts } = require('../bin/install.js');
+
+    const manifest = loadSkillsManifest(REAL_COMMANDS_DIR);
+    // Build the resolved profile once. Both install and surface sides must use
+    // the same skill set so any filename difference is purely a naming bug.
+    const resolvedProfile = resolveProfile({ modes: ['standard'], manifest });
+
+    const PARITY_RUNTIMES = ['opencode', 'cursor', 'augment', 'kilo', 'gemini'];
+
+    for (const runtime of PARITY_RUNTIMES) {
+      // Create two independent temp dirs — one for install, one for surface.
+      const installDir = fs.mkdtempSync(path.join(os.tmpdir(), `gsd-816-install-${runtime}-`));
+      const surfaceDir = fs.mkdtempSync(path.join(os.tmpdir(), `gsd-816-surface-${runtime}-`));
+      t.after(() => { cleanup(installDir); cleanup(surfaceDir); });
+
+      // --- Install path ---
+      installRuntimeArtifacts(runtime, installDir, 'global', resolvedProfile);
+
+      // --- Surface path ---
+      writeActiveProfile(surfaceDir, 'standard');
+      writeSurface(surfaceDir, {
+        baseProfile: 'standard',
+        disabledClusters: [],
+        explicitAdds: [],
+        explicitRemoves: [],
+      });
+      const layout = resolveRuntimeArtifactLayout(runtime, surfaceDir, 'global');
+      applySurface(surfaceDir, layout, manifest, CLUSTERS);
+
+      // --- Find commands kind ---
+      const cmdKind = layout.kinds.find(k => k.kind === 'commands');
+      if (!cmdKind) {
+        // Runtime has no commands kind at global scope — skip gracefully.
+        continue;
+      }
+
+      // --- Compare sorted .md filename sets ---
+      const installCmdDir = path.join(installDir, cmdKind.destSubpath);
+      const surfaceCmdDir = path.join(surfaceDir, cmdKind.destSubpath);
+
+      const installFiles = fs.existsSync(installCmdDir)
+        ? fs.readdirSync(installCmdDir).filter(f => f.endsWith('.md')).sort()
+        : [];
+      const surfaceFiles = fs.existsSync(surfaceCmdDir)
+        ? fs.readdirSync(surfaceCmdDir).filter(f => f.endsWith('.md')).sort()
+        : [];
+
+      assert.deepStrictEqual(
+        surfaceFiles,
+        installFiles,
+        `#816 parity: command filenames for ${runtime} (${cmdKind.destSubpath}) must match a fresh install.\n` +
+        `  install: [${installFiles.slice(0, 5).join(', ')}${installFiles.length > 5 ? '...' : ''}]\n` +
+        `  surface: [${surfaceFiles.slice(0, 5).join(', ')}${surfaceFiles.length > 5 ? '...' : ''}]`
+      );
+    }
+  });
+
+  // Regression test for #813: applySurface must apply per-runtime path rewrites
+  // (applyRuntimeContentRewritesInPlace) just as installRuntimeArtifacts does.
+  // Without the fix, skill bodies retain the converter's default ~/.claude/ paths
+  // instead of being rewritten to the install target (pathPrefix).
+  //
+  // Both 'cursor' and 'codex' use skillsKind AND have a path-rewrite case in
+  // _applyRuntimeRewrites — so the regression guard covers both.
+  for (const runtime of ['cursor', 'codex']) {
+    test(`applySurface rewrites ${runtime} skill bodies to the install pathPrefix, not the converter default ~/.claude path (#813)`, (t) => {
+      // Use mkdtempSync under os.tmpdir() — NOT under the user's home dir — so that
+      // computePathPrefix returns an ABSOLUTE prefix `${configDir}/` for local installs,
+      // clearly distinguishable from the `~/.claude/` converter default.
+      const configDir = fs.mkdtempSync(path.join(os.tmpdir(), `gsd-surface-813-${runtime}-`));
+      t.after(() => cleanup(configDir));
+
+      writeActiveProfile(configDir, 'standard');
+      writeSurface(configDir, {
+        baseProfile: 'standard',
+        disabledClusters: [],
+        explicitAdds: [],
+        explicitRemoves: [],
+      });
+
+      const manifest = loadSkillsManifest(REAL_COMMANDS_DIR);
+      // skills/gsd-<name>/SKILL.md (destSubpath 'skills', prefix 'gsd-')
+      // scope='local' ensures computePathPrefix returns an absolute configDir prefix
+      // rather than the home-relative default (e.g. ~/.cursor/ or ~/.codex/).
+      const layout = resolveRuntimeArtifactLayout(runtime, configDir, 'local');
+      applySurface(configDir, layout, manifest, CLUSTERS);
+
+      // Collect every SKILL.md body under ${configDir}/skills/
+      const skillsRoot = path.join(configDir, 'skills');
+      const skillBodies = [];
+      if (fs.existsSync(skillsRoot)) {
+        for (const dirEntry of fs.readdirSync(skillsRoot)) {
+          const skillMd = path.join(skillsRoot, dirEntry, 'SKILL.md');
+          if (fs.existsSync(skillMd)) {
+            skillBodies.push(fs.readFileSync(skillMd, 'utf8'));
+          }
+        }
+      }
+
+      // (a) Sanity: at least one SKILL.md must have been staged
+      assert.ok(
+        skillBodies.length > 0,
+        `applySurface must stage at least one ${runtime} SKILL.md under ${skillsRoot}/ but found none`
+      );
+
+      // (b) BUG SYMPTOM (#813): after the rewrite, no body should contain '~/.claude/'
+      //     or '$HOME/.claude/' — both are converter-default forms that must be eliminated.
+      //     This assertion FAILS on unpatched code — applySurface does not call
+      //     applyRuntimeContentRewritesInPlace, so the converter's default ~/.claude/
+      //     paths are left verbatim in the staged files.
+      const bodiesWithTildeClaude = skillBodies.filter(b => b.includes('~/.claude/') || b.includes('$HOME/.claude/'));
+      assert.strictEqual(
+        bodiesWithTildeClaude.length,
+        0,
+        `#813 regression: ${bodiesWithTildeClaude.length} ${runtime} SKILL.md(s) still contain '~/.claude/' or '$HOME/.claude/' after applySurface — ` +
+        `applyRuntimeContentRewritesInPlace was not applied (mirrors installRuntimeArtifacts' rewrite step)`
+      );
+
+      // (c) The rewrite must inject the real install target path, not just remove the tilde.
+      //     This also fails on unpatched code for the same reason.
+      //     NOTE: this assertion depends on the command corpus emitting rewritable
+      //     '~/.claude/'-style paths in at least one skill body. If a future corpus
+      //     change removes all such paths, this assertion will become vacuously true
+      //     (no body will contain configDirPrefix either) — update the test rather than
+      //     treating a silent zero-match as a pass.
+      // Production derives pathPrefix as `path.resolve(configDir).replace(/\\/g, '/')`
+      // (mirrors installRuntimeArtifacts), so on Windows the rewritten body uses
+      // forward slashes. Normalize the expected prefix the same way so this assertion
+      // is cross-platform (Windows CI leg is not covered by local gsd-test) (#813).
+      const configDirPrefix = `${path.resolve(configDir).replace(/\\/g, '/')}/`;
+      const bodiesWithAbsolutePrefix = skillBodies.filter(b => b.includes(configDirPrefix));
+      assert.ok(
+        bodiesWithAbsolutePrefix.length > 0,
+        `#813 regression: no ${runtime} SKILL.md contains the absolute configDir prefix '${configDirPrefix}' — ` +
+        `the path rewrite was not applied by applySurface. ` +
+        `(If the command corpus no longer emits any '~/.claude/'-style paths, update this test.)`
+      );
+    });
+  }
 });
 
 // ─── resolveSurface ──────────────────────────────────────────────────────────
@@ -323,7 +544,7 @@ describe('resolveSurface', () => {
         'surface with no state should equal profile resolution'
       );
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -351,7 +572,7 @@ describe('resolveSurface', () => {
         }
       }
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -376,7 +597,7 @@ describe('resolveSurface', () => {
         assert.ok(resolved.skills.has(dep), `transitive dep "${dep}" of sketch must be present`);
       }
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -395,7 +616,7 @@ describe('resolveSurface', () => {
 
       assert.ok(!resolved.skills.has('progress'), '"progress" must be removed by explicitRemoves');
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -410,7 +631,7 @@ describe('resolveSurface', () => {
       assert.ok(typeof resolved.name === 'string');
       assert.ok(resolved.agents instanceof Set);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -434,7 +655,7 @@ describe('resolveSurface', () => {
         'surface baseProfile takes precedence over marker'
       );
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -463,7 +684,7 @@ describe('resolveSurface', () => {
         }
       }
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 });
@@ -484,7 +705,7 @@ describe('readSurface / writeSurface', () => {
       const read = readSurface(dir);
       assert.deepStrictEqual(read, state);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -500,7 +721,7 @@ describe('readSurface / writeSurface', () => {
       writeSurface(dir, state);
       assert.deepStrictEqual(readSurface(dir), state);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -516,7 +737,7 @@ describe('readSurface / writeSurface', () => {
       writeSurface(dir, state);
       assert.deepStrictEqual(readSurface(dir), state);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -526,7 +747,7 @@ describe('readSurface / writeSurface', () => {
       const result = readSurface(dir);
       assert.strictEqual(result, null);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -543,7 +764,7 @@ describe('readSurface / writeSurface', () => {
       const result = readSurface(dir);
       assert.strictEqual(result, null);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -558,7 +779,7 @@ describe('readSurface / writeSurface', () => {
       const result = readSurface(dir);
       assert.strictEqual(result, null);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -573,7 +794,7 @@ describe('readSurface / writeSurface', () => {
       const result = readSurface(dir);
       assert.strictEqual(result, null);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -587,7 +808,7 @@ describe('readSurface / writeSurface', () => {
       assert.deepStrictEqual(tmpFiles, [], 'no tmp files should remain after write');
       assert.ok(files.includes('.gsd-surface.json'));
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -600,7 +821,7 @@ describe('readSurface / writeSurface', () => {
       assert.strictEqual(read.baseProfile, 'standard');
       assert.deepStrictEqual(read.disabledClusters, ['utility']);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -612,7 +833,7 @@ describe('readSurface / writeSurface', () => {
       assert.ok(fs.existsSync(nested));
       assert.ok(readSurface(nested) !== null);
     } finally {
-      fs.rmSync(base, { recursive: true, force: true });
+      cleanup(base);
     }
   });
 });
@@ -703,6 +924,27 @@ describe('CLUSTERS data structure', () => {
 // ─── listSurface ─────────────────────────────────────────────────────────────
 
 describe('listSurface', () => {
+  test('accepts parsed gsd-file-manifest JSON objects without crashing (#322)', () => {
+    const dir = tmpDir('gsd-surface-list-');
+    try {
+      fs.writeFileSync(path.join(dir, '.gsd-source'), REAL_COMMANDS_DIR, 'utf8');
+      writeActiveProfile(dir, 'core');
+      const diskManifestShape = {
+        version: '1.0.0',
+        timestamp: new Date().toISOString(),
+        mode: 'core',
+        files: {},
+      };
+      const result = listSurface(dir, diskManifestShape, CLUSTERS);
+
+      assert.ok(Array.isArray(result.enabled), 'enabled must be array');
+      assert.ok(Array.isArray(result.disabled), 'disabled must be array');
+      assert.ok(typeof result.tokenCost === 'number', 'tokenCost must be number');
+    } finally {
+      cleanup(dir);
+    }
+  });
+
   test('returns { enabled, disabled, tokenCost } structure', () => {
     const dir = tmpDir('gsd-surface-list-');
     try {
@@ -716,7 +958,7 @@ describe('listSurface', () => {
       assert.ok(typeof result.tokenCost === 'number', 'tokenCost must be number');
       assert.ok(result.tokenCost >= 0, 'tokenCost must be non-negative');
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -737,7 +979,7 @@ describe('listSurface', () => {
       assert.ok(coreList.enabled.length + coreList.disabled.length === totalStems,
         'enabled + disabled must equal total stems');
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -763,7 +1005,7 @@ describe('listSurface', () => {
       assert.ok(afterList.tokenCost <= beforeList.tokenCost,
         'disabling a cluster should not increase token cost');
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -786,7 +1028,7 @@ describe('listSurface', () => {
 
       assert.strictEqual(result.tokenCost, expected, 'tokenCost must equal sum of description lengths ÷ 4');
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 
@@ -801,7 +1043,7 @@ describe('listSurface', () => {
       assert.deepStrictEqual(result.enabled, [...result.enabled].sort());
       assert.deepStrictEqual(result.disabled, [...result.disabled].sort());
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      cleanup(dir);
     }
   });
 });

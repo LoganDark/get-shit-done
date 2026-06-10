@@ -15,8 +15,9 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const os = require('os');
+const { cleanup } = require('./helpers.cjs');
 
-const GSD_TOOLS = path.join(__dirname, '..', 'get-shit-done', 'bin', 'gsd-tools.cjs');
+const GSD_TOOLS = path.join(__dirname, '..', 'gsd-core', 'bin', 'gsd-tools.cjs');
 
 describe('config-get --default flag (#1893)', () => {
   let tmpDir;
@@ -29,7 +30,7 @@ describe('config-get --default flag (#1893)', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   function run(...args) {

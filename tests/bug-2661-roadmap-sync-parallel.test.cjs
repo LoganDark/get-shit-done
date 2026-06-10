@@ -40,7 +40,7 @@ const fs = require('fs');
 const path = require('path');
 const { runGsdTools, createTempProject, cleanup } = require('./helpers.cjs');
 
-const WORKFLOW_PATH = path.join(__dirname, '..', 'get-shit-done', 'workflows', 'execute-plan.md');
+const WORKFLOW_PATH = path.join(__dirname, '..', 'gsd-core', 'workflows', 'execute-plan.md');
 
 function writeRoadmap(tmpDir, content) {
   fs.writeFileSync(path.join(tmpDir, '.planning', 'ROADMAP.md'), content);
@@ -90,16 +90,18 @@ describe('bug #2661: execute-plan.md update_roadmap gating', () => {
 
   test('update_roadmap step exists and invokes roadmap.update-plan-progress', () => {
     assert.ok(stepMatch, 'update_roadmap step must exist');
+    // After #3797 architectural fix, callsites use gsd_run
     assert.ok(
-      /gsd-sdk query roadmap\.update-plan-progress/.test(step),
+      /gsd_run query roadmap\.update-plan-progress/.test(step),
       'update_roadmap must still invoke roadmap.update-plan-progress'
     );
   });
 
   test('use_worktrees: false mode — sync call is gated to fire (the #2661 reproducer)', () => {
     // The non-worktree branch must contain the sync call.
+    // After #3797 architectural fix, callsites use gsd_run
     assert.ok(
-      /IS_WORKTREE.*!=.*"true"[\s\S]*?gsd-sdk query roadmap\.update-plan-progress/.test(step),
+      /IS_WORKTREE.*!=.*"true"[\s\S]*?gsd_run query roadmap\.update-plan-progress/.test(step),
       'sync call must execute on the IS_WORKTREE != "true" branch (use_worktrees: false)'
     );
   });
@@ -117,8 +119,9 @@ describe('bug #2661: execute-plan.md update_roadmap gating', () => {
       'bash block must include the IS_WORKTREE worktree-detection check'
     );
     // Sync call must appear after the guard check, not before.
+    // After #3797 architectural fix, callsites use gsd_run
     const guardIdx = bash.search(/if \[ "\$IS_WORKTREE" != "true" \]/);
-    const callIdx = bash.search(/gsd-sdk query roadmap\.update-plan-progress/);
+    const callIdx = bash.search(/gsd_run query roadmap\.update-plan-progress/);
     assert.ok(guardIdx >= 0, 'guard must be present');
     assert.ok(callIdx > guardIdx,
       'sync call must appear inside the use_worktrees: false guard, not before/outside it');

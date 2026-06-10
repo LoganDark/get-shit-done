@@ -6,7 +6,7 @@
  *   > Skipped Codex skill-copy generation (Codex discovers official skills directly)
  * which left users with a "successful" install but no routable `$gsd-*`
  * entrypoints in Codex CLI 0.130.0. Codex CLI does NOT auto-discover
- * commands from `~/.codex/get-shit-done/workflows/*.md` or `agents/*.md`;
+ * commands from `~/.codex/gsd-core/workflows/*.md` or `agents/*.md`;
  * it only registers slash commands derived from `~/.codex/skills/<name>/SKILL.md`.
  * The "Codex discovers official skills directly" assumption was wrong.
  *
@@ -38,7 +38,6 @@ const { test, describe, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 
 const { install, getCodexSkillAdapterHeader } = require('../bin/install.js');
 const { parseFrontmatter, createTempDir, cleanup } = require('./helpers.cjs');
@@ -54,6 +53,7 @@ const COMMANDS_DIR = path.join(ROOT, 'commands', 'gsd');
 
 // Strip ANSI color codes so log assertions don't depend on TTY detection.
 function stripAnsi(s) {
+  // eslint-disable-next-line no-control-regex -- \x1b (ESC) is the required leading byte of ANSI SGR color sequences; matching it is the purpose of stripping ANSI codes from captured CLI/console output
   return s.replace(/\x1b\[[0-9;]*m/g, '');
 }
 

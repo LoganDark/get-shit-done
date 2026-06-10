@@ -10,7 +10,7 @@
 
 'use strict';
 
-const { test, describe, before, after } = require('node:test');
+const { test, describe, before } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
@@ -22,7 +22,7 @@ const isWindows = process.platform === 'win32';
 const PROJECTION_PATH = path.join(
   __dirname,
   '..',
-  'get-shit-done',
+  'gsd-core',
   'bin',
   'lib',
   'shell-command-projection.cjs',
@@ -39,6 +39,7 @@ function createTempHome() {
 }
 
 function cleanup(dir) {
+  // eslint-disable-next-line local/no-raw-rmsync-in-tests -- local cleanup predates helpers.cjs; name collision prevents import
   fs.rmSync(dir, { recursive: true, force: true });
 }
 

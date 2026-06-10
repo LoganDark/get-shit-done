@@ -8,10 +8,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { cleanup } = require('./helpers.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
-const INSTALL = require(path.join(ROOT, 'bin', 'install.js'));
-const PROJECTION = require(path.join(ROOT, 'get-shit-done', 'bin', 'lib', 'shell-command-projection.cjs'));
 const DRIFT_LINT = path.join(ROOT, 'scripts', 'lint-shell-command-projection-drift.cjs');
 
 function runLint(targetFile) {
@@ -21,19 +20,8 @@ function runLint(targetFile) {
   });
 }
 
-describe('bug #3442: shim/wrapper projection seam', () => {
-  test('buildWindowsShimTriple matches shared projection output', () => {
-    const shimSrc = path.join(ROOT, 'bin', 'gsd-sdk.js');
-    const fromInstall = INSTALL.buildWindowsShimTriple(shimSrc);
-    const fromProjection = PROJECTION.buildWindowsShimTriple(shimSrc);
-    assert.deepEqual(fromInstall.invocation, fromProjection.invocation);
-    assert.deepEqual(fromInstall.eol, fromProjection.eol);
-    assert.deepEqual(fromInstall.fileNames, fromProjection.fileNames);
-    assert.equal(fromInstall.render.cmd(), fromProjection.render.cmd());
-    assert.equal(fromInstall.render.ps1(), fromProjection.render.ps1());
-    assert.equal(fromInstall.render.sh(), fromProjection.render.sh());
-  });
-});
+// (The buildWindowsShimTriple parity test was removed with the gsd-sdk shim,
+// #191. The serialized-command drift guard below is retained and unaffected.)
 
 describe('bug #3442: shim/wrapper serialized-command drift guard', () => {
   test('drift guard passes for current install.js', () => {
@@ -57,7 +45,7 @@ describe('bug #3442: shim/wrapper serialized-command drift guard', () => {
       const result = runLint(fixture);
       assert.notEqual(result.status, 0, 'inline shim renderer should be rejected by the drift guard');
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      cleanup(tmp);
     }
   });
 
@@ -77,7 +65,7 @@ describe('bug #3442: shim/wrapper serialized-command drift guard', () => {
       const result = runLint(fixture);
       assert.equal(result.status, 0, `spawnSync/execFileSync should remain allowed:\n${result.stderr || result.stdout}`);
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      cleanup(tmp);
     }
   });
 });

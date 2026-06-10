@@ -6,6 +6,8 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { isSemverNewer } = require('../gsd-core/bin/lib/semver-compare.cjs');
+const { PACKAGE_NAME, updateCacheFileName } = require('../gsd-core/bin/lib/package-identity.cjs');
 
 // --- Config + last-command readers ------------------------------------------
 
@@ -367,14 +369,20 @@ function runStatusline() {
     const todosDir = path.join(claudeDir, 'todos');
     if (session && fs.existsSync(todosDir)) {
       try {
-        const files = fs.readdirSync(todosDir)
-          .filter(f => f.startsWith(session) && f.includes('-agent-') && f.endsWith('.json'))
-          .map(f => ({ name: f, mtime: fs.statSync(path.join(todosDir, f)).mtime }))
-          .sort((a, b) => b.mtime - a.mtime);
+        // Single-pass max-by-mtime scan: only the newest matching todos file
+        // is needed, so the O(n log n) sort and the intermediate array from the
+        // prior `.filter().map(statSync).sort()` chain are unnecessary. Identical
+        // I/O (one statSync per match) and identical result. (#305)
+        let latest = null;
+        for (const entry of fs.readdirSync(todosDir)) {
+          if (!entry.startsWith(session) || !entry.includes('-agent-') || !entry.endsWith('.json')) continue;
+          const mtime = fs.statSync(path.join(todosDir, entry)).mtime;
+          if (!latest || mtime > latest.mtime) latest = { name: entry, mtime };
+        }
 
-        if (files.length > 0) {
+        if (latest) {
           try {
-            const todos = JSON.parse(fs.readFileSync(path.join(todosDir, files[0].name), 'utf8'));
+            const todos = JSON.parse(fs.readFileSync(path.join(todosDir, latest.name), 'utf8'));
             const inProgress = todos.find(t => t.status === 'in_progress');
             if (inProgress) task = inProgress.activeForm || '';
           } catch (e) {}
@@ -388,33 +396,22 @@ function runStatusline() {
     const gsdStateStr = task ? '' : formatGsdState(readGsdState(dir) || {});
 
     // GSD update available?
-    // Check shared cache first (#1421), fall back to runtime-specific cache for
-    // backward compatibility with older gsd-check-update.js versions.
+    // Read only the per-package shared cache file (#607). The legacy
+    // runtime-specific fallback has been removed — the per-package filename
+    // carries lineage and avoids multi-runtime resolution mismatches (#1421).
     let gsdUpdate = '';
-    const sharedCacheFile = path.join(homeDir, '.cache', 'gsd', 'gsd-update-check.json');
-    const legacyCacheFile = path.join(claudeDir, 'cache', 'gsd-update-check.json');
-    const cacheFile = fs.existsSync(sharedCacheFile) ? sharedCacheFile : legacyCacheFile;
+    const cacheFile = path.join(homeDir, '.cache', 'gsd', updateCacheFileName);
     if (fs.existsSync(cacheFile)) {
       try {
         const cache = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-        if (cache.update_available) {
+        const { showUpdate, staleWarning } = evaluateUpdateCache(cache);
+        if (showUpdate) {
           gsdUpdate = '\x1b[33m⬆ /gsd:update\x1b[0m │ ';
         }
-        if (cache.stale_hooks && cache.stale_hooks.length > 0) {
-          // If installed version is ahead of npm latest, this is a dev install.
-          // Running /gsd:update would downgrade — show a contextual warning instead.
-          const isDevInstall = (() => {
-            if (!cache.installed || !cache.latest || cache.latest === 'unknown') return false;
-            const parseV = v => v.replace(/^v/, '').split('.').map(Number);
-            const [ai, bi, ci] = parseV(cache.installed);
-            const [an, bn, cn] = parseV(cache.latest);
-            return ai > an || (ai === an && bi > bn) || (ai === an && bi === bn && ci > cn);
-          })();
-          if (isDevInstall) {
-            gsdUpdate += '\x1b[33m⚠ dev install — re-run installer to sync hooks\x1b[0m │ ';
-          } else {
-            gsdUpdate += '\x1b[31m⚠ stale hooks — run /gsd:update\x1b[0m │ ';
-          }
+        if (staleWarning === 'dev') {
+          gsdUpdate += '\x1b[33m⚠ dev install — re-run installer to sync hooks\x1b[0m │ ';
+        } else if (staleWarning === 'stale') {
+          gsdUpdate += '\x1b[31m⚠ stale hooks — run /gsd:update\x1b[0m │ ';
         }
       } catch (e) {}
     }
@@ -497,11 +494,43 @@ function composeStatusline({
   return `${gsdUpdate}${modelSeg} │ ${dirSeg}${ctx}${lastCmdSuffix}`;
 }
 
+function isInstalledAheadOfLatest(installed, latest) {
+  return isSemverNewer(installed, latest);
+}
+
+/**
+ * Pure function: evaluate an update-check cache object and return display flags.
+ * Applies lineage guard — if package_name is absent or foreign, treats cache as absent.
+ *
+ * @param {object|null} cache  Parsed cache object, or null.
+ * @returns {{ showUpdate: boolean, staleWarning: 'none'|'dev'|'stale' }}
+ */
+function evaluateUpdateCache(cache) {
+  const none = { showUpdate: false, staleWarning: 'none' };
+  if (!cache) return none;
+  // Lineage guard: package_name must be present and match this package.
+  if (!cache.package_name || cache.package_name !== PACKAGE_NAME) return none;
+  const showUpdate = Boolean(cache.update_available);
+  let staleWarning = 'none';
+  if (cache.stale_hooks && cache.stale_hooks.length > 0) {
+    const isDevInstall = (
+      cache.installed &&
+      cache.latest &&
+      cache.latest !== 'unknown' &&
+      isInstalledAheadOfLatest(cache.installed, cache.latest)
+    );
+    staleWarning = isDevInstall ? 'dev' : 'stale';
+  }
+  return { showUpdate, staleWarning };
+}
+
 // Export helpers for unit tests. Harmless when run as a script.
 module.exports = {
   readGsdState, parseStateMd, formatGsdState,
   readGsdConfig, getConfigValue, readLastSlashCommand,
   composeStatusline,
+  isInstalledAheadOfLatest,
+  evaluateUpdateCache,
 };
 
 /**

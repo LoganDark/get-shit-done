@@ -12,8 +12,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { cleanup, createTempDir, runNpm } = require('./helpers.cjs');
+const { cleanup, createTempDir, runNpm, isolatedNpmEnv } = require('./helpers.cjs');
 const { SMOKE, runSmoke } = require('../scripts/release-tarball-smoke.cjs');
+
+const smokeMsg = (label, result) =>
+  `${label}: code=${result.code} details=${JSON.stringify(result.details)}`;
 
 const PKG_PATH = path.join(__dirname, '..', 'package.json');
 const pkg = JSON.parse(fs.readFileSync(PKG_PATH, 'utf-8'));
@@ -32,9 +35,16 @@ describe('release-tarball-smoke', () => {
     installPrefix = createTempDir('gsd-smoke-prefix-');
     fixtureDir = createTempDir('gsd-smoke-fixture-');
 
+    // npm pack + npm install -g on a large tarball (1499 files, ~10 MB) can take
+    // 3–6 minutes on slow Docker hosts (cold disk, constrained CPU). The runNpm
+    // default timeout of 180 s is sufficient on fast machines but insufficient on
+    // cartographer-class hosts. 600 s (10 min) gives a safe ceiling without
+    // masking genuine hangs.
+    const SLOW_HOST_TIMEOUT = 600_000;
+
     const packOutput = runNpm(
       ['pack', '--pack-destination', packDir],
-      { cwd: path.join(__dirname, '..') },
+      { cwd: path.join(__dirname, '..'), timeout: SLOW_HOST_TIMEOUT },
     );
 
     // npm pack prints the filename as the last line of stdout.
@@ -48,7 +58,7 @@ describe('release-tarball-smoke', () => {
     }
 
     // Install once into installPrefix. All tests share this install.
-    runNpm(['install', '-g', '--prefix', installPrefix, tarballPath]);
+    runNpm(['install', '-g', '--prefix', installPrefix, tarballPath], { timeout: SLOW_HOST_TIMEOUT });
   });
 
   after(() => {
@@ -64,10 +74,11 @@ describe('release-tarball-smoke', () => {
       installPrefix,
       expectedVersion: pkg.version,
       fixtureDir,
+      npmEnv: isolatedNpmEnv(),
     });
 
-    assert.equal(result.code, SMOKE.OK);
-    assert.equal(result.details.version, pkg.version);
+    assert.equal(result.code, SMOKE.OK, smokeMsg('A', result));
+    assert.equal(result.details.version, pkg.version, smokeMsg('A', result));
   });
 
   // ── Test B — version mismatch detected ────────────────────────────────────
@@ -77,15 +88,16 @@ describe('release-tarball-smoke', () => {
       installPrefix,
       expectedVersion: '99.99.99',
       fixtureDir,
+      npmEnv: isolatedNpmEnv(),
     });
 
-    assert.equal(result.code, SMOKE.VERSION_MISMATCH);
+    assert.equal(result.code, SMOKE.VERSION_MISMATCH, smokeMsg('B', result));
   });
 
   // ── Test C — happy lifecycle ───────────────────────────────────────────────
   // Verifies that the installed package has all expected command .md files and
   // that each command resolves a workflow .md file that also exists.
-  // Also verifies that `get-shit-done-cc --local --claude` (init) succeeds in
+  // Also verifies that `gsd-core --local --claude` (init) succeeds in
   // the fixtureDir and creates the expected .claude/ directories.
   test('C: happy lifecycle — command + workflow files resolve OK', () => {
     const result = runSmoke({
@@ -94,9 +106,10 @@ describe('release-tarball-smoke', () => {
       expectedVersion: pkg.version,
       fixtureDir,
       lifecycleCommands: ['init', 'discuss-phase', 'plan-phase'],
+      npmEnv: isolatedNpmEnv(),
     });
 
-    assert.equal(result.code, SMOKE.OK);
+    assert.equal(result.code, SMOKE.OK, smokeMsg('C', result));
 
     // Each non-init command must be in lifecycleResolved with both paths populated
     const resolved = result.details.lifecycleResolved;
@@ -132,56 +145,36 @@ describe('release-tarball-smoke', () => {
       expectedVersion: pkg.version,
       fixtureDir,
       lifecycleCommands: ['init', 'nonexistent-phase-xyz'],
+      npmEnv: isolatedNpmEnv(),
     });
 
-    assert.equal(result.code, SMOKE.COMMAND_FILE_MISSING);
-    assert.equal(result.details.command, 'nonexistent-phase-xyz');
-    assert.ok(typeof result.details.path === 'string' && result.details.path.length > 0);
+    assert.equal(result.code, SMOKE.COMMAND_FILE_MISSING, smokeMsg('D', result));
+    assert.equal(result.details.command, 'nonexistent-phase-xyz', smokeMsg('D', result));
+    assert.ok(typeof result.details.path === 'string' && result.details.path.length > 0, smokeMsg('D', result));
   });
 
-  // ── Test E — SDK binary callable ──────────────────────────────────────────
-  // Verifies that `gsd-sdk query state.json` exits 0 and returns parseable JSON.
-  // This is the primary guard for SDK_BINARY_NOT_CALLABLE regressions.
-  test('E: sdk binary callable — gsd-sdk query produces parseable JSON', () => {
-    const result = runSmoke({
-      tarballPath,
-      installPrefix,
-      expectedVersion: pkg.version,
-      fixtureDir,
-      lifecycleCommands: [], // skip lifecycle checks; isolate SDK check
-    });
-
-    // If the binary can't be called, code would be SDK_BINARY_NOT_CALLABLE
-    assert.notEqual(result.code, SMOKE.SDK_BINARY_NOT_CALLABLE);
-    assert.equal(result.details.sdkQueryParsed, true);
-  });
-
-  // ── Test F — workflow-body checks run (informational) ─────────────────────
+  // ── Test E — workflow-body checks run (informational) ─────────────────────
   // Asserts that the workflow-body scanning machinery ran (structural assertion).
-  // Does NOT assert colonLeakCount or missingFallbackCount are zero — they will
-  // be non-zero against current main per #3668 and the /gsd: leak backlog.
-  // When those issues are fixed, this test continues to pass unchanged.
-  test('F: workflow-body checks run — scan counts are present integers', () => {
+  // Does NOT assert colonLeakCount is zero — when those issues are fixed, this
+  // test continues to pass unchanged.
+  test('E: workflow-body checks run — scan counts are present integers', () => {
     const result = runSmoke({
       tarballPath,
       installPrefix,
       expectedVersion: pkg.version,
       fixtureDir,
       lifecycleCommands: [],
+      npmEnv: isolatedNpmEnv(),
     });
 
     // Structural: the scan ran and populated the counters
     assert.ok(
       Number.isInteger(result.details.workflowsScanned) && result.details.workflowsScanned >= 1,
-      `expected workflowsScanned >= 1, got ${result.details.workflowsScanned}`,
+      smokeMsg('E', result),
     );
     assert.ok(
       Number.isInteger(result.details.colonLeakCount),
-      `expected colonLeakCount to be an integer, got ${result.details.colonLeakCount}`,
-    );
-    assert.ok(
-      Number.isInteger(result.details.missingFallbackCount),
-      `expected missingFallbackCount to be an integer, got ${result.details.missingFallbackCount}`,
+      smokeMsg('E', result),
     );
   });
 });

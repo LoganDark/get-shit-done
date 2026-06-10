@@ -40,10 +40,10 @@ const {
   install,
   validateCodexConfigSchema,
   hasUserNamespacedAotHooks,
-  stripGsdFromCodexConfig,
-  installCodexConfig,
   parseTomlToObject,
 } = require('../bin/install.js');
+
+const { cleanup } = require('./helpers.cjs');
 
 if (previousGsdTestMode === undefined) {
   delete process.env.GSD_TEST_MODE;
@@ -108,7 +108,7 @@ describe('#2760 defect 3 — Hooks AoT preservation across install/uninstall/rei
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('fresh install emits the two-level nested AoT schema (#2773)', () => {
@@ -220,7 +220,7 @@ describe('#2760 defect 3 — Hooks AoT preservation across install/uninstall/rei
 
     runCodexInstall(codexHome);
     const content = readCodexConfig(codexHome);
-    const parsed = parseTomlToObject(content);
+    parseTomlToObject(content);
 
     const hooksJsonCommands = readHooksSessionStartCommands(codexHome);
     const gsdHandlers = hooksJsonCommands.filter((cmd) => /gsd-check-update/.test(cmd));
@@ -231,7 +231,7 @@ describe('#2760 defect 3 — Hooks AoT preservation across install/uninstall/rei
     writeCodexConfig(codexHome, '');
     runCodexInstall(codexHome);
     runCodexInstall(codexHome); // second install
-    const content = readCodexConfig(codexHome);
+    readCodexConfig(codexHome);
 
     const hooksJsonCommands = readHooksSessionStartCommands(codexHome);
     const gsdHandlers = hooksJsonCommands.filter((cmd) => /gsd-check-update/.test(cmd));
@@ -249,7 +249,7 @@ describe('#2760 fix 2 — Strip purges invalid legacy [agents] / [[agents]] rega
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('strips bare [agents] single-bracket block (no GSD marker, arbitrary user keys)', () => {
@@ -345,7 +345,7 @@ describe('#2760 fix 3 — Post-write Codex schema validation', { concurrency: fa
       const result = validateCodexConfigSchema(content);
       assert.equal(result.ok, true, 'GSD-emitted config passes schema validation');
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      cleanup(tmpDir);
     }
   });
 
@@ -416,7 +416,7 @@ describe('#2760 fix 3 — Post-write Codex schema validation', { concurrency: fa
       );
     } finally {
       delete installModule.__codexSchemaValidator;
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      cleanup(tmpDir);
     }
   });
 });
@@ -474,7 +474,7 @@ describe('#2760 fix 4 — Write-failure rollback (atomic write + snapshot restor
   afterEach(() => {
     fs.renameSync = originalRenameSync;
     fs.writeFileSync = originalWriteFileSync;
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('pre-install config bytes survive when fs.renameSync throws over configPath', () => {
@@ -616,7 +616,7 @@ describe('#2760 CR4 finding 2 — Legacy flat [[hooks]] block migrates to namesp
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('pre-install legacy flat [[hooks]] gsd-check-update + user namespaced [[hooks.SessionStart]] → post-install converges on namespaced AoT', () => {
@@ -766,7 +766,7 @@ describe('#2760 CR4 finding 1 — atomicWriteFileSync failure aborts install (po
   afterEach(() => {
     fs.renameSync = originalRenameSync;
     console.log = originalConsoleLog;
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('install throws and never prints "Done!" when atomicWriteFileSync fails on configPath', () => {
@@ -846,7 +846,7 @@ describe('#2760 CR5 finding 1 — pre-write failures abort install (outer catch 
   afterEach(() => {
     console.log = originalConsoleLog;
     delete installModule.__codexSchemaValidator;
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('pre-write throw (validator throws, not returns {ok:false}) is fatal and restores snapshot', () => {
@@ -996,7 +996,7 @@ describe('#2760 CR5 finding 3 — migration emits namespaced AoT (no flat/namesp
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('user has [[hooks.AfterTool]] AND legacy [hooks.SessionStart] → post-install both namespaced, no flat AoT', () => {

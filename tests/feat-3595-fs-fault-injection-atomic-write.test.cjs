@@ -2,7 +2,7 @@
  * Filesystem fault-injection coverage for the canonical atomic-write
  * seam (#3595).
  *
- * `platformWriteSync` in `get-shit-done/bin/lib/shell-command-projection.cjs`
+ * `platformWriteSync` in `gsd-core/bin/lib/shell-command-projection.cjs`
  * is the shared seam every config/state/generated-artifact writer in
  * the CJS layer routes through. Its contract:
  *
@@ -37,18 +37,16 @@ const { test, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
-
 const {
   platformWriteSync,
   platformEnsureDir,
-} = require('../get-shit-done/bin/lib/shell-command-projection.cjs');
+} = require('../gsd-core/bin/lib/shell-command-projection.cjs');
 
 /**
  * Create a fresh real-fs scratch dir per test so no two faults share
  * state. Returns the directory; caller must clean up.
  */
-const { createTempDir } = require('./helpers.cjs');
+const { createTempDir, cleanup } = require('./helpers.cjs');
 const mkScratch = (name) => createTempDir(`fs-fault-${name}-`);
 
 /**
@@ -66,7 +64,7 @@ function orphanTmpFiles(dir) {
 
 test('platformWriteSync happy path writes content atomically (baseline for fault tests)', (t) => {
   const dir = mkScratch('happy');
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => cleanup(dir));
   const file = path.join(dir, 'config.json');
   platformWriteSync(file, '{"k":"v"}\n');
   assert.equal(fs.readFileSync(file, 'utf-8'), '{"k":"v"}\n');
@@ -77,13 +75,13 @@ test('platformWriteSync happy path writes content atomically (baseline for fault
 
 test('platformWriteSync recovers when renameSync fails (EXDEV cross-device fallback)', (t) => {
   const dir = mkScratch('exdev');
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => cleanup(dir));
   const file = path.join(dir, 'config.json');
 
   // Simulate rename failing once (e.g. cross-device move on a CI runner
   // with overlayfs). The fallback path must write the content directly.
   let renameCalls = 0;
-  const renameMock = mock.method(fs, 'renameSync', (src, dest) => {
+  const renameMock = mock.method(fs, 'renameSync', (_src, _dest) => {
     renameCalls++;
     const err = new Error('EXDEV: cross-device link not permitted');
     err.code = 'EXDEV';
@@ -104,7 +102,7 @@ test('platformWriteSync recovers when renameSync fails (EXDEV cross-device fallb
 
 test('platformWriteSync falls back when initial tmp writeFileSync fails (ENOSPC)', (t) => {
   const dir = mkScratch('enospc');
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => cleanup(dir));
   const file = path.join(dir, 'config.json');
 
   // Make the FIRST writeFileSync (to .tmp.<pid>) fail with ENOSPC. The
@@ -140,7 +138,7 @@ test('platformWriteSync falls back when initial tmp writeFileSync fails (ENOSPC)
 
 test('platformWriteSync propagates the FALLBACK error when both tmp and fallback writes fail', (t) => {
   const dir = mkScratch('double-fail');
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => cleanup(dir));
   const file = path.join(dir, 'config.json');
 
   let writeCalls = 0;
@@ -178,7 +176,7 @@ test('platformWriteSync propagates the FALLBACK error when both tmp and fallback
 
 test('platformWriteSync propagates mkdirSync failure unchanged (no swallowed parent-dir errors)', (t) => {
   const dir = mkScratch('mkdir-fail');
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => cleanup(dir));
   const file = path.join(dir, 'deep', 'nested', 'config.json');
 
   const mkdirMock = mock.method(fs, 'mkdirSync', () => {
@@ -204,7 +202,7 @@ test('platformWriteSync propagates mkdirSync failure unchanged (no swallowed par
 
 test('platformWriteSync against a target path that is an existing directory fails cleanly', (t) => {
   const dir = mkScratch('target-is-dir');
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => cleanup(dir));
   const file = path.join(dir, 'collides');
   // Pre-create the target AS a directory so the rename step would
   // collide with a directory at the destination.
@@ -229,7 +227,7 @@ test('platformWriteSync against a target path that is an existing directory fail
 
 test('platformWriteSync handles paths with spaces, unicode, and newline characters', (t) => {
   const dir = mkScratch('weird-path');
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => cleanup(dir));
   const cases = [
     'has spaces in name.json',
     'unicode-日本語-name.json',
@@ -258,7 +256,7 @@ test('platformWriteSync handles paths with spaces, unicode, and newline characte
 
 test('platformWriteSync never leaks a tmp file after a successful happy-path write', (t) => {
   const dir = mkScratch('no-orphan-happy');
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => cleanup(dir));
   for (let i = 0; i < 25; i++) {
     platformWriteSync(path.join(dir, `f-${i}.json`), `{"i":${i}}\n`);
   }
@@ -274,7 +272,7 @@ test('platformWriteSync never leaks a tmp file after a successful happy-path wri
 
 test('platformEnsureDir is idempotent on an existing directory', (t) => {
   const dir = mkScratch('ensure-idem');
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => cleanup(dir));
   const target = path.join(dir, 'a', 'b', 'c');
   // First call creates; subsequent calls must not throw EEXIST.
   platformEnsureDir(target);
@@ -287,7 +285,7 @@ test('platformEnsureDir is idempotent on an existing directory', (t) => {
 
 test('platformEnsureDir propagates EACCES when parent dir is unwritable', (t) => {
   const dir = mkScratch('ensure-fail');
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => cleanup(dir));
 
   const mkdirMock = mock.method(fs, 'mkdirSync', () => {
     const err = new Error('EACCES: permission denied');
@@ -328,7 +326,7 @@ test('platformWriteSync REPLACES a symlink with a regular file rather than follo
   }
 
   const dir = mkScratch('symlink-replace');
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => cleanup(dir));
 
   const realTarget = path.join(dir, 'real-target.json');
   fs.writeFileSync(realTarget, 'original — must not be touched\n');
@@ -356,7 +354,7 @@ test('platformWriteSync against a broken symlink replaces it with the intended f
     return;
   }
   const dir = mkScratch('symlink-broken');
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => cleanup(dir));
   const link = path.join(dir, 'dangling.json');
   fs.symlinkSync(path.join(dir, 'does-not-exist'), link);
   assert.equal(fs.lstatSync(link).isSymbolicLink(), true, 'pre-check: link is dangling');
@@ -380,7 +378,7 @@ test('platformWriteSync survives a concurrent collision on the same target path'
   // the writer is sync. This exercises mid-flight error recovery, which
   // is the same concurrency hazard at a lower granularity.)
   const dir = mkScratch('concurrent');
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => cleanup(dir));
   const file = path.join(dir, 'race.json');
 
   // First write completes normally.
