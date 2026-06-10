@@ -2,41 +2,41 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
-status: milestone_complete
-stopped_at: Milestone complete (Phase 19 was final phase)
-last_updated: 2026-06-10T17:49:53.162Z
-last_activity: 2026-06-10
+status: Awaiting next milestone
+stopped_at: Completed 19-13-PLAN.md (phase gate green; MERGE-02 proven; ledger finalized) — Phase 19 ready for /gsd-verify-work; operator squash pending
+last_updated: "2026-06-10T20:10:24.361Z"
+last_activity: 2026-06-10 — Milestone v1.4 completed and archived
 progress:
   total_phases: 5
-  completed_phases: 4
-  total_plans: 111
+  completed_phases: 5
+  total_plans: 24
   completed_plans: 24
-  percent: 80
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
+See: .planning/PROJECT.md (updated 2026-06-10 at v1.4 close)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Milestone complete
+**Current focus:** Planning next milestone (`/gsd-new-milestone`) — carry-ins: Phase 18 re-scope, MERGE-08, jj workspace-add auto-empty WC bug
 
 ## Current Position
 
-Phase: 19
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-06-10
+Phase: Milestone v1.4 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-10 — Milestone v1.4 completed and archived
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 122 (v1.0: 56 + v1.1: 5 + v1.2: 3 + v1.3: 34)
+- Total plans completed: 146 (v1.0: 56 + v1.1: 5 + v1.2: 3 + v1.3: 34 + v1.4: 24)
 - Average duration: see per-milestone table
-- Total execution time: 4 milestones shipped (v1.0, v1.1, v1.2, v1.3)
+- Total execution time: 5 milestones shipped (v1.0, v1.1, v1.2, v1.3, v1.4)
 
 **By Milestone:**
 
@@ -46,7 +46,7 @@ Last activity: 2026-06-10
 | v1.1 | 1 (Phase 7) | 5 | Shipped 2026-05-14 |
 | v1.2 | 1 (Phase 8) | 3 | Shipped 2026-05-15 |
 | v1.3 | 6 (Phases 9–14) | 34 | Shipped 2026-05-24 |
-| v1.4 | 4 (Phases 15–18) | 0/13 | Planning |
+| v1.4 | 5 (Phases 14.1, 15–17, 19) | 24 (Phase 18's 3 deferred) | Shipped 2026-06-10 |
 
 *Updated after each plan completion*
 | Phase 09 P01 | 6min | 1 tasks | 1 files |
@@ -289,21 +289,27 @@ All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQU
 | Docs | `transition.md` update-gap (`update_roadmap_and_state` step lacks immediate commit); see [v14-transition-md-update-gap](./todos/pending/v14-transition-md-update-gap.md) | **IN-SCOPE for v1.4 Phase 18 plan 18.01** (REQ: CLEANUP-01) | v1.3 close (promoted in v1.4) |
 | API | MERGE-08 `WorkspaceMergeOpts.mainBookmark` revision (paired with PARALLEL-08 strict scope decision; zero non-test production callers) | Filed v1.4 Phase 14.1 (deferred until a real caller emerges; see REQUIREMENTS.md for full rationale) | v1.4 Phase 14.1 |
 
+Items acknowledged and deferred at milestone close on 2026-06-10 (Phase 18 never executed; its 3 source todos remain pending — operator chose to close v1.4 at 4/5 phases and re-scope Phase 18's items against the post-Phase-19 tree in the next milestone):
+
+| Category | Item | Status |
+|----------|------|--------|
+| todo | v14-transition-md-update-gap.md (medium) | deferred — CLEANUP-01; target file now `gsd-core/workflows/transition.md` post-merge |
+| todo | v14-review-followups.md (medium) | deferred — CLEANUP-03..07; `sdk/src/query/*` targets retired by Phase 19 restructure, needs re-scoping (some may be moot) |
+| todo | v14-jj-reap-test-flake.md (low) | deferred — TEST-17; test relocated to `src/vcs/__tests__/` (.cts) by Phase 19, needs re-verification before fix |
+
 ## Session Continuity
 
-Last session: 2026-06-10T17:03:18.130Z
-Stopped at: Completed 19-13-PLAN.md (phase gate green; MERGE-02 proven; ledger finalized) — Phase 19 ready for /gsd-verify-work; operator squash pending
+Last session: 2026-06-10
+Stopped at: v1.4 milestone closed and archived (Phase 18 deferred to v1.5+)
 Resume file:
 
-- 13 plans (19-01…19-13), 13 sequential waves, revised per plan-checker iteration 1 (1 BLOCKER + 3 MAJOR + 4 MINOR all fixed, commit `sponvvtl`). VALIDATION.md nyquist-approved.
-- **NEXT STEP: plan-checker iteration 2** (verify the 8 fixes; spot-check 19-10/19-12 allowlist ordering, 19-07 verify, GSD_TEST_BACKENDS prefixes, context includes) → then `/gsd-execute-phase 19`.
-- Execution notes: 19-02 has the phase's only human checkpoint (package legitimacy gate before single `pnpm install`; `autonomous: false`, never auto-approve). jj discipline: work on top of `vpzlrrlv` only; NEVER rewrite/squash/abandon it or below; no bookmark moves; no `jj op restore`/`undo`; operator squashes the stack at the end.
-
-- Phase 12 (A3 fix) is an independent parallel track — may be planned/executed in parallel with Phases 9/10/11; joins at Phase 13 CI integration. (v1.3 closed.)
-- v1.4 phases (15-18) execute in canonical order; Phase 15 plan 15.04 (PARALLEL-07) extracts `cleanupSubagentWorkspaces` helper as Wave 1, consumed by Phase 16 plan 16.02 (CLEANUP-02) — single-owner per IP-5.
+- v1.4 archived to `.planning/milestones/v1.4-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`; `.planning/REQUIREMENTS.md` removed (fresh one comes from `/gsd-new-milestone`).
+- jj discipline (standing): the Phase 19 resolution stack (19-01…19-13, ~70 commits) sits on top of merge change `vpzlrrlv` — NEVER rewrite/squash/abandon `vpzlrrlv` or below; operator squashes the stack.
+- Installed GSD updated from this workspace 2026-06-10 (`node bin/install.js --claude --global`; payload at `~/.claude/gsd-core/`, legacy `~/.claude/get-shit-done/` removed).
 
 ## Operator Next Steps
 
-- Review v1.4 roadmap at `.planning/ROADMAP.md` (4 phases, 13 plans, 25 requirements)
-- When ready, run `/gsd:plan-phase 15` to decompose Phase 15 (Adapter surface extensions + rename) into executable plans
-- Plan 15.01 (rootCommits → rootRevisions hard rename) ships FIRST per Pitfall 3 sequencing — pre-rename JSON sidecar audit is Wave 1 of that plan
+- **Squash the 19-01…19-13 resolution stack into `vpzlrrlv`** (operator-owned graph mutation; review `jj log` first)
+- Optional: `/gsd-secure-phase 19` (security enforcement enabled; no SECURITY.md audit artifact exists for the merge phase)
+- Release marker for v1.4 (jj backend: `gsd/release/v1.4` bookmark per REFS-06) — create AFTER the squash so it lands on the final topology
+- `/gsd-new-milestone` to open v1.5 (carry-ins: Phase 18 re-scope, MERGE-08, jj workspace-add auto-empty WC bug)

@@ -2,6 +2,55 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.4 — Clean, consistent state for next upstream pull
+
+**Shipped:** 2026-06-10
+**Phases:** 5 (14.1, 15, 16, 17, 19) | **Plans:** 24 | **Tasks:** 57 | **Requirements:** 20/28 Complete, 8 Deferred (7 = Phase 18, never executed; 1 = MERGE-08 deferred-by-design)
+
+### What Was Built
+
+- **Phase 14.1 (emergency):** `mainBookmark: string` → optional `mainBookmarks?: readonly string[]` on parallel dispatch/fan-in; bookmark-less jj `@` and detached-HEAD git became first-class dispatch states (PARALLEL-08).
+- **Phase 15:** `rootCommits` → `rootRevisions` hard rename (35 sites, JSON sidecar audit); `vcs.refs.idAlphabet` + `vcs.refs.matchPrefix` public verbs; `vcs.workspace.parallel.cancel(handle)` synchronous teardown + shared `cleanupSubagentWorkspaces` helper.
+- **Phase 16:** `lint-vcs-parallel-call-presence.cjs` CI scanner (LINT-06); orphan jj-workspace dir reap on fan-in clean path + dogfood-restore (CLEANUP-02).
+- **Phase 17:** ARCHITECTURE.md prose-count drift fixed across 5 locales BEFORE the new drift tests landed green day-1; `tests/architecture-counts.test.cjs` + `tests/command-count-sync.test.cjs`; all 45 docs-verify failures closed across 8 themes; PROJECT.md `### Validated` two-pass reconciliation.
+- **Phase 19 (operator-inserted):** the upstream pull itself — ~485 upstream commits with a full restructure (SDK retirement, `get-shit-done/` → `gsd-core/`, `src/*.cts` build-at-publish) merged to 0 conflicts with the restructure ADOPTED; the fork's 34-module VCS layer ported to `src/vcs/*.cts` behind a 19-verb CLI router; 60+ raw-git sites migrated through the adapter; all 4 lint gates re-pointed non-vacuously; vitest suite revived green both backends; 951-path disposition ledger proven complete (`19-MERGE-AUDIT.md`, the next-pull precedent artifact). Post-execution review: 3 Critical + 10 Warning, all fixed.
+
+### What Worked
+
+- **The disposition ledger as merge spine.** Every deleted fork path had to resolve to a ledger row with a six-prefix vocabulary; the 951/951 comm-proof plus a committed anti-rubber-stamp checker means the NEXT upstream pull starts from a machine-verifiable precedent instead of archaeology.
+- **Adopt-upstream-restructure over fork-layout-canonical.** The operator overrode the researcher's Option A recommendation; following upstream's renames made the 13-plan resolution tractable and keeps future pulls cheap. The fork's durable divergence shrank to exactly one surface: the VCS abstraction.
+- **Sequential waves with per-wave independent spot-checks.** 13 waves, each executor's claims spot-checked by the orchestrator before the next wave dispatched; caught the 19-11 format-migration test miss at 19-12 instead of post-merge.
+- **Human legitimacy checkpoint for package installs (19-02).** The phase's only blocking checkpoint gated the single `pnpm install` on operator-performed vetting — the right trust boundary for a merge that pulls ~15 new transitive packages.
+- **Plan-checker iterations before execution.** Iteration 1 caught 1 BLOCKER + 3 MAJOR; iteration 2 caught two vacuous-verify constructions (an allowlist-strip check pointing at a wrong path with `|| echo 0` masking, and an inventory-appendix gap). Cheap relative to discovering them at execution.
+
+### What Was Inefficient
+
+- **Phase 18 went stale on the shelf.** Specified 2026-05-23 against the pre-merge tree, never executed; by close, every file reference in it was wrong (`sdk/` retired, workflows re-homed). Deferred to v1.5+ with a re-scope requirement. Lesson: "everything else" bucket phases age badly across structural upheavals — execute them promptly or expect to re-plan.
+- **Tracking-file checkbox drift.** Phase 15's ROADMAP checkbox and six REQUIREMENTS checkboxes/traceability rows were never flipped despite verified completion — discovered only at milestone close. The phase-completion step updates STATE.md reliably but ROADMAP/REQUIREMENTS checkbox flips depend on workflow steps that evidently skipped.
+- **`roadmap.analyze` returned empty phases** against this free-form ROADMAP shape at close (deprecation warning re: versioned milestone headings) — close relied on disk ground truth instead. Worth aligning ROADMAP shape or the parser before v1.5 close.
+- **Stale milestone audit.** `v1.4-MILESTONE-AUDIT.md` (2026-05-25, `gaps_found`) predated Phases 16–17 completing the very gaps it flagged; it was never re-run. Close proceeded on disk evidence. Re-run the audit at actual close time or skip it deliberately.
+
+### Patterns Established
+
+- **Merge-disposition ledger with closed prefix vocabulary + comm-proof.** For any future upstream pull: open the ledger first (19-01 pattern), six-prefix vocabulary, finalize with a machine completeness proof against the full deleted-path set, commit the checker.
+- **Restructure-adoption porting recipe:** harvest fork reference content at a pinned revision → clear mechanical conflict buckets → genuine merges to 0 conflicts → port the abstraction layer → CLI bridge → call-site migration → workflow/agent rewiring → lint-gate re-pointing (with planted-violation non-vacuity proofs) → test revival → residue deletion → gate.
+- **Frozen pre-port test baseline for attribution.** Freezing the failing-test baseline before the port made every post-port failure attributable to the port vs. pre-existing.
+
+### Key Lessons
+
+1. **Deferred phases must be re-validated against the current tree before execution, and the cost grows with structural distance.** Phase 18's 7 REQ-IDs all reference retired paths. Re-scoping is now a v1.5 planning task rather than a mechanical execution.
+2. **Checkbox state in ROADMAP/REQUIREMENTS is not self-healing.** Milestone close should always run a disk-vs-checkbox reconciliation pass (SUMMARY frontmatter `requirements-completed` is the ground truth) — this close flipped 6 stale entries.
+3. **An upstream merge can be a first-class GSD phase.** Running the merge as a 13-plan phase with plan-checker, per-wave verification, code review, and goal-backward verification caught 3 real Criticals that a freestyle resolution would have shipped.
+4. **The only durable fork surface should be the abstraction, not the layout.** v1.4's end-state proves the thesis: everything else re-converges to upstream, and the jj capability survives as `src/vcs/*.cts` + router + lint gates.
+
+### Cost Observations
+
+- **Model mix:** Opus-class orchestrator + subagents throughout (per session defaults).
+- **Sessions:** Phases 14.1–17 in a 2-day burst (05-24/05-25); Phase 19 in one long orchestrated session 2026-06-10 (13 sequential executor agents + reviewer + fixer + verifier) spanning multiple context compactions.
+- **Notable:** Phase 19's 19-11/19-12 were the heaviest plans (~80/76 min, 135/260 files); the 19-12 110-fail reconciliation was executor-absorbed without operator intervention.
+
+---
+
 ## Milestone: v1.3 — jj octopus merge for subagents fully functional
 
 **Shipped:** 2026-05-24
@@ -125,6 +174,7 @@
 | v1.1 first upstream sync | few | 1 (Phase 7) | First successful weekly upstream rebase; introduced 8 new VcsAdapter verbs in a single phase; PROMPT-04 raw-git deletion pattern |
 | v1.2 unified revision model | 1 sustained autonomous chain | 1 (Phase 8) | Architectural-enforcement-as-lint pattern; audit JSON sidecar as literal allowlist seed; 3-iteration code-review-fix loop closed 12 findings before milestone close |
 | v1.3 jj octopus merge for subagents fully functional | many across 9 days | 6 (Phases 9-14) | Cross-backend parallel verb surface (`vcs.workspace.parallel.{dispatch,fanIn}`) on both backends; orchestrator rewired (raw-git in workflow markdown → zero in execute-phase + quick); A3 colocated pre-commit gap closed (inherited from v1.0); CI parallel-path lane validates verbs before default-flip; dogfood phase LAST with recovery anchor (Pitfall 10) |
+| v1.4 clean state + upstream pull | 2-day burst (15–17) + 1 long orchestrated session (19) | 5 (14.1, 15-17, 19; 18 deferred) | First upstream merge run as a first-class GSD phase (13 plans, disposition ledger, plan-checker iterations, per-wave spot-checks); upstream restructure ADOPTED — fork divergence collapsed to the VCS abstraction (`src/vcs/*.cts`); milestone closed at 4/5 phases with explicit deferral bookkeeping |
 
 ### Cumulative Quality
 
@@ -134,6 +184,7 @@
 | v1.1 | golden-parity strict-green on both backends for new VCS-08..15 verbs | (no new lint) | preserved |
 | v1.2 | golden-parity re-recorded; new `toBeIdOf` matcher composable across both backends; 1033 files at 0 violations on no-commit-id lint, 1071 at 0 on no-raw-git | **+ `lint-vcs-no-commit-id.cjs`** (commit_id-leak guard) | preserved (18 = 18 baseline check) |
 | v1.3 | new `parallel-e2e` CI lane runs synthetic 2-plan parallel phase end-to-end on both backends, required-blocking on jj-colocated; `tests/scripts/*` now recursively collected by `scripts/run-tests.cjs` (4 previously stranded tests rescued); `tests/agent-prompts-no-raw-git.test.cjs` pins agent-prompt deny-list | **+ `scripts/audit-workflow-raw-git.cjs`** (baseline-regression guard, 127-hit per-file frozen baseline) wired into CI-06 step | +4 carried debt acknowledged (Phase 10/11 SDK files, not Phase-13-caused); LINT-05 allowlist net diff +1 (within budget) |
+| v1.4 | post-merge: 13,006/13,050 node:test (29 fails = 2 machine-gpg-environmental files, green on CI) + 612/612 vitest, green both backends from `src/vcs/__tests__/*.cts`; planted-violation fixtures prove lint non-vacuity; frozen pre-port baseline used for port attribution | **+ `scripts/lint-vcs-parallel-call-presence.cjs`** (LINT-06); all 4 gates re-pointed at post-restructure tree with SCAN_EXT +cts; workflow raw-git baseline re-derived at 230 hits / 93 files with per-file rationale ledger | re-baselined at 22 (`check-skip-count.cjs`) after restructure |
 
 ### Top Lessons (Verified Across Milestones)
 
