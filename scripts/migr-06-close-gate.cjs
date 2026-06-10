@@ -2,6 +2,18 @@
 /**
  * scripts/migr-06-close-gate.cjs (Phase 8 Plan 3, MIGR-06 close-gate)
  *
+ * HISTORICAL (marked 19-10, Phase 19 upstream-merge cutoff): this one-shot
+ * rewriter ran EXACTLY ONCE at the v1.2 close-gate (per CONTEXT D-05 below).
+ * Its hard-coded PHASE_DIR (`.planning/phases/08-unified-revision-model-…`) no
+ * longer exists in the adopted tree (Phase 8 planning artifacts archived), and
+ * its docblock references to `sdk/src/vcs/format-migration/*` name the retired
+ * fork SDK layout (ported to src/vcs/format-migration/*.cts in 19-05). NOT
+ * re-pointed: a close-gate that already fired has no live invariant — running
+ * it again would be a no-op walk of a missing directory. Retained (not
+ * deleted) as the dated v1.2 migration record; its unit test exercises the
+ * exported pure functions and stays green. Ledger row: 19-MERGE-AUDIT.md
+ * (dropped:historical-gate, script retained).
+ *
  * One-shot rewriter pass over `.planning/phases/08-…/` to migrate
  * `commit_id`-shape ids written during Plans 1+2 to `change_id`-shape
  * (post-FLIP unified revision contract). Per CONTEXT D-05 dogfood-cutover

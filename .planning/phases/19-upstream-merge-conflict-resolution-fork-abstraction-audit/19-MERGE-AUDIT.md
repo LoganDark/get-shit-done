@@ -264,6 +264,9 @@ Every ledger row's disposition MUST start with exactly one of these six prefixes
 | scripts/audit-workflow-raw-git.cjs | fork | merged | 19-10 Task 2: SCAN_ROOTS `['get-shit-done/workflows','get-shit-done/references','agents']` → `['gsd-core/workflows','gsd-core/references','agents']`; obsolete 127-hit fork-path BASELINE replaced by the machine-derived 230-hit / 93-file map (the script's OWN counter; transcript + per-file count rationale in "Appendix: Skip-count / baseline re-derivations"). Regression rule (current > baseline = fail) byte-identical; exit 0 on first green run (19-10 Task 2) |
 | scripts/lint-vcs-parallel-call-presence.cjs | fork | merged | 19-10 Task 2: SCAN_ROOTS → `['gsd-core/workflows']`; allowlist stays EMPTY; exit 0 — the 19-08 rewiring put workspace.parallel.dispatch AND fan-in literals in execute-phase.md + quick.md fences, all other workflows carry neither (file-level XOR pairing rule holds) (19-10 Task 2) |
 | tests/scripts/fixtures/lint-vcs-parallel-call-presence/*/get-shit-done/ | fork | ported-to:tests/scripts/fixtures/lint-vcs-parallel-call-presence/*/gsd-core/ | Rule 1 fallout of the SCAN_ROOTS re-point: the 5 D-14 fixture trees mirror the production scan root by construction; renamed get-shit-done→gsd-core (file content untouched) + the test's 2 synthetic allowlist path strings updated. 12/12 audit+presence unit tests pass post-rename (19-10 Task 2) |
+| scripts/audit-id-namespace.cjs | fork | merged | 19-10 Task 3: invariant still applies (re-runnable commit_id-surface enumerator, the lint-allowlist seeder source) — RE-POINTED: SCAN_ROOTS `sdk/src`→`src` (19-05 port target; auditing the 19-12-doomed sdk/ residue would only re-report known legacy rows), `get-shit-done/bin/lib` dropped (its hand-written CJS became src/*.cts, covered by the `src` root; gsd-core/bin/lib holds gitignored build output), `get-shit-done/workflows`→`gsd-core/workflows`; SCAN_EXT +cts (Pitfall 8, so the re-point actually sees the .cts sources). Runs green: exit 0, 51-row diagnostic verdict table over the adopted tree (the script never exits non-zero by design) (19-10 Task 3) |
+| scripts/audit-root-commits-rename.cjs | fork | dropped:historical-gate (script retained, marked inactive) | 19-10 Task 3: path evidence — hard-coded special-case target `sdk/src/vcs/backends.ts:79` names the retired fork SDK layout; the rootCommits→rootRevisions rename SHIPPED in v1.4 plan 15.01 and the audited pre-rename surface cannot recur (symbol gone from the adopted src/vcs/*.cts counterpart). Header marked HISTORICAL with the Phase 19 merge as cutoff; node -c green; unit test (synthetic-tree exports) unaffected (19-10 Task 3) |
+| scripts/migr-06-close-gate.cjs | fork | dropped:historical-gate (script retained, marked inactive) | 19-10 Task 3: path evidence — hard-coded PHASE_DIR `.planning/phases/08-unified-revision-model-…` does NOT exist in the adopted tree (Phase 8 planning archived), and its canonical-rewriter references name retired `sdk/src/vcs/format-migration/*` (ported 19-05). The one-shot v1.2 close-gate fired exactly once (D-05); no live invariant to re-point. Header marked HISTORICAL; node -c green; unit test (exported pure functions) unaffected (19-10 Task 3) |
 
 ## Fixture exclusions (conflict-marker sweep)
 
@@ -523,6 +526,15 @@ Run 2026-06-10 (plan 19-03, after buckets A/B/C cleared): **17 hits, set-identic
 | tests/vcs-adapter-contract.test.cjs | 19-06 | yes (2026-06-10) |
 | tests/bug-685-windowshide-spawn.test.cjs | 19-07 | yes (2026-06-10) |
 | hooks/lib/git-cmd.js (.js, header annotation only) | 19-09 | yes — `node --check` (2026-06-10) |
+| scripts/lint-vcs-no-raw-git.cjs | 19-10 | yes (2026-06-10) |
+| scripts/lint-vcs-no-commit-id.cjs | 19-10 | yes (2026-06-10) |
+| scripts/audit-workflow-raw-git.cjs | 19-10 | yes (2026-06-10) |
+| scripts/lint-vcs-parallel-call-presence.cjs | 19-10 | yes (2026-06-10) |
+| tests/scripts/lint-vcs-no-raw-git-fixture.test.cjs (ported + extended) | 19-10 | yes (2026-06-10) |
+| tests/scripts/lint-vcs-parallel-call-presence.test.cjs (2 fixture-path strings) | 19-10 | yes (2026-06-10) |
+| scripts/audit-id-namespace.cjs | 19-10 | yes (2026-06-10) |
+| scripts/audit-root-commits-rename.cjs (header HISTORICAL note only) | 19-10 | yes (2026-06-10) |
+| scripts/migr-06-close-gate.cjs (header HISTORICAL note only) | 19-10 | yes (2026-06-10) |
 
 ## Appendix: AUDIT-01 seam sweep (19-07 Task 3)
 

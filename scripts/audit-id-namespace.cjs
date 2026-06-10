@@ -52,7 +52,9 @@ const SKIP_DIRS = new Set([
 ]);
 
 // Audit scans BOTH code and markdown — code for surface flip, markdown for AUDIT-04 prose grep.
-const SCAN_EXT = /\.(cjs|js|mjs|ts|md)$/;
+// 19-10: `.cts` added (Pitfall 8) so the re-pointed `src` root actually sees the
+// adopted tree's .cts production sources.
+const SCAN_EXT = /\.(cjs|cts|js|mjs|ts|md)$/;
 
 function findFiles(dir, results) {
 	let entries;
@@ -173,12 +175,18 @@ function emitJson(result) {
 if (require.main === module) {
 	const argv = parseArgv(process.argv);
 	const REPO_ROOT = path.resolve(__dirname, '..');
+	// 19-10 re-point (Phase 19 merge — adopted upstream layout): `sdk/src` →
+	// `src` (the 19-05 port target; the residual sdk/ tree is 19-12 deletion
+	// fodder, auditing it would only re-report known legacy rows);
+	// `get-shit-done/bin/lib` dropped — its hand-written CJS sources became
+	// src/*.cts (covered by the `src` root; gsd-core/bin/lib now holds only
+	// gitignored build output + 2 checked-in helpers that were never in audit
+	// scope); `get-shit-done/workflows` → `gsd-core/workflows`.
 	const SCAN_ROOTS = [
-		'sdk/src',
-		'get-shit-done/bin/lib',
+		'src',
 		'scripts',
 		'tests/__tools__',
-		'get-shit-done/workflows',
+		'gsd-core/workflows',
 		'commands',
 		'agents',
 	];

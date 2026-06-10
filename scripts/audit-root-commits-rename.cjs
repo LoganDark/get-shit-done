@@ -2,6 +2,17 @@
 /**
  * audit-root-commits-rename.cjs (Phase 15 Plan 01, D-13)
  *
+ * HISTORICAL (marked 19-10, Phase 19 upstream-merge cutoff): one-shot audit for
+ * the v1.4 Phase 15 `rootCommits` → `rootRevisions` rename, which shipped in
+ * plan 15.01. Its hard-coded targets (`sdk/src/vcs/backends.ts:79` capability
+ * matrix, the v1.4-era extension map) name the retired fork SDK layout — the
+ * adopted tree's counterpart surface lives in src/vcs/*.cts where the rename is
+ * already complete. NOT re-pointed: the invariant it audited (pre-rename
+ * surface enumeration) cannot recur — the rename is done and the symbol is
+ * gone. Retained per the script's own "discarded after Phase 15 milestone
+ * close" framing as a dated audit artifact; do not wire into CI.
+ * Ledger row: 19-MERGE-AUDIT.md (dropped:historical-gate, script retained).
+ *
  * One-shot pre-rename audit script for the `rootCommits` → `rootRevisions`
  * symbol rename (NAMING-01). Emits the D-09 grouped-by-extension JSON shape
  * to STDOUT ONLY. The caller (Plan 15.01 audit task) redirects the stdout
