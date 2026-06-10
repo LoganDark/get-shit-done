@@ -413,6 +413,54 @@ gsd_run query commit "docs(phase-${completed_phase}): update STATE.md after tran
 
 </step>
 
+<step name="assert_clean_wc">
+**Final-gate check: assert the working copy is clean before declaring the transition complete.**
+
+By the time we reach this step, every committable change should already be in history:
+- `phase.complete`'s ROADMAP.md / STATE.md / REQUIREMENTS.md mutations were committed immediately after the verb ran (update_roadmap_and_state).
+- The PROJECT.md evolution was committed at the end of `evolve_project`.
+- The STATE.md cluster (current position, project reference, accumulated context, session continuity — plus the graduation backlog written by `graduation_scan`) was swept by the single commit at the end of `update_session_continuity_after_transition`.
+
+The only writes that happen AFTER this gate are the Route B1/B `config-set workflow._auto_chain_active false` calls inside `offer_next_phase` — each carries its own tolerant follow-up commit, so the terminal banners still never print over a dirty working copy. This is a deliberate deviation from a literal "gate immediately before each banner" placement: one gate step here plus committed config-sets beats five duplicated per-route gates, and everything else between this gate and the banners is read-only (`roadmap.analyze`, `workstream.list`).
+
+Any uncommitted change at this point is therefore a real problem — either (a) a transition step ran a mutating verb but skipped its follow-up commit, (b) a delegated helper (e.g. graduation.md) wrote files outside the swept set, (c) a pre-commit hook silently aborted a commit, or (d) the user mixed unrelated WIP with the transition. All four cases warrant aborting before any "Phase {X} marked complete" / milestone-complete banner rather than silently lying about WC cleanliness.
+
+```bash
+DIRTY=$(gsd_run query diff --name-only 2>/dev/null | jq -r '.nameOnly // [] | join("\n")')
+if [ -n "$DIRTY" ]; then
+	# Categorize the dirty paths so the operator can diagnose which class of leak fired.
+	PLANNING_DIRTY=$(echo "$DIRTY" | grep -E '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
+	OTHER_DIRTY=$(echo "$DIRTY" | grep -vE '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
+
+	echo "FATAL: working copy is dirty before transition completion." >&2
+	echo "" >&2
+	if [ -n "$PLANNING_DIRTY" ]; then
+		echo "Orchestrator-owned planning artifacts (a workflow step skipped its follow-up commit):" >&2
+		echo "$PLANNING_DIRTY" | sed 's/^/  /' >&2
+	fi
+	if [ -n "$OTHER_DIRTY" ]; then
+		echo "Source / scripts / tests (executor commit protocol may have leaked, OR unrelated WIP was present):" >&2
+		echo "$OTHER_DIRTY" | sed 's/^/  /' >&2
+	fi
+	echo "" >&2
+	echo "Transition completion requires a clean working copy. Resolve via one of:" >&2
+	echo "  - commit the listed files with a descriptive message" >&2
+	echo "  - if planning artifacts: identify the workflow step that produced them and add its missing commit (do not just paper over here)" >&2
+	echo "  - if unrelated WIP: jj abandon @ (or stash via git, then re-run the transition)" >&2
+	exit 1
+fi
+```
+
+**Why unconditional and not just `.planning/`:** the gate's job is to catch ALL forms of "we're declaring done but state isn't durable" — orchestrator mutations, delegated-helper writes, hook-aborted commits, mixed-in WIP. Restricting to `.planning/` would only catch case (a) and silently rubber-stamp cases (b)–(d). The categorization in the error message keeps the diagnostic story clean without weakening the gate.
+
+**Do not bypass.** If this gate fires, fix the root cause:
+- Orchestrator-owned planning paths dirty → find the transition step that ran the mutating verb without an immediate commit and add the commit there
+- Source/script/test paths dirty → trace what left them; nothing in this workflow should touch non-planning files
+- Mixed unrelated WIP → commit or `jj abandon @` before re-running the transition
+
+Suppressing the gate without fixing the root cause re-introduces the original Phase 14 bug.
+</step>
+
 <step name="offer_next_phase">
 
 **MANDATORY: Verify milestone status before presenting next steps.**
