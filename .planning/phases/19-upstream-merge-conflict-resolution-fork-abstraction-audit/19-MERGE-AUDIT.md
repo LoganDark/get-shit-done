@@ -1,7 +1,7 @@
 # 19-MERGE-AUDIT — Phase 19 Disposition Ledger
 
 **Opened:** 2026-06-10 (plan 19-01, Wave 0)
-**Status:** LIVE — accumulates from Wave 0 through 19-13; never retrofitted
+**Status:** FINAL — closed 2026-06-10 by plan 19-13 (completeness proof + full ordered phase gate, see "Phase gate results (19-13 Task 2)" at the end). This is the precedent artifact for the next upstream pull — start at "Pointer for the next merge".
 
 ## Merge topology
 
@@ -716,6 +716,7 @@ The suite is green MODULO exactly this enumerated set. Everything else red in th
 | scripts/ci-test-scope.cjs (INERT_WORKFLOWS −3) | 19-12 | yes (2026-06-10) |
 | scripts/research-profiles.cjs (synthesizer tools +Edit) | 19-12 | yes (2026-06-10) |
 | bin/install.js (.js — GSD_SCRIPTS_LIB_FILES +2 fork lib helpers) | 19-12 | yes — `node --check` (2026-06-10) |
+| scripts/dogfood-phase-14.sh (.sh — HISTORICAL header note only) | 19-13 | yes — `bash -n` (2026-06-10) |
 
 ## Appendix: AUDIT-01 seam sweep (19-07 Task 3)
 
@@ -985,3 +986,36 @@ DISPATCH SMOKE: BOTH CELLS PASS
 ```
 
 Both GSD_TOOLS paths `readlink -f`-verified identical to this repo's `gsd-core/bin/gsd-tools.cjs`. Cells removed after the run; `jj st` on this repo confirmed untouched (T-19-17 discipline). Note for the next pull: plain `jj git init` now COLOCATES by default on jj ≥0.45 — jj-only cells must pass `--no-colocate` explicitly (first smoke draft hit this; the git adapter answered in the "jj-only" cell).
+
+## Phase gate results (19-13 Task 2)
+
+**Run:** 2026-06-10, the full ordered gate per 19-VALIDATION.md "Before /gsd-verify-work", executed end-to-end in one session on the finished tree (Task 1 commit `rtwxkxto`/e434a6cb at HEAD). Every result below is a machine transcript, recorded in execution order.
+
+| # | gate step | command | result |
+|---|-----------|---------|--------|
+| 1 | conflicts + marker sweep | `jj st` (no conflict warning; `jj resolve --list` → "No conflicts found"); fixture-exclusion list materialized to /tmp/19-fixture-exclusions.txt (**EMPTY**, per the Fixture-exclusions section); canonical sweep `rg -l --hidden --no-ignore-vcs --glob '!.jj/**' --glob '!.git/**' --glob '!node_modules/**' '^(<<<<<<<\|%%%%%%%\|>>>>>>>)' .` filtered through `grep -vxF -f` | ✅ ZERO hits (result file empty, not a count bound) |
+| 2 | MERGE-02 completeness proof | Task 1 checker (`19-13-ledger-check.mjs`) over the 951-line comm sweep | ✅ 951/951 matched, 0 unmatched; transcript in the Task 1 appendix above |
+| 3 | build | `pnpm run build:lib` (tsc -p tsconfig.build.json, noEmitOnError) | ✅ exit 0 |
+| 4 | hand-edited CJS syntax loop | `node --check` (`.cjs`/`.js`) / `bash -n` (`.sh`) over EVERY row of the Hand-edited inventory appendix (57 rows → 56 unique files; 2 files appear twice across 19-06/19-12) | ✅ ALL 56 FILES PASS |
+| 5 | full node:test suite, both backends | `GSD_TEST_BACKENDS=git,jj node scripts/run-tests.cjs` — 689 files / 3 chunks | ✅ modulo the triaged appendix: **13,050 tests — 13,006 pass / 29 fail / 15 skipped**; the 29 fails are EXACTLY tests/graphify-auto-update.test.cjs (28) + tests/ci-rebase-check.test.cjs (1), the two machine-gpg-environmental files in "Appendix: Pre-existing upstream failures" (byte-reproducible at 03764dbc; green on CI). Totals identical to the 19-12 run |
+| 6 | ported vitest suite, both backends | `GSD_TEST_BACKENDS=git,jj npx vitest run --reporter=basic` | ✅ exit 0 — 61 files / **612/612 tests**, 101s |
+| 7 | skip-count | `node scripts/check-skip-count.cjs` | ✅ exit 0, count 22 (matches 19-12 baseline). Environmental quirk on this jj-only workspace: the script's origin/main probe leg prints `fatal: not a git repository` on stderr and degrades to warn — counts and exits 0 regardless; full baseline compare runs on CI |
+| 8 | four re-pointed lint gates | `lint-vcs-no-commit-id.cjs`; `lint-vcs-no-raw-git.cjs`; `audit-workflow-raw-git.cjs`; `lint-vcs-parallel-call-presence.cjs` | ✅ all exit 0 — 1026 files/0 violations; 1073 files/0 violations; 230 hits == frozen 230 baseline, 0 regressions; 107 files/0 violations |
+| 9 | upstream drift checks | `pnpm run check:alias-drift`; `pnpm run check:identity-drift` | ✅ both exit 0 ("check:alias-drift ok"; "ok identity-drift: all GSD coordinate literals match the seam") |
+| 10 | AUDIT-01 seam sweeps | `rg -c "execGit\(" src -g '*.cts'` → worktree-base-ref 4, shell-command-projection 1, worktree-safety 27, vcs/exec 1 (docblock) — outlier count `rg -l … \| rg -v 'shell-command-projection\|worktree-safety\|worktree-base-ref\|vcs/' \| wc -l` → **0**; `rg -n "execSync\(\|execFileSync\(" src -g '*.cts'` → only shell-command-projection.cts:477 (`execFileSync('tty')`, the seam's terminal probe) | ✅ identical to the 19-07 appendix — substrate-only, zero outliers |
+
+**jj discipline check:** `jj log -r 'vpzlrrlv | parents(vpzlrrlv)'` → `vpzlrrlvmvvw 36c417ee merge`, parents `lxylrmpm 03764dbc` (upstream) + `ltzkoolv c7bd6bee` (fork) — original change ids intact; the merge change and everything below it untouched for the whole phase.
+
+## Completeness statement
+
+Every fork-side file under `sdk/`, `get-shit-done/`, and `tests/` that no longer exists in the resolved tree (951 paths) resolves to a ledger row with an explicit six-prefix disposition — proven by machine sweep + checker, with the lint-allowlist bookkeeping rows excluded from the matcher set so the proof cannot rubber-stamp itself (T-19-36). Every fork-MODIFIED path in that set has a specific (non-covering) row; the two wide covering rows carry only machine-verified fork-unmodified files. Every surviving `gsd-sdk` text reference outside `.planning/` is classified historical with zero live spawn paths. The dispatch chain works end-to-end on both backends from a jj-only subdirectory cwd. All eight requirement IDs evidenced: MERGE-01 (gate 1), MERGE-02 (gate 2), MERGE-03 (gates 3+4), MERGE-04 (gates 5+6+7), MERGE-05 (gate 8), PORT-01 (gate 6: ported src/vcs/__tests__ green both backends), PORT-02 (Task 1 dispatch smoke + gate 5 bridge tests), AUDIT-01 (gate 10).
+
+## Pointer for the next merge
+
+(What MERGE-REVIEW-upstream-2026-05-25.md was for this merge, this section is for the next one.)
+
+1. **Start here.** Read "Merge topology" + "Disposition vocabulary" at the top, then this gate-results section. The locked strategy (upstream layout canonical; the fork's only durable divergence is the VCS abstraction at `src/vcs/*.cts` + the `src/vcs-command-router.cts` bridge + the four `scripts/lint-vcs-*`/`audit-*` gates + workflow/agent verb-protocol rewiring in `gsd-core/workflows/` + `agents/`) should make the next pull mostly auto-resolve: fork deltas are concentrated in files upstream does not have.
+2. **Permanent divergences to expect conflicts in:** `package.json` (pnpm `packageManager` pin vs upstream npm; `fallow` optionalDep removed; vitest devDep), `pnpm-lock.yaml` (regenerate, never hand-merge), `.githooks/pre-commit` (fork lint wiring), `gsd-core/workflows/_runtime-launcher.snippet.sh` + its 80 .md embeds (three-stage RUNTIME_ROOT with jj leg — re-run `node scripts/sync-runtime-launcher.cjs` after taking upstream's snippet changes), `tests/helpers.cjs` (VCS harness block), `vitest.config.ts` (fork-owned; upstream's is dead), `.github/workflows/{test,parallel-e2e}.yml` (pnpm/corepack conversion, de-org'd triggers), README/INVENTORY jj-fork grafts.
+3. **Rerunnable proof tooling committed beside this ledger:** `19-13-ledger-check.mjs` (completeness checker — point it at the new ledger + new comm sweep) and `19-13-dispatch-smoke.sh` (PORT-02 smoke; remember `jj git init --no-colocate` for jj-only cells on jj ≥0.45).
+4. **Open deferrals riding into the next cycle:** MIGR-05 github-release-notes adapter migration (deferred-items.md); hooks/lib/git-cmd.js jj-parity (v1.5); doc-parity/drift-guard re-derivation against upstream docs (future-phase candidate, see the 19-12 doc-parity drop rows); gsd-tools `query diff --diff-filter` pass-through (05-05 sweep TODO); the 2 gpg-environmental test fixtures (upstream-facing `-c commit.gpgsign=false` hardening would fix them, out of merge scope).
+5. **Operator manual actions after phase verification:** squash the 19-01…19-13 stack into the merge change `vpzlrrlv` (graph mutation is operator-owned — see 19-VALIDATION.md Manual-Only Verifications); update the installed-GSD copy from this workspace (deferred, out of phase scope).
