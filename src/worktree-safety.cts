@@ -6,6 +6,15 @@
  * ADR-457 build-at-publish: the hand-written bin/lib/worktree-safety.cjs
  * collapsed to a TypeScript source of truth. Behaviour is preserved
  * byte-for-behaviour from the prior hand-written .cjs; only types are added.
+ *
+ * 19-07 AUDIT-01 disposition — substrate:git-backend worktree machinery; the
+ * jj path is served by vcs.workspace.parallel.* (analogue of the fork
+ * src/vcs/git/parallel.cts). All 27 execGit sites here are `git worktree`
+ * porcelain/policy operations with no jj counterpart; consumers reach this
+ * module only via (a) the explicit `gsd-tools worktree *` cases, or (b)
+ * resolveWorktreeContext, which degrades to `not_git_repo` on non-zero
+ * rev-parse exit (A6 check: safe on jj-only repos — no unguarded jj-path
+ * consumer).
  */
 
 import fs from 'node:fs';

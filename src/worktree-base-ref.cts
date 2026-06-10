@@ -8,6 +8,15 @@
  *
  * Pure/testable module: all I/O is injectable via the `deps` argument so unit
  * tests can run without touching the real filesystem or spawning real git.
+ *
+ * 19-07 AUDIT-01 disposition — substrate:git-only base-ref degrade; jj
+ * workspaces do not share git's worktree base-mismatch failure mode, so no
+ * jj analogue is needed (Open-Q6 decision, 19-07 plan context) — the jj
+ * parallel path is served by vcs.workspace.parallel.*. The 4 execGit sites
+ * here stay on the shell-command-projection seam; consumers reach this
+ * module only via the explicit `gsd-tools worktree base-check|set-baseref`
+ * cases (A6 check: no jj-only code path calls them). Revisit only if a
+ * shared workflow path invokes these under jj (assumption A6).
  */
 
 import fs from 'node:fs';

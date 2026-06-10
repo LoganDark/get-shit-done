@@ -9,6 +9,14 @@
  * ADR-457 build-at-publish: the hand-written bin/lib/shell-command-projection.cjs
  * collapsed to a TypeScript source of truth. Behaviour is preserved byte-for-behaviour
  * from the prior hand-written .cjs; only types are added.
+ *
+ * 19-07 AUDIT-01 disposition — substrate:adapter-internal exec seam (mirrors
+ * the fork sdk/src/vcs/exec.ts precedent). This module's `execGit` is the
+ * upstream-side spawn substrate consumed ONLY by the ledgered substrate
+ * modules (worktree-safety.cts, worktree-base-ref.cts); all production
+ * command modules route VCS reads/writes through src/vcs/ (createVcsAdapter).
+ * Pitfall 10: the execGit signature and SpawnResultOutput shape here are
+ * load-bearing for tests/mocks — do not reshape.
  */
 
 import path from 'node:path';

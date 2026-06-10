@@ -190,6 +190,14 @@ Every ledger row's disposition MUST start with exactly one of these six prefixes
 | gsd-sdk spawn-path sweep (BLOCKER-3 / T-19-15) | n/a (verification) | merged | `rg -n 'gsd-sdk\|resolveGsdToolsPath' src gsd-core/bin --glob '!*.md'` → 9 hits, ALL comment/docblock provenance references (src/vcs-command-router.cts header + exit-code note, src/vcs/{git/parallel,types,backends/git,jj/workspace-cleanup}.cts doc mentions); ZERO executable spawn paths (no spawnSync/execSync/require targeting the retired gsd-sdk binary, no resolveGsdToolsPath survivor — the fork's worktree.ts spawn-bridge was dropped, not ported). Chain verified live: `node gsd-core/bin/gsd-tools.cjs query head-ref` → parseable JSON on this jj repo; `query state.load` (pre-existing upstream verb) still dispatches (19-06 Task 2) |
 | tests/vcs-cjs-smoke.test.cjs | fork (clean survivor, byte-identical to c7bd6bee) | ported-to:tests/vcs-cjs-smoke.test.cjs (re-pointed in place) | Early regression net (built-artifact require smoke): `../sdk/dist-cjs/vcs/{index.js,backends.js}` → `../gsd-core/bin/lib/vcs/{index.cjs,backends.cjs}`; header re-documents `pnpm run build:lib` as the build hint; node -c green; 2/2 pass against the BUILT artifacts (clears its 2 class-B baseline rows) (19-06 Task 3) |
 | tests/vcs-adapter-contract.test.cjs | fork (clean survivor, byte-identical to c7bd6bee) | ported-to:tests/vcs-adapter-contract.test.cjs (re-pointed in place) | Contract suite vs built artifacts: dist-cjs require → `../gsd-core/bin/lib/vcs/index.cjs`. Rule 1 fix during port: the c7bd6bee assertions read `r.hash`/`entries[0].hash`, but the adapter contract (fork AND ported types: CommitResult/LogEntry) has only `id` — hex commit_id on git, [k-z] change_id on jj, with an explicit "Do NOT assume hex form" docblock; the `.hash` asserts were latent fork-side test bugs masked by the stale-dist-cjs class-B module-load error (fork had no unit-CI lane — only parallel-e2e). Fixed to assert `id` against the per-backend alphabet (`/^[0-9a-f]+$/` git, `/^[k-z]+$/` jj). 45/45 pass across git + jj-colocated + jj-native lanes (clears its class-B baseline row) (19-06 Task 3) |
+| src/commands.cts + src/verify.cts (20 execGit sites) | both | re-applied-at:src/commands.cts + src/verify.cts | 19-07 Task 1: fork commands.cjs/verify.cjs annotated migrations replayed onto upstream's .cts sources. cmdCommit internals adapter-routed (single commit path; envelope `hash`→`id`, unified revision model; #2014 filter + #3522 respectStaged preserved); cmdCommitToSubrepo per-repo adapter; cmdStats countCommits/rootRevisions/log; cmdCheckCommit diff({staged}) git-pinned (index probe); verify revision probes via refs.exists(expr.rev) (WR-06 both-alphabet pattern), log({allRefs}), diff(range) for drift. Deviation from the 02-09-era fork annotations: adapter instantiated with AUTO-DETECT (no kind:'git' pin) in commit/stats paths — the pins predate the fork's jj backend and would break jj-only repos; tmp-repo smokes prove commit+log on jj-native ([k-z] id, no commit_id key) and colocated (19-07 Task 1) |
+| src/{init,core,graphify,check-command-router,roadmap-upgrade}.cts (raw-git outliers) | both | re-applied-at:src/{init,core,graphify,check-command-router,roadmap-upgrade}.cts | 19-07 Task 2: init status/version probes adapter-routed (git pins per fork MIGR-02; --show-prefix probe dropped — fork's retained execGit identifier was unbound, de facto fallback path); core isGitIgnored → refs.isIgnored (git pin per fork 02-11); core gitWorktreeInfoInternal → workspace.context() backend-aware root (fork intent; fork text had the same unbound-identifier latent bug); check-command-router git-log → vcs.log({maxCount:200}); roadmap-upgrade T-19-DG: clean-tree gate via vcs.status, HEAD capture via LogEntry.id, rollback = fs rename-reversal + adapter restore scoped to .planning/ (raw destructive pair eliminated; loud-fail with manual instructions on rollback error). Rule 1: cmdStats countCommits/rootRevisions drop {rev:head} (jj '@' counts 1; no-rev default = full ancestry both backends). Rule 2 (#685): vcsExec gains windowsHide:true; bug-685 test rebound to the seam (19-07 Task 2) |
+| src/graphify.cts (2 colocated reads) | upstream | substrate:graphify-colocated-read | Adapter-routed per fork 02-07 reference but `{ kind: 'git' }`-pinned: graph.built_at_commit is hex-fenced by COMMIT_HASH_RE (a jj change_id would fail the fence) and jj commit_ids ARE git commit_ids in colocated repos — the reads stay pinned to the git object store; inline annotations mirror the fork allowlist reason (19-07 Task 2) |
+| src/shell-command-projection.cts | upstream | substrate:adapter-internal exec seam (mirrors fork sdk/src/vcs/exec.ts precedent) | The upstream-side spawn substrate (execGit + SpawnResultOutput, Pitfall 10 — shape untouched). Post-19-07, its execGit is consumed ONLY by the two ledgered substrate modules below; every production command module routes VCS reads/writes through src/vcs/. Header comment added (19-07 Task 3) |
+| src/worktree-safety.cts (27 execGit sites) | upstream | substrate:git-backend worktree machinery; jj path served by vcs.workspace.parallel.* (analogue of fork src/vcs/git/parallel.cts) | Pure `git worktree` porcelain/policy machinery with no jj counterpart. A6 check: consumers are (a) explicit `gsd-tools worktree cleanup-wave|reap-orphans` cases and (b) core resolveWorktreeContext, which short-circuits on local `.planning/` and degrades to `not_git_repo` on non-zero rev-parse — no unguarded jj-only code path. Header comment added (19-07 Task 3) |
+| src/worktree-base-ref.cts (4 execGit sites) | upstream | substrate:git-only base-ref degrade; jj workspaces do not share the base-mismatch failure mode (Open-Q6 decision) | Worktree HEAD-drift degrade logic (#683) is a git-worktree-specific failure mode; jj parallel dispatch goes through vcs.workspace.parallel.*. A6 check: only consumers are the explicit `gsd-tools worktree base-check|set-baseref` cases — no jj-path caller. Revisit only if chunk-8 finds a shared workflow path calling it under jj. Header comment added (19-07 Task 3) |
+| src/{drift,research-store,learnings,intel}.cts ("SHA sites") | upstream | adopted-upstream | 19-07 audit: zero VCS exec in all four modules. research-store/learnings/intel "SHA" hits are crypto.createHash('sha256') content hashes (not revision ids). drift.cts `last_mapped_commit` is opaque unified-revision-id STORAGE (hex on git, [k-z] on jj); its only VCS-facing consumer (verify.cts codebase-drift) wraps it via alphabet-agnostic expr.rev() — annotated in drift.cts (19-07 Task 2/3) |
+| gsd-core/bin/verify-reapply-patches.cjs (2 SHA sites) | upstream | adopted-upstream | 19-07 disposition: both "SHA sites" are `crypto.createHash('sha256')` file-integrity hashes (sha256() helper + pristine-hash compare) — no VCS interaction, no git exec, nothing to migrate; the plan's "2 SHA sites" were false positives of the SHA sweep pattern (19-07 Task 3) |
 
 ## Fixture exclusions (conflict-marker sweep)
 
@@ -230,6 +238,38 @@ Run 2026-06-10 (plan 19-03, after buckets A/B/C cleared): **17 hits, set-identic
 | gsd-core/bin/gsd-tools.cjs | 19-06 | yes (2026-06-10) |
 | tests/vcs-cjs-smoke.test.cjs | 19-06 | yes (2026-06-10) |
 | tests/vcs-adapter-contract.test.cjs | 19-06 | yes (2026-06-10) |
+| tests/bug-685-windowshide-spawn.test.cjs | 19-07 | yes (2026-06-10) |
+
+## Appendix: AUDIT-01 seam sweep (19-07 Task 3)
+
+**Run:** 2026-06-10, after 19-07 Tasks 1+2 (src/ call-site migration complete). Machine-checkable evidence for AUDIT-01's src/ surface: every raw-git/SHA site migrated or substrate-justified.
+
+**Sweep 1 — `rg -n "execGit\(" src -g '*.cts'` (per-file counts):**
+
+```
+ 1 src/shell-command-projection.cts   (the seam definition itself — substrate row above)
+ 1 src/vcs/exec.cts                   (docblock mention of the legacy execGit signature — comment, vcs/ substrate)
+ 4 src/worktree-base-ref.cts          (substrate:git-only base-ref degrade)
+27 src/worktree-safety.cts            (substrate:git-backend worktree machinery)
+```
+
+Every hit is in shell-command-projection.cts, worktree-safety.cts, worktree-base-ref.cts, or vcs/ — ZERO call sites in any production command module (commands, verify, init, core, graphify, check-command-router, roadmap-upgrade, drift, research-store, learnings, intel all at zero). Task 3 gate: `rg -l "execGit\(" src -g '*.cts' | rg -v 'shell-command-projection|worktree-safety|worktree-base-ref|vcs/' | wc -l` → **0**.
+
+**Sweep 2 — `rg -n "execSync\(|execFileSync\(" src -g '*.cts'`:**
+
+```
+ 1 src/shell-command-projection.cts   (execFileSync('tty') — terminal probe, not VCS; the seam module)
+```
+
+Only shell-command-projection.cts. The two 19-06-era outliers inside vcs/ (vcs-command-router jj-version probe, format-migration/run jj-init) were routed through vcsExec in Task 2 (Rule 3 — they blocked this sweep).
+
+**Sweep 3 — commit-id spot check `rg -n "rev-parse --short|cat-file -t" src -g '*.cts'`:**
+
+9 hits, ALL inside `// (was: <git cmd>)` annotation comments (the fork's migration-annotation style deliberately records the prior raw command next to each adapter call) plus one git-backend implementation docblock (vcs/backends/git.cts — substrate). ZERO executable raw uses outside substrate.
+
+**Destructive-pair check:** `rg -c "git reset --hard" src -g '*.cts'` → zero files; the literal `reset --hard` token appears nowhere in src/*.cts (a pre-existing jj.cts comment was cosmetically reworded to keep the acceptance assertion comment-inclusive).
+
+**A6 check (`rg -n "worktree-safety|worktree-base-ref" src gsd-core/bin/gsd-tools.cjs`):** consumers of the two worktree substrate modules are (a) gsd-tools' explicit `worktree cleanup-wave|reap-orphans|base-check|set-baseref` dispatch cases (operator-invoked git-worktree commands) and (b) core.cts resolveWorktreeContext / inspectWorktreeHealth, both of which degrade on non-zero git exit (`not_git_repo` / health-skip) — resolveWorktreeContext additionally short-circuits on a local `.planning/` before any spawn. **No consumer reaches these modules on a jj-only code path without a degrade guard; no guard additions needed.** The remaining hits are docblock/JSDoc references inside src/vcs/ (comments, not imports).
 
 ## Appendix: PORT-02 per-family dispatch smoke (19-06 Task 3)
 
