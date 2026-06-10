@@ -53,7 +53,7 @@ TARBALL_PATH="$2"
 # Phase 18 (CLEANUP-03 / Phase 14 WR-01): project-root assertion. Must fire
 # BEFORE the tarball-existence check and both mutations (jj op restore,
 # tar -xf -C .) — a wrong-cwd run aborts here, pre-mutation.
-[ -f .planning/STATE.md ] || { echo "ERROR: dogfood-restore.sh must run from project root" >&2; exit 1; }
+[ -f .planning/STATE.md ] || { echo "FATAL: dogfood-restore.sh must run from project root" >&2; exit 1; }
 
 # Phase 19 (19-11): the fork `gsd-sdk` CLI retired with the SDK (upstream
 # ADR-0174); the cleanup verb dispatches through the PORT-02 bridge at
@@ -108,7 +108,7 @@ echo "dogfood-restore: complete. Verify with: jj diff --summary && jj log -r '@-
 # the WARN trap never fired because the CLI exit code was still 0.
 #
 # Note on `set -e` interaction (Phase 16 REVIEW IN-01): `set -e` is in
-# effect from line 29. The if/else form below makes the CLI exit
+# effect from the prologue's `set -euo pipefail`. The if/else form below makes the CLI exit
 # code observable to the script without tripping `set -e`'s
 # unguarded-failure trap — `if cmd` is `set -e`-safe.
 CLEANUP_STDERR_FILE=$(mktemp -t dogfood-restore-cleanup-stderr.XXXXXX)
