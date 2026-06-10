@@ -228,8 +228,15 @@ Sort COMMITS in reverse chronological order (newest first). If commits came from
 
 For each commit hash in COMMITS:
 ```bash
-gsd_run query revert --no-commit "${HASH}"
+REVERT_RESULT=$(gsd_run query revert --no-commit "${HASH}")
 ```
+
+Capture the backend from the first revert envelope (used by the finalize step below):
+```bash
+BACKEND=$(echo "$REVERT_RESULT" | jq -r '.backend')
+```
+
+Check each envelope's `.ok` field — `ok: false` means the revert failed; follow the failure handling below.
 
 If any revert fails (merge conflict on git, or `jj abandon` error):
 1. Display the error message
@@ -259,24 +266,50 @@ If any revert fails (merge conflict on git, or `jj abandon` error):
    ```
 4. Exit with error.
 
-After all reverts are staged successfully, create a single commit:
+After all reverts have completed successfully, finalize per backend (19-review CR-03 — the finalize MUST be scope-complete and MUST be verified via the envelope, never assumed).
 
-For MODE=phase:
+**jj backend (`BACKEND` = `jj`):** skip the finalize commit entirely. `jj abandon` is self-contained — each revert already rewrote history, and there is no staged state left to commit. Resolve the summary hash directly:
 ```bash
-gsd_run query commit "revert(${TARGET_PHASE}): undo phase ${TARGET_PHASE} — ${REVERT_REASON}"
+REVERT_HASH=$(gsd_run query head-ref | jq -r '.head')
 ```
 
-For MODE=plan:
+**git backend (`BACKEND` = `git`):** the staged inverse diff must be committed verbatim. Do NOT call `gsd_run query commit` bare — its default scope is `.planning/` (the staged code revert would be dropped or unstaged by the WC-state-capture path). Instead collect the staged paths and commit them with `--respect-staged`:
+
 ```bash
-gsd_run query commit "revert(${TARGET_PLAN}): undo plan ${TARGET_PLAN} — ${REVERT_REASON}"
+STAGED_FILES=$(gsd_run query diff --cached --name-only | jq -r '.nameOnly[]')
 ```
 
-For MODE=last:
+Build the message per mode:
+- MODE=phase: `revert(${TARGET_PHASE}): undo phase ${TARGET_PHASE} — ${REVERT_REASON}`
+- MODE=plan: `revert(${TARGET_PLAN}): undo plan ${TARGET_PLAN} — ${REVERT_REASON}`
+- MODE=last: `revert: undo ${N} selected commits — ${REVERT_REASON}`
+
 ```bash
-gsd_run query commit "revert: undo ${N} selected commits — ${REVERT_REASON}"
+# shellcheck disable=SC2086 — STAGED_FILES is intentionally word-split into one arg per path
+COMMIT_RESULT=$(gsd_run query commit "${MESSAGE}" --respect-staged --files ${STAGED_FILES})
 ```
 
-On the jj backend the `gsd_run query commit` call advances `@-` (squash-based commit lands the description on the parent change, per the WS-09 squash-based commit model the adapter implements); on the git backend it lands an ordinary commit on HEAD.
+**Verify the envelope** — do not proceed to the summary banner on faith:
+```bash
+echo "$COMMIT_RESULT" | jq -e '.committed == true' >/dev/null
+```
+
+If `.committed` is not `true`, display the envelope's `reason` and abort with an error instead of printing "UNDO COMPLETE":
+```
+╔══════════════════════════════════════════════════════════════╗
+║  ERROR                                                       ║
+╚══════════════════════════════════════════════════════════════╝
+
+The reverts are staged but the finalize commit did NOT land (reason: ${REASON}).
+  - reason 'skipped_commit_docs_false': commit_docs is disabled in .planning/config.json —
+    commit the staged revert manually: gsd_run query commit "${MESSAGE}" --respect-staged --files <staged paths>
+    after temporarily enabling commit_docs, or commit via your normal tooling.
+  - reason 'nothing_staged': the reverts produced no staged changes — inspect
+    gsd_run query status --porcelain before assuming the undo landed.
+Working tree still holds the staged revert; nothing has been lost.
+```
+
+On success, set `REVERT_HASH` from the envelope's `.id` field.
 </step>
 
 <step name="summary">
@@ -327,7 +360,8 @@ Show next steps:
 - [ ] Dirty-tree guard aborts if working tree has uncommitted changes
 - [ ] Confirmation gate shown before any revert execution
 - [ ] Reverts use `gsd_run query revert --no-commit` in reverse chronological order (destructive on jj — Pitfall 6 prose documents `jj op restore` as recovery path)
-- [ ] Single commit created via `gsd_run query commit` after all reverts staged
+- [ ] git backend: finalize commit is scope-complete (`--respect-staged --files <staged paths>`, never the bare `.planning/`-scoped default) and the envelope's `committed` field is checked before declaring success
+- [ ] jj backend: finalize commit is skipped (`jj abandon` is self-contained); REVERT_HASH resolved via `query head-ref`
 - [ ] Error handling cleans up both first-call and mid-sequence conflict cases (git backend); jj backend surfaces typed `jj abandon` error with op-log recovery hint
 - [ ] `gsd_run query reset --mode hard` is NEVER used anywhere in this workflow
 </success_criteria>

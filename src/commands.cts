@@ -632,7 +632,14 @@ function cmdCommit(cwd: string, message: string | undefined, files: string[] | u
   // original "stage all of .planning/" semantics.
   const explicitFiles = !!(files && files.length > 0);
   const filesRequested = explicitFiles ? (files as string[]) : ['.planning/'];
-  const filesToCommit = explicitFiles
+  // 19-review CR-03: the #2014 missing-path filter is SKIPPED under
+  // --respect-staged. The hazard the filter guards against is `git add -A --
+  // <missing-path>` silently staging a deletion — but respectStaged never
+  // runs an add (it commits the already-staged index state), and a staged
+  // DELETION's path is legitimately absent from disk. Filtering it out would
+  // drop the deletion from the commit (e.g. an undo workflow's staged revert
+  // of an added file).
+  const filesToCommit = explicitFiles && !respectStaged
     ? filesRequested.filter(f => fs.existsSync(path.join(cwd, f)))
     : filesRequested;
 
