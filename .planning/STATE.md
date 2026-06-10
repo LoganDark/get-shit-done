@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
 status: executing
-stopped_at: "Completed 19-08-PLAN.md (workflow re-wiring); next: 19-09 agents + launcher/githooks"
-last_updated: "2026-06-10T12:59:37.724Z"
+stopped_at: "Completed 19-09-PLAN.md (agents + launcher + githooks); next: 19-10 lint baselines"
+last_updated: "2026-06-10T13:28:18.794Z"
 last_activity: 2026-06-10
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 24
-  completed_plans: 19
-  percent: 79
+  completed_plans: 20
+  percent: 80
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 ## Current Position
 
 Phase: 19 (upstream-merge-conflict-resolution-fork-abstraction-audit) — EXECUTING
-Plan: 9 of 13
+Plan: 10 of 13
 Status: Ready to execute
 Last activity: 2026-06-10
 
@@ -94,6 +94,7 @@ Last activity: 2026-06-10
 | Phase 19 P06 | 19min | 3 tasks | 6 files |
 | Phase 19 P19-07 | 35min | 3 tasks | 19 files |
 | Phase 19 P19-08 | 25min | 2 tasks | 10 files |
+| Phase 19 PP19-09 | 30min | 3 tasks | 91 files |
 
 ## Accumulated Context
 
@@ -204,6 +205,11 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase ?]: 19-07: AUDIT-01 src/ surface complete — execGit survivors only in shell-command-projection + worktree-safety + worktree-base-ref (substrate-ledgered); #685 windowsHide centralized at vcsExec seam; 3 build-state test re-baselines deferred to 19-10/19-12
 - [Phase ?]: 19-08: fork workflow deltas re-applied three-way — envelope adaptations (.entries/.id/date/bookmarks[0]) per ported router; help monolith re-expressed as 2 bullets in help/modes/full.md; upstream #48/#630/#683/#3384/#3491 + create_tag gates preserved via fork-verb re-expression notes
 - [Phase ?]: 19-08 forward deps for 19-09: dispatch-cwd-safety.md @-ref dangles until created; new-project matrix asserts has_jj which init.new-project does not emit yet
+- [Phase 19]: Agent calling convention = bare gsd-tools query, not gsd_run: agents never source the launcher snippet; matches upstream's 17 pre-existing call sites in gsd-executor.md (plan 19-09)
+- [Phase 19]: 19-09: migrate-vcs.md preflight rewritten to primary sources (config jq read + query status + command -v jj) instead of porting fork init.migrate-vcs — the mutator verb re-checks all signals defensively
+- [Phase 19]: 19-09 Rule 2: init.new-project emits has_jj (fork Phase 6 06-01 parity) — closes the 19-08 forward dep feeding the new-project VCS-gate matrix
+- [Phase 19]: 19-09: launcher RUNTIME_ROOT = git rev-parse || jj workspace root || pwd at snippet source, synced to 80 embeds; git-first leg deliberately keeps a raw-git hit in .sh for 19-10 allowlist accounting
+- [Phase 19]: 19-09: .githooks/pre-commit wires fork vcs lints known-RED until 19-10 baselines (Pitfall 12); jj-native degrade + HOOK-07 exactly-once proven through ported adapter; git-cmd.js jj-parity deferred v1.5
 
 ### Pending Todos
 
@@ -274,8 +280,8 @@ All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQU
 
 ## Session Continuity
 
-Last session: 2026-06-10T12:59:37.718Z
-Stopped at: Completed 19-08-PLAN.md (workflow re-wiring); next: 19-09 agents + launcher/githooks
+Last session: 2026-06-10T13:27:57.468Z
+Stopped at: Completed 19-09-PLAN.md (agents + launcher + githooks); next: 19-10 lint baselines
 Resume file:
 
 None
