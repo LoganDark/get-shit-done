@@ -4,17 +4,8 @@
   "$generated_by": "scripts/seed-lint-allowlist.cjs",
   "$post_audit_note": "Entries also include script self-references (audit + lint scripts) and post-audit discoveries (paths outside the audit scan roots that surfaced during Plan 3 lint smoke-run). Each carries an explicit reason + owner per Phase 8 D-03.",
   "$comment_19_10": "Phase 19 plan 19-10 (MERGE-05): allowlist re-pointed at the adopted upstream tree (src/*.cts, .cts now scanned per Pitfall 8). New entries ADDED below with per-entry reasons; every legacy sdk/** and get-shit-done/** entry RETAINED until 19-12 deletes the residual trees (ledger row: pending-19-12-residue-deletion in 19-MERGE-AUDIT.md). 19-12 Task 2 strips the legacy lines and re-runs the gate.",
+  "$comment_19_12": "Phase 19 plan 19-12 Task 2: residue deletion executed — the 20 legacy sdk/** and get-shit-done/** path entries STRIPPED (pending-19-12-residue-deletion resolved) + 1 re-pointed entry ADDED for the ported src/vcs/format-migration/__tests__/rewrite.test.ts. Reasons in surviving entries may still cite sdk/ paths as historical lineage; the lint matches on path/glob fields only.",
   "entries": [
-    {
-      "path": "get-shit-done/bin/lib/graphify.cjs",
-      "reason": "audit-rows-78 safe — legitimate hex/commit_id usage (test fixtures, EMPTY_TREE constant, allowlist literals).",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "get-shit-done/bin/lib/verify.cjs",
-      "reason": "audit-rows-83 safe — legitimate hex/commit_id usage (test fixtures, EMPTY_TREE constant, allowlist literals).",
-      "owner": "@LoganDark"
-    },
     {
       "path": "scripts/audit-id-namespace.cjs",
       "reason": "Scan scripts — audit script literally must contain the literal commit_id strings + .commit_id regex patterns to detect them at consumer sites.",
@@ -33,21 +24,6 @@
     {
       "path": "scripts/seed-lint-allowlist.cjs",
       "reason": "Scan scripts — seeder JSDoc + manual-append reasons literally mention `commit_id` / `.commit_id` / `commit_id.short()` etc. to document which audit verdicts the seeder consumes and the per-row rationale categories.",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/query/commit.ts",
-      "reason": "Post-FLIP JSDoc reference — commit handler JSDoc names `commit_id.short()` / `change_id.shortest()` to document the backend-aware short-id form returned by resolveShort.",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/query/log.ts",
-      "reason": "audit-rows-3 historical-prose — JSDoc/prose reference to commit_id naming the unified contract.",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/types.ts",
-      "reason": "Post-FLIP JSDoc reference — GSDGitCommitEvent.id JSDoc names `commit_id` / `change_id` to document the unified revision contract (D-05 multi-anchor; mirrors LogEntry/CommitResult JSDoc).",
       "owner": "@LoganDark"
     },
     {
@@ -93,81 +69,6 @@
     {
       "path": "tests/bridge-commit-files.test.cjs",
       "reason": "19-11 NEW — negative assertions naming the forbidden surface ('commit_id' key absence + 40-hex shape rejection on the jj envelope); same self-reference class as the lint fixture test.",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/vcs/__tests__/adapter-contract.test.ts",
-      "reason": "audit-rows-10 safe — legitimate hex/commit_id usage (test fixtures, EMPTY_TREE constant, allowlist literals).",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/vcs/__tests__/baseline-parity.test.ts",
-      "reason": "audit-rows-11 safe — legitimate hex/commit_id usage (test fixtures, EMPTY_TREE constant, allowlist literals).",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/vcs/__tests__/expr.test.ts",
-      "reason": "audit-rows-19 safe — legitimate hex/commit_id usage (test fixtures, EMPTY_TREE constant, allowlist literals).",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/vcs/__tests__/git-backend.test.ts",
-      "reason": "audit-rows-25 safe — legitimate hex/commit_id usage (test fixtures, EMPTY_TREE constant, allowlist literals).",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/vcs/__tests__/jj-id-alphabet-probe.test.ts",
-      "reason": "audit-rows-36 historical-prose — JSDoc/prose reference to commit_id naming the unified contract.",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/vcs/__tests__/jj-parsers.test.ts",
-      "reason": "audit-rows-49 historical-prose — JSDoc/prose reference to commit_id naming the unified contract.",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/vcs/__tests__/jj-refs.test.ts",
-      "reason": "NDJSON parser test fixtures — bookmark.rev test asserts exact-string passthrough through `parseJjBookmarkRecord` over both [0-9a-f] and [k-z] alphabets (parser is intentionally alphabet-transparent; fixtures preserve the original NDJSON shape for replay testing).",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/vcs/__tests__/parse-worktree-list.test.ts",
-      "reason": "audit-rows-59 safe — legitimate hex/commit_id usage (test fixtures, EMPTY_TREE constant, allowlist literals).",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/vcs/backends/jj.ts",
-      "reason": "audit-rows-60,62 historical-prose — JSDoc/prose reference to commit_id naming the unified contract.",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/vcs/format-migration/__tests__/rewrite.test.ts",
-      "reason": "audit-rows-65 safe — legitimate hex/commit_id usage (test fixtures, EMPTY_TREE constant, allowlist literals).",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/vcs/format-migration/rewrite.ts",
-      "reason": "audit-rows-68 safe — legitimate hex/commit_id usage (test fixtures, EMPTY_TREE constant, allowlist literals).",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/vcs/format-migration/types.ts",
-      "reason": "Post-FLIP JSDoc reference — MigrateRunResult.commitId JSDoc names `commit_id` / `change_id` to document the active-backend revision identifier mirroring CommitResult.id.",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/vcs/parse/jj-id.ts",
-      "reason": "audit-rows-72,73 boundary-io — backend-private accessor (LINT-03 conditional driver).",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/vcs/parse/jj-log.ts",
-      "reason": "audit-rows-74 historical-prose — JSDoc/prose reference to commit_id naming the unified contract.",
-      "owner": "@LoganDark"
-    },
-    {
-      "path": "sdk/src/vcs/types.ts",
-      "reason": "Post-FLIP JSDoc reference — LogEntry.id + CommitResult.id JSDoc names `commit_id` / `change_id` to document the unified revision contract (D-05 multi-anchor; this is the canonical JSDoc the lint guard message points to as the architectural invariant).",
       "owner": "@LoganDark"
     },
     {
@@ -278,6 +179,11 @@
     {
       "glob": ".planning/**",
       "reason": "19-10 new — planning artifacts incl. the 19-03 harvest reference copies (.planning/phases/19-*/harvest/**: byte-verified c7bd6bee snapshots of fork sources) are never-executed reference material; mirrors the raw-git allowlist's .planning/** documentation entry.",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/vcs/format-migration/__tests__/rewrite.test.ts",
+      "reason": "19-12 re-point of sdk/src/vcs/format-migration/__tests__/rewrite.test.ts (audit-rows-65 safe — test fixtures, EMPTY_TREE constant, allowlist literals); ported with the format-migration test family in 19-12 Task 2.",
       "owner": "@LoganDark"
     }
   ]

@@ -60,7 +60,6 @@ Thumbs.db
 !.env.example
 .next/
 dist/
-sdk/dist-cjs/
 build/
 
 # ADR-457 build-at-publish: TS-generated runtime artifacts (compiled from src/*.cts

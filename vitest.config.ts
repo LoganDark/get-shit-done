@@ -48,7 +48,12 @@ export default defineConfig({
         test: {
           name: 'unit',
           setupFiles: [matchersPath],
-          include: ['src/vcs/__tests__/**/*.test.{ts,cts}'],
+          // 19-12: widened from src/vcs/__tests__/** — the fork config ran
+          // src/**/*.test.ts (rooted at sdk/), which also covered
+          // format-migration/__tests__; the 19-11 include silently dropped
+          // those 5 files. The **/__tests__ shape keeps any future vcs
+          // sub-tree suites discovered.
+          include: ['src/vcs/**/__tests__/**/*.test.{ts,cts}'],
           exclude: ['src/**/*.integration.test.{ts,cts}'],
           testTimeout: 30_000,
           hookTimeout: 30_000,
@@ -59,7 +64,7 @@ export default defineConfig({
         test: {
           name: 'integration',
           setupFiles: [matchersPath],
-          include: ['src/vcs/__tests__/**/*.integration.test.{ts,cts}'],
+          include: ['src/vcs/**/__tests__/**/*.integration.test.{ts,cts}'],
           testTimeout: 120_000,
           hookTimeout: 120_000,
         },

@@ -1,1 +1,0 @@
-{"version":3,"file":"git.d.ts","sourceRoot":"","sources":["../../../src/vcs/backends/git.ts"],"names":[],"mappings":"AAAA;;;;;;;;;;;;;;;;;;GAkBG;AAgBH,OAAO,KAAK,EACV,aAAa,EA2Bd,MAAM,aAAa,CAAC;AA6BrB,wBAAgB,kBAAkB,CAAC,IAAI,EAAE,MAAM,GAAG,MAAM,GAAG,IAAI,CAI9D;AAID,wBAAgB,gBAAgB,CAAC,GAAG,EAAE,MAAM,GAAG,aAAa,CA+5B3D"}
