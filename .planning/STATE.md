@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.4
-milestone_name: milestone
-status: Awaiting next milestone
-stopped_at: Completed 19-13-PLAN.md (phase gate green; MERGE-02 proven; ledger finalized) — Phase 19 ready for /gsd-verify-work; operator squash pending
-last_updated: "2026-06-10T20:10:24.361Z"
-last_activity: 2026-06-10 — Milestone v1.4 completed and archived
+milestone: v1.5
+milestone_name: Tactical cleanup + test-flake (Phase 18 carry-through)
+status: Phase 18 — ready to plan
+stopped_at: v1.5 opened (minimal milestone); Phase 18 re-scoped against post-merge tree; REQUIREMENTS.md + ROADMAP.md written — next /gsd-plan-phase 18
+last_updated: "2026-06-10T21:00:00.000Z"
+last_activity: 2026-06-10 — v1.5 opened; Phase 18 re-scope audit complete (zero items subsumed by Phase 19)
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 24
-  completed_plans: 24
-  percent: 100
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 3
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-10 at v1.4 close)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Planning next milestone (`/gsd-new-milestone`) — carry-ins: Phase 18 re-scope, MERGE-08, jj workspace-add auto-empty WC bug
+**Current focus:** v1.5 (minimal milestone, opened 2026-06-10) — Phase 18 re-scoped against post-merge tree; 7 REQ-IDs active (CLEANUP-01, CLEANUP-03..07, TEST-17). MERGE-08 stays deferred-by-design.
 
 ## Current Position
 
-Phase: Milestone v1.4 complete
-Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-06-10 — Milestone v1.4 completed and archived
+Phase: 18 (Tactical cleanup + test-flake, re-scoped) — v1.5
+Plan: 0/3
+Status: Ready to plan (`/gsd-plan-phase 18`)
+Last activity: 2026-06-10 — v1.5 opened; re-scope audit found zero Phase 18 items subsumed by Phase 19 (all 7 fixes still missing at relocated paths)
 
 ## Performance Metrics
 
@@ -289,21 +289,22 @@ All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQU
 | Docs | `transition.md` update-gap (`update_roadmap_and_state` step lacks immediate commit); see [v14-transition-md-update-gap](./todos/pending/v14-transition-md-update-gap.md) | **IN-SCOPE for v1.4 Phase 18 plan 18.01** (REQ: CLEANUP-01) | v1.3 close (promoted in v1.4) |
 | API | MERGE-08 `WorkspaceMergeOpts.mainBookmark` revision (paired with PARALLEL-08 strict scope decision; zero non-test production callers) | Filed v1.4 Phase 14.1 (deferred until a real caller emerges; see REQUIREMENTS.md for full rationale) | v1.4 Phase 14.1 |
 
-Items acknowledged and deferred at milestone close on 2026-06-10 (Phase 18 never executed; its 3 source todos remain pending — operator chose to close v1.4 at 4/5 phases and re-scope Phase 18's items against the post-Phase-19 tree in the next milestone):
+Items acknowledged and deferred at milestone close on 2026-06-10, then **promoted into v1.5 Phase 18 on 2026-06-10** after the re-scope audit (zero items subsumed by Phase 19 — all fixes still missing at relocated paths):
 
 | Category | Item | Status |
 |----------|------|--------|
-| todo | v14-transition-md-update-gap.md (medium) | deferred — CLEANUP-01; target file now `gsd-core/workflows/transition.md` post-merge |
-| todo | v14-review-followups.md (medium) | deferred — CLEANUP-03..07; `sdk/src/query/*` targets retired by Phase 19 restructure, needs re-scoping (some may be moot) |
-| todo | v14-jj-reap-test-flake.md (low) | deferred — TEST-17; test relocated to `src/vcs/__tests__/` (.cts) by Phase 19, needs re-verification before fix |
+| todo | v14-transition-md-update-gap.md (medium) | promoted — v1.5 CLEANUP-01 (plan 18.01); target `gsd-core/workflows/transition.md`; upstream rewrite has NO commit steps, scope widened to add them |
+| todo | v14-review-followups.md (medium) | promoted — v1.5 CLEANUP-03..07 (plan 18.02); WR-03/04 targets now `src/vcs-command-router.cts` (none moot per audit) |
+| todo | v14-jj-reap-test-flake.md (low) | promoted — v1.5 TEST-17 (plan 18.03); re-verify under root `vitest.config.ts` (maxWorkers: 2) before fixing |
 
 ## Session Continuity
 
 Last session: 2026-06-10
-Stopped at: v1.4 milestone closed and archived (Phase 18 deferred to v1.5+)
+Stopped at: v1.5 opened (minimal milestone); Phase 18 re-scoped; next `/gsd-plan-phase 18`
 Resume file:
 
-- v1.4 archived to `.planning/milestones/v1.4-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`; `.planning/REQUIREMENTS.md` removed (fresh one comes from `/gsd-new-milestone`).
+- v1.5 `.planning/REQUIREMENTS.md` written 2026-06-10 with the re-scope audit evidence inline (7 REQ-IDs carried from v1.4; relocated targets: `gsd-core/workflows/transition.md`, `src/vcs-command-router.cts`, `src/vcs/__tests__/cmd-parallel-{jj,git}.test.ts`, `src/vcs/__tests__/jj-reap.test.ts`).
+- v1.4 archived to `.planning/milestones/v1.4-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`.
 - jj discipline (standing): the Phase 19 resolution stack (19-01…19-13, ~70 commits) sits on top of merge change `vpzlrrlv` — NEVER rewrite/squash/abandon `vpzlrrlv` or below; operator squashes the stack.
 - Installed GSD updated from this workspace 2026-06-10 (`node bin/install.js --claude --global`; payload at `~/.claude/gsd-core/`, legacy `~/.claude/get-shit-done/` removed).
 
@@ -312,4 +313,4 @@ Resume file:
 - **Squash the 19-01…19-13 resolution stack into `vpzlrrlv`** (operator-owned graph mutation; review `jj log` first)
 - Optional: `/gsd-secure-phase 19` (security enforcement enabled; no SECURITY.md audit artifact exists for the merge phase)
 - Release marker for v1.4 (jj backend: `gsd/release/v1.4` bookmark per REFS-06) — create AFTER the squash so it lands on the final topology
-- `/gsd-new-milestone` to open v1.5 (carry-ins: Phase 18 re-scope, MERGE-08, jj workspace-add auto-empty WC bug)
+- ~~`/gsd-new-milestone` to open v1.5~~ — v1.5 opened 2026-06-10 as a minimal milestone (operator chose Phase 18 carry-through over full ceremony); MERGE-08 remains deferred-by-design

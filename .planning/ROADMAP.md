@@ -15,6 +15,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 - ✅ **v1.2 jujutsu is change-only — never commit id anywhere** — Phase 8 (shipped 2026-05-15) — see `.planning/milestones/v1.2-ROADMAP.md`
 - ✅ **v1.3 jj octopus merge for subagents fully functional** — Phases 9-14 (shipped 2026-05-24) — see `.planning/milestones/v1.3-ROADMAP.md`
 - ✅ **v1.4 Clean, consistent state for next upstream pull** — Phase 14.1 + Phases 15-17 + Phase 19 (shipped 2026-06-10; Phase 18 deferred to v1.5+) — see `.planning/milestones/v1.4-ROADMAP.md`
+- 🚧 **v1.5 Tactical cleanup + test-flake (Phase 18 carry-through)** — Phase 18, re-scoped against the post-Phase-19 tree (opened 2026-06-10)
 
 ## Phases
 
@@ -66,9 +67,32 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 - [x] **Phase 16: Workflow + invariant tooling** — Ship `scripts/lint-vcs-parallel-call-presence.cjs` (content-driven detection of `workspace.parallel.dispatch` / `workspace.parallel.fan-in` literals in shell fences; default-deny + per-entry `{path|glob, reason, owner}` allowlist; CI-blocking in `parallel-e2e.yml`, NOT pretest per audit-workflow-raw-git.cjs D-07 precedent); reap orphan `.claude/jj-workspaces/phase-*-subagent-*` FS dirs on `vcs.workspace.parallel.fan-in` clean-path success branch (preserves W3 (a) inspection contract on conflicted branch) AND via `scripts/dogfood-restore.sh` post-restore step (consumes `cleanupSubagentWorkspaces` helper extracted in Phase 15). Parallel-safe within phase (file-disjoint). Requirements: LINT-06, CLEANUP-02. (2 plans) (completed 2026-05-25)
 - [x] **Phase 17: Drift control + reconciliation** — Wave 1 = ARCHITECTURE.md prose-count fixes across en + 3 translations (44→68 commands, 46→89 workflows, 16→33 agents, 17→60 lib modules, ~3000→10,978 install.js LOC) BEFORE drift tests RED per Pitfall 4; Wave 2 = `tests/architecture-counts.test.cjs` + `tests/command-count-sync.test.cjs` (`node:test` framework, verbatim copy of `tests/inventory-counts.test.cjs` shape, live-scan not snapshot); Wave 3 = remaining docs-update themes 1-7+9 (per-theme triage per Pitfall 12 — ADR supersession notes for theme 3, change-id-anchored references for theme 5); Wave 4 = PROJECT.md `### Validated` reconciliation LAST per IP-4 (so v1.4's own REQ-IDs are in truth source; two-pass approach per Pitfall 8 — machine-generated `.planning/intel/project-validated-truth.md` + human-edited narrative). Requirements: DOCS-08, DRIFT-01, DRIFT-02, DOCS-01..07, DOCS-09, PROJECT-01. (4 plans) (completed 2026-05-25)
 - [x] **Phase 19: Upstream merge conflict resolution + fork-abstraction audit** — Post-v1.4 operator-initiated upstream pull (out of v1.4 scope per Overview, tracked here for continuity). Resolve all ~76 conflicted files in merge change `vpzlrrlv` (upstream `03764dbc` ← fork `c7bd6bee`) to 0 conflicts, **adopting upstream's restructure** (SDK retirement, `gsd-core/`, `src/*.cts`) to keep future pulls cheap, while porting the fork's VCS abstraction (jj support: VcsAdapter, unified revision model, `workspace.parallel.*`, `.githooks` bridge) into the new upstream architecture and migrating upstream's raw-git call sites through it. See Phase Details. (plans TBD) (completed 2026-06-10)
-- [ ] **Phase 18: Tactical cleanup + test-flake** — DEFERRED TO v1.5+ at milestone close 2026-06-10 (never planned or executed; 0/3 plans). Requirements CLEANUP-01, CLEANUP-03..07, TEST-17 marked Deferred in the archived REQUIREMENTS. Its file references predate the Phase 19 restructure (`sdk/` retired, `get-shit-done/` → `gsd-core/`) and need re-scoping during next-milestone planning — some items may have been subsumed by Phase 19's audit/code-review fixes. Full original scope: `.planning/milestones/v1.4-ROADMAP.md` Phase Details.
+- [ ] **Phase 18: Tactical cleanup + test-flake** — DEFERRED TO v1.5+ at milestone close 2026-06-10 (never planned or executed; 0/3 plans). Requirements CLEANUP-01, CLEANUP-03..07, TEST-17 marked Deferred in the archived REQUIREMENTS. **Promoted into v1.5 on 2026-06-10** after a re-scope audit against the post-merge tree (verdict: zero items subsumed by Phase 19; all 7 fixes still missing at relocated paths) — see the v1.5 section below. Full original scope: `.planning/milestones/v1.4-ROADMAP.md` Phase Details.
 
 </details>
+
+### 🚧 v1.5 Tactical cleanup + test-flake (Phase 18 carry-through) — IN PROGRESS
+
+- [ ] **Phase 18: Tactical cleanup + test-flake (re-scoped)** — Execute the 7 REQ-IDs deferred at v1.4 close against the post-Phase-19 tree. (0/3 plans)
+
+#### Phase 18 Details (re-scoped 2026-06-10)
+
+**Goal**: Close the v14-* todos and Phase 14 code-review WR-01..05 followups that Phase 19's restructure relocated but did not fix: the `gsd-core/workflows/transition.md` false-clean-WC gap (upstream's rewrite has NO commit steps and NO gate), the `dogfood-restore.sh` precondition/overlay hardening, the dispatch-handler input guards now living in `src/vcs-command-router.cts`, the CONFIG-02 test tmpDir leaks, and the `jj-reap > inclusion-filter` flake (re-verify first — vitest config changed in 19-11).
+**Depends on**: Nothing (v1.4 shipped; post-merge tree is the baseline)
+**Requirements**: CLEANUP-01, CLEANUP-03, CLEANUP-04, CLEANUP-05, CLEANUP-06, CLEANUP-07, TEST-17
+**Success Criteria** (what must be TRUE):
+
+  1. `gsd-core/workflows/transition.md` mutating steps (`update_roadmap`-equivalent, PROJECT.md evolution, STATE.md update) each gain an immediate `gsd_run query commit`, and an `assert_clean_wc` final-gate (mirroring `gsd-core/workflows/execute-phase.md:1676` / `plan-phase.md`) lands before the "Phase {X} marked complete" / milestone-complete terminal banners; verified by inserting a synthetic uncommitted file and confirming the flow halts before the banner. Global-install caveat documented (operator must `node bin/install.js --claude --global` to pick up the new gate).
+  2. `scripts/dogfood-restore.sh` asserts `[ -f .planning/STATE.md ]` (or equivalent project-root check) before `jj op restore` + `tar -xf` (CLEANUP-03); tar-overlay ambiguity resolved — clean overlay OR documented asymmetry (CLEANUP-04).
+  3. `src/vcs-command-router.cts` `workspace.parallel.dispatch` handler returns `{ok:false, reason:'plan_not_array'}` when the parsed plan is not an array (CLEANUP-05) and rejects NaN `--max-concurrency` via a `Number.isNaN` guard mirroring the `--phase` guard at line 1145 (CLEANUP-06); each guard has a contract test covering its envelope shape.
+  4. `src/vcs/__tests__/cmd-parallel-{jj,git}.test.ts` `describe('CONFIG-02 — parallelization_disabled')` blocks include `afterEach(() => rm(tmpDir, {recursive: true, force: true}))` (CLEANUP-07); leaked dirs eliminated, verified via test-run-then-inspect-tmp check.
+  5. TEST-17 resolved by one of two verdicts: (a) flake reproduced under root `vitest.config.ts` (`maxWorkers: 2` per 19-11) → per-test narrow fix (≤5 LOC, ≤1 file, config UNTOUCHED, `scripts/check-skip-count.cjs` green); or (b) flake not reproducible in 3+ full-suite runs → closed as resolved-by-restructure with the runs recorded as evidence.
+
+**Plans**: 3 plans
+
+  - [ ] 18.01-PLAN.md — CLEANUP-01 transition.md commit-adjacency + gate (HIGHEST PRIORITY per v1.4 Pitfall 2 — the false-clean-WC pattern already bit Phase 14). Note the re-scope delta: this is now upstream's rewritten file; the fix adds the missing commit steps, not just the gate.
+  - [ ] 18.02-PLAN.md — CLEANUP-03..07 (Phase 14 WR-01..05). Per-WR commits per v1.4 Pitfall 10; order: prod-code guards (CLEANUP-05, CLEANUP-06 — both in `src/vcs-command-router.cts`, no longer file-disjoint) FIRST, then script fixes (CLEANUP-03, CLEANUP-04), then test fixes (CLEANUP-07). 5 Phase 14 info findings NOT forced in (opportunistic only).
+  - [ ] 18.03-PLAN.md — TEST-17 re-verify-then-fix. Reproduce under current config BEFORE touching anything; narrow per-test fix or resolved-by-restructure closure per Success Criterion 5.
 
 ## Progress
 
@@ -77,7 +101,7 @@ Phases execute in numeric order: 1 → 2 → 2.1 → 3 → 03.1 → 4 → 5 → 
 
 Note: Phase 12 (A3 fix) is an independent parallel track and may execute concurrently with Phases 9/10/11; the dependency ordering above is the canonical record sequence, not a serial execution constraint for Phase 12.
 
-v1.4 executed 15 → 16 → 17 as planned; Phase 19 (upstream merge, operator-initiated) jumped the queue ahead of Phase 18, which was then deferred to v1.5+ at milestone close.
+v1.4 executed 15 → 16 → 17 as planned; Phase 19 (upstream merge, operator-initiated) jumped the queue ahead of Phase 18, which was then deferred to v1.5+ at milestone close. v1.5 (opened 2026-06-10) carries Phase 18 through, re-scoped against the post-merge tree.
 
 | Milestone | Phases | Plans | Status   | Shipped    |
 |-----------|--------|-------|----------|------------|
@@ -86,6 +110,7 @@ v1.4 executed 15 → 16 → 17 as planned; Phase 19 (upstream merge, operator-in
 | v1.2 jujutsu is change-only — never commit id anywhere | 1 | 3/3 | Complete | 2026-05-15 |
 | v1.3 jj octopus merge for subagents fully functional | 6 | 34/34 | Complete | 2026-05-24 |
 | v1.4 Clean, consistent state for next upstream pull | 5 | 24/24 (Phase 18's 3 deferred) | Complete | 2026-06-10 |
+| v1.5 Tactical cleanup + test-flake (Phase 18 carry-through) | 1 | 0/3 | In progress | — |
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -98,16 +123,15 @@ v1.4 executed 15 → 16 → 17 as planned; Phase 19 (upstream merge, operator-in
 | 15. Adapter surface extensions + rename | 4/4 | Complete    | 2026-05-25 |
 | 16. Workflow + invariant tooling | 2/2 | Complete    | 2026-05-25 |
 | 17. Drift control + reconciliation | 4/4 | Complete    | 2026-05-25 |
-| 18. Tactical cleanup + test-flake | 0/3 | Deferred to v1.5+ (at v1.4 close) | — |
+| 18. Tactical cleanup + test-flake (re-scoped, v1.5) | 0/3 | Planning | — |
 | 19. Upstream merge conflict resolution + fork-abstraction audit | 13/13 | Complete    | 2026-06-10 |
 
 ## Next
 
-v1.4 shipped 2026-06-10. Next milestone starts with `/gsd-new-milestone` (questioning → research → requirements → roadmap). Carry-ins for v1.5 planning:
+v1.5 opened 2026-06-10 as a minimal milestone (operator decision: re-scope + execute deferred Phase 18 without full new-milestone ceremony). Next: `/gsd-plan-phase 18` → `/gsd-execute-phase 18`. Still outstanding beyond v1.5:
 
-- **Phase 18 re-scope** — CLEANUP-01, CLEANUP-03..07, TEST-17 deferred at v1.4 close; file references predate the Phase 19 restructure (`sdk/` retired, `get-shit-done/` → `gsd-core/`) and some items may have been subsumed by Phase 19's audit/code-review fixes. Audit against the post-merge tree before promoting.
 - **MERGE-08** — deferred-by-design until a real `vcs.workspace.merge` caller emerges (see archived v1.4 REQUIREMENTS).
 - **Operator manual actions outstanding** — squash the 19-01…19-13 resolution stack into merge change `vpzlrrlv` (operator-owned); optional `/gsd-secure-phase 19` (security enforcement enabled, no SECURITY.md).
 
 ---
-*Last updated: 2026-06-10 — v1.4 milestone closed and archived to `.planning/milestones/v1.4-ROADMAP.md` (verbatim pre-close copy incl. full Phase Details for phases 9–19). Shipped Phase 14.1 + Phases 15, 16, 17, 19 (24 plans); Phase 18 (3 plans) deferred to v1.5+ by operator decision — see MILESTONES.md Known Gaps. Phase 19 (upstream merge `vpzlrrlv` → 0 conflicts, fork VCS abstraction ported into upstream's `src/*.cts` architecture, 951-path disposition ledger proven complete) executed under this milestone as an operator-initiated insertion ahead of Phase 18.*
+*Last updated: 2026-06-10 — v1.5 opened (minimal milestone, Phase 18 carry-through). Re-scope audit ran against the post-merge tree: zero Phase 18 items subsumed by Phase 19; all 7 REQ-IDs promoted with relocated paths (`gsd-core/workflows/transition.md`, `src/vcs-command-router.cts`, `src/vcs/__tests__/`). New `.planning/REQUIREMENTS.md` written with audit evidence. Prior entry: v1.4 closed and archived 2026-06-10 to `.planning/milestones/v1.4-ROADMAP.md`; Phase 19 (upstream merge `vpzlrrlv` → 0 conflicts, 951-path ledger) executed as operator-initiated insertion ahead of Phase 18.*
