@@ -465,6 +465,14 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     // Plan 02-03 Task 1 gap-fill: switch / checkout (with optional create).
     // Phase 3 D-04: `opts.raw` accepted and ignored (git has no prefix to escape).
     switch: (name: string, opts: { create?: boolean; raw?: boolean } = {}): void => {
+      // 19-review WR-03 (D-24 parity): `name` is derived from user-controlled
+      // config templates (phase_branch_template via cmdCommit), so a
+      // `-`-leading token would reach `git checkout` as an option. Validate
+      // like the create/move/delete siblings. No `--` separator here:
+      // checkout interprets `--` as the revs/paths divider (same rationale as
+      // bookmarks.exists above) — the validator's leading-dash rejection is
+      // what keeps the bare positional safe.
+      validateRefname(name);
       const args = opts.create ? ['checkout', '-b', name] : ['checkout', name];
       const r = execGitVcs(cwd, args);
       if (r.exitCode !== 0) {
@@ -644,6 +652,15 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
       // both backends so sidecar callers can compose uniformly. The default
       // (no `name`) preserves the historical Phase 4 git behavior of
       // checking out an existing branch / detached HEAD at `path`.
+      // 19-review WR-03 (D-24 parity): validate the caller-supplied branch
+      // name before it lands at the `-b` argv slot, and reject `-`-leading
+      // paths before the positional slot (git worktree add has no clean `--`
+      // form covering both the path and the trailing commit-ish, so the
+      // shape check is the guard).
+      if (input.name) validateRefname(input.name);
+      if (input.path.startsWith('-')) {
+        throw new Error(`workspace.add: invalid path '${input.path}' (leading '-')`);
+      }
       const baseRevArg = input.baseRef ? [toGitRev(input.baseRef)] : [];
       const branchArg = input.name ? ['-b', input.name] : [];
       const r = execGitVcs(cwd, ['worktree', 'add', ...branchArg, input.path, ...baseRevArg]);
