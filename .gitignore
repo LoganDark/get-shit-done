@@ -66,6 +66,10 @@ build/
 # ADR-457 build-at-publish: TS-generated runtime artifacts (compiled from src/*.cts
 # by `npm run build:lib`). Source of truth is src/; these are emitted, never edited.
 # Published via prepublishOnly; built before test via pretest. Grows as modules migrate.
+# 19-05: the ported VCS layer is ignored as a whole directory (deliberate deviation
+# from the per-file enumeration style above — auto-covers future vcs modules so the
+# enumeration cannot drift; rationale ledgered in 19-MERGE-AUDIT.md).
+/gsd-core/bin/lib/vcs/
 /gsd-core/bin/lib/research-store.cjs
 /gsd-core/bin/lib/research-provider.cjs
 /gsd-core/bin/lib/package-legitimacy.cjs

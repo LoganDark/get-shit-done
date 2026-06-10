@@ -185,6 +185,7 @@ Every ledger row's disposition MUST start with exactly one of these six prefixes
 | sdk/src/vcs/refs-validator.ts | fork (clean survivor) | ported-to:src/vcs/refs-validator.cts | Core contract (chunk 1): mechanical port (19-05 Task 1) |
 | sdk/src/vcs/types.ts | fork (clean survivor) | ported-to:src/vcs/types.cts | Core contract (chunk 1): mechanical port (19-05 Task 1) |
 | sdk/src/query/{config-mutation,state-mutation,commit}.ts (4 helper functions) | fork (conflicted) | ported-to:src/vcs/format-migration/planning-shim.cts | Rule 3 deviation: format-migration/run.ts imported atomicWriteConfig + acquireStateLock/releaseStateLock + planningPaths + sanitizeCommitMessage from the retired SDK query layer (no src/ counterpart compiles); byte-identical fork bodies shimmed locally, planningPaths re-pointed at upstream planning-workspace.cts (same (cwd,ws?)→PlanningPaths contract) (19-05 Task 1) |
+| .gitignore (gsd-core/bin/lib/vcs emit coverage) | n/a (new) | merged | Convention deviation (deliberate): single directory ignore line `/gsd-core/bin/lib/vcs/` instead of upstream's per-file enumeration — a directory line auto-covers future vcs modules and makes enumeration drift impossible; emitted vcs artifacts verified absent from `jj st` post-build (19-05 Task 2) |
 
 ## Fixture exclusions (conflict-marker sweep)
 
