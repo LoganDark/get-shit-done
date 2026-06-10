@@ -176,8 +176,24 @@ describe('CLEANUP-05/06 — dispatch input guards', () => {
 
 	// CLEANUP-06: a valid --phase and a valid array --plan are supplied so the
 	// max-concurrency guard is the ONLY guard that can fire.
-	for (const badValue of ['NaN', 'banana']) {
-		it(`returns {ok:false, reason:max_concurrency_invalid} for --max-concurrency ${badValue}; adapter never called`, async () => {
+	//
+	// Phase 18 REVIEW WR-03: the guard now requires a positive integer
+	// (`Number.isInteger` + `>= 1`, the cleanupSubagentWorkspacesVerb
+	// precedent), and the argv loop's `i + 1 < args.length` form routes an
+	// empty-string value into the validator (`Number('')` is 0) instead of
+	// silently skipping the flag.
+	const invalidMaxConcurrency: ReadonlyArray<[label: string, value: string]> = [
+		['NaN', 'NaN'],
+		['banana', 'banana'],
+		['0 (zero cap)', '0'],
+		['-2 (negative cap)', '-2'],
+		['2.5 (fractional cap)', '2.5'],
+		['Infinity (unbounded sentinel)', 'Infinity'],
+		["'' (empty string — pre-WR-03 silent flag skip)", ''],
+	];
+
+	for (const [label, badValue] of invalidMaxConcurrency) {
+		it(`returns {ok:false, reason:max_concurrency_invalid} for --max-concurrency ${label}; adapter never called`, async () => {
 			recordedDispatchOpts.length = 0;
 			const dispatch = await loadWorkspaceParallelDispatchVerb();
 			const plan = JSON.stringify([{ agentId: 'agent-1', planId: 'plan-1' }]);
@@ -191,4 +207,21 @@ describe('CLEANUP-05/06 — dispatch input guards', () => {
 			expect(recordedDispatchOpts.length).toBe(0);
 		});
 	}
+
+	// WR-03 boundary: 1 is the smallest legal cap — it must pass the guard
+	// and arrive on ParallelDispatchOpts (4 is pinned by the PARALLEL-06
+	// describe above; absent-flag → undefined likewise).
+	it('accepts --max-concurrency 1 (lower boundary) and forwards it to the adapter', async () => {
+		recordedDispatchOpts.length = 0;
+		const dispatch = await loadWorkspaceParallelDispatchVerb();
+		const plan = JSON.stringify([{ agentId: 'agent-1', planId: 'plan-1' }]);
+		const res = await dispatch(
+			['--phase', '18', '--plan', plan, '--max-concurrency', '1'],
+			'/tmp/irrelevant-cwd',
+		);
+		expect(recordedDispatchOpts.length).toBe(1);
+		expect(recordedDispatchOpts[0].maxConcurrency).toBe(1);
+		const data = res.data as { ok?: boolean; reason?: string };
+		expect(data.reason).toBeUndefined();
+	});
 });

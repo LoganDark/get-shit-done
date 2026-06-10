@@ -1137,7 +1137,11 @@ const workspaceParallelDispatchVerb: VcsVerbHandler = (args, projectDir) => {
       mainBookmarks.push(args[++i]);
     } else if (args[i] === '--plan' && args[i + 1]) {
       planRaw = args[++i];
-    } else if (args[i] === '--max-concurrency' && args[i + 1]) {
+    } else if (args[i] === '--max-concurrency' && i + 1 < args.length) {
+      // Phase 18 REVIEW WR-03: `i + 1 < args.length` (not truthiness, the
+      // Phase 16 WR-03 form) so an empty-string value reaches the validator
+      // below (`Number('')` is 0 → rejected) instead of silently skipping
+      // the flag.
       maxConcurrency = Number(args[++i]);
     }
   }
@@ -1145,12 +1149,20 @@ const workspaceParallelDispatchVerb: VcsVerbHandler = (args, projectDir) => {
   if (phaseNumber === undefined || Number.isNaN(phaseNumber)) {
     return { data: { ok: false, reason: 'phase_number_required' } };
   }
-  // Phase 18 (CLEANUP-06 / Phase 14 WR-04): reject a non-numeric
-  // --max-concurrency value instead of silently forwarding NaN into the
-  // adapter's scheduling. The `!== undefined` leg is load-bearing — an ABSENT
-  // flag must still forward `undefined` (D-07 default-undefined contract,
-  // pinned by cmd-parallel-max-concurrency-cli.test.ts).
-  if (maxConcurrency !== undefined && Number.isNaN(maxConcurrency)) {
+  // Phase 18 (CLEANUP-06 / Phase 14 WR-04, strengthened by Phase 18 REVIEW
+  // WR-03): reject any --max-concurrency value that is not a positive
+  // integer — NaN, fractional, zero, negative, and Infinity are all nonsense
+  // scheduling caps. Mirrors the file's numeric-validation precedent at
+  // cleanupSubagentWorkspacesVerb (`Number.isInteger` + range check). The
+  // `!== undefined` leg is load-bearing — an ABSENT flag must still forward
+  // `undefined` (D-07 default-undefined contract, pinned by
+  // cmd-parallel-max-concurrency-cli.test.ts).
+  if (
+    maxConcurrency !== undefined &&
+    (Number.isNaN(maxConcurrency) ||
+      !Number.isInteger(maxConcurrency) ||
+      maxConcurrency < 1)
+  ) {
     return { data: { ok: false, reason: 'max_concurrency_invalid' } };
   }
   if (planRaw === undefined) {
