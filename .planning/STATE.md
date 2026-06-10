@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
 status: executing
-stopped_at: "Completed 19-06-PLAN.md (CLI bridge); next: 19-07 call-site migration"
-last_updated: "2026-06-10T11:52:58.306Z"
+stopped_at: "Completed 19-07-PLAN.md (call-site migration); next: 19-08 workflow re-wiring"
+last_updated: "2026-06-10T12:30:59.031Z"
 last_activity: 2026-06-10
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 24
-  completed_plans: 17
-  percent: 71
+  completed_plans: 18
+  percent: 75
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 ## Current Position
 
 Phase: 19 (upstream-merge-conflict-resolution-fork-abstraction-audit) — EXECUTING
-Plan: 7 of 13
+Plan: 8 of 13
 Status: Ready to execute
 Last activity: 2026-06-10
 
@@ -92,6 +92,7 @@ Last activity: 2026-06-10
 | Phase 19 P19-04 | 32min | 3 tasks | 19 files |
 | Phase 19 P05 | 16min | 2 tasks | 37 files |
 | Phase 19 P06 | 19min | 3 tasks | 6 files |
+| Phase 19 P19-07 | 35min | 3 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -197,6 +198,9 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase ?]: [Phase 19] Plan 05: /gsd-core/bin/lib/vcs/ ignored as a directory line (deviation from upstream per-file enumeration) — drift-proof coverage for future vcs modules, ledgered
 - [Phase 19]: Plan 19-06: PORT-02 CLI bridge live — 19 fork vcs verbs (not the plan's 23; branch-create/branch-delete/rev-parse/rm/bare-workspace are phantom per the 19-03 ledger) dispatch via gsd-tools query through src/vcs-command-router.cts with fork-envelope parity; commit-to-subrepo handler dispatch-dormant until 19-07 (upstream case preserved byte-identical, same locked treatment as commit)
 - [Phase 19]: Plan 19-06 Rule 1: vcs-adapter-contract test asserted nonexistent .hash — adapter contract is id (hex git / [k-z] jj change_id); flipped to per-backend alphabet asserts; latent fork-side bug masked by stale-dist-cjs module-load error (fork had no unit-CI lane)
+- [Phase ?]: 19-07: adapter auto-detect (not the fork 02-09 kind:git pins) in cmdCommit/cmdStats — pins predate the jj backend; jj-native commit/log smoke proves [k-z] id with no commit_id key; envelope hash->id (unified revision model)
+- [Phase ?]: 19-07: T-19-DG closed — roadmap-upgrade rollback is fs rename-reversal + adapter restore scoped to .planning/ (loud-fail, never raw git); literal reset-hard token absent from src/*.cts including comments
+- [Phase ?]: 19-07: AUDIT-01 src/ surface complete — execGit survivors only in shell-command-projection + worktree-safety + worktree-base-ref (substrate-ledgered); #685 windowsHide centralized at vcsExec seam; 3 build-state test re-baselines deferred to 19-10/19-12
 
 ### Pending Todos
 
@@ -267,8 +271,8 @@ All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQU
 
 ## Session Continuity
 
-Last session: 2026-06-10T11:52:58.301Z
-Stopped at: Completed 19-06-PLAN.md (CLI bridge); next: 19-07 call-site migration
+Last session: 2026-06-10T12:30:59.026Z
+Stopped at: Completed 19-07-PLAN.md (call-site migration); next: 19-08 workflow re-wiring
 Resume file:
 
 None
