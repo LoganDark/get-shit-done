@@ -20,6 +20,7 @@ import { platformWriteSync, platformReadSync, platformEnsureDir } from './shell-
 // break the jj-only-repo invariant this phase ports. cmdCheckCommit keeps the
 // git pin (it probes git's index, a git-only concept).
 import { createVcsAdapter, expr } from './vcs/index.cjs';
+import { VcsNotImplementedError } from './vcs/types.cjs';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import core = require('./core.cjs');
 const {
@@ -699,11 +700,31 @@ function cmdCommit(cwd: string, message: string | undefined, files: string[] | u
   // jj. For amend mode, the adapter emits `commit --amend --no-edit`
   // (message field is ignored; `files` is irrelevant under amend's
   // index-rewrite semantics).
-  const commitResult = amend
-    ? vcs.commit({ message: (sanitizedMessage as string) || '', amend: true, noVerify })       // (was: commit --amend --no-edit [+ --no-verify])
-    : respectStaged
-      ? vcs.commit({ message: sanitizedMessage as string, files: respectStagedFiles as string[], noVerify, respectStaged: true })
-      : vcs.commit({ message: sanitizedMessage as string, files: filesToCommit, noVerify });   // (was: add/rm --cached … + commit -m <msg> [+ --no-verify])
+  // 19-review WR-04: --amend and --respect-staged are typed
+  // VcsNotImplementedError throws on the jj backend. Map them to a
+  // structured `{committed:false, reason:'not_supported_on_jj'}` envelope
+  // (exit 0, per the JSON-envelope contract workflows parse with jq)
+  // instead of crashing with a raw stack trace.
+  let commitResult;
+  try {
+    commitResult = amend
+      ? vcs.commit({ message: (sanitizedMessage as string) || '', amend: true, noVerify })     // (was: commit --amend --no-edit [+ --no-verify])
+      : respectStaged
+        ? vcs.commit({ message: sanitizedMessage as string, files: respectStagedFiles as string[], noVerify, respectStaged: true })
+        : vcs.commit({ message: sanitizedMessage as string, files: filesToCommit, noVerify }); // (was: add/rm --cached … + commit -m <msg> [+ --no-verify])
+  } catch (err) {
+    if (err instanceof VcsNotImplementedError) {
+      const result = {
+        committed: false,
+        id: null,
+        reason: 'not_supported_on_jj',
+        error: err.message,
+      };
+      output(result, raw, 'failed');
+      return;
+    }
+    throw err;
+  }
   if (commitResult.exitCode !== 0) {
     if (commitResult.stdout.includes('nothing to commit') || commitResult.stderr.includes('nothing to commit')) {
       const result = { committed: false, id: null, reason: 'nothing_to_commit' };
