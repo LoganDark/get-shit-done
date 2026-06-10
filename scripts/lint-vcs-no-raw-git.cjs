@@ -60,7 +60,27 @@ const SKIP_DIRS = new Set([
 // applies to all repo code, not just JS/TS/YAML. `.githooks/` files are
 // already in the allowlist; helper scripts in scripts/*.sh would otherwise
 // invoke `git` undetected.
-const SCAN_EXT = /\.(cjs|js|mjs|ts|yml|yaml|sh|bash)$/;
+// 19-10 (Pitfall 8 / T-19-26): `.cts` added — the adopted tree's production
+// sources are src/*.cts; without it every gate passes vacuously green over
+// the new tree. Positive-detection proof lives in
+// tests/scripts/lint-vcs-no-raw-git-fixture.test.cjs (planted .cts violation
+// MUST be reported).
+const SCAN_EXT = /\.(cjs|cts|js|mjs|ts|yml|yaml|sh|bash)$/;
+
+// 19-10 (T-19-28): `pnpm run build:lib` emits gitignored .cjs artifacts under
+// gsd-core/bin/lib/ (compiled from the src/*.cts sources this scanner already
+// covers). Scanning the emitted copies would double-report every src/ finding
+// as a phantom violation in generated code nobody hand-edits. Skip them; the
+// two checked-in lib files stay scanned (gsd-core/bin/gsd-tools.cjs is outside
+// lib/ and stays scanned too).
+const EMITTED_LIB_PREFIX = 'gsd-core/bin/lib/';
+const EMITTED_LIB_CHECKED_IN = new Set([
+  'gsd-core/bin/lib/legacy-cleanup.cjs',
+  'gsd-core/bin/lib/package-identity.cjs',
+]);
+function isEmittedArtifact(rel) {
+  return rel.startsWith(EMITTED_LIB_PREFIX) && !EMITTED_LIB_CHECKED_IN.has(rel);
+}
 
 const GIT_PATTERNS = [
   { re: /spawnSync\s*\(\s*['"]git['"]/, label: "spawnSync('git', …)" },
@@ -139,8 +159,13 @@ function checkFile(filepath) {
   return { file: rel, hits };
 }
 
-const files = [];
-findFiles(SCAN_ROOT, files);
+const walked = [];
+findFiles(SCAN_ROOT, walked);
+// 19-10 (T-19-28): drop emitted gsd-core/bin/lib artifacts BEFORE scanning so
+// they are neither scanned nor counted (the checked-in exceptions survive).
+const files = walked.filter(
+  (f) => !isEmittedArtifact(path.relative(SCAN_ROOT, f).split(path.sep).join('/')),
+);
 const violations = files.map(checkFile).filter(Boolean);
 
 if (violations.length === 0) {

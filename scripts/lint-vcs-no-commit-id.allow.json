@@ -3,6 +3,7 @@
   "$migration_note": "Phase 8 Plan 3 D-01: seeded from .planning/intel/id-namespace-audit.json verdicts[boundary-io|safe|historical-prose]. Per-entry schema (D-03 + D-04 — expires NOT required, solo-dev context).",
   "$generated_by": "scripts/seed-lint-allowlist.cjs",
   "$post_audit_note": "Entries also include script self-references (audit + lint scripts) and post-audit discoveries (paths outside the audit scan roots that surfaced during Plan 3 lint smoke-run). Each carries an explicit reason + owner per Phase 8 D-03.",
+  "$comment_19_10": "Phase 19 plan 19-10 (MERGE-05): allowlist re-pointed at the adopted upstream tree (src/*.cts, .cts now scanned per Pitfall 8). New entries ADDED below with per-entry reasons; every legacy sdk/** and get-shit-done/** entry RETAINED until 19-12 deletes the residual trees (ledger row: pending-19-12-residue-deletion in 19-MERGE-AUDIT.md). 19-12 Task 2 strips the legacy lines and re-runs the gate.",
   "entries": [
     {
       "path": "get-shit-done/bin/lib/graphify.cjs",
@@ -152,6 +153,86 @@
     {
       "path": "tests/graphify-visualization.test.cjs",
       "reason": "Test fixtures — graphify visualization test uses ghost-hash placeholders + commit-sha regex shape; same reasoning as graphify-auto-update.",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/vcs/types.cts",
+      "reason": "19-10 re-point of sdk/src/vcs/types.ts (ported 19-05) — LogEntry.id + CommitResult.id JSDoc names `commit_id` / `change_id` to document the unified revision contract (D-05 multi-anchor; the canonical JSDoc the lint guard message points to).",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/vcs/backends/jj.cts",
+      "reason": "19-10 re-point of sdk/src/vcs/backends/jj.ts (ported 19-05) — historical-prose JSDoc referencing commit_id to name the unified contract (audit-rows-60,62 lineage).",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/vcs/parse/jj-id.cts",
+      "reason": "19-10 re-point of sdk/src/vcs/parse/jj-id.ts (ported 19-05) — boundary-io backend-private accessor (audit-rows-72,73 lineage); the `jj log -T commit_id` template IS the colocated-boundary read.",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/vcs/format-migration/rewrite.cts",
+      "reason": "19-10 re-point of sdk/src/vcs/format-migration/rewrite.ts (ported 19-05) — COMMIT_KEY_ALLOWLIST must name the literal `commit_id` frontmatter key it migrates (audit-rows-68 lineage).",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/vcs/format-migration/types.cts",
+      "reason": "19-10 re-point of sdk/src/vcs/format-migration/types.ts (ported 19-05) — MigrateRunResult.commitId JSDoc names `commit_id` / `change_id` documenting the active-backend revision identifier.",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/graphify.cts",
+      "reason": "19-10 re-point of get-shit-done/bin/lib/graphify.cjs (audit-rows-78 lineage) — COMMIT_HASH_RE hex fence is substrate per the 19-07 ledger (substrate:graphify-colocated-read: graph.built_at_commit is git-object-store hex; jj commit_ids ARE git commit_ids in colocated repos).",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/verify.cts",
+      "reason": "19-10 re-point of get-shit-done/bin/lib/verify.cjs (audit-rows-83 lineage) — EMPTY_TREE 40-hex git constant; legitimate hex usage per the fork allowlist precedent carried through the 19-07 verify.cts migration.",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/worktree-safety.cts",
+      "reason": "19-10 new (widened .cts scan) — 40-hex SHA shape validation inside the git-backend worktree machinery; substrate per the 19-07 ledger row (substrate:git-backend worktree machinery; jj path served by vcs.workspace.parallel.*).",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/observability/event.cts",
+      "reason": "19-10 new (widened .cts scan) — UUID_V4_REGEX hex-shape overlap; a UUID is not a revision id (same false-positive class as the installer-migrations sha256 entry).",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "src/research-store.cts",
+      "reason": "19-10 new (widened .cts scan) — /^[0-9a-f]{64}$/ validates sha256 content-store keys, not revision ids (crypto content hash per the 19-07 'SHA sites' ledger row).",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "tests/observability/event.test.cjs",
+      "reason": "19-10 new — UUID v4 regex mirror of src/observability/event.cts; not a revision id.",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "tests/research-store.test.cjs",
+      "reason": "19-10 new — sha256 content-key regex fixtures mirroring src/research-store.cts; not revision ids.",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "tests/research-store.property.test.cjs",
+      "reason": "19-10 new — sha256 content-key regex fixtures (property suite) mirroring src/research-store.cts; not revision ids.",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "tests/worktree-base-ref.test.cjs",
+      "reason": "19-10 new — synthetic 40-hex SHA fixtures (deadbeef/cafebabe…) exercising the git-substrate worktree-base-ref module; test fixtures for a git-only degrade path, not runtime revision-id consumers.",
+      "owner": "@LoganDark"
+    },
+    {
+      "path": "tests/scripts/lint-vcs-no-raw-git-fixture.test.cjs",
+      "reason": "19-10 new — scan-script fixture test literally embeds a planted `.commit_id` access (written into a tmp .cts file) to prove the widened scanner REPORTS it; same self-reference class as tests/scripts/audit-id-namespace.test.cjs.",
+      "owner": "@LoganDark"
+    },
+    {
+      "glob": ".planning/**",
+      "reason": "19-10 new — planning artifacts incl. the 19-03 harvest reference copies (.planning/phases/19-*/harvest/**: byte-verified c7bd6bee snapshots of fork sources) are never-executed reference material; mirrors the raw-git allowlist's .planning/** documentation entry.",
       "owner": "@LoganDark"
     }
   ]
