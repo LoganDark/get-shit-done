@@ -364,7 +364,7 @@ v1.4 phase ordering: Phase 15 ships first (adapter surface highest-leverage; ext
 | 16. Workflow + invariant tooling | 2/2 | Complete    | 2026-05-25 |
 | 17. Drift control + reconciliation | 4/4 | Complete    | 2026-05-25 |
 | 18. Tactical cleanup + test-flake | 0/3 | Not started | — |
-| 19. Upstream merge conflict resolution + fork-abstraction audit | 12/13 | In Progress|  |
+| 19. Upstream merge conflict resolution + fork-abstraction audit | 13/13 | Complete   | 2026-06-10 |
 
 ## Next
 
@@ -375,7 +375,7 @@ v1.4 roadmap created 2026-05-24 — 4 phases, 13 plans, 25 requirements mapped 1
 **Goal:** The upstream merge change `vpzlrrlv` (upstream main `03764dbc` "Merge pull request #940 from open-gsd/hotfix/1.4.3" merged into fork main `c7bd6bee`, ~485 upstream commits incl. a full restructure) reaches 0 conflicts with functional code on **upstream's new layout** — upstream's restructure is ADOPTED (SDK retirement per their ADR-0174, `get-shit-done/` → `gsd-core/`, `src/*.cts` rewrite) so future upstream pulls stay cheap. The fork's only durable divergence is the VCS abstraction enabling jj support: `sdk/src/vcs/` (VcsAdapter, jj+git backends, unified revision model, `workspace.parallel.*`, `.githooks` bridge) is ported into upstream's architecture as `src/vcs/*.cts` (or closest idiomatic equivalent), upstream's raw-git call sites are migrated to route through it, fork jj-behavior tests are ported to upstream's test layout, and fork lint gates are re-pointed at the new tree. Build green (upstream's build), tests green on both backends, every disposition recorded in `19-MERGE-AUDIT.md`. Lessons from MERGE-REVIEW-upstream-2026-05-25.md apply: validate CJS parse correctness, check for silently dropped features, severed dispatch chains, and stale generated files.
 **Requirements**: TBD (merge hygiene + fork-abstraction invariants: lint-vcs-no-raw-git, lint-vcs-no-commit-id, audit-workflow-raw-git baseline)
 **Depends on:** Nothing in v1.4 (operator-initiated upstream pull; v1.4 phases 15-17 shipped; Phase 18 pending independently)
-**Plans:** 12/13 plans executed
+**Plans:** 13/13 plans complete
 
 Constraints:
 
@@ -396,7 +396,7 @@ Plans:
 - [x] 19-10-PLAN.md — Lint-gate re-pointing: SCAN_EXT +cts, allowlists, audit baseline re-derivation (MERGE-05)
 - [x] 19-11-PLAN.md — Vitest revival + port ~75 jj/vcs test assets to upstream layout (PORT-01 proof)
 - [x] 19-12-PLAN.md — Fork-test triage + sdk//get-shit-done/ residue deletion + skip re-baseline + full suites green (MERGE-04)
-- [ ] 19-13-PLAN.md — Phase gate: MERGE-02 ledger completeness proof + ordered verification run + ledger finalization
+- [x] 19-13-PLAN.md — Phase gate: MERGE-02 ledger completeness proof + ordered verification run + ledger finalization
 
 ---
 *Last updated: 2026-05-24 — v1.4 roadmap created. 4 phases (15-18), 13 plans, 25 requirements. Coverage: 25/25 mapped (no orphans). Phase shape derived from research synthesis with one clarification: PARALLEL-07's plan extracts the shared `cleanupSubagentWorkspaces` helper as its Wave 1, then CLEANUP-02 (Phase 16) consumes the same helper — avoiding cross-phase dependency inversion while preserving IP-5 single-owner pattern. Strict ordering enforced at roadmap level: (1) Phase 15 plan 15.01 ships rename FIRST (smallest diff, clears namespace, auto-resolves IP-1); (2) Phase 17 plan 17.01 ships ARCHITECTURE.md prose-count fixes BEFORE plan 17.02 ships drift tests (Pitfall 4 prevents day-1 red CI); (3) Phase 17 plan 17.04 ships PROJECT.md reconciliation LAST per IP-4 (captures v1.4's own REQ-IDs); (4) Phase 18 plan 18.01 (transition.md gate) is HIGHEST PRIORITY within Phase 18 per Pitfall 2 even though the phase is parallel-safe. v1.3 shipped 2026-05-24 (6 phases, 34 plans, 27 requirements).*

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
-status: executing
-stopped_at: "Completed 19-12-PLAN.md (MERGE-04 closed: residue gone, allowlists stripped, full suite green both backends); next: 19-13 completeness proof"
-last_updated: "2026-06-10T16:39:52.512Z"
+status: verifying
+stopped_at: Completed 19-13-PLAN.md (phase gate green; MERGE-02 proven; ledger finalized) — Phase 19 ready for /gsd-verify-work; operator squash pending
+last_updated: "2026-06-10T17:03:18.135Z"
 last_activity: 2026-06-10
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 24
-  completed_plans: 23
-  percent: 80
+  completed_plans: 24
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 
 Phase: 19 (upstream-merge-conflict-resolution-fork-abstraction-audit) — EXECUTING
 Plan: 13 of 13
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-10
 
 ## Performance Metrics
@@ -98,6 +98,7 @@ Last activity: 2026-06-10
 | Phase 19 P19-10 | 30min | 3 tasks | 19 files |
 | Phase 19 P19-11 | ~80min | 2 tasks | 135 files |
 | Phase 19 P19-12 | 76min | 3 tasks | 260 files |
+| Phase 19 P19-13 | ~25min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -218,6 +219,8 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase ?]: [Phase 19]: 19-11 A4 resolved config-level — vite resolves .cjs->.cts but esbuild.include needed +cts and 3 import-equals sites converted to interop default imports; tests stay .test.ts, publish build auto-excludes
 - [Phase ?]: [Phase 19]: 19-11 fork guard-test triage — wave-cleanup-executor DROPPED (pins fork D-05 fanIn-delegation body; 19-07 substrate disposition + 5 upstream files pin the adopted body; D-05 invariant lives at workspace.parallel.fan-in, pinned by cmd-parallel-{jj,git}) and bug-3749* DROPPED (fork-SDK typed-IR helpers retired; invariant carried by commands.test.cjs strategy-branch tests, verified passing)
 - [Phase ?]: [Phase 19]: 19-11 vitest config caps maxWorkers:2 + 30s timeouts — sync-spawn-heavy jj suite starves worker RPC past birpc hard 60s at higher parallelism (exit 1 with all tests green); 2 workers = zero RPC errors, ~110s suite
+- [Phase 19]: 19-13 completeness proof closed MERGE-02 — 951/951 sweep lines ledger-matched via committed checker (lint-allowlist bookkeeping rows excluded from the matcher set per T-19-36); 310-file sdk/ residue resolved with one machine-verified fork-unmodified class row, not back-fill
+- [Phase 19]: 19-13 phase gate all 10 steps green in one run (node:test 13006/13050 modulo the 2 triaged gpg-environmental files; vitest 612/612 both backends); 19-MERGE-AUDIT.md finalized LIVE→FINAL with next-merge pointer; operator squash of the stack into vpzlrrlv + installed-GSD update remain manual actions
 
 ### Pending Todos
 
@@ -288,11 +291,9 @@ All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQU
 
 ## Session Continuity
 
-Last session: 2026-06-10T16:39:52.502Z
-Stopped at: Completed 19-12-PLAN.md (MERGE-04 closed: residue gone, allowlists stripped, full suite green both backends); next: 19-13 completeness proof
+Last session: 2026-06-10T17:03:18.130Z
+Stopped at: Completed 19-13-PLAN.md (phase gate green; MERGE-02 proven; ledger finalized) — Phase 19 ready for /gsd-verify-work; operator squash pending
 Resume file:
-
-None
 
 - 13 plans (19-01…19-13), 13 sequential waves, revised per plan-checker iteration 1 (1 BLOCKER + 3 MAJOR + 4 MINOR all fixed, commit `sponvvtl`). VALIDATION.md nyquist-approved.
 - **NEXT STEP: plan-checker iteration 2** (verify the 8 fixes; spot-check 19-10/19-12 allowlist ordering, 19-07 verify, GSD_TEST_BACKENDS prefixes, context includes) → then `/gsd-execute-phase 19`.
