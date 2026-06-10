@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
 status: executing
-stopped_at: "Completed 19-09-PLAN.md (agents + launcher + githooks); next: 19-10 lint baselines"
-last_updated: "2026-06-10T13:28:18.794Z"
+stopped_at: "Completed 19-10-PLAN.md (lint gates re-pointed, .cts trap closed); next: 19-11 vitest revival"
+last_updated: "2026-06-10T13:55:41.818Z"
 last_activity: 2026-06-10
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 24
-  completed_plans: 20
+  completed_plans: 21
   percent: 80
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 ## Current Position
 
 Phase: 19 (upstream-merge-conflict-resolution-fork-abstraction-audit) — EXECUTING
-Plan: 10 of 13
+Plan: 11 of 13
 Status: Ready to execute
 Last activity: 2026-06-10
 
@@ -95,6 +95,7 @@ Last activity: 2026-06-10
 | Phase 19 P19-07 | 35min | 3 tasks | 19 files |
 | Phase 19 P19-08 | 25min | 2 tasks | 10 files |
 | Phase 19 PP19-09 | 30min | 3 tasks | 91 files |
+| Phase 19 P19-10 | 30min | 3 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -210,6 +211,8 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase 19]: 19-09 Rule 2: init.new-project emits has_jj (fork Phase 6 06-01 parity) — closes the 19-08 forward dep feeding the new-project VCS-gate matrix
 - [Phase 19]: 19-09: launcher RUNTIME_ROOT = git rev-parse || jj workspace root || pwd at snippet source, synced to 80 embeds; git-first leg deliberately keeps a raw-git hit in .sh for 19-10 allowlist accounting
 - [Phase 19]: 19-09: .githooks/pre-commit wires fork vcs lints known-RED until 19-10 baselines (Pitfall 12); jj-native degrade + HOOK-07 exactly-once proven through ported adapter; git-cmd.js jj-parity deferred v1.5
+- [Phase 19]: 19-10: .cts booby trap closed mechanically — SCAN_EXT +cts in both scanners + planted-.cts positive-detection fixture tests; emitted gsd-core/bin/lib artifacts walk-ignored (T-19-28); launcher snippet git-first leg allowlisted per 19-09 ledger instead of weakening the scan pattern
+- [Phase 19]: 19-10: audit-workflow-raw-git baseline machine-re-derived at 230 hits / 93 files (script's own counter; launcher embed +1 per file dominates) replacing the 127-hit fork-path map; legacy sdk/** + get-shit-done/** allowlist entries RETAINED under pending-19-12-residue-deletion; audit-id-namespace re-pointed, rootCommits-rename + migr-06 close-gate marked historical
 
 ### Pending Todos
 
@@ -280,11 +283,9 @@ All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQU
 
 ## Session Continuity
 
-Last session: 2026-06-10T13:27:57.468Z
-Stopped at: Completed 19-09-PLAN.md (agents + launcher + githooks); next: 19-10 lint baselines
+Last session: 2026-06-10T13:55:25.068Z
+Stopped at: Completed 19-10-PLAN.md (lint gates re-pointed, .cts trap closed); next: 19-11 vitest revival
 Resume file:
-
-None
 
 - Strategy (operator-locked, full text in 19-CONTEXT.md): ADOPT upstream restructure (SDK retirement, `gsd-core/`, `src/*.cts`); port fork VCS layer to `src/vcs/*.cts`; pnpm; mirror upstream identity `@opengsd/gsd-core@1.4.3`; vitest revival; adapter-routed cmdCommit; doc-parity tests drop+ledger.
 - 13 plans (19-01…19-13), 13 sequential waves, revised per plan-checker iteration 1 (1 BLOCKER + 3 MAJOR + 4 MINOR all fixed, commit `sponvvtl`). VALIDATION.md nyquist-approved.
