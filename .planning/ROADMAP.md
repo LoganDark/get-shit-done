@@ -365,7 +365,7 @@ v1.4 phase ordering: Phase 15 ships first (adapter surface highest-leverage; ext
 | 16. Workflow + invariant tooling | 2/2 | Complete    | 2026-05-25 |
 | 17. Drift control + reconciliation | 4/4 | Complete    | 2026-05-25 |
 | 18. Tactical cleanup + test-flake | 0/3 | Not started | — |
-| 19. Upstream merge conflict resolution + fork-abstraction audit | 4/13 | In Progress|  |
+| 19. Upstream merge conflict resolution + fork-abstraction audit | 5/13 | In Progress|  |
 
 ## Next
 
@@ -376,7 +376,7 @@ v1.4 roadmap created 2026-05-24 — 4 phases, 13 plans, 25 requirements mapped 1
 **Goal:** The upstream merge change `vpzlrrlv` (upstream main `03764dbc` "Merge pull request #940 from open-gsd/hotfix/1.4.3" merged into fork main `c7bd6bee`, ~485 upstream commits incl. a full restructure) reaches 0 conflicts with functional code on **upstream's new layout** — upstream's restructure is ADOPTED (SDK retirement per their ADR-0174, `get-shit-done/` → `gsd-core/`, `src/*.cts` rewrite) so future upstream pulls stay cheap. The fork's only durable divergence is the VCS abstraction enabling jj support: `sdk/src/vcs/` (VcsAdapter, jj+git backends, unified revision model, `workspace.parallel.*`, `.githooks` bridge) is ported into upstream's architecture as `src/vcs/*.cts` (or closest idiomatic equivalent), upstream's raw-git call sites are migrated to route through it, fork jj-behavior tests are ported to upstream's test layout, and fork lint gates are re-pointed at the new tree. Build green (upstream's build), tests green on both backends, every disposition recorded in `19-MERGE-AUDIT.md`. Lessons from MERGE-REVIEW-upstream-2026-05-25.md apply: validate CJS parse correctness, check for silently dropped features, severed dispatch chains, and stale generated files.
 **Requirements**: TBD (merge hygiene + fork-abstraction invariants: lint-vcs-no-raw-git, lint-vcs-no-commit-id, audit-workflow-raw-git baseline)
 **Depends on:** Nothing in v1.4 (operator-initiated upstream pull; v1.4 phases 15-17 shipped; Phase 18 pending independently)
-**Plans:** 4/13 plans executed
+**Plans:** 5/13 plans executed
 
 Constraints:
 - Resolution happens in the working copy on top of merge change `vpzlrrlv` in workspace `get-shit-done-2`; the operator squashes into the merge change at the end (do NOT squash/rewrite the merge change itself).
@@ -387,7 +387,7 @@ Plans:
 - [x] 19-02-PLAN.md — Dependency vetting + BLOCKING human legitimacy checkpoint + single pnpm install + upstream build bring-up
 - [x] 19-03-PLAN.md — Harvest fork reference content from c7bd6bee + mechanically clear conflict buckets A/B/C (accept upstream deletion)
 - [x] 19-04-PLAN.md — Genuine merges: docs/translations, de-org'd CI, tests/helpers, research-synthesizer → ZERO conflicts + pre-port baseline
-- [ ] 19-05-PLAN.md — Port sdk/src/vcs (36 modules) → src/vcs/*.cts; gitignore; build green + adapter smoke
+- [x] 19-05-PLAN.md — Port sdk/src/vcs (36 modules) → src/vcs/*.cts; gitignore; build green + adapter smoke
 - [ ] 19-06-PLAN.md — CLI bridge: src/vcs-command-router.cts + gsd-tools wiring + early regression net (PORT-02)
 - [ ] 19-07-PLAN.md — Migrate upstream execGit call sites + 5 outliers (incl. destructive reset --hard); substrate dispositions (AUDIT-01)
 - [ ] 19-08-PLAN.md — Workflow re-wiring: 9 fork deltas re-applied on gsd-core/workflows, three-way-aware, verb-smoked
