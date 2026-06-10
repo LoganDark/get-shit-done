@@ -306,10 +306,18 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       const bmName = input.bookmarkRaw !== undefined
         ? input.bookmarkRaw
         : addPrefix(input.bookmark!);
+      // 19-review WR-02 (D-24 parity): this was the one bookmark-write path
+      // that skipped both the validator and the `--` separator — a
+      // caller-supplied name beginning with `-` (e.g. '--delete', '-r')
+      // would have been parsed as a flag by jj. Apply the same
+      // validateRefname + `--` defense-in-depth pair as
+      // bookmarks.create/move/delete/exists. (`--` before the positional
+      // NAMES verified working on jj 0.41.)
+      validateRefname(bmName);
       // IN-03: long form `--allow-backwards` (verified on jj 0.41) so a
       // Renovate bump past 0.41 — where the short `-B` may be retired
       // for the canonical spelling — remains in-place compatible.
-      const advArgs = jjArgv('bookmark', 'set', bmName, '-r', '@-', '--allow-backwards');
+      const advArgs = jjArgv('bookmark', 'set', '-r', '@-', '--allow-backwards', '--', bmName);
       const advRes = vcsExec(cwd, 'jj', advArgs);
       if (advRes.exitCode !== 0) {
         return {
