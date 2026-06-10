@@ -9,8 +9,8 @@ marker probe.
 </purpose>
 
 <required_reading>
-@~/.claude/get-shit-done/references/ui-brand.md
-@~/.claude/get-shit-done/references/gate-prompts.md
+@~/.claude/gsd-core/references/ui-brand.md
+@~/.claude/gsd-core/references/gate-prompts.md
 </required_reading>
 
 <process>
@@ -39,22 +39,20 @@ Parse `$ARGUMENTS`:
   when the working copy contains intentional un-committed work that must
   be preserved through the migration.
 
-If `$ARGUMENTS` includes unknown flags, dispatch fails at the SDK boundary
+If `$ARGUMENTS` includes unknown flags, dispatch fails at the verb boundary
 (the verb's argv parser returns `{ok:false, error:"migrate-vcs: unknown
 flag '...'"}`).
 </step>
 
 <step name="preflight">
-Probe current state via the init handler:
+Probe current state. There is no dedicated init handler for this workflow in
+the adopted tree — derive each signal from its primary source (the
+`migrate-vcs` verb re-checks all of them defensively before mutating):
 
 ```bash
-INIT=$(gsd-sdk query init.migrate-vcs)
-HAS_GIT=$(echo "$INIT" | jq -r '.has_git')
-HAS_JJ=$(echo "$INIT" | jq -r '.has_jj')
-CURRENT_ADAPTER=$(echo "$INIT" | jq -r '.current_adapter')
-JJ_AVAILABLE=$(echo "$INIT" | jq -r '.jj_available')
-DIRTY=$(echo "$INIT" | jq -r '.dirty')
-CONFLICTS=$(echo "$INIT" | jq -r '.conflicts')
+CURRENT_ADAPTER=$(jq -r '.vcs.adapter // "absent"' .planning/config.json 2>/dev/null || echo "absent")
+if command -v jj >/dev/null 2>&1; then JJ_AVAILABLE=true; else JJ_AVAILABLE=false; fi
+DIRTY=$(gsd_run query status --porcelain | jq -r 'if ((.entries // []) | length) > 0 then "true" else "false" end')
 ```
 
 **Derive target if not supplied:**
@@ -71,18 +69,21 @@ CONFLICTS=$(echo "$INIT" | jq -r '.conflicts')
 
 If `DIRTY == "true"` and `--force` not provided:
 ```
-Working copy has uncommitted changes. Commit, stash, or re-run with --force.
+Working copy has uncommitted changes. Commit them, or re-run with --force.
 ```
 Exit. The migration commit must be the only thing landing on the migration
 revision — uncommitted work would be silently captured.
 
 **Conflict refusal (unless --force):**
 
-If `CONFLICTS == "true"` and `--force` not provided:
+Unresolved working-copy conflicts are refused by the verb itself
+(`runMigration` pre-flight; there is no standalone conflicts query verb yet).
+If the dispatch in the next step returns `{ok:false}` with a conflicts
+message, surface it verbatim:
 ```
 Working copy has unresolved conflicts. Resolve them, or re-run with --force.
 ```
-Exit. Conflicts mid-migration would corrupt the rewriter's
+Conflicts mid-migration would corrupt the rewriter's
 revision-resolution cache.
 
 **jj binary gate (target=jj):**
@@ -97,17 +98,18 @@ here gives a friendlier banner for the user.
 </step>
 
 <step name="run_migration">
-Single SDK call dispatches the whole pipeline:
+Single query call dispatches the whole pipeline:
 
 ```bash
-RESULT=$(gsd-sdk query migrate-vcs \
+RESULT=$(gsd_run query migrate-vcs \
   --target "${TARGET}" \
   ${NATIVE:+--native} \
   ${FORCE:+--force})
 ```
 
-The verb handler imports `runMigration` from `sdk/src/vcs/format-migration/`
-(plan 06-02 deliverable) which performs the 9-phase pipeline:
+The verb handler imports `runMigration` from `src/vcs/format-migration/`
+(fork plan 06-02 deliverable, ported in 19-05) which performs the 9-phase
+pipeline:
 
 1. Acquire `.planning/.state.lock` (held for the entire migration).
 2. Read `.planning/config.json` to determine `previousAdapter`.
@@ -123,7 +125,7 @@ The verb handler imports `runMigration` from `sdk/src/vcs/format-migration/`
    unresolvable sites.
 7. Atomic config flip: write `vcs.adapter` = `<target>` in
    `.planning/config.json` via `atomicWriteConfig`.
-8. Emit `.planning/intel/06-migration-report.md` summarising the orphan
+8. Emit `.planning/intel/06-migration-report.md` summarizing the orphan
    resolution table.
 9. Fire `pre-commit` hook explicitly (A3 colocated workaround per Phase 4
    LEARNINGS Open Q1) then commit ALL rewritten files + flipped config +
@@ -144,13 +146,14 @@ Display the completion banner + summary table:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-Show summary:
+Show summary (fields from the verb envelope — note `commitId`, unified
+revision model):
 ```
   ✓ ${FILES_CHANGED} files rewritten (${FILES_SCANNED} scanned)
   ✓ ${ANCESTOR_RESOLVED} orphans resolved via ancestor walk
   ✓ ${UNRESOLVABLE} orphans unresolvable — see .planning/intel/06-migration-report.md
   ✓ Adapter flipped: ${PREVIOUS_ADAPTER} → ${NEW_ADAPTER}
-  ✓ Migration commit: ${COMMIT_HASH}
+  ✓ Migration commit: ${COMMIT_ID}
 ```
 
 If `RESULT.migrated == false`, instead show:
@@ -162,13 +165,13 @@ If `RESULT.migrated == false`, instead show:
 </process>
 
 <success_criteria>
-- [ ] `$ARGUMENTS` parsed for `--target`, `--native`, `--force` (unknown flags fail at SDK boundary with typed error)
-- [ ] `gsd-sdk query init.migrate-vcs` consulted for pre-flight (8-field shape: has_git, has_jj, current_adapter, jj_available, dirty, conflicts, project_path, commit_docs)
+- [ ] `$ARGUMENTS` parsed for `--target`, `--native`, `--force` (unknown flags fail at the verb boundary with typed error)
+- [ ] Pre-flight signals derived from primary sources (`vcs.adapter` via config read, dirty via `gsd_run query status`, jj availability via `command -v jj`); the `migrate-vcs` verb re-checks all of them defensively
 - [ ] Bare command with `current_adapter` in {`git`, `absent`, `auto`} defaults to `--target jj`; with `current_adapter == 'jj'` refuses with explicit-flag prompt
 - [ ] Dirty-tree refusal trips unless `--force` is set
-- [ ] Conflict refusal trips unless `--force` is set
+- [ ] Conflict refusal trips unless `--force` is set (verb-side check; workflow surfaces the error verbatim)
 - [ ] `--target jj` aborts with install instructions when `jj` binary is missing
-- [ ] Migration dispatches via single `gsd-sdk query migrate-vcs` invocation; output JSON is FLAT (`ok`, `migrated`, `newAdapter`, `commitHash`, `orphans` at top level — no `.data` wrapper)
+- [ ] Migration dispatches via single `gsd_run query migrate-vcs` invocation; output JSON is FLAT (`ok`, `migrated`, `filesChanged`, `filesScanned`, `orphans`, `previousAdapter`, `newAdapter`, `commitId` at top level — no `.data` wrapper)
 - [ ] Migration commit subject contains `[gsd-migrate-vcs v1]` marker; re-running yields `migrated: false` (idempotent fast-exit)
 </success_criteria>
 
@@ -179,7 +182,7 @@ If `RESULT.migrated == false`, instead show:
 > path through `jj squash` operations (Phase 4 LEARNINGS Open Q1). The
 > `--native` flag opts into `jj git init --no-colocate`, which produces a
 > pure-jj repo with NO `.git` directory — hooks must be wired via
-> `hook-bridge.ts` (`fireHook(cwd, 'pre-commit')`) instead. Choose
+> `src/vcs/hook-bridge.cts` (`fireHook(cwd, 'pre-commit')`) instead. Choose
 > `--native` only when you do not need git interop at all.
 
 > **Backend semantic shift (round-trip after rebase).** RESEARCH Pitfall 2:
@@ -193,7 +196,7 @@ If `RESULT.migrated == false`, instead show:
 > the chain.
 
 > **Backend semantic shift (A3 hook gap on jj).** `runMigration` fires the
-> `pre-commit` hook explicitly via `hook-bridge.ts` before landing the
+> `pre-commit` hook explicitly via `src/vcs/hook-bridge.cts` before landing the
 > migration commit on the jj target. This closes the migration-commit-specific
 > gap. The broader A3 gap (jj 0.41 does NOT auto-fire
 > `.git/hooks/pre-commit` after every `jj squash` in colocated mode) is

@@ -611,6 +611,10 @@ function cmdInitNewProject(cwd: string, raw: boolean): void {
       (hasCode || hasPackageFile) && !pathExistsInternal(cwd, '.planning/codebase'),
 
     ...getInitGitState(cwd),
+    // 19-09 (fork Phase 6 plan 06-01 parity): the new-project greenfield
+    // VCS-gate matrix branches on has_jj as a peer of has_git — filesystem
+    // presence of `.jj/` in the project directory.
+    has_jj: pathExistsInternal(cwd, '.jj'),
 
     brave_search_available: hasBraveSearch,
     firecrawl_available: hasFirecrawl,

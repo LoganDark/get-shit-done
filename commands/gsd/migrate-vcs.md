@@ -27,9 +27,9 @@ repo no-ops via the `[gsd-migrate-vcs v1]` commit-message marker probe.
 </objective>
 
 <execution_context>
-@~/.claude/get-shit-done/workflows/migrate-vcs.md
-@~/.claude/get-shit-done/references/ui-brand.md
-@~/.claude/get-shit-done/references/gate-prompts.md
+@~/.claude/gsd-core/workflows/migrate-vcs.md
+@~/.claude/gsd-core/references/ui-brand.md
+@~/.claude/gsd-core/references/gate-prompts.md
 </execution_context>
 
 <context>

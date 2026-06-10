@@ -2,8 +2,8 @@
 
 Precondition guard for subagent prompts: assert the agent's cwd is a dispatched
 subagent workspace (not the primary workspace, not a drifted cwd, not a path
-outside any workspace). Backed by the SDK verb
-`gsd-sdk query workspace.assert-dispatched-cwd --cwd .`, which is backend-opaque
+outside any workspace). Backed by the query verb
+`gsd-tools query workspace.assert-dispatched-cwd --cwd .`, which is backend-opaque
 — the same single call covers git worktrees, jj workspaces, and any future
 backend that implements the `vcs.workspace.list()` contract.
 
@@ -11,7 +11,7 @@ backend that implements the `vcs.workspace.list()` contract.
 
 ## Verb shape
 
-`gsd-sdk query workspace.assert-dispatched-cwd --cwd <path>` returns JSON:
+`gsd-tools query workspace.assert-dispatched-cwd --cwd <path>` returns JSON:
 
 ```json
 {
@@ -66,7 +66,7 @@ former HEAD safety assertion (historically issue #2924).
 Place at the start of any commit-staging or write-side protocol block:
 
 ```bash
-DISPATCH_CHECK=$(gsd-sdk query workspace.assert-dispatched-cwd --cwd .)
+DISPATCH_CHECK=$(gsd-tools query workspace.assert-dispatched-cwd --cwd .)
 OK=$(echo "$DISPATCH_CHECK" | jq -r '.ok')
 if [ "$OK" != "true" ]; then
   IS_PRIMARY=$(echo "$DISPATCH_CHECK" | jq -r '.isPrimary')
