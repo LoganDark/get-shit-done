@@ -75,7 +75,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 
 - [ ] **Phase 18: Tactical cleanup + test-flake (re-scoped)** — Execute the 7 REQ-IDs deferred at v1.4 close against the post-Phase-19 tree. (0/3 plans)
 
-#### Phase 18 Details (re-scoped 2026-06-10)
+### Phase 18: Tactical cleanup + test-flake (re-scoped)
 
 **Goal**: Close the v14-* todos and Phase 14 code-review WR-01..05 followups that Phase 19's restructure relocated but did not fix: the `gsd-core/workflows/transition.md` false-clean-WC gap (upstream's rewrite has NO commit steps and NO gate), the `dogfood-restore.sh` precondition/overlay hardening, the dispatch-handler input guards now living in `src/vcs-command-router.cts`, the CONFIG-02 test tmpDir leaks, and the `jj-reap > inclusion-filter` flake (re-verify first — vitest config changed in 19-11).
 **Depends on**: Nothing (v1.4 shipped; post-merge tree is the baseline)
