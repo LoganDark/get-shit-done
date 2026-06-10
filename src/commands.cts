@@ -8,7 +8,18 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { execGit, platformWriteSync, platformReadSync, platformEnsureDir } from './shell-command-projection.cjs';
+import { platformWriteSync, platformReadSync, platformEnsureDir } from './shell-command-projection.cjs';
+// 19-07 (AUDIT-01): VCS reads/writes route through the ported adapter
+// (replayed from the fork's line-annotated commands.cjs reference, plans
+// 02-09 / 2.1-04 / #3522). `execGit` from shell-command-projection is
+// intentionally NOT imported (project_no_raw_git — every VCS read/write
+// routes through the adapter so jj repos aren't perturbed by ambient git).
+// Deviation from the 02-09-era fork annotations: the adapter is instantiated
+// with backend AUTO-DETECT (no `{ kind: 'git' }` pin) in commit/stats paths —
+// the 02-09 pins predate the fork's jj backend, and pinning git here would
+// break the jj-only-repo invariant this phase ports. cmdCheckCommit keeps the
+// git pin (it probes git's index, a git-only concept).
+import { createVcsAdapter, expr } from './vcs/index.cjs';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import core = require('./core.cjs');
 const {
@@ -81,7 +92,11 @@ interface ScaffoldOptions {
 
 interface CommitToSubrepoRepoResult {
   committed: boolean;
-  hash: string | null;
+  // 19-07 unified revision model: `id` is the backend's canonical revision
+  // identifier (short hex commit_id on git, short [k-z] change_id on jj).
+  // Renamed from `hash` per the fork commands.cjs reference — no migrated
+  // path may surface a git-only commit_id/hash field when the backend is jj.
+  id: string | null;
   files: string[];
   reason?: string;
   error?: string;
@@ -500,7 +515,7 @@ function cmdEffortSync(cwd: string, raw: boolean, opts?: { dryRun?: boolean; con
   output({ synced, skipped, changes, dry_run: dryRun, agents_dir: agentsDir }, raw, synced > 0 ? 'changed' : 'ok');
 }
 
-function cmdCommit(cwd: string, message: string | undefined, files: string[] | undefined, raw: boolean, amend: boolean, noVerify: boolean): void {
+function cmdCommit(cwd: string, message: string | undefined, files: string[] | undefined, raw: boolean, amend: boolean, noVerify: boolean, respectStaged?: boolean): void {
   if (!message && !amend) {
     error('commit message required');
   }
@@ -520,15 +535,18 @@ function cmdCommit(cwd: string, message: string | undefined, files: string[] | u
   // `skipped: true` is explicit so agent prompts can match on a first-class
   // success signal rather than inferring "skip" from "committed is missing"
   // and improvising raw git fallbacks (#3678).
+  // 19-07 unified revision model: envelope field is `id` (short commit_id on
+  // git, short change_id on jj), replacing the git-only `hash` key — per the
+  // fork commands.cjs reference.
   if (!config['commit_docs']) {
-    const result = { committed: false, skipped: true, hash: null, reason: 'skipped_commit_docs_false' };
+    const result = { committed: false, skipped: true, id: null, reason: 'skipped_commit_docs_false' };
     output(result, raw, 'skipped');
     return;
   }
 
   // Check if .planning is gitignored
   if (isGitIgnored(cwd, '.planning')) {
-    const result = { committed: false, skipped: true, hash: null, reason: 'skipped_gitignored' };
+    const result = { committed: false, skipped: true, id: null, reason: 'skipped_gitignored' };
     output(result, raw, 'skipped');
     return;
   }
@@ -559,51 +577,123 @@ function cmdCommit(cwd: string, message: string | undefined, files: string[] | u
           .replace('{slug}', generateSlugInternal(milestone.name) || 'milestone');
       }
     }
+    // 19-07: cmdCommit's branching block routes through vcs.refs (replayed
+    // from the fork commands.cjs plan 02-09 annotations; cwd-via-factory).
     if (branchName) {
-      const currentBranch = execGit(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd });
-      if (currentBranch.exitCode === 0 && currentBranch.stdout.trim() !== branchName) {
-        // Create branch if it doesn't exist, or switch to it if it does
-        const create = execGit(['checkout', '-b', branchName], { cwd });
-        if (create.exitCode !== 0) {
-          execGit(['checkout', branchName], { cwd });
+      const branchVcs = createVcsAdapter(cwd);
+      const currentBranch = branchVcs.refs.currentBookmarks()[0] ?? null;          // (was: rev-parse --abbrev-ref HEAD)
+      if (currentBranch !== null && currentBranch !== branchName) {
+        // Create branch if it doesn't exist, or switch to it if it does.
+        // Mirrors the original "try -b, fall back to plain checkout" shape:
+        // bookmarks.switch({create:true}) throws on already-exists; the catch
+        // falls through to the plain switch — equivalent to the prior
+        // "if create.exitCode !== 0 then run plain checkout" pattern.
+        try {
+          branchVcs.refs.bookmarks.switch(branchName, { create: true });           // (was: checkout -b <name>)
+        } catch {
+          branchVcs.refs.bookmarks.switch(branchName);                             // (was: checkout <name>)
         }
       }
     }
   }
 
-  // Stage files
-  const explicitFiles = files && files.length > 0;
-  const filesToStage = explicitFiles ? files : ['.planning/'];
-  for (const file of filesToStage) {
-    const fullPath = path.join(cwd, file);
-    if (!fs.existsSync(fullPath)) {
-      if (explicitFiles) {
-        // Caller passed an explicit --files list: missing files are skipped.
-        // Staging a deletion here would silently remove tracked planning files
-        // (e.g. STATE.md, ROADMAP.md) when they are temporarily absent (#2014).
-        continue;
-      }
-      // Default mode (staging all of .planning/): stage the deletion so
-      // removed planning files are not left dangling in the index.
-      execGit(['rm', '--cached', '--ignore-unmatch', file], { cwd });
-    } else {
-      execGit(['add', file], { cwd });
+  // 19-07: adapter scoped to cwd for the staging/commit sites below (fork
+  // reference pattern: per-invocation factory with cwd).
+  const vcs = createVcsAdapter(cwd);
+
+  // Fork plan 2.1-04 (D-02 + D-04 + D-06): the legacy stage/unstage loop +
+  // commit path-scope collapses to a single `vcs.commit({files})` with
+  // WC-state-capture. The git backend's commit({files}) runs
+  // `git add -A -- <files>`, which stages adds/mods/dels alike, so the
+  // explicit if/else stage-vs-unstage dichotomy (deletion-branch → `git rm
+  // --cached`; existing-branch → `git add`) is redundant — `git add -A`
+  // handles both shapes from one call. The jj backend records WC state
+  // directly (no index).
+  //
+  // #2014 invariant (PRESERVED): when a caller passes an explicit --files for
+  // a missing tracked file, the path is FILTERED OUT BEFORE vcs.commit sees
+  // it. If we did not filter, `git add -A -- <missing-path>` would stage the
+  // deletion and silently remove tracked planning files (e.g. STATE.md,
+  // ROADMAP.md) when temporarily absent. In default mode (".planning/"
+  // catch-all) the directory always exists, so the filter is a no-op there
+  // and removed files inside the tree are still recorded — matching the
+  // original "stage all of .planning/" semantics.
+  const explicitFiles = !!(files && files.length > 0);
+  const filesRequested = explicitFiles ? (files as string[]) : ['.planning/'];
+  const filesToCommit = explicitFiles
+    ? filesRequested.filter(f => fs.existsSync(path.join(cwd, f)))
+    : filesRequested;
+
+  // #2014 invariant: explicit --files with all-missing entries short-circuits
+  // BEFORE vcs.commit.
+  if (!amend && explicitFiles && filesToCommit.length === 0) {
+    const result = { committed: false, id: null, reason: 'nothing_to_commit' };
+    output(result, raw, 'nothing');
+    return;
+  }
+
+  // #3522 (--respect-staged): use the staged-content surface (vcs.diff with
+  // staged:true) rather than WC status. Scoped staged set is what the commit
+  // will capture; empty-staged short-circuits to `nothing_staged` (NOT
+  // `nothing_to_commit`).
+  //
+  // Default (WC-state-capture): use vcs.status — the commit re-stages the
+  // listed paths so the WC IS the source of truth.
+  let respectStagedFiles: string[] | null = null;
+  if (respectStaged && !amend) {
+    const diff = vcs.diff({ staged: true, nameOnly: true });
+    const normalize = (p: string): string => p.replace(/\\/g, '/').replace(/\/+$/, '');
+    const normalizedSpecs = filesToCommit.map(normalize);
+    respectStagedFiles = diff.nameOnly.filter((file) => {
+      const nf = normalize(file);
+      return normalizedSpecs.some((spec) => nf === spec || nf.startsWith(`${spec}/`));
+    });
+    if (respectStagedFiles.length === 0) {
+      const result = { committed: false, id: null, reason: 'nothing_staged' };
+      output(result, raw, 'nothing');
+      return;
+    }
+  } else if (!amend) {
+    // D-06 #2014 caller-side pre-probe via vcs.status. The scope is the
+    // path-prefix set in filesToCommit; any WC entry whose path starts with
+    // one of those prefixes counts as a change to commit. Skipped for amend
+    // (amend rewrites HEAD with currently-staged content — the prior code
+    // had no pre-probe in the amend branch either).
+    const status = vcs.status({ porcelain: true });                                // (was: status --porcelain probe before commit)
+    // Bidirectional path-containment: scope ↔ entry containment in either
+    // direction counts as a match. Required because `git status --porcelain`
+    // collapses fully-untracked directories to a single `?? <dir>/` entry;
+    // without the entry-contains-scope leg, `--files .planning/STATE.md`
+    // against a fresh worktree where .planning/ is fully untracked would
+    // miss the match.
+    const surviving = status.entries.filter(e => filesToCommit.some(p => e.path.startsWith(p) || p.startsWith(e.path)));
+    if (surviving.length === 0) {
+      const result = { committed: false, id: null, reason: 'nothing_to_commit' };
+      output(result, raw, 'nothing');
+      return;
     }
   }
 
-  // Commit (--no-verify skips pre-commit hooks, used by parallel executor agents)
-  const commitArgs = amend ? ['commit', '--amend', '--no-edit'] : ['commit', '-m', sanitizedMessage as string];
-  if (noVerify) commitArgs.push('--no-verify');
-  const commitResult = execGit(commitArgs, { cwd });
+  // Commit (--no-verify skips pre-commit hooks, used by parallel executor
+  // agents). `files` carries WC-state-capture semantics — `git add -A --
+  // <files>` then `git commit -m <msg>` (no -a) on git; direct WC record on
+  // jj. For amend mode, the adapter emits `commit --amend --no-edit`
+  // (message field is ignored; `files` is irrelevant under amend's
+  // index-rewrite semantics).
+  const commitResult = amend
+    ? vcs.commit({ message: (sanitizedMessage as string) || '', amend: true, noVerify })       // (was: commit --amend --no-edit [+ --no-verify])
+    : respectStaged
+      ? vcs.commit({ message: sanitizedMessage as string, files: respectStagedFiles as string[], noVerify, respectStaged: true })
+      : vcs.commit({ message: sanitizedMessage as string, files: filesToCommit, noVerify });   // (was: add/rm --cached … + commit -m <msg> [+ --no-verify])
   if (commitResult.exitCode !== 0) {
     if (commitResult.stdout.includes('nothing to commit') || commitResult.stderr.includes('nothing to commit')) {
-      const result = { committed: false, hash: null, reason: 'nothing_to_commit' };
+      const result = { committed: false, id: null, reason: 'nothing_to_commit' };
       output(result, raw, 'nothing');
       return;
     }
     const result = {
       committed: false,
-      hash: null,
+      id: null,
       reason: 'commit_failed',
       error: commitResult.stderr || commitResult.stdout,
     };
@@ -611,11 +701,16 @@ function cmdCommit(cwd: string, message: string | undefined, files: string[] | u
     return;
   }
 
-  // Get short hash
-  const hashResult = execGit(['rev-parse', '--short', 'HEAD'], { cwd });
-  const hash = hashResult.exitCode === 0 ? hashResult.stdout : null;
-  const result = { committed: true, hash, reason: 'committed' };
-  output(result, raw, hash || 'committed');
+  // Get short revision id (backend-aware via resolveShort — short commit_id
+  // on git, short change_id on jj; unified revision model).
+  let id: string | null = null;
+  try {
+    id = vcs.refs.resolveShort(vcs.refs.head);                                     // (was: rev-parse --short HEAD)
+  } catch {
+    id = null;
+  }
+  const result = { committed: true, id, reason: 'committed' };
+  output(result, raw, id || 'committed');
 }
 
 /**
@@ -680,28 +775,36 @@ function cmdCommitToSubrepo(cwd: string, message: string | undefined, files: str
   const repos: Record<string, CommitToSubrepoRepoResult> = {};
   for (const [repo, repoFiles] of Object.entries(grouped)) {
     const repoCwd = path.join(cwd, repo);
+    // 19-07: cwd-via-factory pattern (fork commands.cjs plan 02-09 reference)
+    // — adapter scoped to the sub-repo's cwd replaces the cwd-arg routing of
+    // the raw execGit seam.
+    const subVcs = createVcsAdapter(repoCwd);
 
-    // Stage files (strip sub-repo prefix for paths relative to that repo)
-    for (const file of repoFiles) {
-      const relativePath = file.slice(repo.length + 1);
-      execGit(['add', relativePath], { cwd: repoCwd });
-    }
-
-    // Commit
-    const commitResult = execGit(['commit', '-m', message as string], { cwd: repoCwd });
+    // Fork plan 2.1-04 (D-02 + D-04): the explicit per-file stage loop is
+    // gone — vcs.commit({files}) captures WC state of the requested paths
+    // via `git add -A -- <files>` then `git commit -m <msg>` (no -a). The
+    // path list is the sub-repo-relative form of repoFiles (strip the
+    // sub-repo prefix so the paths resolve under the sub-repo cwd).
+    const subFiles = repoFiles.map(f => f.slice(repo.length + 1));
+    const commitResult = subVcs.commit({ message: message as string, files: subFiles });   // (was: add <file> … + commit -m <msg>)
     if (commitResult.exitCode !== 0) {
       if (commitResult.stdout.includes('nothing to commit') || commitResult.stderr.includes('nothing to commit')) {
-        repos[repo] = { committed: false, hash: null, files: repoFiles, reason: 'nothing_to_commit' };
+        repos[repo] = { committed: false, id: null, files: repoFiles, reason: 'nothing_to_commit' };
         continue;
       }
-      repos[repo] = { committed: false, hash: null, files: repoFiles, reason: 'error', error: commitResult.stderr };
+      repos[repo] = { committed: false, id: null, files: repoFiles, reason: 'error', error: commitResult.stderr };
       continue;
     }
 
-    // Get hash
-    const hashResult = execGit(['rev-parse', '--short', 'HEAD'], { cwd: repoCwd });
-    const hash = hashResult.exitCode === 0 ? hashResult.stdout : null;
-    repos[repo] = { committed: true, hash, files: repoFiles };
+    // Get short revision id (unified model: short commit_id on git, short
+    // change_id on jj).
+    let id: string | null = null;
+    try {
+      id = subVcs.refs.resolveShort(subVcs.refs.head);                                     // (was: rev-parse --short HEAD)
+    } catch {
+      id = null;
+    }
+    repos[repo] = { committed: true, id, files: repoFiles };
   }
 
   const result = {
@@ -709,7 +812,7 @@ function cmdCommitToSubrepo(cwd: string, message: string | undefined, files: str
     repos,
     unmatched: unmatched.length > 0 ? unmatched : undefined,
   };
-  output(result, raw, Object.entries(repos).map(([r, v]) => `${r}:${v.hash || 'skip'}`).join(' '));
+  output(result, raw, Object.entries(repos).map(([r, v]) => `${r}:${v.id || 'skip'}`).join(' '));
 }
 
 function cmdSummaryExtract(cwd: string, summaryPath: string | undefined, fields: string[] | undefined, raw: boolean): void {
@@ -1294,21 +1397,28 @@ function cmdStats(cwd: string, format: string | undefined, raw: boolean): void {
     if (activityMatch) lastActivity = activityMatch[1].trim();
   }
 
-  // Git stats
+  // VCS stats (JSON keys keep their historical `git_*` names for envelope
+  // parity; values are backend-canonical — unified revision model).
+  // 19-07: replayed from the fork commands.cjs plan 02-09 annotations
+  // (countCommits / rootRevisions / log({rev: expr.rev(<runtime-id>)})).
   let gitCommits = 0;
   let gitFirstCommitDate: string | null = null;
-  const commitCount = execGit(['rev-list', '--count', 'HEAD'], { cwd });
-  if (commitCount.exitCode === 0) {
-    gitCommits = parseInt(commitCount.stdout, 10) || 0;
-  }
-  const rootHash = execGit(['rev-list', '--max-parents=0', 'HEAD'], { cwd });
-  if (rootHash.exitCode === 0 && rootHash.stdout) {
-    const firstCommit = rootHash.stdout.split('\n')[0].trim();
-    const firstDate = execGit(['show', '-s', '--format=%as', firstCommit], { cwd });
-    if (firstDate.exitCode === 0) {
-      gitFirstCommitDate = firstDate.stdout || null;
+  try {
+    const statsVcs = createVcsAdapter(cwd);
+    gitCommits = statsVcs.refs.countCommits({ rev: statsVcs.refs.head });          // (was: rev-list --count HEAD)
+    const roots = statsVcs.refs.rootRevisions({ rev: statsVcs.refs.head });        // (was: rev-list --max-parents=0 HEAD)
+    if (roots.length > 0) {
+      const firstCommit = roots[0];
+      // Wrap the runtime revision id via expr.rev() (structured RevisionExpr;
+      // no raw escape hatch). vcs.log() with maxCount:1 is the contract path
+      // for `show -s --format=%as <rev>`; the date arrives on LogEntry.date
+      // in %aI iso format. Slice [0,10) to match the prior `%as` YYYY-MM-DD.
+      const entries = statsVcs.log({ rev: expr.rev(firstCommit), maxCount: 1 });   // (was: show -s --format=%as <firstCommit>)
+      if (entries.length > 0 && entries[0].date) {
+        gitFirstCommitDate = entries[0].date.slice(0, 10) || null;
+      }
     }
-  }
+  } catch { /* intentionally empty — non-repo cwd or empty repo */ }
 
   const result = {
     milestone_version: milestone.version,
@@ -1372,10 +1482,15 @@ function cmdCheckCommit(cwd: string, raw: boolean): void {
     return;
   }
 
-  // commit_docs is false — check if any .planning/ files are staged
-  const stagedResult = execGit(['diff', '--cached', '--name-only'], { cwd });
-  if (stagedResult.exitCode === 0) {
-    const planningFiles = stagedResult.stdout.split('\n').filter(f => f.startsWith('.planning/') || f.startsWith('.planning\\'));
+  // commit_docs is false — check if any .planning/ files are staged.
+  // 19-07: vcs.diff({staged:true, nameOnly:true}) replaces the raw probe
+  // (fork commands.cjs plan 02-09 reference). The `{ kind: 'git' }` pin is
+  // KEPT from the fork reference: this is a pre-commit hook guard probing
+  // git's index — a git-only concept (jj has no staging area).
+  try {
+    const checkVcs = createVcsAdapter(cwd, { kind: 'git' });
+    const staged = checkVcs.diff({ staged: true, nameOnly: true }).nameOnly.join('\n').trim(); // (was: diff --cached --name-only)
+    const planningFiles = staged.split('\n').filter(f => f.startsWith('.planning/') || f.startsWith('.planning\\'));
 
     if (planningFiles.length > 0) {
       error(
@@ -1384,8 +1499,9 @@ function cmdCheckCommit(cwd: string, raw: boolean): void {
         `\n\nTo unstage: git reset HEAD ${planningFiles.join(' ')}`
       );
     }
+  } catch {
+    // diff failed (not a git repo, etc.) — allow
   }
-  // exitCode !== 0 → no staged files or not a git repo — allow
 
   output({ allowed: true, reason: 'no_planning_files_staged' }, raw, 'allowed');
 }

@@ -21,7 +21,17 @@ import frontmatterMod = require('./frontmatter.cjs');
 import stateMod = require('./state.cjs');
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- model-profiles.cjs is an export= CommonJS module
 import modelProfilesMod = require('./model-profiles.cjs');
-import { execGit, platformReadSync as safeReadFile, platformWriteSync } from './shell-command-projection.cjs';
+import { platformReadSync as safeReadFile, platformWriteSync } from './shell-command-projection.cjs';
+// 19-07 (AUDIT-01): migrated from the execGit seam to the ported VcsAdapter
+// (replayed from the fork's line-annotated verify.cjs reference, plan 02-10).
+// Sites: revision-existence probes use vcs.refs.exists(expr.rev(id))
+// (was: cat-file -t); push-evidence log uses vcs.log({allRefs:true})
+// (was: log --oneline --all -50); repo probe uses vcs.refs.exists(refs.head)
+// (was: rev-parse HEAD); drift diff uses vcs.diff({rev: expr.range(...),
+// nameStatus:true}) (was: diff --name-status <base> HEAD). `execGit` is
+// intentionally NOT imported (project_no_raw_git).
+import { createVcsAdapter, expr } from './vcs/index.cjs';
+import type { LogEntry } from './vcs/types.cjs';
 import { PACKAGE_NAME } from './package-identity.cjs';
 import { formatGsdSlash, resolveRuntime } from './runtime-slash.cjs';
 import { detectSchemaFiles, checkSchemaDrift } from './schema-detect.cjs';
@@ -107,13 +117,26 @@ function cmdVerifySummary(
     }
   }
 
-  const commitHashPattern = /\b[0-9a-f]{7,40}\b/g;
-  const hashes = content.match(commitHashPattern) || [];
+  // 19-07 (fork verify.cjs plan 02-10 + WR-06): accept BOTH alphabets —
+  // commit_id ([0-9a-f]) and change_id ([k-z]). The probe must work on
+  // jj repos where SUMMARY.md cites change_ids, and on git repos where it
+  // cites commit_ids. expr.rev() is alphabet-agnostic. vcs.refs.exists
+  // returns true iff the revision resolves (was: cat-file -t exit 0 +
+  // stdout === 'commit'; the reachability-vs-commit-only semantic shift is
+  // sanctioned — SUMMARY-cited ids are commit ids in practice).
+  const revIdPattern = /\b(?:[0-9a-f]{7,40}|[k-z]{7,40})\b/g;
+  const hashes = content.match(revIdPattern) || [];
   let commitsExist = false;
   if (hashes.length > 0) {
+    const vcs = createVcsAdapter(cwd);
     for (const hash of hashes.slice(0, 3)) {
-      const result = execGit(['cat-file', '-t', hash], { cwd }) as unknown as { exitCode: number; stdout: string };
-      if (result.exitCode === 0 && result.stdout.trim() === 'commit') {
+      let exists = false;
+      try {
+        exists = vcs.refs.exists(expr.rev(hash));                                  // (was: cat-file -t <hash>)
+      } catch {
+        exists = false; // expr.rev shape-validation throw → not a revision id
+      }
+      if (exists) {
         commitsExist = true;
         break;
       }
@@ -334,11 +357,23 @@ function cmdVerifyCommits(cwd: string, hashes: string[], raw: boolean): void {
     error('At least one commit hash required');
   }
 
+  // 19-07 (fork verify.cjs plan 02-10 + WR-07): runtime ids wrap via
+  // expr.rev(hash) — shape-validation throws route to `invalid`. NOTE: the
+  // `all_valid` / `valid` field names describe REACHABILITY, not commit-only
+  // existence — the pre-migration `cat-file -t` probe classified tree/blob
+  // hashes as `invalid`; `vcs.refs.exists` reports ANY reachable object as
+  // valid (CLI inputs are commit/change ids in practice).
+  const vcs = createVcsAdapter(cwd);
   const valid: string[] = [];
   const invalid: string[] = [];
   for (const hash of hashes) {
-    const result = execGit(['cat-file', '-t', hash], { cwd }) as unknown as { exitCode: number; stdout: string };
-    if (result.exitCode === 0 && result.stdout.trim() === 'commit') {
+    let exists = false;
+    try {
+      exists = vcs.refs.exists(expr.rev(hash));                                    // (was: cat-file -t <hash>)
+    } catch {
+      exists = false; // expr.rev shape-validation throw → invalid
+    }
+    if (exists) {
       valid.push(hash);
     } else {
       invalid.push(hash);
@@ -1151,14 +1186,18 @@ function cmdValidateHealth(
   }
 
   try {
+    // 19-07: `deps.execGit` is no longer injected from here — verify.cts does
+    // not import the raw seam (project_no_raw_git). worktree-safety.cts is a
+    // ledgered git-backend substrate module and self-supplies its own seam
+    // default (execGitDefault) when deps.execGit is omitted.
     const worktreeHealth = (inspectWorktreeHealth as unknown as (
       cwd: string,
       opts: { staleAfterMs: number },
-      deps: { execGit: unknown; existsSync: unknown; statSync: unknown },
+      deps: { existsSync: unknown; statSync: unknown },
     ) => Record<string, unknown>)(
       cwd,
       { staleAfterMs: 60 * 60 * 1000 },
-      { execGit, existsSync: fs.existsSync, statSync: fs.statSync },
+      { existsSync: fs.existsSync, statSync: fs.statSync },
     );
     if (!(worktreeHealth['ok'] as boolean)) {
       if (worktreeHealth['reason'] === 'git_timed_out') {
@@ -1585,9 +1624,25 @@ function cmdVerifySchemaDrift(
     executionLog += fs.readFileSync(path.join(phaseDir, sf), 'utf-8') + '\n';
   }
 
-  const gitLog = execGit(['log', '--oneline', '--all', '-50'], { cwd }) as unknown as { exitCode: number; stdout: string };
-  if (gitLog.exitCode === 0) {
-    executionLog += '\n' + gitLog.stdout;
+  // 19-07 (fork verify.cjs plan 02-10): vcs.log({allRefs:true}) replaces the
+  // raw `git log --oneline --all -50`. Reconstruct the `--oneline`-equivalent
+  // from the structured LogEntry[] (short-prefix of the unified id + subject)
+  // since the caller consumes the joined text as a free-text grep target. The
+  // reconstruction is NOT byte-identical to `git log --oneline` (fixed 7-char
+  // prefix vs `core.abbrev`, no decoration); it is good enough for substring
+  // grep over commit subjects.
+  const driftVcs = createVcsAdapter(cwd);
+  let logEntries: LogEntry[] = [];
+  try {
+    logEntries = driftVcs.log({ maxCount: 50, allRefs: true });                    // (was: log --oneline --all -50)
+  } catch {
+    logEntries = [];
+  }
+  if (logEntries.length > 0) {
+    const oneline = logEntries
+      .map((e) => `${(e.id || '').slice(0, 7)} ${e.subject || ''}`)
+      .join('\n');
+    executionLog += '\n' + oneline;
   }
 
   const result = checkSchemaDrift(allFiles, executionLog, { skipCheck: !!skipFlag }) as unknown as Record<string, unknown>;
@@ -1643,8 +1698,21 @@ function cmdVerifyCodebaseDrift(cwd: string, raw: boolean): void {
 
     const lastMapped = (drift['readMappedCommit'] as (p: string) => string | null)(structurePath);
 
-    const revProbe = execGit(['rev-parse', 'HEAD'], { cwd }) as unknown as { exitCode: number; stdout: string };
-    if (revProbe.exitCode !== 0) {
+    // 19-07 (fork verify.cjs plan 02-10 + WR-03): sites share one adapter.
+    // The `vcs.refs.exists(vcs.refs.head)` probe is NOT a clean "is this a
+    // repo?" predicate — it returns false for (a) non-repo cwd, (b) repo with
+    // unresolvable HEAD (fresh init, no commits), (c) missing VCS binary.
+    // For codebase-drift detection the conflation is harmless — all three
+    // states deserve to skip the gate. Callers wanting a TRUE repo probe
+    // should use `vcs.workspace.context()` instead.
+    const vcs = createVcsAdapter(cwd);
+    let headExists = false;
+    try {
+      headExists = vcs.refs.exists(vcs.refs.head);                                 // (was: rev-parse HEAD probe)
+    } catch {
+      headExists = false;
+    }
+    if (!headExists) {
       emit({
         skipped: true,
         reason: 'not-a-git-repo',
@@ -1655,17 +1723,40 @@ function cmdVerifyCodebaseDrift(cwd: string, raw: boolean): void {
       return;
     }
 
+    // Empty-tree SHA is a stable fallback when no mapping commit is recorded
+    // (legitimate hex fixture — git's well-known empty-tree object id, not a
+    // raw-git call site; fork allowlist annotation style).
     const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
     let base = lastMapped;
     if (!base) {
       base = EMPTY_TREE;
     } else {
-      const verify = execGit(['cat-file', '-t', base], { cwd }) as unknown as { exitCode: number; stdout: string };
-      if (verify.exitCode !== 0) base = EMPTY_TREE;
+      // Verify the recorded mapping revision is reachable; if not, fall back
+      // to EMPTY_TREE. expr.rev shape-validates the lastMapped id (either
+      // alphabet — unified revision model) before probing.
+      let reachable = false;
+      try {
+        reachable = vcs.refs.exists(expr.rev(base));                               // (was: cat-file -t <base>)
+      } catch {
+        reachable = false;
+      }
+      if (!reachable) base = EMPTY_TREE;
     }
 
-    const diff = execGit(['diff', '--name-status', base, 'HEAD'], { cwd }) as unknown as { exitCode: number; stdout: string };
-    if (diff.exitCode !== 0) {
+    // vcs.diff with nameStatus:true returns the raw stdout in result.raw; the
+    // downstream parser below is line-oriented over that raw text — preserve
+    // that shape. The original two-rev `diff --name-status <base> HEAD` wraps
+    // via expr.range(from, to), which emits `<base>..HEAD` — same
+    // --name-status output for linear ancestor relationships (drift
+    // detection's base is always an ancestor of HEAD by construction).
+    let diffRaw: string;
+    try {
+      const diffResult = vcs.diff({
+        rev: expr.range(expr.rev(base), expr.head()),
+        nameStatus: true,
+      });                                                                          // (was: diff --name-status <base> HEAD)
+      diffRaw = diffResult.raw;
+    } catch {
       emit({
         skipped: true,
         reason: 'git-diff-failed',
@@ -1679,7 +1770,7 @@ function cmdVerifyCodebaseDrift(cwd: string, raw: boolean): void {
     const added: string[] = [];
     const modified: string[] = [];
     const deleted: string[] = [];
-    for (const line of diff.stdout.split(/\r?\n/)) {
+    for (const line of diffRaw.split(/\r?\n/)) {
       if (!line.trim()) continue;
       const m = line.match(/^([A-Z])\d*\t(.+?)(?:\t(.+))?$/);
       if (!m) continue;
