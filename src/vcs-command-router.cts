@@ -791,8 +791,23 @@ const revertVerb: VcsVerbHandler = (args, projectDir) => {
   // jj path: destructive abandon (Pitfall 6 semantic shift — recovery via
   // `jj op restore` while the op-log retains the pre-abandon state).
   // `--force` adds `--ignore-immutable` (B-05 shared-history override).
-  const jjArgs = ['abandon', rev];
+  //
+  // 19-review WR-06: (a) validate the user-supplied rev against the id-shape
+  // regex via expr.rev — the argv loop above only filters `--`-prefixed
+  // tokens, so a single-dash token like '-r' would otherwise land at the
+  // positional and be reinterpreted by jj as a flag; (b) carry the adapter's
+  // mandatory jj flag set (--no-pager --color never --quiet) so output can't
+  // include ANSI/pager noise the envelope would pass through verbatim; (c)
+  // `--` end-of-options separator before the positional (verified working on
+  // jj 0.41), mirroring the jjArgv discipline in backends/jj.cts.
+  try {
+    expr.rev(rev);
+  } catch (err) {
+    return { data: { ok: false, error: (err as Error).message, rev, backend: 'jj' } };
+  }
+  const jjArgs = ['--no-pager', '--color', 'never', '--quiet', 'abandon'];
   if (force) jjArgs.push('--ignore-immutable');
+  jjArgs.push('--', rev);
   const result = vcsExec(cwd, 'jj', jjArgs);
   return {
     data: {
