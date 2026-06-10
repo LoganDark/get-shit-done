@@ -628,7 +628,7 @@ gsd_run query config-set workflow._auto_chain_active false
 gsd_run query commit "chore: clear auto-advance chain flag" --files .planning/config.json || true
 ```
 
-The tolerant commit (`|| true`) is required because `config-set` writes `.planning/config.json` to disk WITHOUT committing; when the flag was already `false` the rewrite is byte-identical, the VCS sees no change, and the commit is a harmless no-op.
+The commit is needed because `config-set` writes `.planning/config.json` to disk WITHOUT committing. The `|| true` is purely defensive against unexpected launcher/node failures — it does NOT exist for the already-`false` no-change case: when the rewrite is byte-identical, the commit verb itself already exits 0 with `{ committed: false, reason: 'nothing_to_commit' }`, so that path never produces a non-zero exit to tolerate.
 
 <if mode="yolo">
 
@@ -685,7 +685,7 @@ gsd_run query config-set workflow._auto_chain_active false
 gsd_run query commit "chore: clear auto-advance chain flag" --files .planning/config.json || true
 ```
 
-The tolerant commit (`|| true`) is required because `config-set` writes `.planning/config.json` to disk WITHOUT committing; when the flag was already `false` the rewrite is byte-identical, the VCS sees no change, and the commit is a harmless no-op.
+The commit is needed because `config-set` writes `.planning/config.json` to disk WITHOUT committing. The `|| true` is purely defensive against unexpected launcher/node failures — it does NOT exist for the already-`false` no-change case: when the rewrite is byte-identical, the commit verb itself already exits 0 with `{ committed: false, reason: 'nothing_to_commit' }`, so that path never produces a non-zero exit to tolerate.
 
 <if mode="yolo">
 
