@@ -208,6 +208,7 @@ const { routeRoadmapCommand } = require('./lib/roadmap-command-router.cjs');
 const { routeAgentCommand } = require('./lib/agent-command-router.cjs');
 const { routeCheckCommand } = require('./lib/check-command-router.cjs');
 const { routeTaskCommand } = require('./lib/task-command-router.cjs');
+const { routeVcsCommand } = require('./lib/vcs-command-router.cjs');
 const { parseNamedArgs, parseMultiwordArg } = require('./lib/command-arg-projection.cjs');
 
 // ─── Bridge collapsed (Phase 4) ────────────────────────────────────────────────
@@ -1900,6 +1901,44 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
       } else {
         error('Unknown effort subcommand. Available: sync', ERROR_REASON.SDK_UNKNOWN_COMMAND);
       }
+      break;
+    }
+
+    // ─── VCS verbs (Phase 19 fork port — PORT-02 CLI bridge) ───────────────
+    //
+    // Fork verb families dispatched to lib/vcs-command-router.cjs (mirrors the
+    // routeStateCommand family-router precedent). The `query` meta-prefix and
+    // the #3243 dotted→spaced normalization above mean
+    // `gsd-tools query workspace.parallel.dispatch` arrives here as
+    // command='workspace', args=['workspace','parallel.dispatch',…] and
+    // `gsd-tools query hooks.fire pre-commit` as command='hooks',
+    // args=['hooks','fire','pre-commit']. NOTE: `commit` and
+    // `commit-to-subrepo` keep their pre-existing upstream cases (locked
+    // decision — adapter migration of their internals lands in 19-07).
+
+    case 'status':
+    case 'log':
+    case 'diff':
+    case 'head-ref':
+    case 'current-branch':
+    case 'branch-list':
+    case 'push':
+    case 'merge':
+    case 'reset':
+    case 'restore':
+    case 'revert':
+    case 'migrate-vcs':
+    case 'cleanup-subagent-workspaces':
+    case 'hooks':
+    case 'workspace': {
+      await routeVcsCommand({
+        command,
+        args,
+        cwd,
+        raw,
+        error,
+        output: core.output,
+      });
       break;
     }
 
