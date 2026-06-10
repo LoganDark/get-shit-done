@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.5
-milestone_name: Tactical cleanup + test-flake (Phase 18 carry-through)
-status: Phase 18 — ready to plan
-stopped_at: v1.5 opened (minimal milestone); Phase 18 re-scoped against post-merge tree; REQUIREMENTS.md + ROADMAP.md written — next /gsd-plan-phase 18
-last_updated: "2026-06-10T21:00:00.000Z"
-last_activity: 2026-06-10 — v1.5 opened; Phase 18 re-scope audit complete (zero items subsumed by Phase 19)
+milestone_name: Tactical cleanup + test-flake
+status: planning
+stopped_at: v1.5 opened (minimal milestone); Phase 18 re-scoped; next `/gsd-plan-phase 18`
+last_updated: "2026-06-10T21:47:10.884Z"
+last_activity: 2026-06-10 — v1.5 opened; re-scope audit found zero Phase 18 items subsumed by Phase 19 (all 7 fixes still missing at relocated paths)
 progress:
   total_phases: 1
   completed_phases: 0
