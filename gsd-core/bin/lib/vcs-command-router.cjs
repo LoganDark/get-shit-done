@@ -1082,6 +1082,14 @@ const workspaceParallelDispatchVerb = (args, projectDir) => {
     if (phaseNumber === undefined || Number.isNaN(phaseNumber)) {
         return { data: { ok: false, reason: 'phase_number_required' } };
     }
+    // Phase 18 (CLEANUP-06 / Phase 14 WR-04): reject a non-numeric
+    // --max-concurrency value instead of silently forwarding NaN into the
+    // adapter's scheduling. The `!== undefined` leg is load-bearing — an ABSENT
+    // flag must still forward `undefined` (D-07 default-undefined contract,
+    // pinned by cmd-parallel-max-concurrency-cli.test.ts).
+    if (maxConcurrency !== undefined && Number.isNaN(maxConcurrency)) {
+        return { data: { ok: false, reason: 'max_concurrency_invalid' } };
+    }
     if (planRaw === undefined) {
         return { data: { ok: false, reason: 'plan_required' } };
     }
@@ -1122,6 +1130,14 @@ const workspaceParallelDispatchVerb = (args, projectDir) => {
                 error: err instanceof Error ? err.message : String(err),
             },
         };
+    }
+    // Phase 18 (CLEANUP-05 / Phase 14 WR-03): `JSON.parse` accepts any JSON
+    // value — objects, strings, numbers, null all parse cleanly and would flow
+    // unchecked into the adapter's dispatch. Fail closed BEFORE
+    // `createVcsAdapter` so the envelope is backend-agnostic (ASVS V5 input
+    // validation; peer to `phase_number_required` above).
+    if (!Array.isArray(plan)) {
+        return { data: { ok: false, reason: 'plan_not_array' } };
     }
     const vcs = (0, index_cjs_1.createVcsAdapter)(cwd);
     const handle = vcs.workspace.parallel.dispatch({
