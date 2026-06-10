@@ -1,47 +1,65 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# GIT_OVERRIDE / NPM_OVERRIDE: optional test-injection seams (default to bare commands).
-# Hooks remain production-equivalent when these are unset.
+# GIT_OVERRIDE / NPM_OVERRIDE / NODE_OVERRIDE: optional test-injection seams
+# (default to bare commands). Hooks remain production-equivalent when unset.
 GIT_CMD="${GIT_OVERRIDE:-git}"
 NPM_CMD="${NPM_OVERRIDE:-npm}"
+NODE_CMD="${NODE_OVERRIDE:-node}"
 
-if "$GIT_CMD" diff --cached --name-only | grep -Eq "^sdk/src/query/command-manifest\.|^sdk/src/query/command-aliases\.generated\.ts$|^gsd-core/bin/lib/command-aliases\.cjs$|^sdk/scripts/gen-command-aliases\.ts$"; then
+# This hook has TWO fire paths (Phase 12 / HOOK-06/HOOK-07):
+#   1. git's own hook runner on git/colocated repos.
+#   2. The VCS adapter's hook bridge (src/vcs/hook-bridge.cts fireHook), which
+#      shells .githooks/<stage> directly — including on jj-native repos where
+#      no git binary or git index may be available.
+# Every git invocation below is therefore guarded: when git (or a git repo)
+# is absent, the hook DEGRADES to its non-git whole-repo checks instead of
+# crashing (T-19-24). All operations here are read-only inspections feeding
+# an accept/reject decision — no index/working-tree/ref mutation (Phase 12
+# idempotency audit shape; the jj adapter may fire this hook explicitly even
+# when git already ran it, so non-idempotent operations are forbidden).
+
+# Resolve the repo root from the hook's own location. Fire-path-independent:
+# git's runner sets cwd to the worktree root, the hook bridge fires with the
+# adapter's cwd — deriving from BASH_SOURCE works for both.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# ─── staged-file scope probe (git-only; stays empty on jj-native) ───────────
+STAGED=""
+GIT_OK=0
+if command -v "$GIT_CMD" >/dev/null 2>&1 && "$GIT_CMD" -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+  GIT_OK=1
+  STAGED="$("$GIT_CMD" -C "$ROOT" diff --cached --name-only 2>/dev/null || true)"
+fi
+
+# ─── check 1: command-alias drift (git-scoped generated-artifact check) ─────
+# The alias source of truth is src/command-aliases.cts (upstream ADR-457
+# build-at-publish; the retired sdk/ generator paths are gone). Only
+# meaningful when that source is part of the commit being gated.
+if [ "$GIT_OK" -eq 1 ] && printf '%s\n' "$STAGED" | grep -Eq '^src/command-aliases\.cts$'; then
   "$NPM_CMD" run check:alias-drift
 fi
 
-if "$GIT_CMD" diff --cached --name-only | grep -Eq "^sdk/src/query/state-document\.|^gsd-core/bin/lib/state-document\.generated\.cjs$|^sdk/scripts/gen-state-document\.ts$|^sdk/scripts/check-state-document-fresh\.mjs$"; then
-  "$NPM_CMD" run check:state-document-fresh
+# ─── checks 2+3: fork VCS invariant lints (whole-repo, filesystem-only) ─────
+# These scan the tree directly (no git needed), so they double as the hook's
+# degraded-path checks on jj-native repos. Existence-guarded so the hook
+# stays portable when installed into repos that do not carry the scripts.
+run_vcs_lints=1
+if [ -n "$STAGED" ]; then
+  # Speed scope when staging info is available: skip the scan when no staged
+  # file matches the scanners' extension surface (union of
+  # lint-vcs-no-raw-git SCAN_EXT and lint-vcs-no-commit-id SCAN_EXT, plus
+  # cts/mts ahead of the planned scanner extension widening).
+  if ! printf '%s\n' "$STAGED" | grep -Eq '\.(cjs|js|mjs|ts|cts|mts|yml|yaml|sh|bash)$'; then
+    run_vcs_lints=0
+  fi
 fi
 
-if "$GIT_CMD" diff --cached --name-only | grep -Eq "^sdk/src/configuration/|^sdk/shared/config-(defaults|schema)\.manifest\.json$|^gsd-core/bin/lib/configuration\.generated\.cjs$|^sdk/scripts/gen-configuration\.mjs$"; then
-  "$NPM_CMD" run check:configuration-fresh
-fi
-
-if "$GIT_CMD" diff --cached --name-only | grep -Eq "^sdk/src/workstream-inventory/|^gsd-core/bin/lib/workstream-inventory-builder\.generated\.cjs$|^sdk/scripts/gen-workstream-inventory-builder\.mjs$|^sdk/scripts/check-workstream-inventory-builder-fresh\.mjs$"; then
-  "$NPM_CMD" run check:workstream-inventory-builder-fresh
-fi
-
-if "$GIT_CMD" diff --cached --name-only | grep -Eq "^sdk/src/project-root/|^gsd-core/bin/lib/project-root\.generated\.cjs$|^sdk/scripts/gen-project-root\.mjs$|^sdk/scripts/check-project-root-fresh\.mjs$"; then
-  "$NPM_CMD" run check:project-root-fresh
-fi
-
-if "$GIT_CMD" diff --cached --name-only | grep -Eq "^sdk/src/query/plan-scan\.ts$|^gsd-core/bin/lib/plan-scan\.generated\.cjs$|^sdk/scripts/gen-plan-scan\.mjs$|^sdk/scripts/check-plan-scan-fresh\.mjs$"; then
-  "$NPM_CMD" run check:plan-scan-fresh
-fi
-
-if "$GIT_CMD" diff --cached --name-only | grep -Eq "^sdk/src/query/secrets\.ts$|^gsd-core/bin/lib/secrets\.generated\.cjs$|^sdk/scripts/gen-secrets\.mjs$|^sdk/scripts/check-secrets-fresh\.mjs$"; then
-  "$NPM_CMD" run check:secrets-fresh
-fi
-
-if "$GIT_CMD" diff --cached --name-only | grep -Eq "^sdk/src/query/schema-detect\.ts$|^gsd-core/bin/lib/schema-detect\.generated\.cjs$|^sdk/scripts/gen-schema-detect\.mjs$|^sdk/scripts/check-schema-detect-fresh\.mjs$"; then
-  "$NPM_CMD" run check:schema-detect-fresh
-fi
-
-if "$GIT_CMD" diff --cached --name-only | grep -Eq "^sdk/src/query/decisions\.ts$|^gsd-core/bin/lib/decisions\.generated\.cjs$|^sdk/scripts/gen-decisions\.mjs$|^sdk/scripts/check-decisions-fresh\.mjs$"; then
-  "$NPM_CMD" run check:decisions-fresh
-fi
-
-if "$GIT_CMD" diff --cached --name-only | grep -Eq "^sdk/src/workstream-name-policy\.ts$|^gsd-core/bin/lib/workstream-name-policy\.generated\.cjs$|^sdk/scripts/gen-workstream-name-policy\.mjs$|^sdk/scripts/check-workstream-name-policy-fresh\.mjs$"; then
-  "$NPM_CMD" run check:workstream-name-policy-fresh
+if [ "$run_vcs_lints" -eq 1 ]; then
+  if [ -f "$ROOT/scripts/lint-vcs-no-raw-git.cjs" ]; then
+    "$NODE_CMD" "$ROOT/scripts/lint-vcs-no-raw-git.cjs"
+  fi
+  if [ -f "$ROOT/scripts/lint-vcs-no-commit-id.cjs" ]; then
+    "$NODE_CMD" "$ROOT/scripts/lint-vcs-no-commit-id.cjs"
+  fi
 fi

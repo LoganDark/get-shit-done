@@ -15,6 +15,17 @@
  * This module is the single source of truth for git-commit detection so all
  * hooks that need to gate on git commits share one implementation.
  *
+ * VCS-audit note (Phase 19 plan 19-09, AUDIT-01): this classifier is
+ * git-only by design — it never spawns git (pure string token-walk) and no
+ * registered PreToolUse guard in this tree depends on classifying jj
+ * commands today (hooks.json PreToolUse = prompt-guard / read-guard /
+ * worktree-path-guard; the two consumers of this module —
+ * gsd-validate-commit.sh via isGitSubcommand and gsd-workflow-guard.js via
+ * tokenize — gate git-specific invocation forms only). jj-command-awareness
+ * parity (e.g. classifying `jj commit -m` for Conventional Commits gating)
+ * is a deferred v1.5 item; the fork's own copy at c7bd6bee carried zero jj
+ * handling either.
+ *
  * Exported by the hooks/lib/ directory — require via a path relative to the
  * hook's own __dirname:
  *
