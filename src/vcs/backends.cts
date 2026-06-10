@@ -91,9 +91,13 @@ export const BACKENDS_AVAILABLE_FOR_VERB: Readonly<
   'refs.isIgnored': Object.freeze(['git'] as const), // jj-side: VcsNotImplementedError (audit-confirmed no jj caller)
   'refs.remotes': Object.freeze(['git', 'jj-colocated'] as const),
   // VcsBookmarks — plan 03-03 flipped every mutator + list to admit
-  // 'jj-colocated'. `refs.bookmarks.switch` stays git-only: both production
-  // callers in commands.cjs pin `kind:'git'` (see 03-03-AUDIT.md), and the
-  // jj backend throws `VcsNotImplementedError`.
+  // 'jj-colocated'. `refs.bookmarks.switch` stays git-only: the jj backend
+  // throws `VcsNotImplementedError`. The original rationale ("both production
+  // callers pin kind:'git'") expired when 19-07 removed the pin from
+  // cmdCommit's branching block; the live guard is now the explicit
+  // `branchVcs.kind === 'git'` narrowing in src/commands.cts cmdCommit
+  // (19-review CR-01) — on jj, bookmark-less `@` is first-class and the
+  // pre-commit branch switch is intentionally skipped.
   'refs.bookmarks.list': Object.freeze(['git', 'jj-colocated'] as const),
   'refs.bookmarks.create': Object.freeze(['git', 'jj-colocated'] as const),
   'refs.bookmarks.move': Object.freeze(['git', 'jj-colocated'] as const),

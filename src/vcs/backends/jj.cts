@@ -771,13 +771,15 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       return r.exitCode === 0 && r.stdout.trim().length > 0;
     },
     switch: (_name: string, _opts?: { create?: boolean; raw?: boolean }): void => {
-      // RESEARCH §`refs.bookmarks.switch`: no Phase 3 caller exercises this
-      // on jj backends. The two production callers in get-shit-done/bin/lib/
-      // commands.cjs:319/321 both pin `createVcsAdapter(cwd, { kind: 'git' })`
-      // so the dispatch is statically git-only. Audit recorded in
-      // 03-03-AUDIT.md; Phase 4 reshapes if WS-* needs it.
+      // RESEARCH §`refs.bookmarks.switch`: no production caller exercises this
+      // on jj backends. The 02-09-era "callers pin kind:'git'" rationale
+      // expired when 19-07 removed the pin from cmdCommit; the live guard is
+      // now cmdCommit's explicit `branchVcs.kind === 'git'` narrowing
+      // (19-review CR-01) — on jj, bookmark-less `@` is first-class and the
+      // pre-commit branch switch is intentionally a no-op, so this verb stays
+      // unimplemented. Audit recorded in 03-03-AUDIT.md.
       throw new VcsNotImplementedError(
-        'refs.bookmarks.switch: deferred — no Phase 3 caller exercises this on jj backend (see 03-03-AUDIT.md)',
+        'refs.bookmarks.switch: deferred — no caller exercises this on jj backend (cmdCommit guards on vcs.kind === \'git\'; see 03-03-AUDIT.md)',
       );
     },
   });

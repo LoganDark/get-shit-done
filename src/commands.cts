@@ -579,19 +579,31 @@ function cmdCommit(cwd: string, message: string | undefined, files: string[] | u
     }
     // 19-07: cmdCommit's branching block routes through vcs.refs (replayed
     // from the fork commands.cjs plan 02-09 annotations; cwd-via-factory).
+    //
+    // 19-review CR-01: the branching block is git-only. refs.bookmarks.switch
+    // throws VcsNotImplementedError on the jj backend (both the create and
+    // plain-switch calls), so an auto-detected jj adapter would crash with an
+    // unhandled stack trace whenever branching_strategy is configured. On jj,
+    // "switch to a branch before committing" is a no-op by design — Phase 14.1
+    // D-02 precedent: bookmark-less `@` is first-class, and bookmark advance
+    // is handled by the adapter's commit({bookmark}) path when a caller needs
+    // it. Guard on adapter kind, matching the per-verb allowlist
+    // (BACKENDS_AVAILABLE_FOR_VERB['refs.bookmarks.switch'] === ['git']).
     if (branchName) {
       const branchVcs = createVcsAdapter(cwd);
-      const currentBranch = branchVcs.refs.currentBookmarks()[0] ?? null;          // (was: rev-parse --abbrev-ref HEAD)
-      if (currentBranch !== null && currentBranch !== branchName) {
-        // Create branch if it doesn't exist, or switch to it if it does.
-        // Mirrors the original "try -b, fall back to plain checkout" shape:
-        // bookmarks.switch({create:true}) throws on already-exists; the catch
-        // falls through to the plain switch — equivalent to the prior
-        // "if create.exitCode !== 0 then run plain checkout" pattern.
-        try {
-          branchVcs.refs.bookmarks.switch(branchName, { create: true });           // (was: checkout -b <name>)
-        } catch {
-          branchVcs.refs.bookmarks.switch(branchName);                             // (was: checkout <name>)
+      if (branchVcs.kind === 'git') {
+        const currentBranch = branchVcs.refs.currentBookmarks()[0] ?? null;        // (was: rev-parse --abbrev-ref HEAD)
+        if (currentBranch !== null && currentBranch !== branchName) {
+          // Create branch if it doesn't exist, or switch to it if it does.
+          // Mirrors the original "try -b, fall back to plain checkout" shape:
+          // bookmarks.switch({create:true}) throws on already-exists; the catch
+          // falls through to the plain switch — equivalent to the prior
+          // "if create.exitCode !== 0 then run plain checkout" pattern.
+          try {
+            branchVcs.refs.bookmarks.switch(branchName, { create: true });         // (was: checkout -b <name>)
+          } catch {
+            branchVcs.refs.bookmarks.switch(branchName);                           // (was: checkout <name>)
+          }
         }
       }
     }
