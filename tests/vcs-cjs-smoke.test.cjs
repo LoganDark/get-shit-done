@@ -6,9 +6,10 @@
  * This test runs CJS via plain Node require() so the actual artifact path that
  * bin/lib/*.cjs uses in production is exercised end-to-end.
  *
- * Phase 19 plan 19-06: re-pointed from the retired ../sdk/dist-cjs build to the
+ * Phase 19 plan 19-06: re-pointed from the retired SDK dist-cjs build to the
  * build-at-publish artifact at ../gsd-core/bin/lib/vcs (emitted by
- * `pnpm run build:lib`).
+ * `pnpm run build:lib`). 19-12: citation reworded so the retired-surface
+ * detector stays clean.
  *
  * Picked up automatically by scripts/run-tests.cjs (`tests/*.test.cjs` glob).
  */

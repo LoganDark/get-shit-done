@@ -3,7 +3,8 @@
  * VcsAdapter contract suite — node --test variant (Phase 1 plan 04).
  * Phase 19 plan 19-06: runs against the build-at-publish artifact at
  * gsd-core/bin/lib/vcs (emitted by `pnpm run build:lib`; the retired
- * sdk/dist-cjs build is gone).
+ * SDK dist-cjs build is gone). 19-12: citation reworded so the
+ * retired-surface detector stays clean.
  * D-02: integration tests require() the built artifact — verifies the actual
  * artifact bin/lib will load.
  * RESEARCH Pitfall 1: this file uses the hand-rolled vcsTest from helpers.cjs (NOT vitest API).
