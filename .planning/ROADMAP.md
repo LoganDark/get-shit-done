@@ -335,7 +335,6 @@ Plans:
   - [ ] 18.02-PLAN.md — v14-review-followups (CLEANUP-03..07 = Phase 14 WR-01..05). Per-WR commits per Pitfall 10 prevention; order per Pitfall 10: prod-code fixes (CLEANUP-05 Array.isArray, CLEANUP-06 Number.isNaN) FIRST, then script fixes (CLEANUP-03 project-root assertion, CLEANUP-04 tar-overlay decision), then test fixes (CLEANUP-07 afterEach rm). Each WR has its own contract test (envelope return, NaN-guard, tmpDir cleanup). 5 Phase 14 info findings NOT forced into milestone (addressed opportunistically only if adjacent file touched).
   - [ ] 18.03-PLAN.md — TEST-17 jj-reap.test.ts > inclusion-filter flake fix. Narrow scope per Pitfall 9: try `it('inclusion-filter: …', () => {...}, 15_000)` first (5 LOC max); fall back to `describe('workspace.reap …', { concurrent: false }, () => {...})` ONLY if (a) is verified insufficient via bisection. Diff ≤5 LOC, ≤1 file, `sdk/vitest.config.ts` UNTOUCHED, `scripts/check-skip-count.cjs` green. Plan CONTEXT.md cites `.planning/PROJECT.md` Out of Scope clause ("Broader test-perf sweep beyond TEST-17") verbatim.
 
-
 ## Progress
 
 **Execution Order:**
@@ -365,7 +364,7 @@ v1.4 phase ordering: Phase 15 ships first (adapter surface highest-leverage; ext
 | 16. Workflow + invariant tooling | 2/2 | Complete    | 2026-05-25 |
 | 17. Drift control + reconciliation | 4/4 | Complete    | 2026-05-25 |
 | 18. Tactical cleanup + test-flake | 0/3 | Not started | — |
-| 19. Upstream merge conflict resolution + fork-abstraction audit | 5/13 | In Progress|  |
+| 19. Upstream merge conflict resolution + fork-abstraction audit | 6/13 | In Progress|  |
 
 ## Next
 
@@ -376,19 +375,21 @@ v1.4 roadmap created 2026-05-24 — 4 phases, 13 plans, 25 requirements mapped 1
 **Goal:** The upstream merge change `vpzlrrlv` (upstream main `03764dbc` "Merge pull request #940 from open-gsd/hotfix/1.4.3" merged into fork main `c7bd6bee`, ~485 upstream commits incl. a full restructure) reaches 0 conflicts with functional code on **upstream's new layout** — upstream's restructure is ADOPTED (SDK retirement per their ADR-0174, `get-shit-done/` → `gsd-core/`, `src/*.cts` rewrite) so future upstream pulls stay cheap. The fork's only durable divergence is the VCS abstraction enabling jj support: `sdk/src/vcs/` (VcsAdapter, jj+git backends, unified revision model, `workspace.parallel.*`, `.githooks` bridge) is ported into upstream's architecture as `src/vcs/*.cts` (or closest idiomatic equivalent), upstream's raw-git call sites are migrated to route through it, fork jj-behavior tests are ported to upstream's test layout, and fork lint gates are re-pointed at the new tree. Build green (upstream's build), tests green on both backends, every disposition recorded in `19-MERGE-AUDIT.md`. Lessons from MERGE-REVIEW-upstream-2026-05-25.md apply: validate CJS parse correctness, check for silently dropped features, severed dispatch chains, and stale generated files.
 **Requirements**: TBD (merge hygiene + fork-abstraction invariants: lint-vcs-no-raw-git, lint-vcs-no-commit-id, audit-workflow-raw-git baseline)
 **Depends on:** Nothing in v1.4 (operator-initiated upstream pull; v1.4 phases 15-17 shipped; Phase 18 pending independently)
-**Plans:** 5/13 plans executed
+**Plans:** 6/13 plans executed
 
 Constraints:
+
 - Resolution happens in the working copy on top of merge change `vpzlrrlv` in workspace `get-shit-done-2`; the operator squashes into the merge change at the end (do NOT squash/rewrite the merge change itself).
 - `gsd-sdk` is currently installed from the sibling `get-shit-done` checkout — this workspace must be fully resolved, building, and abstraction-clean before the installed copy is touched.
 
 Plans:
+
 - [x] 19-01-PLAN.md — Ledger bootstrap + packaging/identity resolution (pnpm pin, mirror upstream identity, drop fallow/rollout/org-CI)
 - [x] 19-02-PLAN.md — Dependency vetting + BLOCKING human legitimacy checkpoint + single pnpm install + upstream build bring-up
 - [x] 19-03-PLAN.md — Harvest fork reference content from c7bd6bee + mechanically clear conflict buckets A/B/C (accept upstream deletion)
 - [x] 19-04-PLAN.md — Genuine merges: docs/translations, de-org'd CI, tests/helpers, research-synthesizer → ZERO conflicts + pre-port baseline
 - [x] 19-05-PLAN.md — Port sdk/src/vcs (36 modules) → src/vcs/*.cts; gitignore; build green + adapter smoke
-- [ ] 19-06-PLAN.md — CLI bridge: src/vcs-command-router.cts + gsd-tools wiring + early regression net (PORT-02)
+- [x] 19-06-PLAN.md — CLI bridge: src/vcs-command-router.cts + gsd-tools wiring + early regression net (PORT-02)
 - [ ] 19-07-PLAN.md — Migrate upstream execGit call sites + 5 outliers (incl. destructive reset --hard); substrate dispositions (AUDIT-01)
 - [ ] 19-08-PLAN.md — Workflow re-wiring: 9 fork deltas re-applied on gsd-core/workflows, three-way-aware, verb-smoked
 - [ ] 19-09-PLAN.md — Agents rewiring + jj-aware launcher fix (sync script) + .githooks rewrite + hook audit

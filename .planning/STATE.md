@@ -1,16 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.4
-milestone_name: Clean, consistent state for next upstream pull
+milestone_name: milestone
 status: executing
-last_updated: "2026-06-10T11:33:05.443Z"
+stopped_at: "Completed 19-06-PLAN.md (CLI bridge); next: 19-07 call-site migration"
+last_updated: "2026-06-10T11:52:58.306Z"
 last_activity: 2026-06-10
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 24
-  completed_plans: 16
-  percent: 67
+  completed_plans: 17
+  percent: 71
 ---
 
 # Project State
@@ -25,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-24 at v1.4 open)
 ## Current Position
 
 Phase: 19 (upstream-merge-conflict-resolution-fork-abstraction-audit) — EXECUTING
-Plan: 6 of 13
+Plan: 7 of 13
 Status: Ready to execute
 Last activity: 2026-06-10
 
@@ -90,6 +91,7 @@ Last activity: 2026-06-10
 | Phase 19 P19-03 | 39min | 3 tasks | 139 files |
 | Phase 19 P19-04 | 32min | 3 tasks | 19 files |
 | Phase 19 P05 | 16min | 2 tasks | 37 files |
+| Phase 19 P06 | 19min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -193,6 +195,8 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase ?]: [Phase 19] Plan 04: c7bd6bee ISSUE_TEMPLATE URLs were stale GSD-redux deprecation pointers — replaced with the real fork issues URL per identity decision (plan-letter deviation, ledgered); MIGR-05 release-notes adapter migration deferred to 19-07/19-13 via deferred-items.md
 - [Phase ?]: [Phase 19] Plan 05: fork vcs layer ported 1:1 (34 modules; plan's 36 was an over-count) as src/vcs/**.cts; execGit→execGitVcs rename; run.cts retired-SDK imports resolved via byte-identical planning-shim.cts + upstream planningPaths re-point (Rule 3); build:lib green, emitted index.cjs require + jj-detection smokes pass
 - [Phase ?]: [Phase 19] Plan 05: /gsd-core/bin/lib/vcs/ ignored as a directory line (deviation from upstream per-file enumeration) — drift-proof coverage for future vcs modules, ledgered
+- [Phase 19]: Plan 19-06: PORT-02 CLI bridge live — 19 fork vcs verbs (not the plan's 23; branch-create/branch-delete/rev-parse/rm/bare-workspace are phantom per the 19-03 ledger) dispatch via gsd-tools query through src/vcs-command-router.cts with fork-envelope parity; commit-to-subrepo handler dispatch-dormant until 19-07 (upstream case preserved byte-identical, same locked treatment as commit)
+- [Phase 19]: Plan 19-06 Rule 1: vcs-adapter-contract test asserted nonexistent .hash — adapter contract is id (hex git / [k-z] jj change_id); flipped to per-backend alphabet asserts; latent fork-side bug masked by stale-dist-cjs module-load error (fork had no unit-CI lane)
 
 ### Pending Todos
 
@@ -263,8 +267,8 @@ All v1.3 deferred items in scope for v1.4 promoted to REQ-IDs in `.planning/REQU
 
 ## Session Continuity
 
-Last session: 2026-06-10T11:32:58.841Z
-Stopped at: Completed 19-05-PLAN.md (vcs port); next: 19-06 CLI bridge
+Last session: 2026-06-10T11:52:58.301Z
+Stopped at: Completed 19-06-PLAN.md (CLI bridge); next: 19-07 call-site migration
 Resume file:
 
 None
