@@ -79,7 +79,11 @@ describe('bug #3212 execute-phase stall detection and safe resume', () => {
     assert.match(workflow, /EXECUTOR_STALL_THRESHOLD_MINUTES=.*executor\.stall_threshold_minutes/);
     assert.match(workflow, /DISPATCH_TS=/, 'execute-phase must record dispatch timestamp');
     assert.match(workflow, /EXPECTED_BRANCH=/, 'execute-phase must record expected branch');
-    assert.match(workflow, /git log "\$\{EXPECTED_BRANCH\}" --since="\$\{DISPATCH_TS\}"/, 'stall check must inspect branch commits since dispatch');
+    // 19-12 re-point: the jj fork's stall check is adapter-mediated —
+    // `gsd_run query log --range "${EXPECTED_BRANCH}"` filtered by
+    // LogEntry.date >= DISPATCH_TS (ISO-8601 lexicographic compare) replaces
+    // raw `git log --since`.
+    assert.match(workflow, /gsd_run query log --range "\$\{EXPECTED_BRANCH\}"[\s\S]{0,200}?DISPATCH_TS/, 'stall check must inspect branch commits since dispatch');
     assert.match(workflow, /continue waiting/, 'stall warning must offer continue waiting');
     assert.match(workflow, /kill and retry/, 'stall warning must offer kill and retry');
     assert.match(workflow, /kill and switch to inline execution/, 'stall warning must offer inline fallback');

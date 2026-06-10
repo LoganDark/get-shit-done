@@ -1,5 +1,5 @@
 {
-  "generated": "2026-06-07",
+  "generated": "2026-06-10",
   "families": {
     "agents": [
       "gsd-advisor-researcher",
@@ -65,6 +65,7 @@
       "/gsd-ingest-docs",
       "/gsd-manager",
       "/gsd-map-codebase",
+      "/gsd-migrate-vcs",
       "/gsd-milestone-summary",
       "/gsd-mvp-phase",
       "/gsd-new-milestone",
@@ -148,6 +149,7 @@
       "list-workspaces.md",
       "manager.md",
       "map-codebase.md",
+      "migrate-vcs.md",
       "milestone-summary.md",
       "mvp-phase.md",
       "new-milestone.md",
@@ -262,7 +264,8 @@
       "verification-patterns.md",
       "verify-mvp-mode.md",
       "workstream-flag.md",
-      "worktree-branch-check.md"
+      "worktree-branch-check.md",
+      "worktree-path-safety.md"
     ],
     "cli_modules": [
       "active-workstream-store.cjs",
@@ -345,6 +348,7 @@
       "update-context.cjs",
       "validate-command-router.cjs",
       "validate.cjs",
+      "vcs-command-router.cjs",
       "verification-command-router.cjs",
       "verification.cjs",
       "verify-command-router.cjs",

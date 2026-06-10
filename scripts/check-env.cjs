@@ -203,9 +203,16 @@ function main() {
   // ---------------------------------------------------------------------------
   // Check 3: Lockfile presence
   // ---------------------------------------------------------------------------
+  // 19-12 (pnpm fork): this repo is pnpm-managed (`packageManager` pin) and
+  // ships pnpm-lock.yaml instead of package-lock.json. Accept either lockfile;
+  // the npm-specific sync check below only runs for package-lock.json (pnpm's
+  // sync gate is the CI `pnpm install --frozen-lockfile`, per test.yml).
   const LOCKFILE = path.join(PROJECT_ROOT, 'package-lock.json');
+  const PNPM_LOCKFILE = path.join(PROJECT_ROOT, 'pnpm-lock.yaml');
   if (fs.existsSync(LOCKFILE)) {
     addCheck('lockfile-present', 'pass', 'package-lock.json exists');
+  } else if (fs.existsSync(PNPM_LOCKFILE)) {
+    addCheck('lockfile-present', 'pass', 'pnpm-lock.yaml exists (pnpm-managed repo)');
   } else {
     addCheck('lockfile-present', 'fail', "package-lock.json missing — run 'npm install' to generate it");
   }
@@ -232,6 +239,8 @@ function main() {
     } catch {
       addCheck('lockfile-sync', 'fail', "package-lock.json is out of sync — run 'npm ci' to restore");
     }
+  } else if (fs.existsSync(PNPM_LOCKFILE)) {
+    addCheck('lockfile-sync', 'skip', 'skipped — pnpm-managed repo (sync gated by `pnpm install --frozen-lockfile` in CI)');
   } else {
     addCheck('lockfile-sync', 'skip', 'skipped — lockfile missing');
   }

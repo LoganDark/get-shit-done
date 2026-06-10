@@ -12,20 +12,21 @@ const { ExitError, runMain } = require('./lib/cli-exit.cjs');
 // FAIL-SAFE: any .github/workflows/*.yml NOT listed here is treated as a
 // pipeline workflow and gets the full matrix. New workflow files default to full.
 const INERT_WORKFLOWS = new Set([
+  // 19-12: auto-backmerge.yml, pr-target-validator.yml and discord-changelog.yml
+  // removed — those org-automation workflows were dropped from the fork in 19-01
+  // (ledgered in 19-MERGE-AUDIT.md); the every-entry-exists guard test enforces
+  // this list stays in sync with .github/workflows/.
   'stale.yml',
   'branch-cleanup.yml',
   'branch-naming.yml',
   'auto-label-issues.yml',
   'auto-branch.yml',
-  'auto-backmerge.yml',
   'close-draft-prs.yml',
   'dismiss-unauthorized-pr-approvals.yml',
-  'pr-target-validator.yml',
   'pr-template-format.yml',
   'require-issue-link.yml',
   'changeset-required.yml',
   'docs-required.yml',
-  'discord-changelog.yml',
 ]);
 
 // Workflows that gate merges, ship the product, or run security/cross-platform

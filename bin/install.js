@@ -8506,7 +8506,10 @@ function uninstall(isGlobal, runtime = 'claude') {
     'github-release-notes.cjs', 'lint.cjs', 'new.cjs',
     'README.md', // documentation only — not user-authored
   ];
-  const GSD_SCRIPTS_LIB_FILES = ['cli-exit.cjs', 'allowlist-ratchet.cjs'];
+  // 19-12: allowlist-parser.cjs + glob-to-regex.cjs are the jj fork's LINT-06
+  // shared lib helpers (Phase 16) — installed with scripts/lib/ and therefore
+  // GSD-managed; without these entries uninstall left scripts/lib/ behind.
+  const GSD_SCRIPTS_LIB_FILES = ['cli-exit.cjs', 'allowlist-ratchet.cjs', 'allowlist-parser.cjs', 'glob-to-regex.cjs'];
 
   const changesetUninstallDir = path.join(targetDir, 'scripts', 'changeset');
   if (fs.existsSync(changesetUninstallDir)) {

@@ -30,10 +30,14 @@ describe('quick workflow commit boundary (#1503)', () => {
     );
   });
 
-  test('Step 8 explicitly stages artifacts with git add before commit', () => {
+  test('Step 8 explicitly passes the artifact file list to the commit verb', () => {
+    // 19-12 re-point: the jj fork's Step 8 commits via the adapter bridge —
+    // `gsd_run query commit ... --files ${file_list}` captures WC state for
+    // exactly the listed files internally, so no pre-staging `git add` exists.
     assert.ok(
-      content.includes('git add ${file_list}'),
-      'Step 8 should explicitly git add the file list before gsd-tools commit'
+      content.includes('git add ${file_list}')
+        || content.includes('--files ${file_list}'),
+      'Step 8 should explicitly scope the docs commit to the file list (git add or --files form)'
     );
   });
 

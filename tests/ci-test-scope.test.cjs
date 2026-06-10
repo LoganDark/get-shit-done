@@ -340,12 +340,15 @@ describe('INERT_WORKFLOWS allowlist integrity guard', () => {
   ];
 
   // Canonical inert workflow list — reused by both tests below.
+  // 19-12: auto-backmerge.yml, pr-target-validator.yml, discord-changelog.yml
+  // removed — those org-automation workflows were dropped from the fork in
+  // 19-01 (ledgered); mirrors INERT_WORKFLOWS in scripts/ci-test-scope.cjs.
   const knownInert = [
     'stale.yml', 'branch-cleanup.yml', 'branch-naming.yml', 'auto-label-issues.yml',
-    'auto-branch.yml', 'auto-backmerge.yml', 'close-draft-prs.yml',
-    'dismiss-unauthorized-pr-approvals.yml', 'pr-target-validator.yml',
+    'auto-branch.yml', 'close-draft-prs.yml',
+    'dismiss-unauthorized-pr-approvals.yml',
     'pr-template-format.yml', 'require-issue-link.yml', 'changeset-required.yml',
-    'docs-required.yml', 'discord-changelog.yml',
+    'docs-required.yml',
   ];
 
   test('all entries in INERT_WORKFLOWS exist under .github/workflows/', () => {

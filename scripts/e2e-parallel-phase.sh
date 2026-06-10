@@ -1,31 +1,37 @@
 #!/usr/bin/env bash
 # e2e-parallel-phase.sh — CI-05 end-to-end parallel-dispatch harness
 #
-# Drives the `gsd-sdk query workspace.parallel.{dispatch,fan-in}` CLI bridges
-# against a freshly-created throwaway repo, for the backend named in the
-# GSD_E2E_BACKEND environment variable. The CI lane (plan 13-04) runs this
+# Drives the `gsd-tools query workspace.parallel.{dispatch,fan-in}` CLI
+# bridges against a freshly-created throwaway repo, for the backend named in
+# the GSD_E2E_BACKEND environment variable. The CI lane (plan 13-04) runs this
 # harness once per backend cell (`git` and `jj-colocated`).
+#
+# Phase 19 (19-12): the fork `gsd-sdk` CLI retired with the SDK (upstream
+# ADR-0174); every invocation now dispatches through the PORT-02 bridge at
+# gsd-core/bin/gsd-tools.cjs (script-relative default; GSD_TOOLS_BIN is the
+# CI/test injection seam — same shape as scripts/dogfood-restore.sh).
 #
 # This is the only test layer that exercises the CLI-bridge surface — the
 # `@-`/`@<path>` stdin resolution, the `{ok:false,reason}` failure envelope,
 # the `jq` pipelines, and (on the jj cell) real `jj` subprocesses firing
 # `.githooks/pre-commit`. The TypeScript-level TEST-13 contract tests call the
 # adapters directly and cannot see any of that. The harness mirrors the
-# `get-shit-done/workflows/execute-phase.md` dispatch/fan-in shell sequence
+# `gsd-core/workflows/execute-phase.md` dispatch/fan-in shell sequence
 # 1:1 — "fidelity, not smoke test."
 #
 # Environment:
 #   GSD_E2E_BACKEND   required — `git` or `jj-colocated`
-#   GSD_SDK           the `gsd-sdk` invocation; defaults to the literal
-#                     `gsd-sdk` when unset. In CI, after `npm run build:sdk`,
-#                     set it to `node "$GITHUB_WORKSPACE/sdk/dist/cli.js"`.
+#   GSD_TOOLS_BIN     path to gsd-tools.cjs (default: script-relative
+#                     ../gsd-core/bin/gsd-tools.cjs). In CI, after
+#                     `pnpm run build:lib`, the default resolves inside the
+#                     checkout — no override needed.
 #
 # Exit codes:
 #   0   every assertion passed
 #   1   an assertion failed, or a setup step failed (diagnostic on stderr)
 #
 # D-09: this file contains NO raw `git <cmd>` invocation. All git-side VCS
-# setup routes through `gsd-sdk query` or through raw `jj` (the throwaway
+# setup routes through `gsd-tools query` or through raw `jj` (the throwaway
 # repo is created colocated via `jj git init --colocate`, which produces a
 # valid `.git` repo without a raw `git` call). Raw `jj` is NOT flagged by
 # scripts/lint-vcs-no-raw-git.cjs — only raw `git` is. Keeping the harness
@@ -39,19 +45,19 @@ usage() {
   cat >&2 <<'EOF'
 e2e-parallel-phase.sh — CI-05 parallel-dispatch end-to-end harness
 
-Drives `gsd-sdk query workspace.parallel.{dispatch,fan-in}` against a
+Drives `gsd-tools query workspace.parallel.{dispatch,fan-in}` against a
 throwaway repo for one backend cell.
 
 Required environment:
   GSD_E2E_BACKEND   `git` or `jj-colocated`
 
 Optional environment:
-  GSD_SDK           the gsd-sdk invocation (default: `gsd-sdk`).
-                    In CI: `node "$GITHUB_WORKSPACE/sdk/dist/cli.js"`.
+  GSD_TOOLS_BIN     path to gsd-tools.cjs (default: script-relative
+                    ../gsd-core/bin/gsd-tools.cjs).
 
 Usage:
   GSD_E2E_BACKEND=jj-colocated scripts/e2e-parallel-phase.sh
-  GSD_E2E_BACKEND=git GSD_SDK="node sdk/dist/cli.js" scripts/e2e-parallel-phase.sh
+  GSD_E2E_BACKEND=git scripts/e2e-parallel-phase.sh
 EOF
 }
 
@@ -65,11 +71,19 @@ case "$BACKEND" in
     ;;
 esac
 
-# The gsd-sdk invocation. CI sets `node "$GITHUB_WORKSPACE/sdk/dist/cli.js"`;
-# a globally-installed context leaves it unset and the literal `gsd-sdk` is
-# used. Every SDK call below goes through `$GSD_SDK query ...` — never a bare
-# `gsd-sdk`.
-GSD_SDK="${GSD_SDK:-gsd-sdk}"
+# The gsd-tools invocation (19-12 re-point). Default resolution is
+# script-relative — this script lives in scripts/, the bridge in
+# ../gsd-core/bin/. GSD_TOOLS_BIN lets CI/tests inject an executable shim
+# without touching the production resolution. Every bridge call below goes
+# through `run_gsd_tools query ...`.
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+run_gsd_tools() {
+  if [ -n "${GSD_TOOLS_BIN:-}" ]; then
+    "$GSD_TOOLS_BIN" "$@"
+  else
+    node "${SCRIPT_DIR}/../gsd-core/bin/gsd-tools.cjs" "$@"
+  fi
+}
 
 # Plain-text "git" token for diagnostic strings. Holding it in a variable
 # keeps the literal ` git ` substring out of non-comment lines, where the
@@ -78,10 +92,10 @@ GSD_SDK="${GSD_SDK:-gsd-sdk}"
 # stderr diagnostics — never to build a command.
 ECHO_GIT=git
 
-# The git/jj adapter backend the SDK resolves. `createVcsAdapter` honors the
-# GSD_VCS env var (priority #2, no config lock-in side effect — see
-# sdk/src/vcs/index.ts resolveKind). The throwaway repo is always colocated
-# (`.git` + `.jj` both present); GSD_VCS pins which adapter the SDK drives.
+# The git/jj adapter backend the bridge resolves. `createVcsAdapter` honors
+# the GSD_VCS env var (priority #2, no config lock-in side effect — see
+# src/vcs/index.cts resolveKind). The throwaway repo is always colocated
+# (`.git` + `.jj` both present); GSD_VCS pins which adapter the bridge drives.
 if [ "$BACKEND" = "git" ]; then
   ADAPTER_KIND=git
 else
@@ -89,7 +103,7 @@ else
 fi
 export GSD_VCS="$ADAPTER_KIND"
 
-echo "e2e-parallel-phase: backend=${BACKEND} adapter=${ADAPTER_KIND} sdk='${GSD_SDK}'" >&2
+echo "e2e-parallel-phase: backend=${BACKEND} adapter=${ADAPTER_KIND} gsd-tools='${GSD_TOOLS_BIN:-${SCRIPT_DIR}/../gsd-core/bin/gsd-tools.cjs}'" >&2
 
 # ─── Throwaway repo ──────────────────────────────────────────────────────────
 #
@@ -101,6 +115,7 @@ echo "e2e-parallel-phase: backend=${BACKEND} adapter=${ADAPTER_KIND} sdk='${GSD_
 REPO=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/gsd-e2e-XXXXXX")
 cleanup() {
   rm -rf "$REPO"
+  rm -f "${HOOK_MARKER:-}"
 }
 trap cleanup EXIT
 
@@ -117,12 +132,22 @@ echo "e2e-parallel-phase: throwaway repo at ${REPO}" >&2
 
 # Sentinel pre-commit hook (SC5). A tiny executable that appends a marker line
 # to a known file each time it fires. Mirrors the counter-hook in
-# sdk/src/vcs/__tests__/jj-hooks.test.ts (the HOOK-07 regression test). The
+# src/vcs/__tests__/jj-hooks.test.ts (the HOOK-07 regression test). The
 # jj adapter's commit() fires `.githooks/pre-commit` post-squash; a raw `jj
 # squash` would bypass the adapter and the hook would never fire (the entire
 # A3 bug). The harness leaves GSD_HOOK_SKIP_COLOCATED UNSET — setting it would
 # opt out of the hook fire and defeat SC5.
-HOOK_MARKER="${REPO}/.gsd-hook-marker"
+# 19-12 fix: the marker lives OUTSIDE the throwaway repo. With the marker at
+# `$REPO/.gsd-hook-marker`, the workspace-side commits (which fire the hook)
+# appended it into the PRIMARY working copy while the primary WC pointer was
+# stale (the ws squashes rebase slot→merge→primary-@). Fan-in's
+# `jj workspace update-stale` then snapshots the old-op WC WITH the marker
+# and reconciles divergent operations — leaving the primary WC change
+# divergent and tripping assertion 5 (`divergent()` empty). A marker outside
+# the repo keeps the primary WC byte-clean so the stale-WC snapshot is a
+# no-op, matching the cmd-parallel-jj.test.ts-proven topology.
+HOOK_MARKER=$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/gsd-e2e-marker-XXXXXX")
+rm -f "$HOOK_MARKER"   # hook recreates it on first fire; assertion 6 checks existence
 mkdir -p "${REPO}/.githooks"
 cat > "${REPO}/.githooks/pre-commit" <<EOF
 #!/usr/bin/env bash
@@ -178,7 +203,7 @@ AGENT_LABELS="e2e-a e2e-b"
 PLANS_JSON=$(printf '%s\n' $AGENT_LABELS | jq -R . | jq -sc 'map({agentId: ., planId: .})')
 
 HANDLE_JSON=$(printf '%s' "$PLANS_JSON" \
-  | $GSD_SDK query workspace.parallel.dispatch \
+  | run_gsd_tools query workspace.parallel.dispatch \
       --cwd "$REPO" --phase 13 --main-bookmark "$MAIN_BOOKMARK" --plan @-)
 
 # Empty-Handle guard (execute-phase.md:559).
@@ -197,21 +222,20 @@ echo "e2e-parallel-phase: dispatch ok — $(printf '%s' "$HANDLE_JSON" | jq -r '
 # — distinct names so the per-branch merges have nothing to conflict on, the
 # same approach as cmd-parallel-git.test.ts:171) and create one commit.
 #
-# The commit MUST go through `$GSD_SDK query commit` (SC5). On the jj cell
-# this is what fires `.githooks/pre-commit`: `gsd-sdk query commit` routes
-# through `createVcsAdapter().commit()` (sdk/src/query/commit.ts) and the jj
-# adapter's `commit()` fires the hook post-squash. A raw `jj squash` would
-# bypass the adapter and the hook would never fire.
+# The commit MUST go through `run_gsd_tools query commit` (SC5). On the jj
+# cell this is what fires `.githooks/pre-commit`: `gsd-tools query commit`
+# routes through `createVcsAdapter().commit()` (src/vcs-command-router.cts)
+# and the jj adapter's `commit()` fires the hook post-squash. A raw `jj
+# squash` would bypass the adapter and the hook would never fire.
 #
-# `gsd-sdk query commit` has NO `--cwd` flag — it resolves `projectDir` from
-# the process cwd (sdk/src/cli.ts: `projectDir = process.cwd()`), then
-# `findProjectRoot` walks UP looking for `.planning/`. So the commit is run in
-# a subshell with the cwd set to the workspace path. A `.planning/` marker dir
-# is created in each workspace first so `findProjectRoot` returns the
-# workspace unchanged (its rule 1: "startDir itself has .planning/ → return
-# it") instead of walking up to the throwaway-repo root. The hook
-# (`.githooks/pre-commit`) is a tracked file from the seed commit, so it is
-# present in every workspace checkout.
+# `gsd-tools query commit` has NO `--cwd` flag — it resolves `projectDir`
+# from the process cwd, then `findProjectRoot` walks UP looking for
+# `.planning/`. So the commit is run in a subshell with the cwd set to the
+# workspace path. A `.planning/` marker dir is created in each workspace
+# first so `findProjectRoot` returns the workspace unchanged (its rule 1:
+# "startDir itself has .planning/ → return it") instead of walking up to the
+# throwaway-repo root. The hook (`.githooks/pre-commit`) is a tracked file
+# from the seed commit, so it is present in every workspace checkout.
 #
 # `handle.workspaces[].path` is an ABSOLUTE path — used directly, never
 # re-prefixed with $REPO.
@@ -228,14 +252,14 @@ while IFS=$'\t' read -r WS_PATH WS_AGENT; do
     echo "FATAL: dispatched workspace path does not exist: ${WS_PATH}" >&2
     exit 1
   fi
-  # `.planning/` marker so `gsd-sdk query commit`'s findProjectRoot resolves
+  # `.planning/` marker so `gsd-tools query commit`'s findProjectRoot resolves
   # projectDir to THIS workspace, not the throwaway-repo root.
   mkdir -p "${WS_PATH}/.planning"
   printf 'work %s\n' "$WS_AGENT" > "${WS_PATH}/work-${WS_AGENT}.txt"
 
   COMMIT_JSON=$(
     cd "$WS_PATH" \
-      && $GSD_SDK query commit "feat(13-test): e2e work ${WS_AGENT}" \
+      && run_gsd_tools query commit "feat(13-test): e2e work ${WS_AGENT}" \
            --files "work-${WS_AGENT}.txt"
   )
   COMMIT_OK=$(printf '%s' "$COMMIT_JSON" | jq -r '.committed // false')
@@ -267,7 +291,7 @@ RESULTS_ACCUM=$(printf '%s' "$HANDLE_JSON" \
 HANDLE_FILE=$(mktemp "${TMPDIR:-/tmp}/gsd-handle-XXXXXX.json")
 printf '%s' "$HANDLE_JSON" > "$HANDLE_FILE"
 FAN_RESULT=$(printf '%s' "$RESULTS_ACCUM" \
-  | $GSD_SDK query workspace.parallel.fan-in \
+  | run_gsd_tools query workspace.parallel.fan-in \
       --cwd "$REPO" --handle "@$HANDLE_FILE" --results @-)
 rm -f "$HANDLE_FILE"
 

@@ -45,6 +45,9 @@ const KNOWN_SKILLS = new Set([
   'ingest-docs.md',
   'manager.md',
   'map-codebase.md',
+  // 19-12: the jj fork's user-invocable VCS migration boundary (/gsd:migrate-vcs)
+  // — a genuine new skill, not consolidation drift.
+  'migrate-vcs.md',
   'milestone-summary.md',
   'mvp-phase.md',
   'new-milestone.md',

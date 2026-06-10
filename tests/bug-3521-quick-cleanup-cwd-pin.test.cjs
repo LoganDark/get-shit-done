@@ -29,41 +29,42 @@ describe('bug #3521 — quick.md post-merge cleanup CWD safety (via SDK delegati
     assert.ok(content.length > 0, 'quick.md must not be empty');
   });
 
-  test('quick.md cleanup delegates CWD-safe worktree cleanup to SDK (worktree.cleanup-wave)', () => {
+  test('quick.md cleanup delegates CWD-safe workspace cleanup to SDK (workspace.parallel.fan-in)', () => {
     const content = readQuickMd();
-    // After #3797: quick.md delegates to gsd_run query worktree.cleanup-wave
-    // which handles CWD pinning, STATE.md backup, deletion guards, and branch
-    // cleanup internally. The manual shell loop has been removed.
+    // 19-12 re-point: after #3797 quick.md delegated to worktree.cleanup-wave;
+    // the jj fork's Phase 11 rewiring (re-applied 19-08) delegates to the
+    // cross-backend workspace.parallel.fan-in verb, which owns CWD pinning,
+    // merge, deletion guards and per-success workspace cleanup internally.
     assert.ok(
-      content.includes('worktree.cleanup-wave'),
-      'quick.md must delegate cleanup to gsd_run query worktree.cleanup-wave (#3797)',
+      content.includes('workspace.parallel.fan-in'),
+      'quick.md must delegate cleanup to gsd_run query workspace.parallel.fan-in (#3797; 19-12 re-point)',
     );
   });
 
-  test('quick.md cleanup-wave call uses || exit 1 to enforce fail-closed safety (#3521 contract)', () => {
+  test('quick.md fan-in guard enforces fail-closed safety (#3521 contract)', () => {
     const content = readQuickMd();
-    // The || exit 1 enforces fail-closed: SDK safety refusals (e.g. branch
-    // drift detection from #3174) surface immediately rather than being swallowed.
-    // This is the equivalent of the pre-#3797 `gsd_run query ... || exit 1` in the
-    // `if command -v gsd-sdk` branch.
+    // Fail-closed: the fan-in result guard exits 1 on conflicted/failedReaped
+    // rather than swallowing SDK refusals (19-12 re-point of `|| exit 1`).
     assert.match(
       content,
-      /gsd_run query worktree\.cleanup-wave.*\|\| exit 1/,
-      'quick.md cleanup-wave must use || exit 1 — fail-closed for safety refusals (#3521/#3797)',
+      /\[ "\$CONFLICTED" = "true" \] \|\| \[ "\$FAILED_REAPED" -gt 0 \][\s\S]{0,200}?exit 1/,
+      'quick.md fan-in must exit 1 on conflicted/failedReaped — fail-closed for safety refusals (#3521/#3797; 19-12 re-point)',
     );
   });
 
-  test('quick.md manifest guard still blocks broad cleanup when manifest is missing (#3384)', () => {
+  test('quick.md handle guard still blocks broad cleanup without a dispatch envelope (#3384)', () => {
     const content = readQuickMd();
-    // The manifest guard must still be present before the cleanup-wave call
-    // to prevent broad worktree cleanup when the manifest file is absent.
+    // 19-12 re-point: Phase 11 D-01 eliminated the manifest file; the same
+    // anti-discovery contract rides the dispatch envelope — $HANDLE_JSON is
+    // the only workspace-set source of truth (quick.md documents the #3384
+    // re-expression explicitly), and fan-in is skipped when it is empty.
     assert.ok(
-      content.includes('QUICK_WORKTREE_MANIFEST') || content.includes('WAVE_WORKTREE_MANIFEST'),
-      'quick.md must still guard cleanup behind QUICK_WORKTREE_MANIFEST (#3384)',
+      content.includes('HANDLE_JSON'),
+      'quick.md must scope cleanup to the $HANDLE_JSON dispatch envelope (#3384; 19-12 re-point)',
     );
     assert.ok(
-      content.includes('refusing broad worktree cleanup') || content.includes('missing QUICK_WORKTREE_MANIFEST'),
-      'quick.md must emit a blocked message when the manifest is missing (#3384)',
+      content.includes('#3384 manifest source of truth') || content.includes('only workspace-set source of truth'),
+      'quick.md must document the #3384 anti-broad-discovery re-expression (19-12 re-point)',
     );
   });
 

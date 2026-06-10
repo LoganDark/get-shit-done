@@ -26,7 +26,10 @@ describe('.githooks/pre-commit alias drift guard', () => {
     const tmpDir = createTempDir('gsd-precommit-hook-');
     t.after(() => cleanup(tmpDir));
 
-    const mockGit = writeMock(tmpDir, 'git', `#!/usr/bin/env bash\nprintf "%s\\n" "${'sdk/src/query/command-manifest.phase.ts'}"\n`);
+    // 19-12 re-point: the alias source of truth in the adopted tree is
+    // src/command-aliases.cts (upstream ADR-457); the fork-era
+    // sdk/src/query/command-manifest.*.ts trigger paths retired with the SDK.
+    const mockGit = writeMock(tmpDir, 'git', `#!/usr/bin/env bash\nprintf "%s\\n" "${'src/command-aliases.cts'}"\n`);
     const mockNpm = writeMock(tmpDir, 'npm', `#!/usr/bin/env bash\nprintf "called" > "$GSD_TEST_NPM_MARKER"\n`);
 
     const marker = path.join(tmpDir, 'npm-called.txt');

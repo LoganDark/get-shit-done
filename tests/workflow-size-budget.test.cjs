@@ -81,9 +81,12 @@ const GRACE = 3000;
 // current high-water mark within GRACE (#597 tighten-only ratchet).
 // XL high-water mark is execute-phase.md — note that under LINES it was
 // plan-phase; bytes genuinely re-rank the tier, which is the point of #717.
-// actualMax=92525 (execute-phase, #913 inline-fallback scope clarification);
-// slack=475 ≤ GRACE. plan-phase.md=90748 (#922 attempt-based Agent gate), new-project.md=58110.
-const XL_BUDGET = 93000;
+// actualMax=97632 (execute-phase; 19-12 re-baseline: the jj fork's Phase 11
+// verb-dispatch rewiring re-applied in 19-08 — workspace.parallel dispatch/
+// fan-in blocks, the #630/#3384 envelope re-expression notes, and the jj-aware
+// launcher shim — grew both XL orchestrators); slack=368 ≤ GRACE.
+// plan-phase.md=93621 (fork deltas, same 19-08 re-apply), new-project.md≈58k.
+const XL_BUDGET = 98000;
 // LARGE high-water mark is docs-update.md. actualMax=54410 (#891 launcher shim expansion);
 // slack=1590 ≤ GRACE. quick.md=45710, autonomous.md=38030.
 const LARGE_BUDGET = 56000;
@@ -95,9 +98,9 @@ const DEFAULT_BUDGET = 40000;
 // Grandfathered at current sizes — see PR #2551 for the progressive-disclosure
 // pattern that future shrinks should follow. Byte counts noted for reference.
 const XL_WORKFLOWS = new Set([
-  'execute-phase',  // 92525 bytes (tier high-water mark; grew in #913 inline-fallback scope clarification)
-  'plan-phase',     // 90748 bytes (grew in #922 attempt-based Agent gate)
-  'new-project',    // 55850 bytes
+  'execute-phase',  // 97632 bytes (tier high-water mark; 19-12 re-baseline — fork verb-dispatch re-apply)
+  'plan-phase',     // 93621 bytes (19-12 re-baseline — fork deltas)
+  'new-project',    // ~58k bytes
 ]);
 
 // Multi-step planners and bigger feature workflows. Grandfathered.

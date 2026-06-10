@@ -14,6 +14,15 @@ function readWorkflow(relativePath) {
   return fs.readFileSync(path.join(process.cwd(), relativePath), 'utf8');
 }
 
+// 19-12 (jj fork): pr-target-validator.yml and close-draft-prs-sweep.yml are
+// OpenGSD org-automation workflows deliberately dropped from the fork in 19-01
+// (ledgered in 19-MERGE-AUDIT.md — the fork does not run upstream's PR policy
+// bots). Their policy tests skip at runtime when the workflow file is absent
+// so the upstream assertions revive unchanged on any future re-adoption.
+function workflowExists(relativePath) {
+  return fs.existsSync(path.join(process.cwd(), relativePath));
+}
+
 function assertMaintainerSkip(source) {
   assert.ok(
     source.includes(MAINTAINER_SKIP_EXPR),
@@ -41,13 +50,21 @@ describe('PR policy workflow maintainer carve-outs', () => {
     assert.doesNotMatch(workflow, /^\s*pull_request:\s*$/m);
   });
 
-  test('PR target validator does not run for maintainer-authored PRs', () => {
+  test('PR target validator does not run for maintainer-authored PRs', (t) => {
+    if (!workflowExists('.github/workflows/pr-target-validator.yml')) {
+      t.skip('pr-target-validator.yml dropped from the fork in 19-01 (org automation; ledgered)');
+      return;
+    }
     const workflow = readWorkflow('.github/workflows/pr-target-validator.yml');
 
     assertMaintainerSkip(workflow);
   });
 
-  test('draft PR sweep enforces the same policy as the event-driven close', () => {
+  test('draft PR sweep enforces the same policy as the event-driven close', (t) => {
+    if (!workflowExists('.github/workflows/close-draft-prs-sweep.yml')) {
+      t.skip('close-draft-prs-sweep.yml dropped from the fork in 19-01 (org automation; ledgered)');
+      return;
+    }
     const workflow = readWorkflow('.github/workflows/close-draft-prs-sweep.yml');
 
     // Timer-driven in base-repo context, plus a manual dispatch for testing.

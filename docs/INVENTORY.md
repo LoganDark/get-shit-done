@@ -265,7 +265,7 @@ Full roster at `gsd-core/workflows/*.md`. Workflows are thin orchestrators that 
 
 ---
 
-## References (67 shipped)
+## References (68 shipped)
 
 Full roster at `gsd-core/references/*.md`. References are shared knowledge documents that workflows and agents `@-reference`. The groupings below match [`docs/ARCHITECTURE.md`](ARCHITECTURE.md#references-gsd-corereferencesmd) — core, workflow, thinking-model clusters, and the modular planner decomposition.
 
@@ -307,6 +307,7 @@ Full roster at `gsd-core/references/*.md`. References are shared knowledge docum
 | `universal-anti-patterns.md` | Universal anti-patterns to detect and avoid. |
 | `worktree-branch-check.md` | Canonical spawn-time worktree HEAD/base guard (worktree_branch_check): verify-only and fail-closed — per-agent-branch assertion, protected-ref refusal (#2924), and an exact-base assertion that halts with `exit 42` on mismatch so the orchestrator (worktree lifecycle owner) performs recovery (#48). Embedded into worktree sub-agent prompts at dispatch. |
 | `dispatch-cwd-safety.md` | Dispatched-cwd precondition guard for subagent prompts: backend-agnostic `workspace.assert-dispatched-cwd` verb call that subsumes the former HEAD assertion (#2924), cwd-drift sentinel (#3097), and absolute-path guard (#3099) — loaded into executor spawn prompts via `<execution_context>`. |
+| `worktree-path-safety.md` | Upstream worktree guard suite: HEAD assertion, cwd-drift sentinel (step 0a, #3097), and absolute-path guard (step 0b, #3099). Retained for legacy git-worktree flows; dispatched subagent prompts load `dispatch-cwd-safety.md` instead. |
 | `artifact-types.md` | Planning artifact type definitions. |
 | `phase-argument-parsing.md` | Phase argument parsing conventions. |
 | `decimal-phase-calculation.md` | Decimal sub-phase numbering rules. |
@@ -371,7 +372,7 @@ The `gsd-planner` agent is decomposed into a core agent plus reference modules t
 
 ---
 
-## CLI Modules (90 shipped)
+## CLI Modules (91 shipped)
 
 Full listing: `gsd-core/bin/lib/*.cjs`.
 
@@ -457,6 +458,7 @@ Full listing: `gsd-core/bin/lib/*.cjs`.
 | `update-context.cjs` | Pure install-context resolver for `/gsd:update` — runtime/scope/config-dir/version detection (LOCAL/GLOBAL/UNKNOWN) ported from update.md bash; backs `gsd-tools update-context` (#498) |
 | `validate-command-router.cjs` | Thin CJS subcommand router adapter for `gsd-tools validate` |
 | `validate.cjs` | Pure phase variant normalization helpers (`phaseVariants`, `buildRoadmapPhaseVariants`, `buildNotStartedPhaseVariants`) used by `verify.cjs` for W006/W007 checks; no I/O, no async |
+| `vcs-command-router.cjs` | VCS verb table for `gsd-tools query` (status/log/diff/commit/workspace.parallel.* and more) routing through the cross-backend adapter; tsc-emitted from `src/vcs-command-router.cts` (PORT-02 bridge) |
 | `verification-command-router.cjs` | Thin CJS subcommand router adapter for `gsd-tools verification` |
 | `verification.cjs` | Verification-status routing — consolidates pass/gaps_found/human_needed status from phase verifier-emitted VERIFICATION.md frontmatter (#651) |
 | `verify-command-router.cjs` | Thin CJS subcommand router adapter for `gsd-tools verify` |

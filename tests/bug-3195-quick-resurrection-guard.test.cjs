@@ -44,8 +44,8 @@ describe('resurrection guard drift check — quick.md vs execute-phase.md (#3195
     // resurrection detection (diff --diff-filter=D) internally. The inline
     // WAS_DELETED form has been removed — it was part of the SDK-absence fallback.
     assert.ok(
-      quickContent.includes('worktree.cleanup-wave'),
-      'quick.md must delegate to worktree.cleanup-wave for resurrection detection (#3195/#3797)'
+      quickContent.includes('workspace.parallel.fan-in'),
+      'quick.md must delegate to workspace.parallel.fan-in for resurrection detection (#3195/#3797; 19-12 re-point)'
     );
   });
 
@@ -54,16 +54,16 @@ describe('resurrection guard drift check — quick.md vs execute-phase.md (#3195
     // After #3797: execute-phase.md delegates to worktree.cleanup-wave, which handles
     // resurrection detection (diff --diff-filter=D) internally.
     assert.ok(
-      executePhaseContent.includes('worktree.cleanup-wave'),
-      'execute-phase.md must delegate to worktree.cleanup-wave for resurrection detection (#3195/#3797)'
+      executePhaseContent.includes('workspace.parallel.fan-in'),
+      'execute-phase.md must delegate to workspace.parallel.fan-in for resurrection detection (#3195/#3797; 19-12 re-point)'
     );
   });
 
   test('both workflows use the same cleanup mechanism (SDK delegation parity)', () => {
     if (!quickContent) quickContent = fs.readFileSync(QUICK_MD, 'utf-8');
     if (!executePhaseContent) executePhaseContent = fs.readFileSync(EXECUTE_PHASE_MD, 'utf-8');
-    const quickDelegates = quickContent.includes('worktree.cleanup-wave');
-    const executeDelegates = executePhaseContent.includes('worktree.cleanup-wave');
+    const quickDelegates = quickContent.includes('workspace.parallel.fan-in');
+    const executeDelegates = executePhaseContent.includes('workspace.parallel.fan-in');
     assert.strictEqual(
       quickDelegates,
       executeDelegates,

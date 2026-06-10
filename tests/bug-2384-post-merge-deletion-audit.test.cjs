@@ -32,14 +32,19 @@ const EXECUTE_PHASE = path.join(
  * rather than raw text.
  */
 function parseExecutePhaseContract(filePath) {
-  const lines = fs.readFileSync(filePath, 'utf-8').split(/\r?\n/);
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const lines = content.split(/\r?\n/);
   return {
-    // Does the workflow call the worktree.cleanup-wave SDK command?
-    delegatesToCleanupWave: lines.some(l => l.includes('worktree.cleanup-wave')),
-    // Does the cleanup-wave invocation use || exit 1 (fail-closed)?
-    cleanupWaveFailClosed: lines.some(
-      l => /gsd_run query worktree\.cleanup-wave.*\|\| exit 1/.test(l),
-    ),
+    // 19-12 (jj fork): wave merge + deletion audit are delegated to the
+    // cross-backend workspace.parallel.fan-in verb (Phase 11 rewiring;
+    // worktree.cleanup-wave is its git-substrate ancestor). The deletion
+    // audit itself moved to the per-commit `query diff --name-status`
+    // D-filter in agents/gsd-executor.md (D-06).
+    delegatesToCleanupWave: lines.some(l => l.includes('workspace.parallel.fan-in')),
+    // Fail-closed: the fan-in result guard exits 1 on conflicted/failedReaped
+    // rather than swallowing SDK refusals.
+    cleanupWaveFailClosed:
+      /\[ "\$CONFLICTED" = "true" \] \|\| \[ "\$FAILED_REAPED" -gt 0 \][\s\S]{0,200}?exit 1/.test(content),
     // Does the workflow export/reference WAVE_WORKTREE_MANIFEST for the SDK?
     passesWaveManifest: lines.some(l => l.includes('WAVE_WORKTREE_MANIFEST')),
   };
@@ -48,22 +53,23 @@ function parseExecutePhaseContract(filePath) {
 describe('execute-phase.md — post-merge deletion audit (#2384)', () => {
   const contract = parseExecutePhaseContract(EXECUTE_PHASE);
 
-  test('execute-phase delegates to worktree.cleanup-wave (which handles deletion audit)', () => {
-    // After #3797: worktree.cleanup-wave in worktree-safety.cjs performs
-    // diff --diff-filter=D checks (blocks branches with deletions) before merge.
-    // The workflow delegates to the SDK rather than duplicating the check inline.
+  test('execute-phase delegates wave merge to workspace.parallel.fan-in (which handles deletion audit)', () => {
+    // After #3797 the audit lived in worktree.cleanup-wave; the jj fork's
+    // Phase 11 rewiring (re-applied 19-08) delegates to the cross-backend
+    // workspace.parallel.fan-in verb instead, and the per-commit deletion
+    // audit lives in gsd-executor.md's `query diff --name-status` D-filter.
     assert.ok(
       contract.delegatesToCleanupWave,
-      'execute-phase.md must delegate to gsd_run query worktree.cleanup-wave (#2384/#3797)',
+      'execute-phase.md must delegate to gsd_run query workspace.parallel.fan-in (#2384/#3797; 19-12 re-point)',
     );
   });
 
-  test('execute-phase cleanup-wave uses || exit 1 (fail-closed for blocked deletions)', () => {
-    // If worktree.cleanup-wave detects deletions, it exits 1 (blocked).
-    // The || exit 1 in the workflow propagates that refusal rather than swallowing it.
+  test('execute-phase fan-in guard exits 1 (fail-closed for blocked merges)', () => {
+    // If fan-in reports conflicted or failedReaped, the workflow exits 1
+    // rather than swallowing the refusal.
     assert.ok(
       contract.cleanupWaveFailClosed,
-      'execute-phase.md must use || exit 1 so deletion-blocked cleanups surface to the orchestrator',
+      'execute-phase.md must exit 1 on conflicted/failedReaped fan-in results (#2384/#3797; 19-12 re-point)',
     );
   });
 

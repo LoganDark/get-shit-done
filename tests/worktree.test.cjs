@@ -424,9 +424,13 @@ describe('bug-2075: worktree deletion safeguards', () => {
     test('gsd-executor.md task_commit_protocol has post-commit deletion verification', () => {
       const content = fs.readFileSync(EXECUTOR_AGENT_PATH, 'utf-8');
 
+      // 19-12 re-point: the diff verb lacks --diff-filter pass-through, so
+      // the executor protocol filters the name-status output for `D` rows
+      // client-side (D-06) — accept either form.
       assert.ok(
-        content.includes('--diff-filter=D'),
-        'gsd-executor.md must include --diff-filter=D to detect accidental file deletions after each commit'
+        content.includes('--diff-filter=D')
+          || (/query diff --name-status/.test(content) && /status == "D"/.test(content)),
+        'gsd-executor.md must verify post-commit deletions (--diff-filter=D or the verb-based D-row filter)'
       );
 
       // Must have a warning about unexpected deletions
@@ -438,50 +442,34 @@ describe('bug-2075: worktree deletion safeguards', () => {
   });
 
   describe('Defense-in-depth: pre-merge deletion check (from #1977)', () => {
+    // 19-12 re-point: the "Worktree cleanup" sections retired with the
+    // manifest machinery (Phase 11 D-01). The deletion defense moved to the
+    // per-commit boundary: gsd-executor.md's post-commit deletion check runs
+    // BEFORE any fan-in, subsuming the old single pre-merge point. The
+    // workflows' part of the contract is the fan-in delegation itself.
     test('execute-phase.md worktree merge section has pre-merge deletion check', () => {
       const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
+      const executor = fs.readFileSync(EXECUTOR_AGENT_PATH, 'utf-8');
 
-      const worktreeCleanupStart = content.indexOf('Worktree cleanup');
+      const delegatesToFanIn = content.includes('workspace.parallel.fan-in');
+      const executorHasDeletionAudit =
+        /query diff --name-status/.test(executor) && /status == "D"/.test(executor);
       assert.ok(
-        worktreeCleanupStart > -1,
-        'execute-phase.md must have a worktree cleanup section'
-      );
-
-      const cleanupSection = content.slice(worktreeCleanupStart);
-
-      // After #3797 architectural fix: deletion check is handled by SDK worktree.cleanup-wave.
-      // Accept either (a) --diff-filter=D inline OR (b) SDK delegation with deletion mention.
-      const hasInlineDiffFilterCheck = cleanupSection.includes('--diff-filter=D');
-      const hasSdkDelegationWithDeletionMention = (
-        cleanupSection.includes('worktree.cleanup-wave') &&
-        (cleanupSection.includes('deletion') || cleanupSection.includes('BLOCKED'))
-      );
-      assert.ok(
-        hasInlineDiffFilterCheck || hasSdkDelegationWithDeletionMention,
-        'execute-phase.md cleanup section must either include --diff-filter=D or delegate to SDK (worktree.cleanup-wave) with documented deletion-diff validation (#2384/#3797)',
+        delegatesToFanIn && executorHasDeletionAudit,
+        'execute-phase.md must delegate merges to workspace.parallel.fan-in with the executor-level deletion audit in place (#2384/#3797; 19-12 re-point)',
       );
     });
 
     test('quick.md worktree merge section has pre-merge deletion check', () => {
       const content = fs.readFileSync(QUICK_PATH, 'utf-8');
+      const executor = fs.readFileSync(EXECUTOR_AGENT_PATH, 'utf-8');
 
-      // Find the worktree cleanup block (starts after "Worktree cleanup")
-      const worktreeCleanupStart = content.indexOf('Worktree cleanup');
-      assert.ok(
-        worktreeCleanupStart > -1,
-        'quick.md must have a worktree cleanup section'
-      );
-
-      const cleanupSection = content.slice(worktreeCleanupStart);
-
-      // After #3797 architectural fix: deletion check is handled by SDK worktree.cleanup-wave.
-      // Accept either (a) --diff-filter=D / diff-filter inline OR (b) SDK delegation with deletion mention.
       const hasInlineDiffFilterCheck = (
-        cleanupSection.includes('--diff-filter=D') || cleanupSection.includes('diff-filter')
+        content.includes('--diff-filter=D') || content.includes('diff-filter')
       );
       const hasSdkDelegationWithDeletionMention = (
-        cleanupSection.includes('worktree.cleanup-wave') &&
-        (cleanupSection.includes('deletion') || cleanupSection.includes('BLOCKED'))
+        content.includes('workspace.parallel.fan-in') &&
+        /query diff --name-status/.test(executor) && /status == "D"/.test(executor)
       );
       assert.ok(
         hasInlineDiffFilterCheck || hasSdkDelegationWithDeletionMention,
@@ -515,62 +503,71 @@ describe('bug-2431: worktree teardown must surface locked-worktree errors', () =
     assert.ok(!silentRemovePattern.test(content), 'execute-phase.md: must not contain silent git worktree remove pattern');
   });
 
+  // 19-12 re-point for the four guards below: the jj fork delegates cleanup
+  // to workspace.parallel.fan-in (Phase 11 rewiring; worktree.cleanup-wave is
+  // its git-substrate ancestor and still owns lock detection / unlock retry /
+  // residual-worktree warnings internally). The SDK-delegation disjunction
+  // therefore accepts the fan-in verb.
   test('quick.md: has lock-aware detection block', () => {
     const content = fs.readFileSync(QUICK_PATH, 'utf-8');
-    // After #3797 architectural fix: quick.md delegates entirely to SDK worktree.cleanup-wave,
-    // which handles lock detection internally. Accept either inline .git/worktrees/.../locked
-    // check OR SDK delegation (the SDK documents locked-worktree handling).
     const hasInlineLockCheck = content.includes('.git/worktrees/') && content.includes('locked');
-    const hasSdkDelegation = content.includes('worktree.cleanup-wave');
+    const hasSdkDelegation = content.includes('worktree.cleanup-wave') || content.includes('workspace.parallel.fan-in');
     assert.ok(
       hasInlineLockCheck || hasSdkDelegation,
-      'quick.md: must include lock-aware detection (.git/worktrees/.../locked check) or delegate to SDK worktree.cleanup-wave (#2431/#3797)'
+      'quick.md: must include lock-aware detection (.git/worktrees/.../locked check) or delegate to the SDK (#2431/#3797; 19-12 re-point)'
     );
   });
 
   test('execute-phase.md: has lock-aware detection block', () => {
     const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
+    const hasInlineLockCheck = content.includes('.git/worktrees/') && content.includes('locked');
+    const hasSdkDelegation = content.includes('worktree.cleanup-wave') || content.includes('workspace.parallel.fan-in');
     assert.ok(
-      content.includes('.git/worktrees/') && content.includes('locked'),
-      'execute-phase.md: must include lock-aware detection'
+      hasInlineLockCheck || hasSdkDelegation,
+      'execute-phase.md: must include lock-aware detection or delegate to the SDK (#2431/#3797; 19-12 re-point)'
     );
   });
 
   test('quick.md: has git worktree unlock retry', () => {
     const content = fs.readFileSync(QUICK_PATH, 'utf-8');
-    // After #3797 architectural fix: quick.md delegates entirely to SDK worktree.cleanup-wave.
-    // Accept either inline "git worktree unlock" OR SDK delegation.
     const hasInlineUnlock = content.includes('git worktree unlock');
-    const hasSdkDelegation = content.includes('worktree.cleanup-wave');
+    const hasSdkDelegation = content.includes('worktree.cleanup-wave') || content.includes('workspace.parallel.fan-in');
     assert.ok(
       hasInlineUnlock || hasSdkDelegation,
-      'quick.md: must include "git worktree unlock" retry attempt or delegate to SDK worktree.cleanup-wave (#2431/#3797)'
+      'quick.md: must include "git worktree unlock" retry attempt or delegate to the SDK (#2431/#3797; 19-12 re-point)'
     );
   });
 
   test('execute-phase.md: has git worktree unlock retry', () => {
     const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
-    assert.ok(content.includes('git worktree unlock'), 'execute-phase.md: must include "git worktree unlock" retry attempt');
+    const hasInlineUnlock = content.includes('git worktree unlock');
+    const hasSdkDelegation = content.includes('worktree.cleanup-wave') || content.includes('workspace.parallel.fan-in');
+    assert.ok(
+      hasInlineUnlock || hasSdkDelegation,
+      'execute-phase.md: must include "git worktree unlock" retry attempt or delegate to the SDK (#2431/#3797; 19-12 re-point)'
+    );
   });
 
   test('quick.md: has user-visible warning on residual worktree', () => {
     const content = fs.readFileSync(QUICK_PATH, 'utf-8');
-    // After #3797 architectural fix: quick.md delegates entirely to SDK worktree.cleanup-wave,
-    // which surfaces residual worktree warnings internally. Accept either inline warning
-    // OR SDK delegation.
     const hasInlineWarning = content.includes('Residual worktree') || content.includes('manual cleanup');
-    const hasSdkDelegation = content.includes('worktree.cleanup-wave');
+    // failedReaped surfacing is the fan-in form of the residual warning.
+    const hasSdkDelegation = content.includes('worktree.cleanup-wave')
+      || content.includes('Fan-in surfaced issues');
     assert.ok(
       hasInlineWarning || hasSdkDelegation,
-      'quick.md: must include user-visible warning when worktree removal fails, or delegate to SDK worktree.cleanup-wave (#2431/#3797)'
+      'quick.md: must include user-visible warning when worktree removal fails, or surface failedReaped fan-in results (#2431/#3797; 19-12 re-point)'
     );
   });
 
   test('execute-phase.md: has user-visible warning on residual worktree', () => {
     const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
+    const hasInlineWarning = content.includes('Residual worktree') || content.includes('manual cleanup');
+    const hasSdkDelegation = content.includes('worktree.cleanup-wave')
+      || content.includes('Fan-in surfaced issues');
     assert.ok(
-      content.includes('Residual worktree') || content.includes('manual cleanup'),
-      'execute-phase.md: must include user-visible warning when worktree removal fails'
+      hasInlineWarning || hasSdkDelegation,
+      'execute-phase.md: must include user-visible warning when worktree removal fails, or surface failedReaped fan-in results (#2431/#3797; 19-12 re-point)'
     );
   });
 });

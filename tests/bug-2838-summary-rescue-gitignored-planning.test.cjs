@@ -33,16 +33,19 @@ const QUICK_PATH = path.join(REPO_ROOT, 'gsd-core', 'workflows', 'quick.md');
  * Returns typed boolean fields so tests assert on structure, not raw text.
  */
 function parseWorkflowContract(filePath) {
-  const lines = fs.readFileSync(filePath, 'utf-8').split(/\r?\n/);
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const lines = content.split(/\r?\n/);
   return {
     // Non-empty check
     nonEmpty: lines.length > 0 && lines.some(l => l.length > 0),
-    // Does the workflow delegate SUMMARY rescue to worktree.cleanup-wave?
-    delegatesToCleanupWave: lines.some(l => l.includes('worktree.cleanup-wave')),
-    // Does the cleanup-wave invocation use || exit 1 (fail-closed)?
-    cleanupWaveFailClosed: lines.some(
-      l => /gsd_run query worktree\.cleanup-wave.*\|\| exit 1/.test(l),
-    ),
+    // 19-12 (jj fork): wave cleanup + SUMMARY handling are delegated to the
+    // cross-backend workspace.parallel.fan-in verb (Phase 11 rewiring,
+    // re-applied 19-08; worktree.cleanup-wave is its git-substrate ancestor).
+    delegatesToCleanupWave: lines.some(l => l.includes('workspace.parallel.fan-in')),
+    // Fail-closed: the fan-in result guard exits 1 on conflicted/failedReaped
+    // rather than swallowing SDK refusals (19-12 re-point of `|| exit 1`).
+    cleanupWaveFailClosed:
+      /\[ "\$CONFLICTED" = "true" \] \|\| \[ "\$FAILED_REAPED" -gt 0 \][\s\S]{0,200}?exit 1/.test(content),
     // Does the workflow still contain the broken ls-files --exclude-standard rescue form?
     hasBrokenLsFilesForm: lines.some(
       l => l.includes('ls-files --modified --others --exclude-standard'),

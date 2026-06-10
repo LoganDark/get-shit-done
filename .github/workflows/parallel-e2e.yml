@@ -3,14 +3,15 @@ name: Parallel E2E
 # ─────────────────────────────────────────────────────────────────────────────
 # CI-03 BOUNDARY (carried from test.yml lines 3-17):
 # GitHub Actions workflows themselves stay on git — GitHub *is* git. The jj
-# port covers the GSD CLI + SDK that USERS run locally / in workspaces; it does
+# port covers the GSD CLI/tools that USERS run locally / in workspaces; it does
 # NOT extend to the workflow runtime. The raw `git` invocations in this file's
 # own steps (actions/checkout internals, etc.) are idiomatic on the CI runner
 # and are NOT routed through the VCS adapter.
 #
 # The harness this lane runs (scripts/e2e-parallel-phase.sh) is different: it
-# routes ALL of its VCS operations through `gsd-sdk query` (D-09). The no-raw-git
-# rule governs that harness, not the GitHub Actions runtime around it.
+# routes ALL of its VCS operations through `gsd-tools query` (D-09; 19-12
+# re-point of the retired `gsd-sdk` CLI). The no-raw-git rule governs that
+# harness, not the GitHub Actions runtime around it.
 #
 # Why this is a STANDALONE file and not a job in test.yml (D-03): this lane's
 # blocking polarity is the INVERSE of test.yml's `test` job. `test` is
@@ -34,9 +35,9 @@ on:
     # the VCS adapter, the workspace-parallel CLI bridges, the workflow
     # markdown the harness/audit mirror, and the three files this lane owns.
     paths:
-      - 'sdk/src/vcs/**'
-      - 'sdk/src/query/workspace-parallel-*.ts'
-      - 'get-shit-done/workflows/**'
+      - 'src/vcs/**'
+      - 'src/vcs-command-router.cts'
+      - 'gsd-core/workflows/**'
       - 'scripts/audit-workflow-raw-git.cjs'
       - 'scripts/lint-vcs-parallel-call-presence.cjs'
       - 'scripts/lint-vcs-parallel-call-presence.allow.json'
@@ -78,11 +79,17 @@ jobs:
           # consulted by tooling in the build path.
           fetch-depth: 0
 
+      # pnpm via corepack — mirrors test.yml's de-org'd install pattern (19-04):
+      # corepack honors the package.json `packageManager: pnpm@…` pin without a
+      # third-party action entering the SHA-pinned workflow.
+      - name: Enable corepack (pnpm)
+        run: corepack enable
+
       - name: Set up Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
         with:
           node-version: 24
-          cache: 'npm'
+          cache: 'pnpm'
 
       # Install jj 0.41.0 via the official GitHub release tarball — only on
       # the jj-colocated cell. The `v0.41.0` tarball-curl block is copied
@@ -102,36 +109,40 @@ jobs:
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/jj" --version
 
+      # pnpm fork: frozen-lockfile install doubles as the dependency integrity
+      # gate (matches test.yml).
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
-      # The harness depends on the built SDK at sdk/dist/cli.js — build it
+      # The harness dispatches through gsd-core/bin/gsd-tools.cjs, which
+      # require()s the build-at-publish lib (ADR-457, gitignored) — build it
       # before the harness step runs.
-      - name: Build SDK dist
-        run: npm run build:sdk
+      - name: Build runtime lib
+        run: pnpm run build:lib
 
       # The CI-05 lane proper: run the Wave-1 harness once for this matrix
-      # cell's backend. GSD_SDK points the harness at the repo-checkout SDK
-      # (no global install — Pattern 4); GSD_E2E_BACKEND selects the cell.
+      # cell's backend. The harness resolves gsd-tools script-relative inside
+      # the checkout (GSD_TOOLS_BIN override not needed — no global install,
+      # Pattern 4); GSD_E2E_BACKEND selects the cell.
       - name: Run parallel-dispatch E2E harness
         shell: bash
         env:
           GSD_E2E_BACKEND: ${{ matrix.backend }}
-          GSD_SDK: "node $GITHUB_WORKSPACE/sdk/dist/cli.js"
         run: bash scripts/e2e-parallel-phase.sh
 
       # CI-06: the milestone-completeness regression guard. The audit carries a
-      # frozen 127-hit baseline of raw-git in workflow markdown and exits
-      # non-zero only when a scanned file's count EXCEEDS its baseline — i.e.
-      # NEW raw-git was added. A non-zero exit fails this cell.
+      # frozen baseline (machine-re-derived at 230 hits in 19-10) of raw-git in
+      # workflow markdown and exits non-zero only when a scanned file's count
+      # EXCEEDS its baseline — i.e. NEW raw-git was added. A non-zero exit
+      # fails this cell.
       - name: Audit — raw git in workflow markdown (CI-06)
         shell: bash
         run: node scripts/audit-workflow-raw-git.cjs
 
       # LINT-06 / Phase 16.01: enforce dispatch <-> fan-in pairing presence in
-      # bash/sh/zsh fences under get-shit-done/workflows/. FILE-level scope per
+      # bash/sh/zsh fences under gsd-core/workflows/. FILE-level scope per
       # D-01; default-deny + per-entry allowlist via scripts/lib/allowlist-parser.cjs.
-      # CI-only (NOT promoted to npm pretest per CF-05).
+      # CI-only (NOT promoted to pretest per CF-05).
       - name: Lint — workflow call-presence (LINT-06)
         shell: bash
         run: node scripts/lint-vcs-parallel-call-presence.cjs

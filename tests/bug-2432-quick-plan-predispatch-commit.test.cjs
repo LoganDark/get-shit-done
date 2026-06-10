@@ -64,9 +64,13 @@ describe('quick.md pre-dispatch PLAN.md commit (#2432)', () => {
       step56Block.includes('PLAN.md'),
       'Step 5.6 must reference PLAN.md in the pre-dispatch commit'
     );
+    // 19-12 re-point: the jj fork commits through the adapter bridge
+    // (`gsd_run query commit ... --files <PLAN.md>` captures WC state for the
+    // named files internally) instead of raw git add/commit.
     assert.ok(
-      step56Block.includes('git add') || step56Block.includes('git commit'),
-      'Step 5.6 must include git add/commit to stage and commit PLAN.md'
+      step56Block.includes('git add') || step56Block.includes('git commit')
+        || /gsd_run query commit [\s\S]*?--files/.test(step56Block),
+      'Step 5.6 must stage and commit PLAN.md (raw git or adapter-bridge commit form)'
     );
   });
 

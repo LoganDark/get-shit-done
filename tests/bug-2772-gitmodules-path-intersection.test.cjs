@@ -453,9 +453,11 @@ describe('quick.md executor pre-commit submodule guard (#2772)', () => {
   test('quick.md executor prompt contains a fail-loud pre-commit guard with ABORT message', () => {
     const md = fs.readFileSync(quickPath, 'utf-8');
     assert.match(md, /<submodule_commit_guard>/, 'guard block must exist');
+    // 19-12 re-point: the jj fork's guard inspects staged paths through the
+    // adapter (`gsd_run query diff --cached --name-only`) instead of raw git.
     assert.match(
       md,
-      /git diff --cached --name-only/,
+      /(?:git|gsd_run query) diff --cached --name-only/,
       'guard must inspect staged paths before commit'
     );
     assert.match(

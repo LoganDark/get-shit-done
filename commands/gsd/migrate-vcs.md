@@ -1,6 +1,6 @@
 ---
 name: gsd:migrate-vcs
-description: "Bidirectional VCS migration. Rewrites .planning/ between git SHAs and jj change_ids in a single atomic commit and flips vcs.adapter to match."
+description: "Bidirectional VCS migration: rewrites .planning/ revision ids and flips vcs.adapter atomically."
 argument-hint: "[--target jj|git] [--native] [--force]"
 allowed-tools:
   - Read

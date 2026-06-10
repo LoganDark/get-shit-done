@@ -124,6 +124,8 @@ export const CLUSTERS: ClusterMap = Object.freeze({
     'import',
     'manager',
     'map-codebase',
+    // 19-12: the jj fork's VCS migration boundary (/gsd:migrate-vcs).
+    'migrate-vcs',
     'profile-user',
     'spec-phase',
     'ultraplan-phase',

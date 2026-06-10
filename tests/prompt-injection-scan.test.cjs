@@ -51,6 +51,11 @@ const SCAN_EXTS = new Set(['.md', '.cjs', '.js', '.json']);
 // or exceed the 50K size threshold due to legitimate workflow complexity
 const ALLOWLIST = new Set([
   'gsd-core/bin/lib/security.cjs',        // The security module itself
+  // 19-12 (deferred item #2): emitted from src/vcs/format-migration/planning-shim.cts —
+  // sanitizeCommitMessage carries the injection-pattern regex literals as its own
+  // detection corpus (same self-reference class as security.cjs). Gitignored build
+  // output; present whenever build:lib has run.
+  'gsd-core/bin/lib/vcs/format-migration/planning-shim.cjs',
   'gsd-core/workflows/discuss-phase.md',  // Large workflow (~50K) with power mode + i18n
   'gsd-core/workflows/new-project.md',     // Large workflow (~50K) — agent install, runtime detect, brownfield map, #3491 worktree gating
   'gsd-core/workflows/execute-phase.md',  // Large orchestration workflow (~51K) with wave execution + code-review gate

@@ -167,7 +167,7 @@ Emit this warning to stderr (or the equivalent workflow-output channel) exactly 
 
 > This fork of GSD exists for jj support. An effort was made to preserve existing git support as much as possible, but there may be new bugs that do not exist upstream. Complex workflows may exhibit unusual behavior.
 
-The 12-row matrix above is exhaustive — every `(has_git, has_jj) × {none, --git, --jj}` cell is explicit, with no `(any)` wildcards. There are two abort paths (both no-flag cases where the project's VCS intent is ambiguous), one fork-specific default (jj wins whenever `.jj/` is present), and one always-available escape hatch (`--git` is honored in every cell, always with the git-warning). This preserves the ROADMAP SC #1 / #7 anchor — no silent `git init` fallback, and the migration boundary (`/gsd-migrate-vcs`) remains invisible-default-free. Upstream's #3491 never-nest guard rides the two init-running cells via `in_nested_subdir` / `git_worktree_root` from init JSON.
+The 12-row matrix above is exhaustive — every `(has_git, has_jj) × {none, --git, --jj}` cell is explicit, with no `(any)` wildcards. There are two abort paths (both no-flag cases where the project's VCS intent is ambiguous), one fork-specific default (jj wins whenever `.jj/` is present), and one always-available escape hatch (`--git` is honored in every cell, always with the git-warning). This preserves the ROADMAP SC #1 / #7 anchor — no silent `git init` fallback, and the migration boundary (`/gsd:migrate-vcs`) remains invisible-default-free. Upstream's #3491 never-nest guard rides the two init-running cells via `in_nested_subdir` / `git_worktree_root` from init JSON.
 
 ## 2. Brownfield Offer
 

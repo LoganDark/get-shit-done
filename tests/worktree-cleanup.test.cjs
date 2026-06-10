@@ -333,28 +333,28 @@ describe('bug #2924: worktree HEAD attachment + destructive recovery', () => {
   describe('quick.md pre-dispatch plan commit no longer hard-codes --no-verify', () => {
     const content = fs.readFileSync(QUICK_PATH, 'utf-8');
     const codeBlocks = extractFencedCodeBlocks(content);
-    // Find the bash block containing the pre-dispatch plan commit
+    // 19-12 re-point: the jj fork's Step 5.6 commits via the adapter bridge
+    // (`gsd_run query commit ... --files <PLAN.md>`), not raw `git commit`.
     const target = codeBlocks.find(({ body }) =>
-      body.includes('pre-dispatch plan') && body.includes('git commit')
+      body.includes('pre-dispatch plan') &&
+      (body.includes('git commit') || body.includes('query commit'))
     );
     test('pre-dispatch plan commit block exists', () => {
       assert.ok(target, 'quick.md must contain the pre-dispatch plan commit block');
     });
 
     test('pre-dispatch plan commit gates --no-verify behind a config flag', () => {
-      // The block must contain BOTH a `git commit` without --no-verify AND
-      // gate any --no-verify variant inside an `if` block reading a config
-      // value (workflow.worktree_skip_hooks).
-      const statements = shellStatements(target.body);
-      const noVerifyCommits = statements.filter((cmd) =>
-        cmd[0] === 'git' && cmd[1] === 'commit' && cmd.includes('--no-verify')
-      );
-      const cleanCommits = statements.filter((cmd) =>
-        cmd[0] === 'git' && cmd[1] === 'commit' && !cmd.includes('--no-verify')
-      );
+      // The block must contain BOTH a commit invocation without --no-verify
+      // (the default, hook-firing path) AND gate any --no-verify variant
+      // behind the workflow.worktree_skip_hooks config flag.
+      const commitLines = target.body
+        .split('\n')
+        .filter((l) => /(?:^|\s)(?:git commit|gsd_run query commit)\b/.test(l));
+      const noVerifyCommits = commitLines.filter((l) => l.includes('--no-verify'));
+      const cleanCommits = commitLines.filter((l) => !l.includes('--no-verify'));
       assert.ok(
         cleanCommits.length >= 1,
-        'must include at least one `git commit` without --no-verify (default path)'
+        'must include at least one commit invocation without --no-verify (default path)'
       );
       // If --no-verify still appears, the block must reference the opt-in flag.
       if (noVerifyCommits.length > 0) {
@@ -401,13 +401,21 @@ describe('bug #2924: worktree HEAD attachment + destructive recovery', () => {
       assert.ok(block, 'gsd-executor.md must contain a <task_commit_protocol> block');
     });
 
-    test('step 0 enforces positive worktree-agent-* allow-list (#2924 hardening)', () => {
+    test('step 0 enforces the dispatched-cwd assertion (#2924 hardening; 19-12 re-point)', () => {
+      // 19-12 re-point: the jj fork's Phase 11 P04 collapsed the four
+      // worktree-aware guards (incl. the ^worktree-agent-* allow-list grep)
+      // into the single backend-opaque `workspace.assert-dispatched-cwd`
+      // verb call, which verifies the agent sits in a dispatched subagent
+      // workspace (not the primary, not a protected-ref-attached HEAD).
       const codeBlocks = extractFencedCodeBlocks(block);
       const scripts = codeBlocks.map(({ body }) => body).join('\n');
-      const allowListRe = /grep\s+-Eq?\s+'\^worktree-agent-/;
       assert.ok(
-        allowListRe.test(scripts),
-        'task_commit_protocol step 0 must enforce a positive allow-list matching ^worktree-agent-* in addition to the protected-ref deny-list (#2924 hardening)'
+        scripts.includes('workspace.assert-dispatched-cwd'),
+        'task_commit_protocol step 0 must run the workspace.assert-dispatched-cwd precondition (#2924 hardening; 19-12 re-point)'
+      );
+      assert.ok(
+        /isPrimary/.test(scripts),
+        'step 0 must fail when the cwd resolves to the primary workspace (isPrimary guard)'
       );
     });
   });
@@ -475,14 +483,13 @@ describe('worktree cleanup after executor completes (#1496)', () => {
   const executePhasePath = path.join(__dirname, '..', 'gsd-core', 'workflows', 'execute-phase.md');
   const quickPath = path.join(__dirname, '..', 'gsd-core', 'workflows', 'quick.md');
 
-  test('execute-phase.md includes worktree cleanup step', () => {
+  test('execute-phase.md includes workspace fan-in (cleanup) step', () => {
+    // 19-12 re-point: cleanup is delegated to the cross-backend
+    // workspace.parallel.fan-in verb (Phase 11 rewiring), whose backends own
+    // `git worktree remove`/`git branch -D` (git) and workspace reap (jj).
     const content = fs.readFileSync(executePhasePath, 'utf8');
-    assert.ok(content.includes('Worktree cleanup'),
-      'execute-phase should have a worktree cleanup step');
-    assert.ok(content.includes('git worktree remove'),
-      'cleanup should remove worktrees');
-    assert.ok(content.includes('git branch -D'),
-      'cleanup should delete temporary branches');
+    assert.ok(content.includes('workspace.parallel.fan-in'),
+      'execute-phase should delegate post-wave cleanup to workspace.parallel.fan-in (19-12 re-point)');
   });
 
   test('execute-phase.md merges worktree branch before removing', () => {
@@ -505,27 +512,25 @@ describe('worktree cleanup after executor completes (#1496)', () => {
       'cleanup should respect workflow.use_worktrees config');
   });
 
-  test('quick.md includes worktree cleanup after executor returns', () => {
+  test('quick.md includes workspace fan-in after executor returns', () => {
     const content = fs.readFileSync(quickPath, 'utf8');
-    assert.ok(content.includes('Worktree cleanup') || content.includes('worktree cleanup'),
-      'quick should have worktree cleanup');
-    // After #3797 architectural fix: quick.md delegates entirely to the SDK's
-    // worktree.cleanup-wave command (which handles git worktree remove and branch
-    // deletion internally). The manual shell cleanup loop has been removed.
+    // 19-12 re-point: after #3797 quick.md delegated to worktree.cleanup-wave;
+    // the jj fork's Phase 11 rewiring delegates to workspace.parallel.fan-in,
+    // which handles merge-back + workspace removal internally.
     assert.ok(
-      content.includes('worktree.cleanup-wave'),
-      'quick cleanup must delegate to gsd_run query worktree.cleanup-wave (#3797)',
+      content.includes('Workspace fan-in') || content.includes('workspace.parallel.fan-in'),
+      'quick cleanup must delegate to gsd_run query workspace.parallel.fan-in (#3797; 19-12 re-point)',
     );
   });
 
-  test('quick.md cleanup-wave uses || exit 1 to enforce safety semantics', () => {
+  test('quick.md fan-in guard exits 1 to enforce safety semantics', () => {
     const content = fs.readFileSync(quickPath, 'utf8');
-    // The || exit 1 guards against SDK safety refusals (#3174/#3384).
-    // A soft || { warn } fallback would silently swallow blocked cleanups.
+    // Fail-closed: conflicted/failedReaped fan-in results exit 1 rather than
+    // being swallowed (19-12 re-point of the cleanup-wave `|| exit 1`).
     assert.match(
       content,
-      /gsd_run query worktree\.cleanup-wave.*\|\| exit 1/,
-      'quick.md cleanup-wave must use || exit 1 — SDK safety refusals must surface (#3797)',
+      /\[ "\$CONFLICTED" = "true" \] \|\| \[ "\$FAILED_REAPED" -gt 0 \][\s\S]{0,200}?exit 1/,
+      'quick.md fan-in must exit 1 on conflicted/failedReaped — SDK safety refusals must surface (#3797; 19-12 re-point)',
     );
   });
 
@@ -544,26 +549,32 @@ describe('worktree merge: orchestrator file protection (#1756)', () => {
   // backup and restore internally). The manual shell backup loop has been removed.
   // The workflow contracts now verify SDK delegation rather than inline backup code.
 
-  test('execute-phase.md delegates wave cleanup to SDK with fail-closed || exit 1', () => {
+  test('execute-phase.md delegates wave cleanup to SDK with a fail-closed result guard', () => {
     const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
-    // worktree.cleanup-wave handles STATE.md/ROADMAP.md backup + restore internally.
+    // 19-12 re-point: workspace.parallel.fan-in handles merge-back + workspace
+    // cleanup internally; the result guard exits 1 on conflicted/failedReaped.
     assert.match(
       content,
-      /gsd_run query worktree\.cleanup-wave --manifest "\$WAVE_WORKTREE_MANIFEST" \|\| exit 1/,
-      'execute-phase.md must delegate to gsd_run query worktree.cleanup-wave with || exit 1 (#3797)',
+      /gsd_run query workspace\.parallel\.fan-in --handle/,
+      'execute-phase.md must delegate to gsd_run query workspace.parallel.fan-in (#3797; 19-12 re-point)',
+    );
+    assert.match(
+      content,
+      /\[ "\$CONFLICTED" = "true" \] \|\| \[ "\$FAILED_REAPED" -gt 0 \][\s\S]{0,200}?exit 1/,
+      'execute-phase.md fan-in result guard must exit 1 (fail-closed) (#3797; 19-12 re-point)',
     );
   });
 
-  test('execute-phase.md cleanup-tail snippet still backs up STATE.md for custom deviations', () => {
+  test('execute-phase.md documents the conflicted-fan-in recovery path for custom deviations', () => {
     const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
-    // The cleanup-tail snippet (for deviations from the standard wave merge path)
-    // uses git worktree remove directly — it doesn't use the SDK helper.
-    // This snippet doesn't need STATE.md backup because it only removes worktrees
-    // that were already manually merged — not performing merges itself.
+    // 19-12 re-point: the git-worktree cleanup-tail snippet retired with the
+    // manifest machinery (Phase 11 D-01); deviations now surface through the
+    // fan-in result envelope (conflicted/failedReaped) which the workflow
+    // surfaces to the operator instead of silently cleaning up.
     assert.match(
       content,
-      /Cleanup-tail: remove residual agent worktrees after a cross-wave-dependency deviation/,
-      'execute-phase.md must contain the cleanup-tail snippet for custom merge deviations',
+      /Fan-in surfaced issues \(conflicted=\$CONFLICTED, failedReaped=\$FAILED_REAPED\)/,
+      'execute-phase.md must surface conflicted/failedReaped fan-in results for manual recovery (19-12 re-point)',
     );
   });
 
@@ -578,14 +589,15 @@ describe('worktree merge: orchestrator file protection (#1756)', () => {
       'execute-phase must use WAVE_WORKTREE_MANIFEST to scope cleanup (#3384)');
   });
 
-  test('quick.md delegates wave cleanup to SDK with fail-closed || exit 1', () => {
+  test('quick.md delegates wave cleanup to SDK with a fail-closed result guard', () => {
     const content = fs.readFileSync(QUICK_PATH, 'utf-8');
-    // After #3797 architectural fix: quick.md no longer contains inline STATE.md/ROADMAP.md
-    // backup code — that is handled internally by worktree.cleanup-wave.
+    // 19-12 re-point: quick.md delegates to workspace.parallel.fan-in (no
+    // manifest file exists; the Handle JSON is the envelope) and exits 1 on
+    // conflicted/failedReaped results.
     assert.match(
       content,
-      /gsd_run query worktree\.cleanup-wave --manifest "\$QUICK_WORKTREE_MANIFEST" \|\| exit 1/,
-      'quick.md must delegate to gsd_run query worktree.cleanup-wave with || exit 1 (#3797)',
+      /gsd_run query workspace\.parallel\.fan-in --handle/,
+      'quick.md must delegate to gsd_run query workspace.parallel.fan-in (#3797; 19-12 re-point)',
     );
   });
 });
@@ -613,31 +625,31 @@ describe('worktree commit safety hardening (#1977)', () => {
   });
 
   test('gsd-executor.md task_commit_protocol includes post-commit deletion verification', () => {
+    // 19-12 re-point: the diff verb does not expose --diff-filter pass-through
+    // yet, so the executor protocol filters the name-status output for `D`
+    // rows client-side (D-06) and WARNs on unexpected deletions.
     const content = fs.readFileSync(EXECUTOR_AGENT_PATH, 'utf-8');
-    assert.ok(content.includes('--diff-filter=D'), 'must include --diff-filter=D deletion verification');
+    assert.ok(
+      content.includes('--diff-filter=D')
+        || (/query diff --name-status/.test(content) && /status == "D"/.test(content)),
+      'must include post-commit deletion verification (--diff-filter=D or the verb-based D-row filter)'
+    );
     assert.ok(
       content.includes('WARNING') || content.includes('DELETIONS'),
       'must warn when a commit includes file deletions'
     );
   });
 
-  test('execute-phase.md worktree merge section includes pre-merge deletion check', () => {
-    const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf-8');
-    const worktreeCleanupStart = content.indexOf('Worktree cleanup');
-    assert.ok(worktreeCleanupStart > -1, 'must have a worktree cleanup section');
-    const cleanupSection = content.slice(worktreeCleanupStart);
-    // After #3797: deletion check is handled by SDK worktree.cleanup-wave.
-    // The cleanup section must either (a) include --diff-filter=D directly or
-    // (b) delegate to the SDK which documents that it validates deletion diffs.
-    // Accept either form: inline shell check OR SDK delegation with deletion mention.
-    const hasInlineDiffFilterCheck = cleanupSection.includes('--diff-filter=D');
-    const hasSdkDelegationWithDeletionMention = (
-      cleanupSection.includes('worktree.cleanup-wave') &&
-      (cleanupSection.includes('deletion') || cleanupSection.includes('BLOCKED'))
-    );
+  test('post-merge deletion audit lives at the executor commit boundary (19-12 re-point)', () => {
+    // 19-12 re-point: the pre-merge deletion check of the retired worktree
+    // cleanup section moved to the per-commit deletion audit in
+    // agents/gsd-executor.md (step 6 of task_commit_protocol) — every commit
+    // is checked before fan-in ever runs, which subsumes the old pre-merge
+    // single point.
+    const executor = fs.readFileSync(EXECUTOR_AGENT_PATH, 'utf-8');
     assert.ok(
-      hasInlineDiffFilterCheck || hasSdkDelegationWithDeletionMention,
-      'cleanup section must either include --diff-filter=D directly or delegate to SDK (worktree.cleanup-wave) with documented deletion-diff validation (#2384/#3797)',
+      /Post-commit deletion check/.test(executor),
+      'gsd-executor.md must document the post-commit deletion check (#2384/#3797; 19-12 re-point)',
     );
   });
 });
@@ -673,28 +685,25 @@ describe('worktree sequential dispatch', () => {
 // ─── #3384: cleanup manifest workflow contracts ──────────────────────────────
 
 describe('bug #3384: worktree cleanup workflow contracts', () => {
-    test('execute-phase contract requires a cleanup manifest instead of global worktree discovery', () => {
+  // 19-12 re-point: Phase 11 D-01 retired the manifest files; the #3384
+  // anti-broad-discovery contract rides the dispatch envelope — the Handle
+  // JSON is the only workspace-set source of truth, consumed directly by
+  // workspace.parallel.fan-in. Both workflows document the re-expression and
+  // neither performs global worktree discovery in cleanup.
+  test('execute-phase contract scopes cleanup to the dispatch envelope instead of global worktree discovery', () => {
     const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf8');
-    assert.match(content, /WAVE_WORKTREE_MANIFEST/);
-    assert.match(content, /worktree\.cleanup-wave/);
-    assert.match(content, /atomically append `\{agent_id, worktree_path, branch, expected_base\}`/);
-    assert.match(content, /try\{if\(!p\)throw new Error\("WAVE_WORKTREE_MANIFEST is unset"\)/);
-    assert.match(content, /WT_PATHS_FILE=.*gsd-worktree-paths-/);
+    assert.match(content, /\$HANDLE_JSON/);
+    assert.match(content, /workspace\.parallel\.fan-in/);
+    assert.match(content, /#3384/);
     assert.doesNotMatch(content, /done < <\(node -e 'const fs=require\("fs"\);const p=process\.env\.WAVE_WORKTREE_MANIFEST/);
     assert.doesNotMatch(content, /done < <\(git worktree list --porcelain \| grep "\^worktree " \| grep "\\\.claude\/worktrees\/agent-"/);
   });
 
-  test('quick contract requires a cleanup manifest instead of global worktree discovery', () => {
+  test('quick contract scopes cleanup to the dispatch envelope instead of global worktree discovery', () => {
     const content = fs.readFileSync(QUICK_PATH, 'utf8');
-    assert.match(content, /WAVE_WORKTREE_MANIFEST|QUICK_WORKTREE_MANIFEST/);
-    assert.match(content, /worktree\.cleanup-wave/);
-    assert.match(content, /mktemp "\$\{TMPDIR:-\/tmp\}\/gsd-quick-worktree-/);
-    assert.match(content, /append its returned `\{agent_id, worktree_path, branch, expected_base\}`/);
-    // After #3797 architectural fix: quick.md delegates entirely to the SDK's cleanup-wave
-    // command (which handles manifest parsing internally). The shell fallback with manual
-    // QUICK_WORKTREE_MANIFEST node-e code is removed — the gsd_run call with || exit 1 is the
-    // only cleanup path, enforcing safety-refusal semantics (#3174/#3384).
-    assert.match(content, /gsd_run query worktree\.cleanup-wave --manifest "\$QUICK_WORKTREE_MANIFEST" \|\| exit 1/);
+    assert.match(content, /\$HANDLE_JSON/);
+    assert.match(content, /workspace\.parallel\.fan-in/);
+    assert.match(content, /#3384/);
     assert.doesNotMatch(content, /done < <\(node -e 'const fs=require\("fs"\);const p=process\.env\.QUICK_WORKTREE_MANIFEST/);
     assert.doesNotMatch(content, /done < <\(git worktree list --porcelain \| grep "\^worktree " \| grep "\\\.claude\/worktrees\/agent-"/);
   });
@@ -703,29 +712,23 @@ describe('bug #3384: worktree cleanup workflow contracts', () => {
 
 // ─── #3425: CWD pin before cleanup ──────────────────────────────────────────
 
-test('#3425: helper cleanup path pins orchestrator CWD to primary worktree and checks EXPECTED_BRANCH', () => {
+test('#3425: pre-fan-in drift guard pins the orchestrator to its expected branch (19-12 re-point)', () => {
+  // 19-12 re-point: the manifest-based PRIMARY_WT pin retired with the
+  // manifest machinery (Phase 11 D-01). The surviving #3425/#3174 invariant —
+  // "the orchestrator must be on its own expected branch before any
+  // merge-back" — is the EXPECTED_BRANCH FATAL check immediately before
+  // workspace.parallel.fan-in.
   const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf8');
-
-  // #630: the orchestrator root is now resolved from the manifest's orchestrator_root; the
-  // git-worktree-list first entry survives only as a guarded fallback for pre-#630 manifests.
-  assert.match(content, /PRIMARY_WT=\$\(MANIFEST="\$WAVE_WORKTREE_MANIFEST" node -e '[^']*orchestrator_root[^']*'\)/);
-  assert.match(content, /\[ -n "\$PRIMARY_WT" \] \|\| PRIMARY_WT=\$\(git worktree list --porcelain \| awk '\/\^worktree \/\{print substr\(\$0,10\); exit\}'\)/);
-  assert.match(content, /if \[ -z "\$PRIMARY_WT" \]; then\s+echo "FATAL: could not resolve orchestrator worktree before cleanup" >&2\s+exit 1\s+fi/);
-  assert.match(content, /cd "\$PRIMARY_WT" \|\| \{ echo "FATAL: cannot cd to primary worktree \$PRIMARY_WT" >&2; exit 1; \}/);
-  assert.match(content, /ORCH_BRANCH=\$\(git rev-parse --abbrev-ref HEAD\)/);
-  assert.match(content, /FATAL: orchestrator on '\$ORCH_BRANCH' but expected '\$EXPECTED_BRANCH' before worktree cleanup — refusing to merge \(#3174-class drift\)/);
-  // After #3797 architectural fix, callsites use gsd_run
-  assert.match(content, /gsd_run query worktree\.cleanup-wave --manifest "\$WAVE_WORKTREE_MANIFEST"/);
+  assert.match(content, /EXPECTED_BRANCH=\$\(gsd_run query current-branch/);
+  assert.match(
+    content,
+    /FATAL: orchestrator on '\$ORCH_BRANCH' but expected '\$EXPECTED_BRANCH' before fan-in \(#3174-class drift\)/,
+  );
 });
 
-test('#3425: cleanup-tail snippet carries the same primary-worktree pin before removal', () => {
-  const content = fs.readFileSync(EXECUTE_PHASE_PATH, 'utf8');
-
-  assert.match(content, /Cleanup-tail: pin orchestrator CWD to its OWN worktree before cleanup-tail \(#3174, #630\)\./);
-  // #630: cleanup-tail resolves the orchestrator root from the manifest, with first-entry fallback.
-  assert.match(content, /PRIMARY_WT=\$\(MANIFEST="\$WAVE_WORKTREE_MANIFEST" node -e '[^']*orchestrator_root[^']*'\)/);
-  assert.match(content, /FATAL: cannot cd to primary worktree \$PRIMARY_WT/);
-  assert.match(content, /# Cleanup-tail: remove residual agent worktrees after a cross-wave-dependency deviation\./);
+test('#3425: quick.md carries the same pre-fan-in drift guard (19-12 re-point)', () => {
+  const content = fs.readFileSync(QUICK_PATH, 'utf8');
+  assert.match(content, /EXPECTED_BRANCH=\$\(gsd_run query current-branch/);
 });
 
 describe('bug #48: orchestrator cwd-drift guard at execute_waves entry', () => {

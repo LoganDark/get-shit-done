@@ -38,12 +38,13 @@ describe('execute-phase.md — resurrection-detection guard (#2501)', () => {
 
   test('cleanup delegates to SDK (handles resurrection detection internally)', () => {
     if (!content) content = fs.readFileSync(EXECUTE_PHASE, 'utf-8');
-    // After #3797: execute-phase.md delegates to worktree.cleanup-wave, which
-    // handles pre-merge deletion checks internally. The SDK checks diff --diff-filter=D
-    // before merging, blocking branches that contain file deletions (#2384/#2501).
+    // After #3797: execute-phase.md delegated to worktree.cleanup-wave; the jj
+    // fork's Phase 11 rewiring (re-applied 19-08) delegates to the cross-backend
+    // workspace.parallel.fan-in verb, whose merge machinery owns resurrection /
+    // deletion handling (19-12 re-point).
     assert.ok(
-      content.includes('worktree.cleanup-wave'),
-      'execute-phase.md must delegate to worktree.cleanup-wave (#2501/#3797)',
+      content.includes('workspace.parallel.fan-in'),
+      'execute-phase.md must delegate to workspace.parallel.fan-in (#2501/#3797; 19-12 re-point)',
     );
   });
 

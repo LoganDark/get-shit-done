@@ -140,6 +140,14 @@ Parse JSON for: `planner_model`, `executor_model`, `checker_model`, `verifier_mo
 USE_WORKTREES=$(gsd_run query config-get workflow.use_worktrees 2>/dev/null || echo "true")
 ```
 
+If `USE_WORKTREES` is not `"false"`, run a startup orphan sweep before spawning any executors. This reaps locked worktrees whose lock-owner process is dead, whose branch is merged into the default branch, and whose lock file mtime is older than 5 minutes. Running it at startup prevents accumulation of orphaned worktrees from prior sessions that exited without cleanup (#3707). (19-12: restored — the Phase 11 dispatch rewiring accidentally dropped this sweep from quick.md while execute-phase.md kept it; the verb is git-substrate and no-ops gracefully on jj-native repos.)
+
+```bash
+if [ "$USE_WORKTREES" != "false" ]; then
+  gsd_run query worktree.reap-orphans 2>/dev/null || true
+fi
+```
+
 If the project uses git submodules, worktree isolation is unsafe **only when the quick task touches a submodule path**. The previous behavior unconditionally disabled worktree isolation whenever `.gitmodules` existed, which penalised every quick task in a submodule project even when the task was nowhere near a submodule. Parse submodule paths from `.gitmodules` so the executor can act on actual submodule paths rather than the mere file's existence:
 
 ```bash
@@ -698,7 +706,7 @@ ${EXPECTED_BASE}) is superseded on the dispatch path by the executor-side
 \`workspace.assert-dispatched-cwd\` precondition — the dispatch envelope binds this
 workspace to \`baseRev\` at creation, and the executor's first commit asserts its cwd
 IS a dispatched subagent workspace (FATAL, never self-recovers via \`git update-ref\`;
-same verify-only contract as the fragment's exit-42). The git-only fragment remains at
+same verify-only behavior as the fragment's exit-42). The git-only fragment remains at
 \`gsd-core/references/worktree-branch-check.md\` for non-dispatched worktree flows.
 </worktree_branch_check>
 ` : ''}
@@ -980,10 +988,9 @@ Build file list:
 
 ```bash
 # gsd_run query commit captures WC state for the supplied --files internally
-# (the handler runs `vcs.commit({files})` which does `git add -A -- <files>`
-# then `git commit -m` on git; direct WC record on jj). The pre-staging
-# `git add` is no longer needed. Filter .planning/ files from the file list
-# if commit_docs is disabled (#1783).
+# (the handler runs `vcs.commit({files})`, staging `-A -- <files>` before the
+# commit on git; direct WC record on jj). No pre-staging step is needed.
+# Filter .planning/ files from the file list if commit_docs is disabled (#1783).
 COMMIT_DOCS=$(gsd_run query config-get commit_docs 2>/dev/null || echo "true")
 if [ "$COMMIT_DOCS" = "false" ]; then
   file_list_filtered=$(echo "${file_list}" | tr ' ' '\n' | grep -v '^\.planning/' | tr '\n' ' ')

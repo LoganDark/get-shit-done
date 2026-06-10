@@ -134,7 +134,10 @@ const PROFILES = [
     description:
       'Synthesizes research outputs from parallel researcher agents into SUMMARY.md. Spawned by /gsd:new-project after 4 researcher agents complete.',
     color: 'purple',
-    tools: 'Read, Write, Bash',
+    // 19-12 re-baseline: Edit added in the 19-04 bucket-G reconciliation — the
+    // fork's blocked-Write guarantee grafts the rule-7 pre-seeded-file Edit
+    // path (upstream #222 truncation-only fallback does not cover it).
+    tools: 'Read, Write, Edit, Bash',
     requiredIncludes: [],
     requiredSeamCalls: [
       'gsd-tools query commit',

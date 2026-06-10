@@ -1,13 +1,17 @@
 // allow-test-rule: source-text-is-the-product
 // The workflow .md file is the installed AI contract — its text IS what the orchestrator
 // executes at runtime. Testing structural content of step 5.5 guards against accidental
-// deletion of the cross-wave-deviation cleanup documentation (#3264).
+// deletion of the wave-merge documentation (#3264).
 
 /**
- * Regression tests for #3264: cross-wave-dependency deviation cleanup documentation
+ * Regression tests for #3264 (19-12 re-point): step 5.5 wave-merge documentation
  *
- * Guards that step 5.5 of execute-phase.md documents both skip conditions and
- * contains a self-contained cleanup-tail snippet for the deviation path.
+ * The jj fork's Phase 11 rewiring (re-applied 19-08) replaced the git-worktree
+ * cleanup-tail snippet with the cross-backend workspace.parallel.fan-in step.
+ * The #3264 intent — "step 5.5 documents its skip conditions and its cleanup
+ * machinery; neither may be accidentally deleted" — is preserved against the
+ * NEW structure: fan-in invocation, fail-closed result guard, the explicit
+ * skip-condition list, and the #630/#3384 envelope re-expression note.
  */
 
 const { describe, test } = require('node:test');
@@ -58,103 +62,80 @@ describe('execute-phase step 5.5: cross-wave-deviation cleanup documentation (#3
     assert.ok(block.length > 0, 'step 5.5 block must be non-empty');
   });
 
-  test('step 5.5 documents the standard wave contract', () => {
+  test('step 5.5 documents the standard wave-merge contract (fan-in before next wave)', () => {
     const content = readWorkflow();
     const block = extractStep55Block(content);
     assert.ok(
-      block.includes('Standard wave contract'),
-      'step 5.5 must name the standard wave contract explicitly',
+      block.includes('Workspace fan-in'),
+      'step 5.5 must name the workspace fan-in step explicitly (19-12 re-point of the standard wave contract)',
+    );
+    assert.ok(
+      block.includes('workspace.parallel.fan-in') || block.includes('workspace.parallel.fanIn'),
+      'step 5.5 must delegate the wave merge to the workspace.parallel fan-in verb',
     );
   });
 
-  test('step 5.5 names cross-wave dependency deviation as a supported execution mode', () => {
+  test('step 5.5 carries the fail-closed fan-in result guard', () => {
+    const content = readWorkflow();
+    const block = extractStep55Block(content);
+    assert.match(
+      block,
+      /\[ "\$CONFLICTED" = "true" \] \|\| \[ "\$FAILED_REAPED" -gt 0 \][\s\S]{0,200}?exit 1/,
+      'step 5.5 must exit 1 on conflicted/failedReaped fan-in results',
+    );
+  });
+
+  test('step 5.5 carries the pre-fan-in branch-drift guard (#3174-class)', () => {
     const content = readWorkflow();
     const block = extractStep55Block(content);
     assert.ok(
-      block.includes('Cross-wave dependency deviation'),
-      'step 5.5 must name the cross-wave dependency deviation as a supported mode',
+      block.includes('#3174-class drift'),
+      'step 5.5 must FATAL on orchestrator branch drift before fan-in',
     );
   });
 
-  test('cleanup-tail snippet contains git worktree prune', () => {
+  test('skip conditions enumerate the no-isolation case (empty WAVE_WORKTREE_PLANS)', () => {
     const content = readWorkflow();
     const block = extractStep55Block(content);
     assert.ok(
-      block.includes('git worktree prune'),
-      'step 5.5 cleanup-tail snippet must include git worktree prune',
+      block.includes('When to skip step 5.5'),
+      'step 5.5 must document its skip conditions explicitly',
     );
-  });
-
-  test('cleanup-tail snippet contains git worktree remove --force', () => {
-    const content = readWorkflow();
-    const block = extractStep55Block(content);
-    assert.ok(
-      block.includes('git worktree remove') && block.includes('--force'),
-      'step 5.5 cleanup-tail snippet must include git worktree remove --force',
-    );
-  });
-
-  test('cleanup-tail snippet contains git worktree unlock', () => {
-    const content = readWorkflow();
-    const block = extractStep55Block(content);
-    assert.ok(
-      block.includes('git worktree unlock'),
-      'step 5.5 cleanup-tail snippet must include git worktree unlock',
-    );
-  });
-
-  test('cleanup-tail snippet contains git branch -D', () => {
-    const content = readWorkflow();
-    const block = extractStep55Block(content);
-    assert.ok(
-      block.includes('git branch -D'),
-      'step 5.5 cleanup-tail snippet must include git branch -D',
-    );
-  });
-
-  test('skip conditions enumerate empty-WAVE_WORKTREE_PLANS case', () => {
-    const content = readWorkflow();
-    const block = extractStep55Block(content);
     assert.ok(
       block.includes('WAVE_WORKTREE_PLANS'),
       'step 5.5 must document the empty-WAVE_WORKTREE_PLANS skip condition',
     );
   });
 
-  test('skip conditions enumerate custom-merge-deviation case', () => {
-    const content = readWorkflow();
-    const block = extractStep55Block(content);
-    // The deviation skip condition must reference the cleanup-tail as the alternative
-    assert.ok(
-      block.includes('cleanup-tail'),
-      'step 5.5 must document the custom-merge-deviation skip condition with a pointer to the cleanup-tail',
-    );
-  });
-
-  test('cleanup-tail uses wave manifest instead of agent namespace discovery', () => {
+  test('skip conditions enumerate the empty-handle case', () => {
     const content = readWorkflow();
     const block = extractStep55Block(content);
     assert.ok(
-      block.includes('WAVE_WORKTREE_MANIFEST'),
-      'cleanup-tail must consume the current wave manifest',
-    );
-    assert.ok(
-      block.includes('avoid touching unrelated active agents'),
-      'cleanup-tail must document why manifest-scoped cleanup is required',
+      block.includes('$HANDLE_JSON` is empty'),
+      'step 5.5 must document the empty-handle skip condition',
     );
   });
 
-  test('cleanup-tail does not rediscover global agent worktrees', () => {
+  test('step 5.5 documents the #630/#3384 envelope re-expression instead of manifest machinery', () => {
+    const content = readWorkflow();
+    const block = extractStep55Block(content);
+    assert.ok(
+      block.includes('#630') && block.includes('#3384'),
+      'step 5.5 must document the upstream-guard re-expression (#630 manifest pinning + #3384 manifest source of truth)',
+    );
+    assert.ok(
+      block.includes('only workspace-set source of truth'),
+      'step 5.5 must state the Handle JSON is the only workspace-set source of truth',
+    );
+  });
+
+  test('step 5.5 does not rediscover global agent worktrees', () => {
     const content = readWorkflow();
     const block = extractStep55Block(content);
     assert.doesNotMatch(
       block,
       /git worktree list --porcelain.*\.claude\/worktrees\/agent-/s,
-      'cleanup-tail must not parse global git worktree list output for agent worktrees',
-    );
-    assert.ok(
-      block.includes('IFS= read -r'),
-      'cleanup-tail still reads manifest paths line-by-line to preserve paths with whitespace',
+      'step 5.5 must not parse global git worktree list output for agent worktrees',
     );
   });
 });

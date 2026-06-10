@@ -32,6 +32,13 @@ function auditProductionVulns(cwd) {
   if (!fs.existsSync(path.join(cwd, 'node_modules'))) {
     return null; // signal "skip" to caller
   }
+  // 19-12 (pnpm fork): `npm audit` requires package-lock.json; this repo is
+  // pnpm-managed (pnpm-lock.yaml, ledgered permanent divergence in 19-01) so
+  // npm audit cannot produce metadata. Dependency-advisory coverage on the
+  // fork rides `pnpm install --frozen-lockfile` + the security-scan CI lane.
+  if (!fs.existsSync(path.join(cwd, 'package-lock.json'))) {
+    return null; // signal "skip" to caller
+  }
   const isWindows = process.platform === 'win32';
   const npmCandidates = isWindows ? ['npm.cmd', 'npm'] : ['npm'];
   const args = ['audit', '--omit=dev', '--json'];

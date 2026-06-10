@@ -232,19 +232,22 @@ describe('CR-AGENT: code review agent frontmatter', () => {
       'gsd-code-fixer has skills: in frontmatter — breaks Gemini CLI');
   });
 
-  test('gsd-code-fixer.md rollback uses git checkout (not Write tool)', () => {
+  test('gsd-code-fixer.md rollback uses VCS restore (not Write tool)', () => {
+    // 19-12 re-point: the jj fork's rollback is the adapter-routed
+    // `gsd-tools query restore <file>` verb (atomic; `git checkout -- {file}`
+    // on git, `jj restore --from @-` on jj) instead of raw git checkout.
     const content = fs.readFileSync(path.join(AGENTS_DIR, 'gsd-code-fixer.md'), 'utf-8');
-    assert.ok(content.includes('git checkout --'),
-      'gsd-code-fixer rollback should use git checkout -- {file} for atomic rollback');
+    assert.ok(content.includes('git checkout --') || content.includes('query restore'),
+      'gsd-code-fixer rollback should use an atomic VCS restore (git checkout -- {file} or gsd-tools query restore)');
     assert.ok(!content.includes('PRE_FIX_CONTENT'),
-      'gsd-code-fixer should not use PRE_FIX_CONTENT in-memory capture (use git checkout instead)');
+      'gsd-code-fixer should not use PRE_FIX_CONTENT in-memory capture (use VCS restore instead)');
   });
 
-  test('gsd-code-fixer.md success_criteria consistent with rollback strategy (git checkout)', () => {
+  test('gsd-code-fixer.md success_criteria consistent with rollback strategy (VCS restore)', () => {
     const content = fs.readFileSync(path.join(AGENTS_DIR, 'gsd-code-fixer.md'), 'utf-8');
     const successCriteria = content.match(/<success_criteria>([\s\S]*?)<\/success_criteria>/)?.[1] || '';
-    assert.ok(successCriteria.includes('git checkout'),
-      'gsd-code-fixer success_criteria must reference git checkout rollback');
+    assert.ok(successCriteria.includes('git checkout') || successCriteria.includes('query restore') || successCriteria.includes('rollback_strategy'),
+      'gsd-code-fixer success_criteria must reference the VCS-restore rollback strategy');
     assert.ok(!successCriteria.includes('Write tool with captured'),
       'gsd-code-fixer success_criteria must not say Write tool for rollback');
   });

@@ -4,11 +4,14 @@
     "audit": {
       "files": [
         "audit-fix-command.test.cjs",
+        "audit-id-namespace.test.cjs",
+        "audit-root-commits-rename.test.cjs",
+        "audit-workflow-raw-git.test.cjs",
         "bug-2659-audit-open-crash.test.cjs",
         "bug-2836-audit-open-summary-uat-drift.test.cjs",
         "bug-2911-audit-open-output-shape.test.cjs"
       ],
-      "issue": "192"
+      "issue": "192; 19-12 re-baseline: + the 3 fork-carried audit-* gate-script tests (tests/scripts/, ported 19-10/19-11) — they test the audit-*.cjs scan scripts, not the audit command module"
     },
     "config": {
       "files": [

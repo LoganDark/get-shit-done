@@ -130,6 +130,12 @@ export default tseslint.config(
       'gsd-core/bin/lib/research-store.cjs',
       'gsd-core/bin/lib/research-provider.cjs',
       'gsd-core/bin/lib/package-legitimacy.cjs',
+      // 19-12 (deferred item #3): emitted from src/vcs-command-router.cts (19-06
+      // PORT-02 bridge); lint the .cts source, not the tsc artifact.
+      'gsd-core/bin/lib/vcs-command-router.cjs',
+      // 19-12: the whole emitted VCS layer (src/vcs/**.cts → bin/lib/vcs/**.cjs,
+      // gitignored per 19-05) — directory-level ignore mirrors the .gitignore shape.
+      'gsd-core/bin/lib/vcs/**',
     ],
   },
 
