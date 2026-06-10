@@ -1145,6 +1145,14 @@ const workspaceParallelDispatchVerb: VcsVerbHandler = (args, projectDir) => {
   if (phaseNumber === undefined || Number.isNaN(phaseNumber)) {
     return { data: { ok: false, reason: 'phase_number_required' } };
   }
+  // Phase 18 (CLEANUP-06 / Phase 14 WR-04): reject a non-numeric
+  // --max-concurrency value instead of silently forwarding NaN into the
+  // adapter's scheduling. The `!== undefined` leg is load-bearing — an ABSENT
+  // flag must still forward `undefined` (D-07 default-undefined contract,
+  // pinned by cmd-parallel-max-concurrency-cli.test.ts).
+  if (maxConcurrency !== undefined && Number.isNaN(maxConcurrency)) {
+    return { data: { ok: false, reason: 'max_concurrency_invalid' } };
+  }
   if (planRaw === undefined) {
     return { data: { ok: false, reason: 'plan_required' } };
   }

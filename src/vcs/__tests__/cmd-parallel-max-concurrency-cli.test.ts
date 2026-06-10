@@ -173,4 +173,22 @@ describe('CLEANUP-05/06 — dispatch input guards', () => {
 			expect(recordedDispatchOpts.length).toBe(0);
 		});
 	}
+
+	// CLEANUP-06: a valid --phase and a valid array --plan are supplied so the
+	// max-concurrency guard is the ONLY guard that can fire.
+	for (const badValue of ['NaN', 'banana']) {
+		it(`returns {ok:false, reason:max_concurrency_invalid} for --max-concurrency ${badValue}; adapter never called`, async () => {
+			recordedDispatchOpts.length = 0;
+			const dispatch = await loadWorkspaceParallelDispatchVerb();
+			const plan = JSON.stringify([{ agentId: 'agent-1', planId: 'plan-1' }]);
+			const res = await dispatch(
+				['--phase', '18', '--plan', plan, '--max-concurrency', badValue],
+				'/tmp/irrelevant-cwd',
+			);
+			const data = res.data as { ok?: boolean; reason?: string };
+			expect(data.ok).toBe(false);
+			expect(data.reason).toBe('max_concurrency_invalid');
+			expect(recordedDispatchOpts.length).toBe(0);
+		});
+	}
 });
