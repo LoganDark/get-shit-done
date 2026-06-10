@@ -1,0 +1,77 @@
+---
+phase: 18
+slug: tactical-cleanup-test-flake-re-scoped
+status: draft
+nyquist_compliant: false
+wave_0_complete: false
+created: 2026-06-10
+---
+
+# Phase 18 — Validation Strategy
+
+> Per-phase validation contract for feedback sampling during execution.
+
+---
+
+## Test Infrastructure
+
+| Property | Value |
+|----------|-------|
+| **Framework** | vitest 3.2.6 (`src/vcs/__tests__`, root `vitest.config.ts`, unit+integration projects) + node:test (`tests/`, via `scripts/run-tests.cjs`) |
+| **Config file** | `vitest.config.ts` (LOCKED — must remain untouched per TEST-17) |
+| **Quick run command** | `npx vitest run --project unit <file> [-t '<pattern>']` |
+| **Full suite command** | `GSD_TEST_BACKENDS=git,jj npx vitest run` (~110s, 612 tests); `pnpm test` (node:test, runs `build:lib` via pretest) |
+| **Estimated runtime** | ~110 seconds (vitest full) |
+
+---
+
+## Sampling Rate
+
+- **After every task commit:** Run the targeted vitest file run (or grep/audit checks for the workflow-markdown plan)
+- **After every plan wave:** Run `GSD_TEST_BACKENDS=git,jj npx vitest run` + the four lint gates
+- **Before `/gsd-verify-work`:** Full vitest suite + `pnpm test` + all four lint gates + `scripts/check-skip-count.cjs` green
+- **Max feedback latency:** ~110 seconds
+
+---
+
+## Per-Task Verification Map
+
+| Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
+|---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
+| (filled by planner) | 01 | 1 | CLEANUP-01 | — | N/A | scripted fixture + grep | `grep -c 'gsd_run query diff --name-only' gsd-core/workflows/transition.md` ≥ 1; ephemeral fixture-repo gate script exits 1 dirty / 0 clean; `node scripts/audit-workflow-raw-git.cjs` exit 0 | ❌ W0 (ephemeral) | ⬜ pending |
+| (filled by planner) | 02 | 1 | CLEANUP-05 | T-18-01 | non-array plan fails closed with `{ok:false, reason:'plan_not_array'}` | unit (vi.mock) | `npx vitest run --project unit src/vcs/__tests__/cmd-parallel-max-concurrency-cli.test.ts` | ❌ W0 (new `it`s in existing file) | ⬜ pending |
+| (filled by planner) | 02 | 1 | CLEANUP-06 | T-18-02 | NaN `--max-concurrency` fails closed; absent flag stays `undefined` (D-07) | unit (vi.mock) | same file; D-07 test at L132 stays green | ❌ W0 (new `it`s in existing file) | ⬜ pending |
+| (filled by planner) | 02 | 1 | CLEANUP-03 | T-18-03 | wrong-cwd run aborts before any mutation | manual-equivalent + node:test | `cd /tmp && bash <repo>/scripts/dogfood-restore.sh x y` → exit 1; `node --test tests/scripts/dogfood-restore-orphan-cleanup.test.cjs` green | ✅ | ⬜ pending |
+| (filled by planner) | 02 | 1 | CLEANUP-04 | — | overlay semantics documented or made clean | review + existing test green | same as CLEANUP-03 | ✅ | ⬜ pending |
+| (filled by planner) | 02 | 1 | CLEANUP-07 | — | N/A | targeted run + tmp inspect | run CONFIG-02 describes, then assert zero leaked tmpdirs | ✅ (edits to existing describes) | ⬜ pending |
+| (filled by planner) | 03 | 1 | TEST-17 | — | N/A | 3+ full-suite runs | `GSD_TEST_BACKENDS=git,jj npx vitest run` ×3 exit 0; `node scripts/check-skip-count.cjs` green (baseline 22) | ✅ | ⬜ pending |
+
+*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+
+---
+
+## Wave 0 Requirements
+
+- [ ] New contract `it`s in `src/vcs/__tests__/cmd-parallel-max-concurrency-cli.test.ts` — CLEANUP-05/06 envelope pins (written GREEN alongside the guards in the same per-WR commit; guard-addition, not TDD-RED)
+- [ ] Ephemeral fixture-repo gate script for CLEANUP-01 SC1 verification (run-and-discard, stdout-only — never written into the working tree per `feedback_avoid_jj_auto_tracked_output`)
+
+---
+
+## Manual-Only Verifications
+
+| Behavior | Requirement | Why Manual | Test Instructions |
+|----------|-------------|------------|-------------------|
+| CLEANUP-04 overlay-decision review (if option (b) documented-asymmetry chosen) | CLEANUP-04 | comment-only change has no behavior to assert | read the added comment block; confirm it states the additive-overlay asymmetry and why it is intended |
+
+---
+
+## Validation Sign-Off
+
+- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
+- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
+- [ ] Wave 0 covers all MISSING references
+- [ ] No watch-mode flags
+- [ ] Feedback latency < 120s
+- [ ] `nyquist_compliant: true` set in frontmatter
+
+**Approval:** pending
