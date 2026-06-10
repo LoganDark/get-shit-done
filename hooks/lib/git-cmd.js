@@ -104,7 +104,74 @@ function tokenize(cmd) {
 }
 
 /**
+ * Split a shell command string into segments at unquoted command-separator
+ * operators: `;`, `&&`, `||`, `|`, `&`, and newlines. Quoted spans (single or
+ * double) are copied verbatim — operators inside quotes do not split.
+ *
+ * 19-review WR-10: without this split, `true && git commit -m x` classified
+ * as NOT a git commit (first token `true` is not `git`), so PreToolUse
+ * guards built on isGitSubcommand were silently bypassed for compound Bash
+ * commands — the most common shape agents emit (`cd x && git commit …`).
+ *
+ * Residual limits (documented, not handled): command substitution `$(git …)`
+ * / backticks, subshell grouping `(git …)`, and indirection via `bash -c
+ * 'git …'` are NOT recursed into — the inner command is a quoted/nested
+ * string, not a segment. Guards needing those shapes must pre-extract them.
+ *
+ * @param {string} cmd
+ * @returns {string[]} non-empty segments
+ */
+function splitOnShellOperators(cmd) {
+  const segments = [];
+  let current = '';
+  let i = 0;
+  const len = cmd.length;
+
+  const push = () => {
+    if (current.trim()) segments.push(current);
+    current = '';
+  };
+
+  while (i < len) {
+    const c = cmd[i];
+    if (c === "'" || c === '"') {
+      // Copy the quoted span verbatim (no escape handling — matches tokenize).
+      const quote = c;
+      current += cmd[i++];
+      while (i < len && cmd[i] !== quote) current += cmd[i++];
+      if (i < len) current += cmd[i++]; // consume closing quote
+      continue;
+    }
+    if (c === '\n' || c === ';') {
+      push();
+      i++;
+      continue;
+    }
+    if (c === '&') {
+      push();
+      i += cmd[i + 1] === '&' ? 2 : 1; // '&&' or background '&'
+      continue;
+    }
+    if (c === '|') {
+      push();
+      i += cmd[i + 1] === '|' ? 2 : 1; // '||' or pipe '|'
+      continue;
+    }
+    current += c;
+    i++;
+  }
+  push();
+
+  return segments;
+}
+
+/**
  * Return true if `cmd` invokes the git subcommand `sub`.
+ *
+ * 19-review WR-10: the command is first split on unquoted shell operators
+ * (`;`, `&&`, `||`, `|`, `&`, newline) and the token-walk runs on EACH
+ * segment — `cd x && git commit -m y` matches. See splitOnShellOperators
+ * for the documented residual limits (subshells, `bash -c`).
  *
  * @param {string} cmd  - Full shell command string (may include env vars, full paths)
  * @param {string} sub  - Subcommand to test for, e.g. 'commit'
@@ -112,7 +179,17 @@ function tokenize(cmd) {
  */
 function isGitSubcommand(cmd, sub) {
   if (!cmd || !sub) return false;
+  return splitOnShellOperators(cmd).some((segment) => segmentIsGitSubcommand(segment, sub));
+}
 
+/**
+ * Token-walk a single (operator-free) command segment for `git <sub>`.
+ *
+ * @param {string} cmd
+ * @param {string} sub
+ * @returns {boolean}
+ */
+function segmentIsGitSubcommand(cmd, sub) {
   const tokens = tokenize(cmd);
   let i = 0;
 
@@ -158,4 +235,4 @@ function isGitSubcommand(cmd, sub) {
   return tokens[i] === sub;
 }
 
-module.exports = { isGitSubcommand, tokenize };
+module.exports = { isGitSubcommand, tokenize, splitOnShellOperators };
