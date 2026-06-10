@@ -22,7 +22,10 @@
 # CONTEXT D-10 considered narrowing the scope; RESEARCH recommended omitting,
 # and Plan 14-04's rehearsal validates the choice empirically.
 #
-# Pre-condition: must be run from the project root.
+# Pre-condition: must be run from the project root. Enforced (Phase 18
+# CLEANUP-03 / Phase 14 WR-01): the assertion below the positional parse
+# exits 1 before the tarball check and before either mutation (jj op
+# restore, tar -xf) when .planning/STATE.md is absent from the cwd.
 #
 # Exit 0 on success; exit 1 on any failure (with diagnostic on stderr).
 
@@ -46,6 +49,11 @@ fi
 
 PRE_OP_ID="$1"
 TARBALL_PATH="$2"
+
+# Phase 18 (CLEANUP-03 / Phase 14 WR-01): project-root assertion. Must fire
+# BEFORE the tarball-existence check and both mutations (jj op restore,
+# tar -xf -C .) — a wrong-cwd run aborts here, pre-mutation.
+[ -f .planning/STATE.md ] || { echo "ERROR: dogfood-restore.sh must run from project root" >&2; exit 1; }
 
 # Phase 19 (19-11): the fork `gsd-sdk` CLI retired with the SDK (upstream
 # ADR-0174); the cleanup verb dispatches through the PORT-02 bridge at
