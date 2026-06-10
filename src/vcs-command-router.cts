@@ -1,0 +1,1477 @@
+/**
+ * VCS verb command router — Phase 19 plan 19-06 (PORT-02 CLI bridge).
+ *
+ * Re-expresses the fork's vcs-facing gsd-sdk query handlers (harvested at
+ * revision c7bd6bee, reference copies under
+ * .planning/phases/19-…/harvest/query-handlers/) as gsd-tools verbs over the
+ * ported adapter at ./vcs/index.cjs. Envelope shapes are byte-for-behavior
+ * with the fork handlers — workflows parse these JSON envelopes with jq, so
+ * top-level field names, the null-for-absent-optional convention (Phase 11
+ * precedent: emit null, never undefined, where the fork handlers did), and
+ * exit-code semantics (handler envelopes exit 0, including ok:false typed
+ * errors) are all load-bearing (T-19-16).
+ *
+ * Verb surface (the fork's registered vcs verb set per the harvested
+ * command-manifest.non-family.ts, minus `commit` — locked decision: upstream's
+ * existing commit command keeps its name and gets its internals migrated to
+ * the adapter in 19-07 — and minus `worktree.cleanup-wave`, whose fork handler
+ * was a spawnSync back-bridge INTO gsd-tools' own `worktree cleanup-wave`
+ * case, i.e. the upstream case IS the implementation):
+ *
+ *   status, log, diff, head-ref, current-branch, branch-list, push, merge,
+ *   reset, restore, revert, commit-to-subrepo, hooks.fire, migrate-vcs,
+ *   workspace.assert-dispatched-cwd, workspace.parallel.dispatch,
+ *   workspace.parallel.fan-in, workspace.parallel.cancel,
+ *   cleanup-subagent-workspaces
+ *
+ * `commit-to-subrepo` has a handler here for envelope parity (the fork's
+ * adapter-routed body), but gsd-tools' pre-existing upstream case keeps
+ * dispatch ownership until the 19-07 internals migration — same treatment as
+ * `commit`.
+ *
+ * Registration mirrors the routeStateCommand precedent: gsd-tools.cjs
+ * requires this module and dispatches the verb families here. The `query`
+ * meta-prefix and the dotted→spaced normalization in gsd-tools (#3243) mean
+ * `gsd-tools query workspace.parallel.dispatch` arrives as
+ * command='workspace', args=['workspace','parallel.dispatch',…].
+ */
+
+import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
+import { readFile, realpath } from 'node:fs/promises';
+import { execSync } from 'node:child_process';
+import { isAbsolute, join, normalize, relative, resolve } from 'node:path';
+import { createVcsAdapter } from './vcs/index.cjs';
+import { expr } from './vcs/expr.cjs';
+import { vcsExec } from './vcs/exec.cjs';
+import { validateRefname } from './vcs/refs-validator.cjs';
+import { fireHook } from './vcs/hook-bridge.cjs';
+import { runMigration } from './vcs/format-migration/index.cjs';
+import { sanitizeCommitMessage } from './vcs/format-migration/planning-shim.cjs';
+import {
+  cleanupSubagentWorkspaces,
+  WORKSPACE_NAME_RE,
+} from './vcs/jj/workspace-cleanup.cjs';
+import type {
+  HookStage,
+  ParallelAgentResult,
+  ParallelDispatchHandle,
+  RevisionExpr,
+  VcsAdapter,
+  WorkspaceInfo,
+} from './vcs/types.cjs';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import planningWorkspace = require('./planning-workspace.cjs');
+const { planningPaths } = planningWorkspace;
+
+// ─── Envelope contract types ─────────────────────────────────────────────────
+
+/** Mirrors the fork's QueryResult: `data` is the on-the-wire JSON envelope. */
+interface VerbResult {
+  data: unknown;
+}
+
+type VcsVerbHandler = (args: string[], projectDir: string) => Promise<VerbResult> | VerbResult;
+
+// ─── Shared helpers (fork-handler ports) ─────────────────────────────────────
+
+/**
+ * Plan 05-06 Task 2 (CR-02 fix, ported from harvest/query-handlers/log.ts):
+ * classify a CLI `--range` argv into an encoded RevisionExpr. D-12 forbids
+ * `expr.raw()`, so every raw string must flow through a structured factory.
+ */
+function parseRangeArg(raw: string, vcs: VcsAdapter): RevisionExpr {
+  const rangeIdx = raw.indexOf('..');
+  if (rangeIdx >= 0) {
+    const fromRaw = raw.slice(0, rangeIdx);
+    const toRaw = raw.slice(rangeIdx + 2);
+    if (!fromRaw || !toRaw) {
+      throw new Error(`parseRangeArg: malformed range '${raw}' (one side empty)`);
+    }
+    return expr.range(parseSingle(fromRaw, vcs), parseSingle(toRaw, vcs));
+  }
+  return parseSingle(raw, vcs);
+}
+
+function parseSingle(raw: string, vcs: VcsAdapter): RevisionExpr {
+  if (raw === 'HEAD' || raw === '@') return expr.head();
+  const tildeMatch = raw.match(/^(?:HEAD|@)~(\d+)$/);
+  if (tildeMatch) {
+    const n = parseInt(tildeMatch[1], 10);
+    if (n === 0) return expr.head();
+    const entries = vcs.log({ maxCount: n + 1 });
+    if (entries.length <= n) {
+      throw new Error(
+        `parseRangeArg: ${raw} exceeds repo depth (${entries.length} commits available)`,
+      );
+    }
+    return expr.rev(entries[n].id);
+  }
+  if (/^[0-9a-fA-F]{4,40}$/.test(raw) || /^[k-z]{4,40}$/.test(raw)) {
+    return expr.rev(raw);
+  }
+  return expr.bookmark(raw);
+}
+
+/** Resolve "@-" (stdin) / "@<path>" (file) plan input (dispatch bridge). */
+function resolvePlanInput(raw: string): string {
+  if (raw === '@-') {
+    return readFileSync(0, 'utf-8');
+  }
+  if (raw.startsWith('@')) {
+    return readFileSync(raw.slice(1), 'utf-8');
+  }
+  return raw;
+}
+
+/** Fan-in/cancel input contract: file-or-stdin ONLY (RESEARCH Open Q2 RESOLVED). */
+function resolveFileOrStdin(raw: string): string {
+  if (raw === '@-') {
+    return readFileSync(0, 'utf-8');
+  }
+  if (raw.startsWith('@')) {
+    return readFileSync(raw.slice(1), 'utf-8');
+  }
+  throw new Error(
+    `expected @<path> or @- but got inline string (inline JSON form is not accepted)`,
+  );
+}
+
+function safeRealpath(p: string): string | null {
+  try {
+    return realpathSync(p);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve a jj workspace NAME to an absolute fs path via
+ * `jj workspace root --name <NAME>` (Phase 11 plan 07 CR-01 closure shape).
+ */
+function resolveJjWorkspacePath(repoCwd: string, name: string): string | null {
+  if (!name) return null;
+  const res = vcsExec(repoCwd, 'jj', [
+    '--repository',
+    repoCwd,
+    '--no-pager',
+    '--color',
+    'never',
+    '--quiet',
+    'workspace',
+    'root',
+    '--name',
+    name,
+  ]);
+  if (res.exitCode !== 0) return null;
+  const out = res.stdout.trim();
+  return out.length > 0 ? out : null;
+}
+
+/**
+ * Port of the fork's helpers.ts resolvePathUnderProject (path-escape guard for
+ * commit-to-subrepo). Throws a plain Error tagged via `name` so the caller can
+ * envelope it (the retired SDK's GSDError taxonomy does not exist here).
+ */
+async function resolvePathUnderProject(projectDir: string, userPath: string): Promise<string> {
+  const projectReal = await realpath(projectDir);
+  const candidate = isAbsolute(userPath) ? normalize(userPath) : resolve(projectReal, userPath);
+  let realCandidate: string;
+  try {
+    realCandidate = await realpath(candidate);
+  } catch {
+    realCandidate = candidate;
+  }
+  const rel = relative(projectReal, realCandidate);
+  if (rel.startsWith('..') || (isAbsolute(rel) && rel.length > 0)) {
+    const err = new Error('path escapes project directory');
+    err.name = 'VcsPathValidationError';
+    throw err;
+  }
+  return realCandidate;
+}
+
+// ─── Verb handlers (envelope contracts: harvest/query-handlers/*) ───────────
+
+const statusVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+  let porcelain = false;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[i + 1];
+      i++;
+    } else if (args[i] === '--porcelain' || args[i] === '--short') {
+      // `--short` accepted as an alias; StatusOpts contract exposes only `porcelain`.
+      porcelain = true;
+    }
+  }
+
+  const vcs = createVcsAdapter(cwd);
+  const result = vcs.status({ porcelain });
+
+  return {
+    data: {
+      ok: true,
+      entries: result.entries,
+      raw: result.raw,
+      porcelain,
+    },
+  };
+};
+
+const logVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+  let maxCount: number | undefined;
+  let allRefs = false;
+  let range: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[i + 1];
+      i++;
+    } else if (args[i] === '--max-count' && args[i + 1]) {
+      const n = parseInt(args[i + 1], 10);
+      if (Number.isFinite(n) && n > 0) maxCount = n;
+      i++;
+    } else if (args[i] === '--all') {
+      allRefs = true;
+    } else if (args[i] === '--range' && args[i + 1]) {
+      range = args[i + 1];
+      i++;
+    }
+    // --grep / --format / --no-merges parsed-but-unused: LogOpts contract
+    // (Phase 2 CR-02 narrowing) doesn't expose them.
+  }
+
+  const vcs = createVcsAdapter(cwd);
+
+  let rev: RevisionExpr | undefined;
+  if (range !== undefined) {
+    try {
+      rev = parseRangeArg(range, vcs);
+    } catch (err) {
+      return {
+        data: {
+          ok: false,
+          error: (err as Error).message,
+          range,
+        },
+      };
+    }
+  }
+
+  let entries;
+  try {
+    entries = vcs.log({
+      maxCount,
+      allRefs,
+      rev,
+    });
+  } catch (err) {
+    return {
+      data: {
+        ok: false,
+        error: (err as Error).message,
+        range,
+      },
+    };
+  }
+
+  return {
+    data: {
+      ok: true,
+      entries,
+      maxCount,
+      allRefs,
+      range,
+    },
+  };
+};
+
+const diffVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+  let range: string | undefined;
+  let nameOnly = false;
+  let nameStatus = false;
+  let staged = false;
+  const paths: string[] = [];
+
+  let inPaths = false;
+  for (let i = 0; i < args.length; i++) {
+    if (inPaths) {
+      paths.push(args[i]);
+      continue;
+    }
+    if (args[i] === '--') {
+      inPaths = true;
+    } else if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[i + 1];
+      i++;
+    } else if (args[i] === '--range' && args[i + 1]) {
+      range = args[i + 1];
+      i++;
+    } else if (args[i] === '--name-only') {
+      nameOnly = true;
+    } else if (args[i] === '--name-status') {
+      nameStatus = true;
+    } else if (args[i] === '--cached') {
+      staged = true;
+    } else if (args[i] === '--quiet') {
+      // Parsed but unused; DiffOpts contract has no quiet field.
+    }
+  }
+
+  const vcs = createVcsAdapter(cwd);
+
+  let rev: RevisionExpr | undefined;
+  if (range !== undefined) {
+    try {
+      rev = parseRangeArg(range, vcs);
+    } catch (err) {
+      return {
+        data: {
+          ok: false,
+          error: (err as Error).message,
+          range,
+        },
+      };
+    }
+  }
+
+  let result;
+  try {
+    result = vcs.diff({
+      staged,
+      nameOnly,
+      nameStatus,
+      rev,
+      paths: paths.length > 0 ? paths : undefined,
+    });
+  } catch (err) {
+    return {
+      data: {
+        ok: false,
+        error: (err as Error).message,
+        range,
+      },
+    };
+  }
+
+  return {
+    data: {
+      ok: true,
+      raw: result.raw,
+      nameOnly: result.nameOnly,
+      nameStatus: result.nameStatus,
+      range,
+      staged,
+    },
+  };
+};
+
+const headRefVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[i + 1];
+      i++;
+    }
+  }
+
+  const vcs = createVcsAdapter(cwd);
+  const head = vcs.refs.resolveShort(vcs.refs.head);
+
+  return {
+    data: {
+      ok: true,
+      head,
+    },
+  };
+};
+
+const currentBranchVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[i + 1];
+      i++;
+    }
+  }
+
+  const vcs = createVcsAdapter(cwd);
+  const bookmarks = vcs.refs.currentBookmarks();
+
+  return {
+    data: {
+      ok: true,
+      bookmarks,
+    },
+  };
+};
+
+const branchListVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+  let prefix: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[i + 1];
+      i++;
+    } else if (args[i] === '--prefix' && args[i + 1]) {
+      prefix = args[i + 1];
+      i++;
+    }
+  }
+
+  if (prefix !== undefined) {
+    // Allow trailing slash (e.g., 'gsd/'): strip it for validation, since
+    // `gsd/` itself ends with `/` which validateRefname rejects.
+    const probe = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
+    if (probe.length > 0) {
+      try {
+        validateRefname(probe);
+      } catch (err) {
+        return { data: { ok: false, error: (err as Error).message } };
+      }
+    }
+  }
+
+  const vcs = createVcsAdapter(cwd);
+  const all = vcs.refs.bookmarks.list();
+  const bookmarks = prefix ? all.filter((b) => b.name.startsWith(prefix as string)) : all;
+
+  return {
+    data: {
+      ok: true,
+      bookmarks,
+      prefix,
+    },
+  };
+};
+
+const pushVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+  let remote: string | undefined;
+  let bookmark: string | undefined;
+  let force = false;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[i + 1];
+      i++;
+    } else if (args[i] === '--remote' && args[i + 1]) {
+      remote = args[i + 1];
+      i++;
+    } else if (args[i] === '--bookmark' && args[i + 1]) {
+      bookmark = args[i + 1];
+      i++;
+    } else if (args[i] === '--force') {
+      force = true;
+    }
+  }
+
+  let ref: RevisionExpr | undefined;
+  if (bookmark !== undefined) {
+    try {
+      validateRefname(bookmark);
+      ref = expr.bookmark(bookmark);
+    } catch (err) {
+      return {
+        data: {
+          ok: false,
+          error: (err as Error).message,
+        },
+      };
+    }
+  }
+
+  const vcs = createVcsAdapter(cwd);
+
+  let result;
+  try {
+    result = vcs.push({
+      remote,
+      ref,
+      force,
+    });
+  } catch (err) {
+    return {
+      data: {
+        ok: false,
+        error: (err as Error).message,
+        remote,
+        bookmark,
+        force,
+      },
+    };
+  }
+
+  return {
+    data: {
+      ok: result.exitCode === 0,
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      remote,
+      bookmark,
+      force,
+    },
+  };
+};
+
+const mergeVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+  let ref: string | undefined;
+  let squash = false;
+  let noFf = false;
+  let noCommit = false;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[i + 1];
+      i++;
+    } else if (args[i] === '--squash') {
+      squash = true;
+    } else if (args[i] === '--no-ff') {
+      noFf = true;
+    } else if (args[i] === '--no-commit') {
+      noCommit = true;
+    } else if (!args[i].startsWith('--') && ref === undefined) {
+      ref = args[i];
+    }
+  }
+
+  if (!ref) {
+    return { data: { ok: false, error: 'merge: positional <ref> argument required' } };
+  }
+
+  try {
+    validateRefname(ref);
+  } catch (err) {
+    return { data: { ok: false, error: (err as Error).message } };
+  }
+
+  const vcs = createVcsAdapter(cwd);
+  if (vcs.kind !== 'git') {
+    return {
+      data: {
+        ok: false,
+        error: 'merge: not yet supported on jj backend; phase merge happens via performJjReap',
+      },
+    };
+  }
+
+  const result = vcs.gitOnly.merge({ ref, squash, noFf, noCommit });
+  return {
+    data: {
+      ok: result.exitCode === 0,
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      ref,
+      squash,
+      noFf,
+      noCommit,
+    },
+  };
+};
+
+const VALID_RESET_MODES = ['soft', 'mixed', 'hard'] as const;
+type ResetMode = (typeof VALID_RESET_MODES)[number];
+
+function isResetMode(s: string): s is ResetMode {
+  return (VALID_RESET_MODES as readonly string[]).includes(s);
+}
+
+const resetVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+  let ref: string | undefined;
+  let mode: ResetMode | undefined;
+  const paths: string[] = [];
+
+  let inPaths = false;
+  for (let i = 0; i < args.length; i++) {
+    if (inPaths) {
+      paths.push(args[i]);
+      continue;
+    }
+    if (args[i] === '--') {
+      inPaths = true;
+    } else if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[i + 1];
+      i++;
+    } else if (args[i] === '--ref' && args[i + 1]) {
+      ref = args[i + 1];
+      i++;
+    } else if (args[i] === '--mode' && args[i + 1]) {
+      const m = args[i + 1];
+      if (!isResetMode(m)) {
+        return {
+          data: {
+            ok: false,
+            error: `reset: invalid --mode '${m}'. Valid: ${VALID_RESET_MODES.join(', ')}`,
+          },
+        };
+      }
+      mode = m;
+      i++;
+    }
+  }
+
+  if (!ref) {
+    return { data: { ok: false, error: 'reset: --ref <rev> is required' } };
+  }
+  if (!mode) {
+    return { data: { ok: false, error: 'reset: --mode <soft|mixed|hard> is required' } };
+  }
+
+  const vcs = createVcsAdapter(cwd);
+  if (vcs.kind !== 'git') {
+    return {
+      data: {
+        ok: false,
+        error:
+          'reset: not supported on jj backend; use `gsd-tools query revert` for per-commit destructive undo',
+      },
+    };
+  }
+
+  const result = vcs.gitOnly.reset({
+    ref,
+    mode,
+    paths: paths.length > 0 ? paths : undefined,
+  });
+  return {
+    data: {
+      ok: result.exitCode === 0,
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      ref,
+      mode,
+      paths: paths.length > 0 ? paths : undefined,
+    },
+  };
+};
+
+const restoreVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+  let from: string | undefined;
+  const files: string[] = [];
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[i + 1];
+      i++;
+    } else if (args[i] === '--from' && args[i + 1]) {
+      from = args[i + 1];
+      i++;
+    } else if (!args[i].startsWith('--')) {
+      files.push(args[i]);
+    }
+  }
+
+  if (files.length === 0) {
+    return { data: { ok: false, error: 'restore: at least one file argument required' } };
+  }
+
+  if (from !== undefined) {
+    try {
+      validateRefname(from);
+    } catch (err) {
+      return { data: { ok: false, error: (err as Error).message } };
+    }
+  }
+
+  const vcs = createVcsAdapter(cwd);
+  if (vcs.kind === 'git') {
+    const result = vcs.gitOnly.restore({ files, from });
+    return {
+      data: {
+        ok: result.exitCode === 0,
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        files,
+        from,
+        backend: 'git',
+      },
+    };
+  }
+
+  // jj path: no adapter verb yet — dispatch via vcsExec directly
+  // (fork gap-fill carry-over; see src/vcs/backends/jj.cts TODO).
+  const jjFrom = from ?? '@-';
+  const result = vcsExec(cwd, 'jj', ['restore', '--from', jjFrom, '--', ...files]);
+  return {
+    data: {
+      ok: result.exitCode === 0,
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      files,
+      from: jjFrom,
+      backend: 'jj',
+    },
+  };
+};
+
+const revertVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+  let rev: string | undefined;
+  let noCommit = false;
+  let abort = false;
+  let force = false;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[i + 1];
+      i++;
+    } else if (args[i] === '--no-commit') {
+      noCommit = true;
+    } else if (args[i] === '--abort') {
+      abort = true;
+    } else if (args[i] === '--force') {
+      force = true;
+    } else if (!args[i].startsWith('--') && rev === undefined) {
+      rev = args[i];
+    }
+  }
+
+  const vcs = createVcsAdapter(cwd);
+
+  if (abort) {
+    if (vcs.kind === 'git') {
+      const r = vcs.gitOnly.revertAbort();
+      return {
+        data: {
+          ok: r.exitCode === 0,
+          exitCode: r.exitCode,
+          stdout: r.stdout,
+          stderr: r.stderr,
+          abort: true,
+          backend: 'git',
+        },
+      };
+    }
+    // jj path: no in-progress revert sequence to abort; documented no-op
+    // (Pitfall 6 — jj abandon is one-shot).
+    return {
+      data: {
+        ok: true,
+        abort: true,
+        backend: 'jj',
+        note: 'jj has no in-progress revert sequence; abort is a no-op',
+      },
+    };
+  }
+
+  if (!rev) {
+    return { data: { ok: false, error: 'revert: positional <rev> argument required' } };
+  }
+
+  if (vcs.kind === 'git') {
+    const result = vcs.gitOnly.revert({ rev, noCommit });
+    return {
+      data: {
+        ok: result.exitCode === 0,
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        rev,
+        noCommit,
+        backend: 'git',
+      },
+    };
+  }
+
+  // jj path: destructive abandon (Pitfall 6 semantic shift — recovery via
+  // `jj op restore` while the op-log retains the pre-abandon state).
+  // `--force` adds `--ignore-immutable` (B-05 shared-history override).
+  const jjArgs = ['abandon', rev];
+  if (force) jjArgs.push('--ignore-immutable');
+  const result = vcsExec(cwd, 'jj', jjArgs);
+  return {
+    data: {
+      ok: result.exitCode === 0,
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      rev,
+      noCommit,
+      force,
+      backend: 'jj',
+      destructive: true,
+    },
+  };
+};
+
+const commitToSubrepoVerb: VcsVerbHandler = async (args, projectDir) => {
+  const filesIdx = args.indexOf('--files');
+  const endIdx = filesIdx >= 0 ? filesIdx : args.length;
+  const knownFlags = new Set(['--force', '--amend', '--no-verify']);
+  const messageArgs = args.slice(0, endIdx).filter((a) => !knownFlags.has(a));
+  const message = messageArgs.join(' ') || undefined;
+  const files = filesIdx >= 0 ? args.slice(filesIdx + 1).filter((a) => !a.startsWith('--')) : [];
+
+  if (!message) {
+    return { data: { committed: false, reason: 'commit message required' } };
+  }
+
+  const paths = planningPaths(projectDir);
+  let config: Record<string, unknown> = {};
+  try {
+    const raw = await readFile(paths.config, 'utf-8');
+    config = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    /* no config */
+  }
+  const subRepos = config.sub_repos as string[] | undefined;
+  if (!subRepos || subRepos.length === 0) {
+    return {
+      data: { committed: false, reason: 'no sub_repos configured in .planning/config.json' },
+    };
+  }
+
+  if (files.length === 0) {
+    return { data: { committed: false, reason: '--files required for commit-to-subrepo' } };
+  }
+
+  const sanitized = sanitizeCommitMessage(message);
+  if (!sanitized && message) {
+    return { data: { committed: false, reason: 'commit message empty after sanitization' } };
+  }
+
+  try {
+    for (const file of files) {
+      try {
+        await resolvePathUnderProject(projectDir, file);
+      } catch (err) {
+        if (err instanceof Error && err.name === 'VcsPathValidationError') {
+          return { data: { committed: false, reason: `${err.message}: ${file}` } };
+        }
+        throw err;
+      }
+    }
+
+    const fileArgs = files.length > 0 ? files : ['.'];
+    // B-08: respect sticky `vcs.adapter` config — no `kind` override here.
+    const subVcs = createVcsAdapter(projectDir);
+    const commitResult = subVcs.commit({
+      message: sanitized,
+      files: fileArgs,
+    });
+    if (commitResult.exitCode !== 0) {
+      return { data: { committed: false, reason: commitResult.stderr || 'commit failed' } };
+    }
+
+    let id: string;
+    try {
+      id = subVcs.refs.resolveShort(subVcs.refs.head);
+    } catch {
+      // Mirror the pre-migration spawnSync shape: empty string on failed
+      // resolution — callers treat empty-string id as "set but unknown".
+      id = '';
+    }
+    return { data: { committed: true, id, message: sanitized } };
+  } catch (err) {
+    return { data: { committed: false, reason: String(err) } };
+  }
+};
+
+const VALID_HOOK_STAGES: readonly HookStage[] = ['pre-commit', 'pre-push'];
+
+function isHookStage(s: string): s is HookStage {
+  return (VALID_HOOK_STAGES as readonly string[]).includes(s);
+}
+
+const hooksFireVerb: VcsVerbHandler = (args, projectDir) => {
+  const stage = args[0];
+  if (!stage) {
+    return {
+      data: {
+        ok: false,
+        error: 'hooks.fire requires a stage argument: pre-commit or pre-push',
+      },
+    };
+  }
+  if (!isHookStage(stage)) {
+    return {
+      data: {
+        ok: false,
+        error: `hooks.fire: invalid stage '${stage}'. Valid: ${VALID_HOOK_STAGES.join(', ')}`,
+      },
+    };
+  }
+  let cwd = projectDir;
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[i + 1];
+      i++;
+    }
+  }
+
+  const result = fireHook(cwd, stage);
+  return {
+    data: {
+      stage,
+      cwd,
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      ok: result.exitCode === 0,
+    },
+  };
+};
+
+const VALID_MIGRATE_TARGETS = new Set(['git', 'jj']);
+
+const migrateVcsVerb: VcsVerbHandler = async (args, projectDir) => {
+  let cwd = projectDir;
+  let target: string | undefined;
+  let native = false;
+  let force = false;
+  let workstream: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    // WR-04: distinguish "flag requires value" from "unknown flag".
+    if (args[i] === '--cwd') {
+      if (!args[i + 1]) {
+        return { data: { ok: false, error: `migrate-vcs: --cwd requires a path argument` } };
+      }
+      cwd = args[i + 1];
+      i++;
+    } else if (args[i] === '--target') {
+      if (!args[i + 1]) {
+        return { data: { ok: false, error: `migrate-vcs: --target requires a value (git|jj)` } };
+      }
+      target = args[i + 1];
+      i++;
+    } else if (args[i] === '--workstream') {
+      if (!args[i + 1]) {
+        return { data: { ok: false, error: `migrate-vcs: --workstream requires a name argument` } };
+      }
+      workstream = args[i + 1];
+      i++;
+    } else if (args[i] === '--native') {
+      native = true;
+    } else if (args[i] === '--force') {
+      force = true;
+    } else if (args[i].startsWith('--')) {
+      return { data: { ok: false, error: `migrate-vcs: unknown flag '${args[i]}'` } };
+    }
+  }
+
+  // Determine current adapter from .planning/config.json (current-state-aware
+  // target defaults, CONTEXT D-03).
+  let currentAdapter: 'git' | 'jj' | 'auto' | 'absent' = 'absent';
+  try {
+    const configPath = workstream
+      ? join(cwd, '.planning', 'workstreams', workstream, 'config.json')
+      : join(cwd, '.planning', 'config.json');
+    const raw = await readFile(configPath, 'utf-8');
+    const json = JSON.parse(raw);
+    currentAdapter = json?.vcs?.adapter ?? 'absent';
+  } catch {
+    /* leave 'absent' */
+  }
+
+  if (target === undefined) {
+    if (currentAdapter === 'git' || currentAdapter === 'absent' || currentAdapter === 'auto') {
+      target = 'jj';
+    } else if (currentAdapter === 'jj') {
+      return {
+        data: {
+          ok: false,
+          error: 'migrate-vcs: already on jj — pass --target git to migrate back',
+        },
+      };
+    }
+  }
+
+  if (!VALID_MIGRATE_TARGETS.has(target!)) {
+    return {
+      data: { ok: false, error: `migrate-vcs: invalid --target '${target}' (valid: jj, git)` },
+    };
+  }
+
+  // Pre-flight: target=jj requires jj binary available.
+  if (target === 'jj') {
+    try {
+      execSync('jj --version', { stdio: 'pipe' });
+    } catch {
+      return {
+        data: {
+          ok: false,
+          error: 'migrate-vcs: --target jj requires jj binary in PATH (install jj first)',
+        },
+      };
+    }
+  }
+
+  try {
+    const result = await runMigration(cwd, target as 'git' | 'jj', { force, native, workstream });
+    return {
+      data: {
+        ok: true,
+        migrated: result.migrated,
+        filesChanged: result.filesChanged,
+        filesScanned: result.filesScanned,
+        orphans: result.orphans,
+        previousAdapter: result.previousAdapter,
+        newAdapter: result.newAdapter,
+        commitId: result.commitId,
+      },
+    };
+  } catch (e) {
+    return { data: { ok: false, error: `migrate-vcs: ${(e as Error).message}` } };
+  }
+};
+
+const workspaceAssertDispatchedCwdVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[i + 1];
+      i++;
+    }
+  }
+
+  const vcs = createVcsAdapter(cwd);
+  const entries = vcs.workspace.list();
+
+  const cwdReal = safeRealpath(cwd);
+
+  // Plan 11-11 (PROMPT-08): primary workspace fs path resolved independently
+  // of the cwd-match outcome so the failure branch carries it too.
+  const primaryWorkspacePath: string | null =
+    entries.length === 0
+      ? null
+      : vcs.kind === 'jj'
+        ? resolveJjWorkspacePath(cwd, entries[0].path)
+        : safeRealpath(entries[0].path);
+
+  // Convention (load-bearing on both backends): list()[0] is the primary
+  // workspace. On jj, WorkspaceInfo.path carries the workspace NAME and is
+  // resolved to an fs path before the realpath compare (Plan 11-07 CR-01).
+  let matchedIndex = -1;
+  let matchedPath: string | null = null;
+  for (let i = 0; i < entries.length; i++) {
+    const entry: WorkspaceInfo = entries[i];
+    const fsPath =
+      vcs.kind === 'jj' ? resolveJjWorkspacePath(cwd, entry.path) : entry.path;
+    if (fsPath === null) continue;
+    const entryReal = safeRealpath(fsPath);
+    if (entryReal !== null && cwdReal !== null && entryReal === cwdReal) {
+      matchedIndex = i;
+      matchedPath = fsPath;
+      break;
+    }
+  }
+
+  if (matchedIndex === -1) {
+    // `null` (not `undefined`) so the JSON envelope carries the keys
+    // explicitly — consumers see a stable shape regardless of resolution.
+    return {
+      data: {
+        ok: false,
+        workspaceName: null,
+        workspacePath: null,
+        isPrimary: false,
+        primaryWorkspacePath,
+      },
+    };
+  }
+
+  const matched = entries[matchedIndex];
+  const isPrimary = matchedIndex === 0;
+
+  return {
+    data: {
+      ok: !isPrimary,
+      workspaceName: matched.path,
+      workspacePath: matchedPath ?? matched.path,
+      isPrimary,
+      primaryWorkspacePath,
+    },
+  };
+};
+
+const workspaceParallelDispatchVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+  let phaseNumber: number | undefined;
+  // Phase 14.1 (PARALLEL-08, D-02): repeated-singular --main-bookmark
+  // accumulator. Preserves argv order; no dedup. Empty list is legal.
+  const mainBookmarks: string[] = [];
+  let planRaw: string | undefined;
+  let maxConcurrency: number | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[++i];
+    } else if (args[i] === '--phase' && args[i + 1]) {
+      phaseNumber = Number(args[++i]);
+    } else if (args[i] === '--main-bookmark' && args[i + 1]) {
+      mainBookmarks.push(args[++i]);
+    } else if (args[i] === '--plan' && args[i + 1]) {
+      planRaw = args[++i];
+    } else if (args[i] === '--max-concurrency' && args[i + 1]) {
+      maxConcurrency = Number(args[++i]);
+    }
+  }
+
+  if (phaseNumber === undefined || Number.isNaN(phaseNumber)) {
+    return { data: { ok: false, reason: 'phase_number_required' } };
+  }
+  if (planRaw === undefined) {
+    return { data: { ok: false, reason: 'plan_required' } };
+  }
+
+  // Port-time collapse of the retired SDK loadConfig: the only consumed field
+  // is `parallelization`, checked strict-equal-false (Phase 14 plan 02
+  // RESEARCH §A "Critical caveat" — protects legacy nested-shape configs from
+  // the loose-falsey trap). planningPaths carries the GSD_WORKSTREAM env
+  // defaulting the SDK loader had.
+  let parallelization: unknown;
+  try {
+    const rawConfig = readFileSync(planningPaths(cwd).config, 'utf-8');
+    parallelization = (JSON.parse(rawConfig) as Record<string, unknown>).parallelization;
+  } catch {
+    /* missing/malformed config — default (true) allows dispatch */
+  }
+  if (parallelization === false) {
+    return {
+      data: {
+        ok: false,
+        reason: 'parallelization_disabled',
+        message:
+          'Parallelization is disabled in .planning/config.json. ' +
+          'Set `parallelization: true`, or remove the explicit `false` ' +
+          'entry to fall back to the default (true).',
+      },
+    };
+  }
+
+  let plan: readonly { agentId: string; planId: string; workspacePath?: string }[];
+  try {
+    const planText = resolvePlanInput(planRaw);
+    plan = JSON.parse(planText);
+  } catch (err) {
+    return {
+      data: {
+        ok: false,
+        reason: 'plan_json_parse_failed',
+        error: err instanceof Error ? err.message : String(err),
+      },
+    };
+  }
+
+  const vcs = createVcsAdapter(cwd);
+  const handle = vcs.workspace.parallel.dispatch({
+    phaseNumber,
+    mainBookmarks,
+    plan,
+    maxConcurrency,
+  });
+
+  return { data: handle };
+};
+
+const workspaceParallelFanInVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+  let handleRaw: string | undefined;
+  let resultsRaw: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[++i];
+    } else if (args[i] === '--handle' && args[i + 1]) {
+      handleRaw = args[++i];
+    } else if (args[i] === '--results' && args[i + 1]) {
+      resultsRaw = args[++i];
+    }
+  }
+
+  if (handleRaw === undefined) {
+    return { data: { ok: false, reason: 'handle_required' } };
+  }
+
+  // Disambiguation: both inputs cannot default to stdin.
+  if (resultsRaw === undefined) {
+    if (handleRaw === '@-') {
+      return {
+        data: {
+          ok: false,
+          reason: 'results_required_when_handle_is_stdin',
+        },
+      };
+    }
+    resultsRaw = '@-';
+  } else if (handleRaw === '@-' && resultsRaw === '@-') {
+    return {
+      data: { ok: false, reason: 'handle_and_results_cannot_both_be_stdin' },
+    };
+  }
+
+  let handle: ParallelDispatchHandle;
+  try {
+    const handleText = resolveFileOrStdin(handleRaw);
+    handle = JSON.parse(handleText);
+  } catch (err) {
+    return {
+      data: {
+        ok: false,
+        reason: 'handle_json_parse_failed',
+        error: err instanceof Error ? err.message : String(err),
+      },
+    };
+  }
+
+  let results: readonly ParallelAgentResult[];
+  try {
+    const resultsText = resolveFileOrStdin(resultsRaw);
+    results = JSON.parse(resultsText);
+  } catch (err) {
+    return {
+      data: {
+        ok: false,
+        reason: 'results_json_parse_failed',
+        error: err instanceof Error ? err.message : String(err),
+      },
+    };
+  }
+
+  const vcs = createVcsAdapter(cwd);
+  const fanInResult = vcs.workspace.parallel.fanIn(handle, results);
+
+  return { data: fanInResult };
+};
+
+const workspaceParallelCancelVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+  let handleRaw: string | undefined;
+
+  // Phase 16 REVIEW WR-03: `i + 1 < args.length` (not truthiness) so an
+  // empty-string value routes to the downstream validator.
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && i + 1 < args.length) {
+      cwd = args[++i];
+    } else if (args[i] === '--handle' && i + 1 < args.length) {
+      handleRaw = args[++i];
+    }
+  }
+
+  if (handleRaw === undefined) {
+    return { data: { ok: false, reason: 'handle_required' } };
+  }
+
+  let handle: ParallelDispatchHandle;
+  try {
+    const handleText = resolveFileOrStdin(handleRaw);
+    handle = JSON.parse(handleText);
+  } catch (err) {
+    return {
+      data: {
+        ok: false,
+        reason: 'handle_json_parse_failed',
+        error: err instanceof Error ? err.message : String(err),
+      },
+    };
+  }
+
+  const vcs = createVcsAdapter(cwd);
+  const cancelResult = vcs.workspace.parallel.cancel(handle);
+
+  return { data: cancelResult };
+};
+
+const cleanupSubagentWorkspacesVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+  let phase: number | undefined;
+  let allPhases = false;
+
+  // Phase 16 REVIEW WR-03: explicit `i + 1 < args.length` guard.
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && i + 1 < args.length) {
+      cwd = args[++i];
+    } else if (args[i] === '--phase' && i + 1 < args.length) {
+      phase = Number(args[++i]);
+    } else if (args[i] === '--all-phases') {
+      allPhases = true;
+    }
+  }
+
+  // (a) Mutual-exclusion — checked FIRST (no filesystem read). CONTEXT D-04.
+  if (phase !== undefined && allPhases) {
+    return { data: { ok: false, reason: 'phase_and_all_phases_mutually_exclusive' } };
+  }
+
+  // (b) At least one mode flag required.
+  if (phase === undefined && !allPhases) {
+    return { data: { ok: false, reason: 'phase_or_all_phases_required' } };
+  }
+
+  // (c) Phase-number validation (T-16.02-02 — fail loud, not silent no-op).
+  if (phase !== undefined && (Number.isNaN(phase) || !Number.isInteger(phase) || phase < 0)) {
+    return { data: { ok: false, reason: 'invalid_phase_number' } };
+  }
+
+  if (phase !== undefined) {
+    const result = cleanupSubagentWorkspaces(cwd, phase);
+    return { data: result };
+  }
+
+  // --all-phases mode (D-05/D-06): enumerate, bucket BY phase via the shared
+  // regex (Phase 16 REVIEW WR-05 — authoritative-list branch, no padded-regex
+  // fallback divergence), iterate ascending.
+  const workspacesDir = join(cwd, '.claude', 'jj-workspaces');
+  if (!existsSync(workspacesDir)) {
+    return { data: { abandoned: [], failedReaped: [] } };
+  }
+
+  const entries = readdirSync(workspacesDir);
+  const workspacesByPhase = new Map<number, { name: string; path: string }[]>();
+  for (const e of entries) {
+    const m = WORKSPACE_NAME_RE.exec(e);
+    if (!m) continue;
+    const p = Number(m[1]);
+    let bucket = workspacesByPhase.get(p);
+    if (!bucket) {
+      bucket = [];
+      workspacesByPhase.set(p, bucket);
+    }
+    bucket.push({ name: e, path: join(workspacesDir, e) });
+  }
+
+  const sortedPhases = [...workspacesByPhase.keys()].sort((a, b) => a - b);
+
+  const merged: { abandoned: string[]; failedReaped: string[] } = {
+    abandoned: [],
+    failedReaped: [],
+  };
+  for (const p of sortedPhases) {
+    const r = cleanupSubagentWorkspaces(cwd, p, workspacesByPhase.get(p));
+    merged.abandoned.push(...r.abandoned);
+    merged.failedReaped.push(...r.failedReaped);
+  }
+
+  return { data: merged };
+};
+
+// ─── Verb table ──────────────────────────────────────────────────────────────
+
+/**
+ * Canonical verb → handler. Keys are the fork's registered verb names
+ * (command-manifest.non-family.ts at c7bd6bee). `commit-to-subrepo` is present
+ * for envelope parity but gsd-tools' upstream case owns its dispatch until
+ * 19-07 (see file header).
+ */
+const VCS_VERB_TABLE: Record<string, VcsVerbHandler> = {
+  'status': statusVerb,
+  'log': logVerb,
+  'diff': diffVerb,
+  'head-ref': headRefVerb,
+  'current-branch': currentBranchVerb,
+  'branch-list': branchListVerb,
+  'push': pushVerb,
+  'merge': mergeVerb,
+  'reset': resetVerb,
+  'restore': restoreVerb,
+  'revert': revertVerb,
+  'commit-to-subrepo': commitToSubrepoVerb,
+  'hooks.fire': hooksFireVerb,
+  'migrate-vcs': migrateVcsVerb,
+  'workspace.assert-dispatched-cwd': workspaceAssertDispatchedCwdVerb,
+  'workspace.parallel.dispatch': workspaceParallelDispatchVerb,
+  'workspace.parallel.fan-in': workspaceParallelFanInVerb,
+  'workspace.parallel.cancel': workspaceParallelCancelVerb,
+  'cleanup-subagent-workspaces': cleanupSubagentWorkspacesVerb,
+};
+
+// ─── Router entry point ──────────────────────────────────────────────────────
+
+interface RouteVcsCommandOptions {
+  /** Head command after gsd-tools' dotted→spaced normalization. */
+  command: string;
+  /** Full args array (args[0] === command; subcommand tokens follow). */
+  args: string[];
+  cwd: string;
+  raw: boolean;
+  error: (message: string) => void;
+  /** core.output-compatible emitter (handles --raw and @file: spill). */
+  output: (result: unknown, raw?: boolean, rawValue?: unknown) => void;
+}
+
+/**
+ * Resolve the canonical verb + the verb's own argv from gsd-tools' normalized
+ * (command, args) pair. Returns null when the family/subcommand combination
+ * does not name a known verb.
+ */
+function resolveVerb(command: string, args: string[]): { verb: string; verbArgs: string[] } | null {
+  if (command === 'hooks') {
+    if (args[1] === 'fire') {
+      return { verb: 'hooks.fire', verbArgs: args.slice(2) };
+    }
+    return null;
+  }
+  if (command === 'workspace') {
+    const sub = args[1];
+    if (sub === 'assert-dispatched-cwd') {
+      return { verb: 'workspace.assert-dispatched-cwd', verbArgs: args.slice(2) };
+    }
+    // Dotted canonical (`workspace.parallel.dispatch`) arrives as
+    // args[1]='parallel.dispatch' after gsd-tools' first-dot split; the fully
+    // spaced form arrives as args[1]='parallel', args[2]='dispatch'.
+    if (sub === 'parallel.dispatch' || (sub === 'parallel' && args[2] === 'dispatch')) {
+      return { verb: 'workspace.parallel.dispatch', verbArgs: args.slice(sub === 'parallel' ? 3 : 2) };
+    }
+    if (sub === 'parallel.fan-in' || (sub === 'parallel' && args[2] === 'fan-in')) {
+      return { verb: 'workspace.parallel.fan-in', verbArgs: args.slice(sub === 'parallel' ? 3 : 2) };
+    }
+    if (sub === 'parallel.cancel' || (sub === 'parallel' && args[2] === 'cancel')) {
+      return { verb: 'workspace.parallel.cancel', verbArgs: args.slice(sub === 'parallel' ? 3 : 2) };
+    }
+    return null;
+  }
+  if (Object.prototype.hasOwnProperty.call(VCS_VERB_TABLE, command)) {
+    return { verb: command, verbArgs: args.slice(1) };
+  }
+  return null;
+}
+
+/**
+ * Route a vcs verb to its handler and emit the fork-shaped JSON envelope.
+ *
+ * Exit-code semantics mirror the fork's gsd-sdk query dispatch: a handler
+ * that RETURNS an envelope (including typed `ok:false` error envelopes)
+ * exits 0; only thrown errors propagate to gsd-tools' runMain failure path.
+ */
+async function routeVcsCommand({ command, args, cwd, raw, error, output }: RouteVcsCommandOptions): Promise<void> {
+  const resolved = resolveVerb(command, args);
+  if (resolved === null) {
+    if (command === 'hooks') {
+      error('Unknown hooks subcommand. Available: fire');
+      return;
+    }
+    if (command === 'workspace') {
+      error(
+        'Unknown workspace subcommand. Available: assert-dispatched-cwd, ' +
+          'parallel.dispatch, parallel.fan-in, parallel.cancel',
+      );
+      return;
+    }
+    error(`Unknown vcs verb: ${command}. Available: ${Object.keys(VCS_VERB_TABLE).join(', ')}`);
+    return;
+  }
+  const handler = VCS_VERB_TABLE[resolved.verb];
+  const result = await handler(resolved.verbArgs, cwd);
+  output(result.data, raw);
+}
+
+export = {
+  routeVcsCommand,
+  VCS_VERB_TABLE,
+};

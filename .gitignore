@@ -70,6 +70,7 @@ build/
 # from the per-file enumeration style above — auto-covers future vcs modules so the
 # enumeration cannot drift; rationale ledgered in 19-MERGE-AUDIT.md).
 /gsd-core/bin/lib/vcs/
+/gsd-core/bin/lib/vcs-command-router.cjs
 /gsd-core/bin/lib/research-store.cjs
 /gsd-core/bin/lib/research-provider.cjs
 /gsd-core/bin/lib/package-legitimacy.cjs
