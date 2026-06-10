@@ -3,7 +3,7 @@
  * lint-vcs-parallel-call-presence.cjs (Phase 16 plan 16.01, LINT-06)
  *
  * FILE-level pairing lint for workspace.parallel.dispatch <-> workspace.parallel.fan-in
- * literals in bash/sh/zsh fences under get-shit-done/workflows/.
+ * literals in bash/sh/zsh fences under gsd-core/workflows/ (19-10 re-point).
  *
  * Scope: SHELL FENCE not prose mention (Pitfall 7 / CF-04). A workflow .md file
  * that contains `workspace.parallel.dispatch` inside any bash/sh/zsh fence MUST
@@ -64,8 +64,9 @@ const FENCE_OPEN = /^\s*(```+|~~~+)\s*(bash|sh|zsh)\b/i;
 const FENCE_CLOSE = /^\s*(```+|~~~+)\s*$/;
 // D-03: narrower than audit's 3-root scope (which includes references/ and
 // agents/) — workflows only, to avoid Pitfall 7 false-positives on prose-only
-// references in non-dispatch workflows.
-const SCAN_ROOTS = ['get-shit-done/workflows'];
+// references in non-dispatch workflows. (19-10: re-pointed from the retired
+// get-shit-done/ layout to the adopted upstream gsd-core/ layout.)
+const SCAN_ROOTS = ['gsd-core/workflows'];
 
 // Content-driven literal substring detection (CF-04). NO regex anchors —
 // the fence walker already scopes to bash content. Hyphenated fan-in per

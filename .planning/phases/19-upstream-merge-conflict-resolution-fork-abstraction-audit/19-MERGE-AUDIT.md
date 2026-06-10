@@ -261,6 +261,9 @@ Every ledger row's disposition MUST start with exactly one of these six prefixes
 | lint-vcs-no-commit-id.allow.json + tests/scripts/lint-vcs-no-raw-git-fixture.test.cjs | fork | merged | Allowlist line ADDED: the extended fixture test embeds the planted `.commit_id` literal it writes into tmp .cts fixtures — scan-script self-reference class (tests/scripts/audit-id-namespace.test.cjs precedent) (19-10 Task 1) |
 | lint-vcs-no-commit-id.allow.json + .planning/** (glob) | both | merged | Allowlist line ADDED: planning artifacts incl. the 19-03 harvest reference copies (.planning/phases/19-*/harvest/** — byte-verified c7bd6bee snapshots carrying fork-era commit_id text) are never-executed reference material; mirrors the raw-git allowlist's .planning/** entry (19-10 Task 1) |
 | lint-vcs-no-commit-id.allow.json: sdk/src/query/{commit,log}.ts + sdk/src/types.ts JSDoc re-point targets | fork | merged | NO new entry minted (phantom-entry rule): the plan's expected re-point targets `src/vcs-command-router.cts` carries zero commit_id-shape text under the widened scan (the 19-06/19-07 port already routed envelopes through `.id`), and `src/vcs/parse/jj-log.cts` (old jj-log.ts historical-prose entry) no longer hits any pattern. Legacy entries retained under pending-19-12-residue-deletion; nothing replaces them (19-10 Task 1) |
+| scripts/audit-workflow-raw-git.cjs | fork | merged | 19-10 Task 2: SCAN_ROOTS `['get-shit-done/workflows','get-shit-done/references','agents']` → `['gsd-core/workflows','gsd-core/references','agents']`; obsolete 127-hit fork-path BASELINE replaced by the machine-derived 230-hit / 93-file map (the script's OWN counter; transcript + per-file count rationale in "Appendix: Skip-count / baseline re-derivations"). Regression rule (current > baseline = fail) byte-identical; exit 0 on first green run (19-10 Task 2) |
+| scripts/lint-vcs-parallel-call-presence.cjs | fork | merged | 19-10 Task 2: SCAN_ROOTS → `['gsd-core/workflows']`; allowlist stays EMPTY; exit 0 — the 19-08 rewiring put workspace.parallel.dispatch AND fan-in literals in execute-phase.md + quick.md fences, all other workflows carry neither (file-level XOR pairing rule holds) (19-10 Task 2) |
+| tests/scripts/fixtures/lint-vcs-parallel-call-presence/*/get-shit-done/ | fork | ported-to:tests/scripts/fixtures/lint-vcs-parallel-call-presence/*/gsd-core/ | Rule 1 fallout of the SCAN_ROOTS re-point: the 5 D-14 fixture trees mirror the production scan root by construction; renamed get-shit-done→gsd-core (file content untouched) + the test's 2 synthetic allowlist path strings updated. 12/12 audit+presence unit tests pass post-rename (19-10 Task 2) |
 
 ## Fixture exclusions (conflict-marker sweep)
 
@@ -287,7 +290,224 @@ Run 2026-06-10 (plan 19-03, after buckets A/B/C cleared): **17 hits, set-identic
 
 ## Appendix: Skip-count / baseline re-derivations
 
-*(empty — filled by 19-10/19-12)*
+### 19-10: audit-workflow-raw-git baseline re-derivation
+
+**Run:** 2026-06-10 (plan 19-10 Task 2). Method (Don't-Hand-Roll rule): the new BASELINE map was produced by running the script's OWN fence-aware counter against the finished tree — `auditWorkflowRawGit({ scanRoots: ['gsd-core/workflows','gsd-core/references','agents'], repoRoot, baseline: {} })` via the module export — and freezing the resulting `currentCounts` verbatim (never hand-counted). The regression rule (current > baseline = fail) is byte-identical to the Phase 13 original. First green run: current == baseline == pass, exit 0.
+
+**Replaced:** the obsolete 127-hit / 30-file fork-path map (2026-05-22) → **230 hits / 93 files** (2026-06-10, post-19-08/19-09 tree). Net shape change is dominated by the 19-09 launcher embed: its deliberate raw `git rev-parse --show-toplevel` first leg sits in a bash fence of every embedded workflow file (+1 per file; the same leg is allowlisted at the .sh snippet source in 19-10 Task 1).
+
+**Derivation transcript** (`node scripts/audit-workflow-raw-git.cjs --json` immediately after freezing — provably machine-derived; `scanned_at` from the freezing session, regressions empty):
+
+```json
+{
+  "$schema_version": 1,
+  "scanned_at": "2026-06-10T13:46:36.567Z",
+  "ok": true,
+  "scannedFiles": 210,
+  "totalCurrent": 230,
+  "currentCounts": {
+    "gsd-core/workflows/add-backlog.md": 1,
+    "gsd-core/workflows/add-phase.md": 1,
+    "gsd-core/workflows/add-tests.md": 3,
+    "gsd-core/workflows/add-todo.md": 1,
+    "gsd-core/workflows/ai-integration-phase.md": 3,
+    "gsd-core/workflows/audit-fix.md": 4,
+    "gsd-core/workflows/audit-milestone.md": 1,
+    "gsd-core/workflows/audit-uat.md": 1,
+    "gsd-core/workflows/autonomous.md": 2,
+    "gsd-core/workflows/check-todos.md": 2,
+    "gsd-core/workflows/cleanup.md": 4,
+    "gsd-core/workflows/code-review-fix.md": 3,
+    "gsd-core/workflows/code-review.md": 4,
+    "gsd-core/workflows/complete-milestone.md": 11,
+    "gsd-core/workflows/debug.md": 1,
+    "gsd-core/workflows/diagnose-issues.md": 2,
+    "gsd-core/workflows/discuss-phase/modes/advisor.md": 1,
+    "gsd-core/workflows/discuss-phase/modes/auto.md": 1,
+    "gsd-core/workflows/discuss-phase/modes/chain.md": 1,
+    "gsd-core/workflows/discuss-phase-assumptions.md": 1,
+    "gsd-core/workflows/discuss-phase.md": 1,
+    "gsd-core/workflows/do.md": 1,
+    "gsd-core/workflows/docs-update.md": 1,
+    "gsd-core/workflows/edit-phase.md": 1,
+    "gsd-core/workflows/eval-review.md": 3,
+    "gsd-core/workflows/execute-phase/steps/codebase-drift-gate.md": 1,
+    "gsd-core/workflows/execute-phase/steps/post-merge-gate.md": 1,
+    "gsd-core/workflows/execute-phase.md": 15,
+    "gsd-core/workflows/execute-plan.md": 3,
+    "gsd-core/workflows/explore.md": 1,
+    "gsd-core/workflows/extract-learnings.md": 1,
+    "gsd-core/workflows/fast.md": 3,
+    "gsd-core/workflows/forensics.md": 10,
+    "gsd-core/workflows/graduation.md": 1,
+    "gsd-core/workflows/health.md": 1,
+    "gsd-core/workflows/import.md": 1,
+    "gsd-core/workflows/ingest-docs.md": 2,
+    "gsd-core/workflows/insert-phase.md": 1,
+    "gsd-core/workflows/list-workspaces.md": 1,
+    "gsd-core/workflows/manager.md": 1,
+    "gsd-core/workflows/map-codebase.md": 1,
+    "gsd-core/workflows/migrate-vcs.md": 1,
+    "gsd-core/workflows/milestone-summary.md": 6,
+    "gsd-core/workflows/mvp-phase.md": 1,
+    "gsd-core/workflows/new-milestone.md": 1,
+    "gsd-core/workflows/new-project.md": 1,
+    "gsd-core/workflows/new-workspace.md": 6,
+    "gsd-core/workflows/next.md": 1,
+    "gsd-core/workflows/pause-work.md": 1,
+    "gsd-core/workflows/plan-milestone-gaps.md": 1,
+    "gsd-core/workflows/plan-phase.md": 2,
+    "gsd-core/workflows/plan-review-convergence.md": 1,
+    "gsd-core/workflows/plant-seed.md": 1,
+    "gsd-core/workflows/pr-branch.md": 12,
+    "gsd-core/workflows/profile-user.md": 1,
+    "gsd-core/workflows/progress.md": 2,
+    "gsd-core/workflows/quick.md": 12,
+    "gsd-core/workflows/remove-phase.md": 1,
+    "gsd-core/workflows/remove-workspace.md": 3,
+    "gsd-core/workflows/resume-project.md": 1,
+    "gsd-core/workflows/review.md": 2,
+    "gsd-core/workflows/scan.md": 1,
+    "gsd-core/workflows/secure-phase.md": 1,
+    "gsd-core/workflows/session-report.md": 2,
+    "gsd-core/workflows/settings-advanced.md": 1,
+    "gsd-core/workflows/settings-integrations.md": 1,
+    "gsd-core/workflows/settings.md": 1,
+    "gsd-core/workflows/ship.md": 11,
+    "gsd-core/workflows/sketch-wrap-up.md": 1,
+    "gsd-core/workflows/sketch.md": 1,
+    "gsd-core/workflows/spec-phase.md": 3,
+    "gsd-core/workflows/spike-wrap-up.md": 1,
+    "gsd-core/workflows/spike.md": 1,
+    "gsd-core/workflows/stats.md": 1,
+    "gsd-core/workflows/thread.md": 1,
+    "gsd-core/workflows/transition.md": 1,
+    "gsd-core/workflows/ui-phase.md": 1,
+    "gsd-core/workflows/ui-review.md": 1,
+    "gsd-core/workflows/ultraplan-phase.md": 1,
+    "gsd-core/workflows/undo.md": 1,
+    "gsd-core/workflows/validate-phase.md": 3,
+    "gsd-core/workflows/verify-phase.md": 1,
+    "gsd-core/workflows/verify-work.md": 1,
+    "gsd-core/references/git-integration.md": 6,
+    "gsd-core/references/planner-load-graph-context.md": 1,
+    "gsd-core/references/planning-config.md": 4,
+    "gsd-core/references/tdd.md": 3,
+    "gsd-core/references/worktree-branch-check.md": 4,
+    "gsd-core/references/worktree-path-safety.md": 4,
+    "agents/gsd-code-fixer.md": 6,
+    "agents/gsd-code-reviewer.md": 1,
+    "agents/gsd-debugger.md": 7,
+    "agents/gsd-phase-researcher.md": 1
+  },
+  "regressions": []
+}
+```
+
+**Per-file count rationale** (one row per baseline key; embed/content split computed by filtering the script's own hit list for the launcher line shape `_GSD_SHIM_NAME`):
+
+- *launcher-embed-only* — the file's sole hit is the 19-09 launcher embed git-first leg (substrate by design)
+- *carried* — content hits equal the fork-era baseline count for the renamed path (never-rewired fences: checkout/tag/stash-class operations with phantom-verb TODOs)
+- *upstream-grew* — upstream 1.4.x added fences that the 19-08 three-way re-application deliberately preserved (e.g. execute-phase #48 orchestrator cwd-guard + #683 base-ref degrade; complete-milestone git_tag pre-checks; ship release fences)
+- *upstream-new* — file absent from the fork baseline (upstream-new workflow/reference, e.g. worktree-branch-check.md / worktree-path-safety.md git-worktree machinery; cleanup.md/autonomous.md/review.md/plan-phase.md upstream additions)
+
+| file | baseline | count rationale |
+|------|----------|-----------------|
+| `agents/gsd-code-fixer.md` | 6 | carried: 6 never-rewired fork-baseline fence hit(s) (no launcher embed) |
+| `agents/gsd-code-reviewer.md` | 1 | carried: 1 never-rewired fork-baseline fence hit(s) (no launcher embed) |
+| `agents/gsd-debugger.md` | 7 | carried: 7 never-rewired fork-baseline fence hit(s) (no launcher embed) |
+| `agents/gsd-phase-researcher.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/references/git-integration.md` | 6 | carried: 6 never-rewired fork-baseline fence hit(s) (no launcher embed) |
+| `gsd-core/references/planner-load-graph-context.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/references/planning-config.md` | 4 | carried: 4 never-rewired fork-baseline fence hit(s) (no launcher embed) |
+| `gsd-core/references/tdd.md` | 3 | carried: 3 never-rewired fork-baseline fence hit(s) (no launcher embed) |
+| `gsd-core/references/worktree-branch-check.md` | 4 | upstream-new: 4 content hit(s) in a file absent from the fork baseline (no launcher embed) |
+| `gsd-core/references/worktree-path-safety.md` | 4 | upstream-new: 4 content hit(s) in a file absent from the fork baseline (no launcher embed) |
+| `gsd-core/workflows/add-backlog.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/add-phase.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/add-tests.md` | 3 | carried: 2 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/add-todo.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/ai-integration-phase.md` | 3 | carried: 2 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/audit-fix.md` | 4 | carried: 3 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/audit-milestone.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/audit-uat.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/autonomous.md` | 2 | upstream-new: 1 content hit(s) in a file absent from the fork baseline + 1 launcher embed |
+| `gsd-core/workflows/check-todos.md` | 2 | carried: 1 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/cleanup.md` | 4 | upstream-new: 3 content hit(s) in a file absent from the fork baseline + 1 launcher embed |
+| `gsd-core/workflows/code-review-fix.md` | 3 | carried: 2 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/code-review.md` | 4 | carried: 3 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/complete-milestone.md` | 11 | upstream-grew: fork baseline 9 -> 10 content hit(s) (upstream 1.4.x fences preserved by the 19-08 three-way re-application) + 1 launcher embed |
+| `gsd-core/workflows/debug.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/diagnose-issues.md` | 2 | carried: 1 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/discuss-phase-assumptions.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/discuss-phase.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/discuss-phase/modes/advisor.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/discuss-phase/modes/auto.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/discuss-phase/modes/chain.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/do.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/docs-update.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/edit-phase.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/eval-review.md` | 3 | carried: 2 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/execute-phase.md` | 15 | upstream-grew: fork baseline 11 -> 14 content hit(s) (upstream 1.4.x fences preserved by the 19-08 three-way re-application) + 1 launcher embed |
+| `gsd-core/workflows/execute-phase/steps/codebase-drift-gate.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/execute-phase/steps/post-merge-gate.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/execute-plan.md` | 3 | carried: 2 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/explore.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/extract-learnings.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/fast.md` | 3 | upstream-grew: fork baseline 2 -> 3 content hit(s) (upstream 1.4.x fences preserved by the 19-08 three-way re-application) |
+| `gsd-core/workflows/forensics.md` | 10 | carried: 9 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/graduation.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/health.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/import.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/ingest-docs.md` | 2 | carried: 1 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/insert-phase.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/list-workspaces.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/manager.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/map-codebase.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/migrate-vcs.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/milestone-summary.md` | 6 | carried: 5 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/mvp-phase.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/new-milestone.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/new-project.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/new-workspace.md` | 6 | carried: 5 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/next.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/pause-work.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/plan-milestone-gaps.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/plan-phase.md` | 2 | upstream-new: 1 content hit(s) in a file absent from the fork baseline + 1 launcher embed |
+| `gsd-core/workflows/plan-review-convergence.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/plant-seed.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/pr-branch.md` | 12 | carried: 12 never-rewired fork-baseline fence hit(s) (no launcher embed) |
+| `gsd-core/workflows/profile-user.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/progress.md` | 2 | carried: 1 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/quick.md` | 12 | carried: 11 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/remove-phase.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/remove-workspace.md` | 3 | carried: 2 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/resume-project.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/review.md` | 2 | upstream-new: 1 content hit(s) in a file absent from the fork baseline + 1 launcher embed |
+| `gsd-core/workflows/scan.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/secure-phase.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/session-report.md` | 2 | carried: 2 never-rewired fork-baseline fence hit(s) (no launcher embed) |
+| `gsd-core/workflows/settings-advanced.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/settings-integrations.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/settings.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/ship.md` | 11 | upstream-grew: fork baseline 8 -> 10 content hit(s) (upstream 1.4.x fences preserved by the 19-08 three-way re-application) + 1 launcher embed |
+| `gsd-core/workflows/sketch-wrap-up.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/sketch.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/spec-phase.md` | 3 | carried: 2 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/spike-wrap-up.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/spike.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/stats.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/thread.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/transition.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/ui-phase.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/ui-review.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/ultraplan-phase.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/undo.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/validate-phase.md` | 3 | carried: 2 never-rewired fork-baseline fence hit(s) + 1 launcher embed |
+| `gsd-core/workflows/verify-phase.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+| `gsd-core/workflows/verify-work.md` | 1 | launcher-embed-only: sole hit is the 19-09 launcher embed git-first leg (deliberate substrate) |
+
+**Observation (no action this plan):** `agents/gsd-phase-researcher.md` and `gsd-core/references/planner-load-graph-context.md` carry the OLD launcher form (`git rev-parse … || pwd`, no jj leg) — the 19-09 sync scope was gsd-core/workflows only. Logged to deferred-items.md for a follow-up embed sync outside workflows/.
 
 ## Appendix: Hand-edited .cjs inventory
 

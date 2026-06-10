@@ -3,19 +3,23 @@
  * audit-workflow-raw-git.cjs (Phase 13 plan 13-02, LINT-04)
  *
  * Scans `.md` shell-fence blocks (the bash / sh / zsh labelled fences) under
- * `get-shit-done/workflows/`, `get-shit-done/references/`, and `agents/` for
- * raw `git <cmd>` invocations.
+ * `gsd-core/workflows/`, `gsd-core/references/`, and `agents/` for
+ * raw `git <cmd>` invocations. (19-10: scan roots re-pointed from the retired
+ * get-shit-done/ layout to the adopted upstream gsd-core/ layout.)
  *
  * This is a BASELINE-REGRESSION GUARD, not a zero-assertion audit. v1.3's
- * PROMPT-06..09 removed raw-git only from the parallel-dispatch path; 127
- * unrelated raw-git invocations remain across 30 workflow-markdown files. A
- * zero-assertion audit cannot pass. Instead, the audit carries a FROZEN per-file
- * baseline capturing the 2026-05-22 127-hit state (the BASELINE constant below)
+ * PROMPT-06..09 removed raw-git only from the parallel-dispatch path; the
+ * adopted post-merge tree carries 230 raw-git invocations across 93
+ * workflow-markdown files (most are the 19-09 launcher embed's deliberate
+ * git-first leg — 1 hit per embedded file). A zero-assertion audit cannot
+ * pass. Instead, the audit carries a FROZEN per-file baseline capturing the
+ * 2026-06-10 230-hit state (the BASELINE constant below, machine-derived by
+ * THIS script's own counter — transcript in 19-MERGE-AUDIT.md appendix)
  * and exits non-zero ONLY when a scanned file's current raw-git count EXCEEDS
  * its baseline count — i.e. NEW raw-git was added to workflow markdown. On the
  * first green run, current == baseline == pass. (Per RESEARCH.md Open Q1 user
  * resolution; plan 13-01 re-baselined ROADMAP SC2/SC3 + CONTEXT.md D-08 to this
- * same framing.)
+ * same framing; plan 19-10 re-derived the map for the adopted tree.)
  *
  * The audit is the CI-06 gate (plan 13-04 wires it into the parallel-e2e lane).
  * It is NOT in `npm pretest` (D-07 — one-shot / CI-06-only).
@@ -47,11 +51,18 @@ const SHELL_GIT_RE = /(?:^|[ \t;&|(])git[ \t]+[a-zA-Z]/;
 // case-insensitive). Fence close: a bare fence (no language label).
 const FENCE_OPEN = /^\s*(```+|~~~+)\s*(bash|sh|zsh)\b/i;
 const FENCE_CLOSE = /^\s*(```+|~~~+)\s*$/;
-const SCAN_ROOTS = ['get-shit-done/workflows', 'get-shit-done/references', 'agents'];
+const SCAN_ROOTS = ['gsd-core/workflows', 'gsd-core/references', 'agents'];
 
-// The frozen per-file raw-git baseline. A fence-aware scan re-run by the
-// executor on 2026-05-22 reproduced this map exactly (TOTAL = 127 hits across
-// 30 files). D-09 / phase-scope-decision: a per-file count map, NOT a bare
+// The frozen per-file raw-git baseline. Re-derived 2026-06-10 (plan 19-10) by
+// running THIS script's own fence-aware counter against the finished post-merge
+// tree (after the 19-08/19-09 rewiring): TOTAL = 230 hits across 93 files,
+// replacing the obsolete 127-hit fork-path map. Derivation transcript + one
+// ledger row per file (count rationale) live in 19-MERGE-AUDIT.md "Appendix:
+// Skip-count / baseline re-derivations". Dominant shape: the 19-09 launcher
+// embed keeps a DELIBERATE raw `git rev-parse --show-toplevel` first leg in a
+// bash fence of every embedded file (+1 each); never-rewired upstream fences
+// (pr-branch, ship, forensics, complete-milestone checkout/tag) carry the rest.
+// D-09 / phase-scope-decision: a per-file count map, NOT a bare
 // total — a removal in one file must never mask an addition in another. An
 // embedded `Object.freeze`d constant in committed source does NOT violate
 // CONTEXT.md D-06: D-06 forbids the audit WRITING transient output at runtime;
@@ -61,33 +72,96 @@ const BASELINE = Object.freeze({
 	'agents/gsd-code-fixer.md': 6,
 	'agents/gsd-code-reviewer.md': 1,
 	'agents/gsd-debugger.md': 7,
-	'get-shit-done/references/git-integration.md': 6,
-	'get-shit-done/references/planning-config.md': 4,
-	'get-shit-done/references/tdd.md': 3,
-	'get-shit-done/workflows/add-tests.md': 2,
-	'get-shit-done/workflows/ai-integration-phase.md': 2,
-	'get-shit-done/workflows/audit-fix.md': 3,
-	'get-shit-done/workflows/check-todos.md': 1,
-	'get-shit-done/workflows/code-review-fix.md': 2,
-	'get-shit-done/workflows/code-review.md': 3,
-	'get-shit-done/workflows/complete-milestone.md': 9,
-	'get-shit-done/workflows/diagnose-issues.md': 1,
-	'get-shit-done/workflows/eval-review.md': 2,
-	'get-shit-done/workflows/execute-phase.md': 11,
-	'get-shit-done/workflows/execute-plan.md': 2,
-	'get-shit-done/workflows/fast.md': 2,
-	'get-shit-done/workflows/forensics.md': 9,
-	'get-shit-done/workflows/ingest-docs.md': 1,
-	'get-shit-done/workflows/milestone-summary.md': 5,
-	'get-shit-done/workflows/new-workspace.md': 5,
-	'get-shit-done/workflows/pr-branch.md': 12,
-	'get-shit-done/workflows/progress.md': 1,
-	'get-shit-done/workflows/quick.md': 11,
-	'get-shit-done/workflows/remove-workspace.md': 2,
-	'get-shit-done/workflows/session-report.md': 2,
-	'get-shit-done/workflows/ship.md': 8,
-	'get-shit-done/workflows/spec-phase.md': 2,
-	'get-shit-done/workflows/validate-phase.md': 2,
+	'agents/gsd-phase-researcher.md': 1,
+	'gsd-core/references/git-integration.md': 6,
+	'gsd-core/references/planner-load-graph-context.md': 1,
+	'gsd-core/references/planning-config.md': 4,
+	'gsd-core/references/tdd.md': 3,
+	'gsd-core/references/worktree-branch-check.md': 4,
+	'gsd-core/references/worktree-path-safety.md': 4,
+	'gsd-core/workflows/add-backlog.md': 1,
+	'gsd-core/workflows/add-phase.md': 1,
+	'gsd-core/workflows/add-tests.md': 3,
+	'gsd-core/workflows/add-todo.md': 1,
+	'gsd-core/workflows/ai-integration-phase.md': 3,
+	'gsd-core/workflows/audit-fix.md': 4,
+	'gsd-core/workflows/audit-milestone.md': 1,
+	'gsd-core/workflows/audit-uat.md': 1,
+	'gsd-core/workflows/autonomous.md': 2,
+	'gsd-core/workflows/check-todos.md': 2,
+	'gsd-core/workflows/cleanup.md': 4,
+	'gsd-core/workflows/code-review-fix.md': 3,
+	'gsd-core/workflows/code-review.md': 4,
+	'gsd-core/workflows/complete-milestone.md': 11,
+	'gsd-core/workflows/debug.md': 1,
+	'gsd-core/workflows/diagnose-issues.md': 2,
+	'gsd-core/workflows/discuss-phase-assumptions.md': 1,
+	'gsd-core/workflows/discuss-phase.md': 1,
+	'gsd-core/workflows/discuss-phase/modes/advisor.md': 1,
+	'gsd-core/workflows/discuss-phase/modes/auto.md': 1,
+	'gsd-core/workflows/discuss-phase/modes/chain.md': 1,
+	'gsd-core/workflows/do.md': 1,
+	'gsd-core/workflows/docs-update.md': 1,
+	'gsd-core/workflows/edit-phase.md': 1,
+	'gsd-core/workflows/eval-review.md': 3,
+	'gsd-core/workflows/execute-phase.md': 15,
+	'gsd-core/workflows/execute-phase/steps/codebase-drift-gate.md': 1,
+	'gsd-core/workflows/execute-phase/steps/post-merge-gate.md': 1,
+	'gsd-core/workflows/execute-plan.md': 3,
+	'gsd-core/workflows/explore.md': 1,
+	'gsd-core/workflows/extract-learnings.md': 1,
+	'gsd-core/workflows/fast.md': 3,
+	'gsd-core/workflows/forensics.md': 10,
+	'gsd-core/workflows/graduation.md': 1,
+	'gsd-core/workflows/health.md': 1,
+	'gsd-core/workflows/import.md': 1,
+	'gsd-core/workflows/ingest-docs.md': 2,
+	'gsd-core/workflows/insert-phase.md': 1,
+	'gsd-core/workflows/list-workspaces.md': 1,
+	'gsd-core/workflows/manager.md': 1,
+	'gsd-core/workflows/map-codebase.md': 1,
+	'gsd-core/workflows/migrate-vcs.md': 1,
+	'gsd-core/workflows/milestone-summary.md': 6,
+	'gsd-core/workflows/mvp-phase.md': 1,
+	'gsd-core/workflows/new-milestone.md': 1,
+	'gsd-core/workflows/new-project.md': 1,
+	'gsd-core/workflows/new-workspace.md': 6,
+	'gsd-core/workflows/next.md': 1,
+	'gsd-core/workflows/pause-work.md': 1,
+	'gsd-core/workflows/plan-milestone-gaps.md': 1,
+	'gsd-core/workflows/plan-phase.md': 2,
+	'gsd-core/workflows/plan-review-convergence.md': 1,
+	'gsd-core/workflows/plant-seed.md': 1,
+	'gsd-core/workflows/pr-branch.md': 12,
+	'gsd-core/workflows/profile-user.md': 1,
+	'gsd-core/workflows/progress.md': 2,
+	'gsd-core/workflows/quick.md': 12,
+	'gsd-core/workflows/remove-phase.md': 1,
+	'gsd-core/workflows/remove-workspace.md': 3,
+	'gsd-core/workflows/resume-project.md': 1,
+	'gsd-core/workflows/review.md': 2,
+	'gsd-core/workflows/scan.md': 1,
+	'gsd-core/workflows/secure-phase.md': 1,
+	'gsd-core/workflows/session-report.md': 2,
+	'gsd-core/workflows/settings-advanced.md': 1,
+	'gsd-core/workflows/settings-integrations.md': 1,
+	'gsd-core/workflows/settings.md': 1,
+	'gsd-core/workflows/ship.md': 11,
+	'gsd-core/workflows/sketch-wrap-up.md': 1,
+	'gsd-core/workflows/sketch.md': 1,
+	'gsd-core/workflows/spec-phase.md': 3,
+	'gsd-core/workflows/spike-wrap-up.md': 1,
+	'gsd-core/workflows/spike.md': 1,
+	'gsd-core/workflows/stats.md': 1,
+	'gsd-core/workflows/thread.md': 1,
+	'gsd-core/workflows/transition.md': 1,
+	'gsd-core/workflows/ui-phase.md': 1,
+	'gsd-core/workflows/ui-review.md': 1,
+	'gsd-core/workflows/ultraplan-phase.md': 1,
+	'gsd-core/workflows/undo.md': 1,
+	'gsd-core/workflows/validate-phase.md': 3,
+	'gsd-core/workflows/verify-phase.md': 1,
+	'gsd-core/workflows/verify-work.md': 1,
 });
 
 // Recursive *.md walker. Tolerates a missing scan-root directory via the
@@ -190,7 +264,7 @@ function emitMarkdown(result) {
 		'# Workflow raw-git audit — Phase 13 (LINT-04)',
 		'',
 		`**Generated:** ${new Date().toISOString().slice(0, 10)}`,
-		'**Mode:** baseline-regression guard (frozen 127-hit baseline; fails only on raw-git ADDED beyond baseline)',
+		'**Mode:** baseline-regression guard (frozen 230-hit baseline, re-derived 19-10; fails only on raw-git ADDED beyond baseline)',
 		`**Files scanned:** ${result.scannedFiles}`,
 		`**Current raw-git hits:** ${result.totalCurrent}`,
 		`**Regressions:** ${result.regressions.length}`,

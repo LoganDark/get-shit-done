@@ -115,7 +115,7 @@ test('LINT-06 D-14 #5: allowlist entry suppresses opted-out file; parser rejects
 			$schema_version: 2,
 			entries: [
 				{
-					path: 'get-shit-done/workflows/opted-out.md',
+					path: 'gsd-core/workflows/opted-out.md',
 					reason: 'test fixture',
 					owner: '@LoganDark',
 				},
@@ -125,7 +125,7 @@ test('LINT-06 D-14 #5: allowlist entry suppresses opted-out file; parser rejects
 	);
 	assert.ok(result.files instanceof Set, 'expected result.files to be a Set');
 	assert.ok(
-		result.files.has('get-shit-done/workflows/opted-out.md'),
+		result.files.has('gsd-core/workflows/opted-out.md'),
 		'expected result.files to contain the opted-out path but got: ' + JSON.stringify([...result.files]),
 	);
 
