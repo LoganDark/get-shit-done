@@ -409,11 +409,12 @@ node gsd-tools.cjs audit-open [--json]
 node gsd-tools.cjs from-gsd2 [--path <dir>] [--force] [--dry-run]
 
 # Git commit with config checks
-node gsd-tools.cjs commit <message> [--files f1 f2] [--amend] [--no-verify] [--respect-staged]
+node gsd-tools.cjs commit <message> [--files f1 f2] [--amend] [--no-verify] [--respect-staged] [--allow-deletions]
 ```
 
 > `--no-verify`: Skips pre-commit hooks. Used by parallel executor agents during wave-based execution to avoid build lock contention (e.g., cargo lock fights in Rust projects). The orchestrator runs hooks once after each wave completes. Do not use `--no-verify` during sequential execution — let hooks run normally.
 > `--files <paths>` **staging behaviour**: by default, `--files` runs `git add -- <path>` for each named file before committing. This overwrites any per-hunk staging set up via `git add -p`. Pass `--respect-staged` to skip the `git add` step and commit only what is already in the index within the requested pathspec. If nothing is staged within that scope, the command returns `{ committed: false, reason: 'nothing staged' }` without error. The trailing `-- <paths>` pathspec on the commit is applied under both modes, so files staged outside the `--files` scope are never included (#3061 invariant).
+> `--allow-deletions`: by default, a `--files` path that is missing from disk is skipped, even when the working copy has a pending deletion for it (#2014 invariant — a stale file list must not silently commit deletions). When skipped deletions are detected, the result envelope carries `skipped_deletions: [paths]` and a `hint`. Pass `--allow-deletions` to commit those deletions (paths that never existed in the VCS are still skipped). No-op under `--respect-staged`, which already commits staged deletions verbatim.
 
 # Web search (requires Brave API key)
 node gsd-tools.cjs websearch <query> [--limit N] [--freshness day|week|month]

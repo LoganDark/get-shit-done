@@ -20,6 +20,15 @@
  * /private/var symlinked tmp roots resolve correctly); absolute paths
  * outside the repo root fail loudly with `reason: 'path_outside_repo'`.
  *
+ * Defect 3: WC deletions were inexpressible via --files — the #2014
+ * missing-path filter drops any path absent from disk, so a deleted path
+ * always produced a misleading `nothing_to_commit` (or was silently dropped
+ * from a mixed list). Fix: `--allow-deletions` opts in to committing missing
+ * paths that the WC status reports as changed (pending deletions); without
+ * the flag, behavior is unchanged but the envelope surfaces the dropped
+ * paths via `skipped_deletions` + `hint`. The #2014 invariant itself stays
+ * regression-tested in tests/commit-files-deletion.test.cjs.
+ *
  * Raw `jj`/`git` invocations here are fixture setup / cross-checks
  * (tests/**\/*.test.cjs allowlist entry).
  */
@@ -156,6 +165,67 @@ describe(
         if (outsideDir) cleanup(outsideDir);
       }
     });
+
+    test('Defect 3: deleted --files path without the flag reports skipped_deletions', () => {
+      fs.writeFileSync(path.join(tmpDir, 'del-a.md'), 'a\n');
+      jj(tmpDir, ['squash', '-B', '@', '-k', '-m', 'seed del-a']);
+      fs.unlinkSync(path.join(tmpDir, 'del-a.md'));
+
+      const r = runGsdTools(['query', 'commit', 'test(v15): deletion no flag', '--files', 'del-a.md'], tmpDir);
+      const json = parseEnvelope(r.output);
+      assert.equal(json.committed, false, JSON.stringify(json));
+      assert.equal(json.reason, 'nothing_to_commit', JSON.stringify(json));
+      assert.deepEqual(json.skipped_deletions, ['del-a.md'], `envelope must name the dropped deletion: ${JSON.stringify(json)}`);
+      assert.match(json.hint ?? '', /--allow-deletions/, `hint must point at the flag: ${JSON.stringify(json)}`);
+
+      // The deletion stays a pending WC change (not lost, not committed).
+      assert.match(jj(tmpDir, ['status']), /D del-a\.md/);
+    });
+
+    test('Defect 3: --allow-deletions commits the deletion (the T-19-02 incident shape)', () => {
+      const message = 'test(v15): deletion with flag';
+      const r = runGsdTools(['query', 'commit', message, '--files', 'del-a.md', '--allow-deletions'], tmpDir);
+      assert.equal(r.exitCode, 0, `commit failed: ${r.output || r.error}`);
+      const json = parseEnvelope(r.output);
+      assert.equal(json.committed, true, JSON.stringify(json));
+      assert.equal(json.skipped_deletions, undefined, 'nothing skipped when the flag is passed');
+
+      // Cross-check: the created commit records exactly the deletion, and
+      // the WC no longer carries it (the squash moved it out of @).
+      const summary = jj(tmpDir, ['diff', '-r', json.id, '--summary']).split('\n').filter(Boolean);
+      assert.deepEqual(summary, ['D del-a.md']);
+      assert.doesNotMatch(jj(tmpDir, ['status']), /del-a\.md/);
+    });
+
+    test('Defect 3: mixed existing + deleted list without the flag commits the partial set and reports the rest', () => {
+      fs.writeFileSync(path.join(tmpDir, 'del-b.md'), 'b\n');
+      jj(tmpDir, ['squash', '-B', '@', '-k', '-m', 'seed del-b']);
+      fs.unlinkSync(path.join(tmpDir, 'del-b.md'));
+      fs.writeFileSync(path.join(tmpDir, 'mix.md'), 'mix\n');
+
+      const r = runGsdTools(['query', 'commit', 'test(v15): mixed no flag', '--files', 'mix.md', 'del-b.md'], tmpDir);
+      const json = parseEnvelope(r.output);
+      assert.equal(json.committed, true, JSON.stringify(json));
+      assert.deepEqual(json.skipped_deletions, ['del-b.md'], JSON.stringify(json));
+      const summary = jj(tmpDir, ['diff', '-r', json.id, '--summary']).split('\n').filter(Boolean);
+      assert.deepEqual(summary, ['A mix.md'], 'the deletion must NOT ride along without the flag');
+
+      // Follow-up with the flag finishes the job (the self-correction path
+      // the envelope hint instructs agents to take).
+      const r2 = runGsdTools(['query', 'commit', 'test(v15): mixed follow-up', '--files', 'del-b.md', '--allow-deletions'], tmpDir);
+      const json2 = parseEnvelope(r2.output);
+      assert.equal(json2.committed, true, JSON.stringify(json2));
+      const summary2 = jj(tmpDir, ['diff', '-r', json2.id, '--summary']).split('\n').filter(Boolean);
+      assert.deepEqual(summary2, ['D del-b.md']);
+    });
+
+    test('Defect 3: never-existed path stays dropped even with --allow-deletions', () => {
+      const r = runGsdTools(['query', 'commit', 'test(v15): garbage path', '--files', 'no-such-file.md', '--allow-deletions'], tmpDir);
+      const json = parseEnvelope(r.output);
+      assert.equal(json.committed, false, JSON.stringify(json));
+      assert.equal(json.reason, 'nothing_to_commit', JSON.stringify(json));
+      assert.equal(json.skipped_deletions, undefined, 'a path with no WC change is not a skipped deletion');
+    });
   },
 );
 
@@ -229,6 +299,57 @@ describe(
       } finally {
         if (outsideDir) cleanup(outsideDir);
       }
+    });
+
+    test('Defect 3 parity: deleted --files path without the flag reports skipped_deletions', () => {
+      fs.writeFileSync(path.join(tmpDir, 'del-a.md'), 'a\n');
+      git(tmpDir, ['add', 'del-a.md']);
+      git(tmpDir, ['commit', '-q', '-m', 'seed del-a']);
+      fs.unlinkSync(path.join(tmpDir, 'del-a.md'));
+
+      const r = runGsdTools(['query', 'commit', 'test(v15): deletion no flag (git)', '--files', 'del-a.md'], tmpDir);
+      const json = parseEnvelope(r.output);
+      assert.equal(json.committed, false, JSON.stringify(json));
+      assert.equal(json.reason, 'nothing_to_commit', JSON.stringify(json));
+      assert.deepEqual(json.skipped_deletions, ['del-a.md'], JSON.stringify(json));
+      assert.match(json.hint ?? '', /--allow-deletions/, JSON.stringify(json));
+      // #2014 invariant intact: nothing was committed, the WC deletion stays.
+      assert.match(git(tmpDir, ['status', '--porcelain']), /D del-a\.md/);
+    });
+
+    test('Defect 3 parity: --allow-deletions commits the deletion', () => {
+      const r = runGsdTools(['query', 'commit', 'test(v15): deletion with flag (git)', '--files', 'del-a.md', '--allow-deletions'], tmpDir);
+      assert.equal(r.exitCode, 0, `commit failed: ${r.output || r.error}`);
+      const json = parseEnvelope(r.output);
+      assert.equal(json.committed, true, JSON.stringify(json));
+      assert.equal(json.skipped_deletions, undefined);
+
+      const nameStatus = git(tmpDir, ['show', '--name-status', '--format=', 'HEAD']).split('\n').filter(Boolean);
+      assert.deepEqual(nameStatus, ['D\tdel-a.md']);
+      assert.doesNotMatch(git(tmpDir, ['status', '--porcelain']), /del-a\.md/);
+    });
+
+    test('Defect 3 parity: mixed list without the flag commits the partial set and reports the rest', () => {
+      fs.writeFileSync(path.join(tmpDir, 'del-b.md'), 'b\n');
+      git(tmpDir, ['add', 'del-b.md']);
+      git(tmpDir, ['commit', '-q', '-m', 'seed del-b']);
+      fs.unlinkSync(path.join(tmpDir, 'del-b.md'));
+      fs.writeFileSync(path.join(tmpDir, 'mix.md'), 'mix\n');
+
+      const r = runGsdTools(['query', 'commit', 'test(v15): mixed no flag (git)', '--files', 'mix.md', 'del-b.md'], tmpDir);
+      const json = parseEnvelope(r.output);
+      assert.equal(json.committed, true, JSON.stringify(json));
+      assert.deepEqual(json.skipped_deletions, ['del-b.md'], JSON.stringify(json));
+      const nameStatus = git(tmpDir, ['show', '--name-status', '--format=', 'HEAD']).split('\n').filter(Boolean);
+      assert.deepEqual(nameStatus, ['A\tmix.md'], 'the deletion must NOT ride along without the flag');
+    });
+
+    test('Defect 3 parity: never-existed path stays dropped even with --allow-deletions', () => {
+      const r = runGsdTools(['query', 'commit', 'test(v15): garbage path (git)', '--files', 'no-such-file.md', '--allow-deletions'], tmpDir);
+      const json = parseEnvelope(r.output);
+      assert.equal(json.committed, false, JSON.stringify(json));
+      assert.equal(json.reason, 'nothing_to_commit', JSON.stringify(json));
+      assert.equal(json.skipped_deletions, undefined);
     });
   },
 );

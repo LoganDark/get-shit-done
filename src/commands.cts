@@ -21,6 +21,7 @@ import { platformWriteSync, platformReadSync, platformEnsureDir } from './shell-
 // git pin (it probes git's index, a git-only concept).
 import { createVcsAdapter, expr } from './vcs/index.cjs';
 import { VcsNotImplementedError } from './vcs/types.cjs';
+import type { StatusEntry } from './vcs/types.cjs';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import core = require('./core.cjs');
 const {
@@ -516,7 +517,7 @@ function cmdEffortSync(cwd: string, raw: boolean, opts?: { dryRun?: boolean; con
   output({ synced, skipped, changes, dry_run: dryRun, agents_dir: agentsDir }, raw, synced > 0 ? 'changed' : 'ok');
 }
 
-function cmdCommit(cwd: string, message: string | undefined, files: string[] | undefined, raw: boolean, amend: boolean, noVerify: boolean, respectStaged?: boolean): void {
+function cmdCommit(cwd: string, message: string | undefined, files: string[] | undefined, raw: boolean, amend: boolean, noVerify: boolean, respectStaged?: boolean, allowDeletions?: boolean): void {
   if (!message && !amend) {
     error('commit message required');
   }
@@ -689,14 +690,59 @@ function cmdCommit(cwd: string, message: string | undefined, files: string[] | u
   // DELETION's path is legitimately absent from disk. Filtering it out would
   // drop the deletion from the commit (e.g. an undo workflow's staged revert
   // of an added file).
-  const filesToCommit = explicitFiles && !respectStaged
-    ? filesRequested.filter(f => fs.existsSync(path.join(cwd, f)))
-    : filesRequested;
+  //
+  // v15 envelope-defects fix (Defect 3, 2026-06-11): the #2014 filter made
+  // WC deletions inexpressible — a deleted path never exists on disk, so
+  // `--files <deleted-path>` was always dropped and the verb returned a
+  // misleading `nothing_to_commit` while the deletion sat uncommitted. Disk
+  // state alone cannot distinguish an intentional deletion from the
+  // temporarily-absent tracked file #2014 guards against, so deletions are
+  // OPT-IN via --allow-deletions: a missing path is kept when the WC status
+  // reports a change under it (a pending deletion has a status entry; a
+  // typo/never-tracked path has none and is still dropped — `git add -A` on
+  // such a path would fail with `pathspec did not match`, and committing it
+  // was never expressible anyway). Without the flag the filter behaves
+  // exactly as before (#2014 invariant preserved, regression-tested in
+  // tests/commit-files-deletion.test.cjs), but the dropped deletions are
+  // surfaced on the result envelope (`skipped_deletions` + `hint`) so
+  // callers can re-run with the flag instead of trusting the no-op.
+  let wcStatusEntries: StatusEntry[] | null = null;
+  const statusEntries = (): StatusEntry[] => {
+    if (wcStatusEntries === null) wcStatusEntries = vcs.status({ porcelain: true }).entries;
+    return wcStatusEntries;
+  };
+  // Path-prefix containment against status (a deleted directory lists
+  // per-file entries, never the directory itself).
+  const hasWcChange = (spec: string): boolean => {
+    const s = spec.replace(/\\/g, '/').replace(/\/+$/, '');
+    return statusEntries().some(e => {
+      const ep = e.path.replace(/\\/g, '/');
+      return ep === s || ep.startsWith(`${s}/`);
+    });
+  };
+  const skippedDeletions: string[] = [];
+  let filesToCommit: string[];
+  if (explicitFiles && !respectStaged) {
+    filesToCommit = [];
+    for (const f of filesRequested) {
+      if (fs.existsSync(path.join(cwd, f))) { filesToCommit.push(f); continue; }
+      if (!hasWcChange(f)) continue; // missing + no WC entry: unchanged #2014 drop
+      if (allowDeletions) filesToCommit.push(f);
+      else skippedDeletions.push(f);
+    }
+  } else {
+    filesToCommit = filesRequested;
+  }
+  const deletionHint = 'path(s) deleted in the working copy were skipped; pass --allow-deletions to commit the deletion(s)';
 
   // #2014 invariant: explicit --files with all-missing entries short-circuits
   // BEFORE vcs.commit.
   if (!amend && explicitFiles && filesToCommit.length === 0) {
-    const result = { committed: false, id: null, reason: 'nothing_to_commit' };
+    const result: Record<string, unknown> = { committed: false, id: null, reason: 'nothing_to_commit' };
+    if (skippedDeletions.length > 0) {
+      result['skipped_deletions'] = skippedDeletions;
+      result['hint'] = deletionHint;
+    }
     output(result, raw, 'nothing');
     return;
   }
@@ -727,8 +773,10 @@ function cmdCommit(cwd: string, message: string | undefined, files: string[] | u
     // path-prefix set in filesToCommit; any WC entry whose path starts with
     // one of those prefixes counts as a change to commit. Skipped for amend
     // (amend rewrites HEAD with currently-staged content — the prior code
-    // had no pre-probe in the amend branch either).
-    const status = vcs.status({ porcelain: true });                                // (was: status --porcelain probe before commit)
+    // had no pre-probe in the amend branch either). Defect-3 note: reuses
+    // the lazily-cached statusEntries() snapshot when the missing-path
+    // filter above already probed status (no WC mutation between the two).
+    const status = { entries: statusEntries() };                                   // (was: status --porcelain probe before commit)
     // Bidirectional path-containment: scope ↔ entry containment in either
     // direction counts as a match. Required because `git status --porcelain`
     // collapses fully-untracked directories to a single `?? <dir>/` entry;
@@ -807,7 +855,13 @@ function cmdCommit(cwd: string, message: string | undefined, files: string[] | u
       id = commitResult.id;
     }
   }
-  const result = { committed: true, id, reason: 'committed' };
+  const result: Record<string, unknown> = { committed: true, id, reason: 'committed' };
+  // v15 Defect 3: a partial commit that dropped WC deletions from --files is
+  // reported, not silent — callers re-run with --allow-deletions to finish.
+  if (skippedDeletions.length > 0) {
+    result['skipped_deletions'] = skippedDeletions;
+    result['hint'] = deletionHint;
+  }
   output(result, raw, id || 'committed');
 }
 

@@ -19,7 +19,7 @@
  *   state signal-resume                Remove WAITING.json signal
  *   resolve-model <agent-type>         Get model for agent based on profile
  *   find-phase <phase>                 Find phase directory by number
- *   commit <message> [--files f1 f2] [--no-verify] [--amend] [--respect-staged]   Commit planning docs
+ *   commit <message> [--files f1 f2] [--no-verify] [--amend] [--respect-staged] [--allow-deletions]   Commit planning docs
  *   commit-to-subrepo <msg> --files f1 f2  Route commits to sub-repos
  *   verify-summary <path>              Verify a SUMMARY.md file
  *   generate-slug <text>               Convert text to URL-safe slug
@@ -669,6 +669,11 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
       // flag was a silent no-op from the CLI. The undo workflow's finalize
       // step depends on it to commit the staged revert verbatim.
       const respectStaged = args.includes('--respect-staged');
+      // v15 envelope-defects fix (Defect 3): opt-in to committing WC
+      // deletions listed in --files — without it the #2014 missing-path
+      // filter in cmdCommit drops deleted paths and reports them via
+      // `skipped_deletions` on the envelope.
+      const allowDeletions = args.includes('--allow-deletions');
       const filesIndex = args.indexOf('--files');
       // Collect all positional args between command name and first flag,
       // then join them — handles both quoted ("multi word msg") and
@@ -677,7 +682,7 @@ async function runCommand(command, args, cwd, raw, defaultValue, originalCommand
       const messageArgs = args.slice(1, endIndex).filter(a => !a.startsWith('--'));
       const message = messageArgs.join(' ') || undefined;
       const files = filesIndex !== -1 ? args.slice(filesIndex + 1).filter(a => !a.startsWith('--')) : [];
-      commands.cmdCommit(cwd, message, files, raw, amend, noVerify, respectStaged);
+      commands.cmdCommit(cwd, message, files, raw, amend, noVerify, respectStaged, allowDeletions);
       break;
     }
 

@@ -477,6 +477,12 @@ gsd-tools query commit "{type}({phase}-{plan}): {concise task description}
 " --files "${TASK_FILES[@]}"
 ```
 
+**Deleted files:** paths in `--files` that no longer exist on disk are skipped
+by default (a stale file list must not silently commit deletions). When the
+task intentionally deleted files, the envelope reports them via
+`skipped_deletions: [paths]` — re-run with `--allow-deletions` appended to
+commit the deletion(s). Never fall back to raw `git rm`/`jj` for this.
+
 **5. Record hash:**
 - **Single-repo:** `TASK_COMMIT=$(gsd-tools query head-ref | jq -r '.head // empty' | cut -c1-7)` — track for SUMMARY.
 - **Multi-repo (sub_repos):** Extract hashes from `commit-to-subrepo` JSON output (`repos.{name}.hash`). Record all hashes for SUMMARY (e.g., `backend@abc1234, frontend@def5678`).
@@ -715,6 +721,10 @@ one of three shapes:
   success path.** Record "skipped (.planning gitignored)" and move on.
 - `{committed: false, reason: 'nothing_to_commit' | 'commit_failed', ...}` —
   no-op / genuine failure; surface in the completion notes.
+- Any of the above with `skipped_deletions: [paths]` — the listed `--files`
+  paths are deleted in the working copy and were NOT committed. If the
+  deletions are intentional, re-run the same commit with `--allow-deletions`;
+  otherwise investigate why the paths are missing.
 
 **Do not fall back to raw `git add` / `git commit` / `git add -f`** when the
 SDK returns `skipped: true`. The SDK's skip is the user's deliberate choice
