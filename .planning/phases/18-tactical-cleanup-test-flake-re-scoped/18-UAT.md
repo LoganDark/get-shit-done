@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: complete
 phase: 18-tactical-cleanup-test-flake-re-scoped
-source: 18-01-SUMMARY.md, 18-02-SUMMARY.md, 18-03-SUMMARY.md
+source: 18-01-SUMMARY.md, 18-02-SUMMARY.md, 18-03-SUMMARY.md, 18-04-SUMMARY.md
 started: 2026-06-11T04:29:52Z
-updated: 2026-06-11T05:05:00Z
+updated: 2026-06-11T09:51:00Z
 ---
 
 ## Current Test
@@ -30,9 +30,8 @@ result: pass
 
 ### 5. Transition gate fails closed on dirty working copy
 expected: The assert_clean_wc gate in gsd-core/workflows/transition.md (placed before offer_next_phase) exits 1 with a FATAL "working copy is dirty before transition completion" message listing the dirty files when the WC has uncommitted changes, and passes silently (exit 0) on a clean WC. All 5 mutating transition steps now have adjacent `gsd_run query commit` fences.
-result: issue
-reported: "Gate false-positives FATAL on a CLEAN working copy under the jj backend: orchestrator ran the gate fence live during the post-UAT transition on this repo (vcs.adapter jj) and it aborted with 'FATAL: working copy is dirty' while `status --porcelain` returned entries: [] (clean). The fence keys DIRTY on .raw, which on jj is human-readable `jj st` text ('The working copy has no changes...') — never empty. Initial pass verdict was based on structural greps + the 18-01 fixture, which exercised the git path only."
-severity: blocker
+result: pass
+note: "Initially failed as blocker (gate keyed DIRTY on .raw — false FATAL on clean jj WC). Fixed by plan 18-04 (entries-keyed predicate in transition.md, execute-phase.md, plan-phase.md fences + undo.md guard). Re-verified 2026-06-11: dirty case fired live on this jj repo (uncommitted 18-UAT.md listed under orchestrator-owned planning artifacts); clean case confirmed via adapter-pinned jj fixture + the live phase-18 transition reaching its completion banners through this exact gate."
 
 ### 6. jj-reap inclusion-filter flake does not reproduce (TEST-17)
 expected: Running the Phase 14 regression-gate shape (jj-reap + cmd-parallel-jj + cmd-parallel-git test files) passes with the inclusion-filter test completing in well under a second (~400-500ms), nowhere near any timeout. No source/test/config files were modified for this — vitest.config.ts is byte-identical.
@@ -41,8 +40,8 @@ result: pass
 ## Summary
 
 total: 6
-passed: 5
-issues: 1
+passed: 6
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0
@@ -50,7 +49,7 @@ blocked: 0
 ## Gaps
 
 - truth: "assert_clean_wc gate passes silently (exit 0) on a clean working copy on BOTH backends"
-  status: failed
+  status: closed (fixed by plan 18-04, re-verified 2026-06-11)
   reason: "User-side live run on this jj repo: gate aborted FATAL on a clean WC (entries: [] but .raw non-empty — jj `status` raw is human-readable `jj st` text, never empty on jj)"
   severity: blocker
   test: 5
