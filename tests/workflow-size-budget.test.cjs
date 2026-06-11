@@ -81,12 +81,14 @@ const GRACE = 3000;
 // current high-water mark within GRACE (#597 tighten-only ratchet).
 // XL high-water mark is execute-phase.md — note that under LINES it was
 // plan-phase; bytes genuinely re-rank the tier, which is the point of #717.
-// actualMax=97632 (execute-phase; 19-12 re-baseline: the jj fork's Phase 11
-// verb-dispatch rewiring re-applied in 19-08 — workspace.parallel dispatch/
-// fan-in blocks, the #630/#3384 envelope re-expression notes, and the jj-aware
-// launcher shim — grew both XL orchestrators); slack=368 ≤ GRACE.
-// plan-phase.md=93621 (fork deltas, same 19-08 re-apply), new-project.md≈58k.
-const XL_BUDGET = 98000;
+// actualMax=99069 (execute-phase; Phase 18 re-baseline: the CLEANUP-01
+// assert_clean_wc final gate (18-01) plus its entries-keyed predicate fix
+// (18-04) grew both XL orchestrators — deliberate cross-backend WC-cleanliness
+// gate work closing the Phase 14 false-clean incident class, not duplicated
+// content; extraction is blocked because ~50 tests pin these blocks inside
+// execute-phase.md itself); slack=431 ≤ GRACE.
+// plan-phase.md=95058 (same gate graft), new-project.md≈64k.
+const XL_BUDGET = 99500;
 // LARGE high-water mark is docs-update.md. actualMax=54410 (#891 launcher shim expansion);
 // slack=1590 ≤ GRACE. quick.md=45710, autonomous.md=38030.
 const LARGE_BUDGET = 56000;
@@ -98,9 +100,9 @@ const DEFAULT_BUDGET = 40000;
 // Grandfathered at current sizes — see PR #2551 for the progressive-disclosure
 // pattern that future shrinks should follow. Byte counts noted for reference.
 const XL_WORKFLOWS = new Set([
-  'execute-phase',  // 97632 bytes (tier high-water mark; 19-12 re-baseline — fork verb-dispatch re-apply)
-  'plan-phase',     // 93621 bytes (19-12 re-baseline — fork deltas)
-  'new-project',    // ~58k bytes
+  'execute-phase',  // 99069 bytes (tier high-water mark; Phase 18 re-baseline — assert_clean_wc gates)
+  'plan-phase',     // 95058 bytes (Phase 18 re-baseline — same gate graft)
+  'new-project',    // ~64k bytes
 ]);
 
 // Multi-step planners and bigger feature workflows. Grandfathered.
