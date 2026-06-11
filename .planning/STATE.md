@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Tactical cleanup + test-flake
-status: complete
-stopped_at: Phase 18 verified — UAT 6/6 passed
-last_updated: "2026-06-11T04:55:00.000Z"
+status: verifying
+stopped_at: Phase 18 UAT 5/6 — blocker gap diagnosed (clean-WC gate false-positive on jj)
+last_updated: "2026-06-11T05:05:00.000Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 1
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-10 at v1.4 close)
 
 Phase: 18
 Plan: Not started
-Status: Phase complete — verified (UAT 6/6 passed, security gate green)
+Status: UAT 5/6 passed — 1 blocker gap (assert_clean_wc .raw predicate false-positives on clean jj WC in transition.md + execute-phase.md); fix plan pending
 Last activity: 2026-06-11
 
 ## Performance Metrics
@@ -307,8 +307,8 @@ Items acknowledged and deferred at milestone close on 2026-06-10, then **promote
 
 ## Session Continuity
 
-Last session: 2026-06-11T04:55:00Z
-Stopped at: Phase 18 verified (UAT 6/6 passed) — milestone v1.5 ready to complete
+Last session: 2026-06-11T05:05:00Z
+Stopped at: Phase 18 UAT found blocker gap (test 5) — gap diagnosed, fix planning next; milestone close blocked until gap fixed
 Resume file:
 
 None
