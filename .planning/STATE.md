@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Tactical cleanup + test-flake
-status: verifying
-stopped_at: Phase 18 UAT 5/6 — blocker gap diagnosed (clean-WC gate false-positive on jj)
-last_updated: "2026-06-11T05:05:00.000Z"
-last_activity: 2026-06-11
+status: executing
+stopped_at: Completed 18-04-PLAN.md (gap closure — UAT test 5 blocker fixed)
+last_updated: "2026-06-11T06:30:26.522Z"
+last_activity: 2026-06-11 -- Phase 18 execution started
 progress:
   total_phases: 1
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 4
+  completed_plans: 4
   percent: 100
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-10 at v1.4 close)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 18 — Tactical cleanup + test-flake (re-scoped)
+**Current focus:** Phase 18 — tactical-cleanup-test-flake-re-scoped
 
 ## Current Position
 
-Phase: 18
-Plan: Not started
-Status: UAT 5/6 passed — 1 blocker gap (assert_clean_wc .raw predicate false-positives on clean jj WC in transition.md + execute-phase.md); fix plan pending
-Last activity: 2026-06-11
+Phase: 18 (tactical-cleanup-test-flake-re-scoped) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-06-11 -- Phase 18 execution started
 
 ## Performance Metrics
 
@@ -102,6 +102,7 @@ Last activity: 2026-06-11
 | Phase 18 P18-01 | 4min | 2 tasks | 1 files |
 | Phase 18 P18-02 | 9min | 3 tasks | 6 files |
 | Phase 18 P18-03 | 10min | 2 tasks | 2 files |
+| Phase 18 P18-04 | 6min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -229,6 +230,7 @@ Decisions are logged in PROJECT.md Key Decisions table. v1.4-specific decisions 
 - [Phase 18]: 18-02: CLEANUP-04 resolved as option (b) documented asymmetry — jj op restore is the actual rollback, tar overlay stays additive; destructive rm -rf clean-overlay rejected as new risk in a recovery primitive — Phase 14 P05 production run validated restore-then-untar empirically; comment-only, zero behavior change
 - [Phase 18]: 18-02: dogfood-restore root assertion placed BEFORE the tarball-existence check so the wrong-cwd verify is non-tautological; emitted gsd-core/bin/lib/vcs-command-router.cjs is tracked (not gitignored) and was committed as a 6th chore commit after build:lib — post-tarball placement would let FATAL: tarball-not-found fire first on wrong-cwd dummy-arg runs; tracked artifact would otherwise trip the clean-WC phase gate
 - [Phase 18]: 18-03: TEST-17 verdict (b) resolved-by-restructure — inclusion-filter passed all 5 gate invocations (419-473ms) under the 19-11 config (maxWorkers 2 + 30s unit timeout); zero edits, vitest.config.ts byte-identical — 3 full-suite runs 618/618 + reg-gate shape + isolation control; intermittent birpc onTaskUpdate exit-1 confound (zero test failures) deferred per Pitfall 9 to phase deferred-items.md
+- [Phase 18]: 18-04: assert_clean_wc + undo dirty guard re-keyed on status entries[] (never .raw) — clean jj WC passes silently, all probe-failure modes still FATAL; jj .raw stays display-only backend stdout (asymmetry documented); swallowed-exec-failure hole deferred as REQ-18-04-A (status-verb contract change out of workflow-markdown scope)
 
 ### Pending Todos
 
@@ -307,8 +309,8 @@ Items acknowledged and deferred at milestone close on 2026-06-10, then **promote
 
 ## Session Continuity
 
-Last session: 2026-06-11T05:05:00Z
-Stopped at: Phase 18 UAT found blocker gap (test 5) — gap diagnosed, fix planning next; milestone close blocked until gap fixed
+Last session: 2026-06-11T06:30:26.517Z
+Stopped at: Completed 18-04-PLAN.md (gap closure — UAT test 5 blocker fixed)
 Resume file:
 
 None
