@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Tactical cleanup + test-flake
-status: executing
-stopped_at: Phase 18 UAT complete — 6/6 passed (test 5 re-verified after 18-04 gap fix)
-last_updated: "2026-06-11T09:51:00.000Z"
-last_activity: 2026-06-11
+status: Awaiting next milestone
+stopped_at: Milestone v1.5 completed and archived (2026-06-11)
+last_updated: "2026-06-11T11:15:52.268Z"
+last_activity: 2026-06-11 — Milestone v1.5 completed and archived
 progress:
   total_phases: 1
   completed_phases: 1
@@ -18,25 +18,25 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-10 at v1.4 close)
+See: .planning/PROJECT.md (updated 2026-06-11 at v1.5 close)
 
 **Core value:** Every upstream GSD command works correctly on a jj-only repo without git — full GSD workflow on a jj backend with no degradation in behavior or test coverage.
-**Current focus:** Phase 18 — tactical-cleanup-test-flake-re-scoped
+**Current focus:** Planning next milestone (v1.6 — run /gsd-new-milestone)
 
 ## Current Position
 
-Phase: 18 (complete — UAT 6/6 passed, security verified)
-Plan: All 4 complete
-Status: Ready for /gsd-complete-milestone v1.5
-Last activity: 2026-06-11
+Phase: Milestone v1.5 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-11 — Milestone v1.5 completed and archived
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 153 (v1.0: 56 + v1.1: 5 + v1.2: 3 + v1.3: 34 + v1.4: 24)
+- Total plans completed: 157 (v1.0: 56 + v1.1: 5 + v1.2: 3 + v1.3: 34 + v1.4: 24 + v1.5: 4)
 - Average duration: see per-milestone table
-- Total execution time: 5 milestones shipped (v1.0, v1.1, v1.2, v1.3, v1.4)
+- Total execution time: 6 milestones shipped (v1.0, v1.1, v1.2, v1.3, v1.4, v1.5)
 
 **By Milestone:**
 
@@ -47,6 +47,7 @@ Last activity: 2026-06-11
 | v1.2 | 1 (Phase 8) | 3 | Shipped 2026-05-15 |
 | v1.3 | 6 (Phases 9–14) | 34 | Shipped 2026-05-24 |
 | v1.4 | 5 (Phases 14.1, 15–17, 19) | 24 (Phase 18's 3 deferred) | Shipped 2026-06-10 |
+| v1.5 | 1 (Phase 18 re-scoped) | 4 | Shipped 2026-06-11 |
 
 *Updated after each plan completion*
 | Phase 09 P01 | 6min | 1 tasks | 1 files |
@@ -321,7 +322,4 @@ None
 
 ## Operator Next Steps
 
-- **Squash the 19-01…19-13 resolution stack into `vpzlrrlv`** (operator-owned graph mutation; review `jj log` first)
-- Optional: `/gsd-secure-phase 19` (security enforcement enabled; no SECURITY.md audit artifact exists for the merge phase)
-- Release marker for v1.4 (jj backend: `gsd/release/v1.4` bookmark per REFS-06) — create AFTER the squash so it lands on the final topology
-- ~~`/gsd-new-milestone` to open v1.5~~ — v1.5 opened 2026-06-10 as a minimal milestone (operator chose Phase 18 carry-through over full ceremony); MERGE-08 remains deferred-by-design
+- Start the next milestone with /gsd-new-milestone

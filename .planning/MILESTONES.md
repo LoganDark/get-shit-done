@@ -1,5 +1,18 @@
 # Milestones
 
+## v1.5 Tactical cleanup + test-flake (Shipped: 2026-06-11)
+
+**Phases completed:** 1 phases, 4 plans, 9 tasks
+
+**Key accomplishments:**
+
+- Grafted 5 `gsd_run query commit` fences after every mutating transition.md step plus an unconditional `assert_clean_wc` FATAL gate before `offer_next_phase` — a transition can no longer declare "Phase {X} marked complete" over an uncommitted working copy (Phase 14 false-clean-WC recurrence site closed).
+- Two fail-closed input-validation envelopes (`plan_not_array`, `max_concurrency_invalid`) in the dispatch router with 6 pinning contract tests, dogfood-restore.sh project-root assertion + documented tar-overlay asymmetry, and CONFIG-02 tmpDir leak elimination — 5 per-WR commits in the locked order.
+- Verdict (b) — the jj-reap inclusion-filter flake is NOT reproducible under the 19-11 config (3 full-suite runs + regression-gate shape + isolation control, inclusion-filter 419-473ms every time): closed as resolved-by-restructure with zero file edits.
+- UAT test 5 blocker closed: all three assert_clean_wc fences + the /gsd-undo dirty guard now key dirty detection on the structured `entries[]` array instead of `.raw`, so a clean jj working copy passes silently (exit 0) while every dirty and probe-failure mode still FATALs — proven by a 12-run dual-backend mktemp fixture matrix.
+
+---
+
 ## v1.4 Clean, consistent state for next upstream pull (Shipped: 2026-06-10)
 
 **Phases completed:** 5 phases, 24 plans, 57 tasks
