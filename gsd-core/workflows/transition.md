@@ -426,19 +426,21 @@ The only writes that happen AFTER this gate are the Route B1/B `config-set workf
 Any uncommitted change at this point is therefore a real problem — either (a) a transition step ran a mutating verb but skipped its follow-up commit, (b) a delegated helper (e.g. graduation.md) wrote files outside the swept set, (c) a pre-commit hook silently aborted a commit, or (d) the user mixed unrelated WIP with the transition. All four cases warrant aborting before any "Phase {X} marked complete" / milestone-complete banner rather than silently lying about WC cleanliness.
 
 ```bash
-# Fail-closed probe (Phase 18 REVIEW WR-01/WR-02): `status --porcelain` sees
-# untracked and staged-only changes on every backend (a `diff --name-only`
-# probe missed both on non-jj backends), and EVERY probe-failure mode aborts
-# instead of resolving to "clean" — a broken probe must never rubber-stamp
-# this gate.
+# Fail-closed probe (Phase 18 REVIEW WR-01/WR-02; predicate corrected by the
+# 18-04 gap fix): `status --porcelain` sees untracked and staged-only changes
+# on every backend (a `diff --name-only` probe missed both on non-jj
+# backends). Dirty detection keys on the structured `entries` array — the
+# cross-backend porcelain contract (empty = clean). It must NEVER key on
+# `.raw`: on the jj backend `.raw` is human-readable `jj st` text ("The
+# working copy has no changes....") and is non-empty even when the working
+# copy is clean. EVERY probe-failure mode (non-zero exit, non-ok envelope,
+# missing/non-array entries, an entry without a path, unparseable JSON)
+# aborts instead of resolving to "clean" — a broken probe must never
+# rubber-stamp this gate.
 STATUS_JSON=$(gsd_run query status --porcelain) || { echo "FATAL: WC-cleanliness probe failed (status query exited non-zero); cannot verify the working copy is clean — fix the probe, do NOT treat this as clean." >&2; exit 1; }
-DIRTY=$(printf '%s' "$STATUS_JSON" | jq -re 'if .ok == true then .raw else error("status envelope not ok") end') || { echo "FATAL: WC-cleanliness probe returned an error envelope or unparseable JSON; cannot verify the working copy is clean — fix the probe, do NOT treat this as clean." >&2; exit 1; }
-if [ -n "$DIRTY" ]; then
+DIRTY_PATHS=$(printf '%s' "$STATUS_JSON" | jq -re 'if .ok == true and ((.entries // null) | type == "array") then ([.entries[] | (.path // error("entry missing path"))] | join("\n")) else error("status envelope not ok or entries missing") end') || { echo "FATAL: WC-cleanliness probe returned an error envelope, a missing/malformed entries list (or an entry without a path), or unparseable JSON; cannot verify the working copy is clean — fix the probe, do NOT treat this as clean." >&2; exit 1; }
+if [ -n "$DIRTY_PATHS" ]; then
 	# Categorize the dirty paths so the operator can diagnose which class of leak fired.
-	# Prefer structured entry paths for categorization; fall back to the raw
-	# porcelain lines if the entry list is empty.
-	DIRTY_PATHS=$(printf '%s' "$STATUS_JSON" | jq -r '[.entries[]?.path] | join("\n")')
-	[ -n "$DIRTY_PATHS" ] || DIRTY_PATHS="$DIRTY"
 	PLANNING_DIRTY=$(printf '%s\n' "$DIRTY_PATHS" | grep -E '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
 	OTHER_DIRTY=$(printf '%s\n' "$DIRTY_PATHS" | grep -vE '^\.planning/|-SUMMARY\.md$|-VERIFICATION\.md$' || true)
 

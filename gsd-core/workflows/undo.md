@@ -212,11 +212,11 @@ Store the response as REVERT_REASON. Continue to execute_revert.
 
 **Dirty-tree guard (run first, before any revert):**
 
-Run `gsd_run query status --porcelain | jq -r '.raw // ""'`. If the output is non-empty, display the dirty files and abort:
+Run `gsd_run query status --porcelain | jq -re 'if .ok == true and ((.entries // null) | type == "array") then ([.entries[] | (.path // error("entry missing path"))] | join("\n")) else error("status envelope not ok or entries missing") end'`. If the command FAILS (non-zero exit), abort — the probe is broken; never assume the tree is clean. If the output is non-empty, display the dirty files and abort:
 ```
 Working tree has uncommitted changes. Commit or stash them before running /gsd:undo.
 ```
-Exit immediately — do not proceed to any revert operations.
+Exit immediately — do not proceed to any revert operations. This guard must never key on `.raw`: on the jj backend `.raw` is human-readable `jj st` text that is non-empty even on a clean tree.
 
 ---
 
