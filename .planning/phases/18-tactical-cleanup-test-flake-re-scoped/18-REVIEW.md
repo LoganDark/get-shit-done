@@ -19,7 +19,9 @@ findings:
   warning: 4
   info: 4
   total: 9
-status: issues_found
+status: fixed
+resolved: 2026-06-11
+resolution: "CR-01 fixed pre-v1.5-close: plan-phase.md §14 + §15 manual-branch routing now run the §16 gate BEFORE <offer_next> (both routing instructions reference CR-01 inline). WR-01..04 + IN-01..04 accepted as deferred tech debt at v1.5 close — recorded in the v1.5 milestone archive."
 ---
 
 # Phase 18: Code Review Report
@@ -27,7 +29,7 @@ status: issues_found
 **Reviewed:** 2026-06-11
 **Depth:** standard
 **Files Reviewed:** 10
-**Status:** issues_found
+**Status:** fixed (CR-01 resolved 2026-06-11; warnings/info deferred at v1.5 close)
 
 ## Summary
 

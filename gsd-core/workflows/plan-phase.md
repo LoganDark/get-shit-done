@@ -1695,7 +1695,7 @@ re-run `/gsd:plan-phase --gaps` to add plans, or proceed to execute-phase as-is.
 
 ## 14. Present Final Status
 
-Route to `<offer_next>` OR `auto_advance` depending on flags/config.
+Proceed to §15 (Auto-Advance Check). Routing to `<offer_next>` happens there, and ONLY after the §16 Assert Clean Working Copy gate has run on the manual route (18-REVIEW CR-01: a direct jump to `<offer_next>` from here would bypass the gate).
 
 ## 15. Auto-Advance Check
 
@@ -1759,7 +1759,7 @@ The `--no-transition` flag tells execute-phase to return status after verificati
   ```
 
 **If neither `--auto` nor config enabled:**
-Route to `<offer_next>` (existing behavior).
+Run the §16 Assert Clean Working Copy gate FIRST — it must pass (exit 0) before any banner is emitted — then route to `<offer_next>` (18-REVIEW CR-01: routing before the gate made §16 unreachable dead code on the very path it protects).
 
 ## 16. Assert Clean Working Copy
 
