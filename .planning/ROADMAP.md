@@ -117,7 +117,7 @@ v1.5 shipped 2026-06-11. Next milestone not yet opened — run `/gsd-new-milesto
 - **MERGE-08** — deferred-by-design until a real `vcs.workspace.merge` caller emerges (see archived v1.4 REQUIREMENTS).
 - **REQ-18-04-A** — swallowed backend exec failure presents as clean status envelope (status-verb contract change; Phase 18 deferred-items.md §3).
 - **18-REVIEW deferred findings** — WR-01..04 + IN-01..04 (warnings/info accepted as tech debt at v1.5 close).
-- **Operator manual actions outstanding** — squash the 19-01…19-13 resolution stack into merge change `vpzlrrlv` (operator-owned); optional `/gsd-secure-phase 19` (security enforcement enabled, no SECURITY.md); reinstall (`node bin/install.js --claude --global`) to propagate the close-day CR-01 + envelope fixes.
+- **Operator manual actions** — ✅ squash done 2026-06-11: conflict resolutions squashed into merge change `vpzlrrlv` (no conflicted changes remain anywhere — jj won't push conflicts; `jj-vcs` synced to origin; the 19-01…19-13 fix/docs commits remain as ordinary history). Still open: optional `/gsd-secure-phase 19` (security enforcement enabled, no SECURITY.md); reinstall (`node bin/install.js --claude --global`) to propagate the close-day CR-01 + envelope fixes.
 
 ---
 *Last updated: 2026-06-11 — v1.5 closed and archived to `.planning/milestones/v1.5-ROADMAP.md` (Phase 18 carry-through: all 7 deferred REQ-IDs closed, UAT 6/6; close-day fixes: 18-REVIEW CR-01 gate routing + query-commit envelope defects). Prior entry: v1.5 opened 2026-06-10 (minimal milestone; re-scope audit found zero Phase 18 items subsumed by Phase 19); v1.4 closed and archived 2026-06-10 to `.planning/milestones/v1.4-ROADMAP.md`.*

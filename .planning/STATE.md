@@ -317,7 +317,7 @@ Resume file:
 None
 
 - v1.4 archived to `.planning/milestones/v1.4-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`.
-- jj discipline (standing): the Phase 19 resolution stack (19-01…19-13, ~70 commits) sits on top of merge change `vpzlrrlv` — NEVER rewrite/squash/abandon `vpzlrrlv` or below; operator squashes the stack.
+- jj discipline (standing): NEVER rewrite/squash/abandon merge change `vpzlrrlv` or below. The operator squash completed 2026-06-11 — conflict resolutions are in `vpzlrrlv` (conflict-free, pushable; jj won't push conflicts), and the 19-01…19-13 fix/docs commits sit on top as ordinary history, pushed to origin.
 - Installed GSD updated from this workspace 2026-06-10 (`node bin/install.js --claude --global`; payload at `~/.claude/gsd-core/`, legacy `~/.claude/get-shit-done/` removed).
 
 ## Operator Next Steps
