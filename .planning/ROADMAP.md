@@ -73,7 +73,7 @@ Port GSD from a git-only toolkit to a dual-backend (git + jj) toolkit while pres
 
 ### 🚧 v1.5 Tactical cleanup + test-flake (Phase 18 carry-through) — IN PROGRESS
 
-- [x] **Phase 18: Tactical cleanup + test-flake (re-scoped)** — Execute the 7 REQ-IDs deferred at v1.4 close against the post-Phase-19 tree. (0/3 plans) (completed 2026-06-10)
+- [x] **Phase 18: Tactical cleanup + test-flake (re-scoped)** — Execute the 7 REQ-IDs deferred at v1.4 close against the post-Phase-19 tree. (3/3 plans) (completed 2026-06-10, verified 2026-06-11 — UAT 6/6 passed)
 
 ### Phase 18: Tactical cleanup + test-flake (re-scoped)
 
@@ -110,7 +110,7 @@ v1.4 executed 15 → 16 → 17 as planned; Phase 19 (upstream merge, operator-in
 | v1.2 jujutsu is change-only — never commit id anywhere | 1 | 3/3 | Complete | 2026-05-15 |
 | v1.3 jj octopus merge for subagents fully functional | 6 | 34/34 | Complete | 2026-05-24 |
 | v1.4 Clean, consistent state for next upstream pull | 5 | 24/24 (Phase 18's 3 deferred) | Complete | 2026-06-10 |
-| v1.5 Tactical cleanup + test-flake (Phase 18 carry-through) | 1 | 0/3 | In progress | — |
+| v1.5 Tactical cleanup + test-flake (Phase 18 carry-through) | 1 | 3/3 | In progress | — |
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -128,7 +128,7 @@ v1.4 executed 15 → 16 → 17 as planned; Phase 19 (upstream merge, operator-in
 
 ## Next
 
-v1.5 opened 2026-06-10 as a minimal milestone (operator decision: re-scope + execute deferred Phase 18 without full new-milestone ceremony). Next: `/gsd-plan-phase 18` → `/gsd-execute-phase 18`. Still outstanding beyond v1.5:
+v1.5 opened 2026-06-10 as a minimal milestone (operator decision: re-scope + execute deferred Phase 18 without full new-milestone ceremony). Phase 18 executed (3/3 plans) and verified (UAT 6/6 passed, 2026-06-11) — all v1.5 phases done. Next: `/gsd-complete-milestone v1.5`. Still outstanding beyond v1.5:
 
 - **MERGE-08** — deferred-by-design until a real `vcs.workspace.merge` caller emerges (see archived v1.4 REQUIREMENTS).
 - **Operator manual actions outstanding** — squash the 19-01…19-13 resolution stack into merge change `vpzlrrlv` (operator-owned); optional `/gsd-secure-phase 19` (security enforcement enabled, no SECURITY.md).
