@@ -124,7 +124,7 @@ v1.4 executed 15 → 16 → 17 as planned; Phase 19 (upstream merge, operator-in
 | 15. Adapter surface extensions + rename | 4/4 | Complete    | 2026-05-25 |
 | 16. Workflow + invariant tooling | 2/2 | Complete    | 2026-05-25 |
 | 17. Drift control + reconciliation | 4/4 | Complete    | 2026-05-25 |
-| 18. Tactical cleanup + test-flake (re-scoped, v1.5) | 4/4 | Complete   | 2026-06-11 |
+| 18. Tactical cleanup + test-flake (re-scoped, v1.5) | 4/4 | Complete    | 2026-06-11 |
 | 19. Upstream merge conflict resolution + fork-abstraction audit | 13/13 | Complete    | 2026-06-10 |
 
 ## Next
