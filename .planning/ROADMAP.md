@@ -129,7 +129,7 @@ v1.4 executed 15 → 16 → 17 as planned; Phase 19 (upstream merge, operator-in
 
 ## Next
 
-v1.5 opened 2026-06-10 as a minimal milestone (operator decision: re-scope + execute deferred Phase 18 without full new-milestone ceremony). Phase 18 executed (3/3 plans); UAT 2026-06-11 found 1 blocker gap (assert_clean_wc `.raw` predicate false-positives on clean jj WC — transition.md + execute-phase.md). Next: `/gsd-execute-phase 18 --gaps-only`, then `/gsd-complete-milestone v1.5`. Still outstanding beyond v1.5:
+v1.5 opened 2026-06-10 as a minimal milestone (operator decision: re-scope + execute deferred Phase 18 without full new-milestone ceremony). Phase 18 complete (4/4 plans incl. 18-04 gap closure); UAT complete 2026-06-11 — 6/6 passed (test 5 blocker fixed by 18-04 entries-keyed gate predicate, re-verified). Security verified (threats_open: 0). Next: `/gsd-complete-milestone v1.5`. Still outstanding beyond v1.5:
 
 - **MERGE-08** — deferred-by-design until a real `vcs.workspace.merge` caller emerges (see archived v1.4 REQUIREMENTS).
 - **Operator manual actions outstanding** — squash the 19-01…19-13 resolution stack into merge change `vpzlrrlv` (operator-owned); optional `/gsd-secure-phase 19` (security enforcement enabled, no SECURITY.md).
