@@ -195,13 +195,16 @@ describe.skipIf(!jjAvailable)(
     });
 
     // ─── refs.resolveShort ───────────────────────────────────────────────
-    it('refs.resolveShort(expr.parent()) returns non-empty short change_id', () => {
-      // Phase 8 FLIP-01: jj backend now emits change_id.shortest() (k-z
-      // alphabet) instead of commit_id.short() per the unified revision
-      // contract (D-05). Length can be as short as 1 char when there's no
-      // disambiguating overlap with sibling commits.
+    it('refs.resolveShort(expr.parent()) returns a short change_id of at least 12 chars', () => {
+      // Phase 8 FLIP-01: jj backend emits change_id (k-z alphabet) instead
+      // of commit_id.short() per the unified revision contract (D-05).
+      // Padded form: shortest(12) — a MINIMAL unique prefix (bare
+      // shortest()) goes stale once any later change overlaps it, and these
+      // ids are persisted in envelopes/SUMMARYs, not just displayed. 12 is
+      // a minimum: shortest(12) auto-extends if uniqueness ever demands it
+      // (which short()'s blind truncation would not).
       const short = vcs.refs.resolveShort(expr.parent());
-      expect(short.length).toBeGreaterThan(0);
+      expect(short.length).toBeGreaterThanOrEqual(12);
       expect(short).toMatch(/^[k-z]+$/);
     });
 

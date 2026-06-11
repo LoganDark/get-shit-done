@@ -956,12 +956,20 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
     },
 
     resolveShort: (rev: RevisionExpr): string => {
+      // shortest(12), not bare shortest() and not short(): bare shortest()
+      // returns the MINIMAL unique prefix (1-2 chars on small repos), which
+      // goes stale as soon as any new change lands with an overlapping id —
+      // and these short ids are persisted in envelopes/SUMMARYs, not just
+      // displayed. short() is a blind fixed-length truncation that would
+      // NOT extend on a prefix conflict; shortest(12) emits the same 12
+      // k-z chars (~55 bits) in the no-conflict case AND auto-extends past
+      // 12 when uniqueness ever demands it.
       const args = jjArgv(
         'log',
         '-r',
         toJjRev(rev),
         '-T',
-        'change_id.shortest()',
+        'change_id.shortest(12)',
         '--no-graph',
         '-n',
         '1',
