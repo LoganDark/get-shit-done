@@ -23,3 +23,15 @@ Out-of-scope discoveries logged during execution (scope-boundary rule). Not fixe
 - **Symptoms:** (a) success envelope `id` is the post-commit head — on jj that's the new empty `@`, not the squash-created `@-` (`src/commands.cts:746-752` discards the backend-computed `CommitResult.id`); (b) absolute `--files` paths are filtered out by the #2014 `path.join(cwd, f)` existence check and short-circuit to a silent `nothing_to_commit` (`src/commands.cts:643-653`).
 - **Why deferred:** production CLI-bridge fixes with contract-test obligations — outside both the Phase 18 REQ fence (CLEANUP-01..07, TEST-17) and the 18-04 gap plan's workflow-markdown footprint.
 - **Tracked at:** `.planning/todos/pending/v15-query-commit-envelope-defects.md` (full evidence + acceptance criteria).
+
+## 3. 18-04 gate-fix residuals: jj `.raw` asymmetry, dormant `.raw` checks, swallowed exec failure (REQ-18-04-A)
+
+- **Found during:** 18-04 (assert_clean_wc entries-keyed predicate fix, 2026-06-11)
+
+**(a) jj `.raw` asymmetry — decided, NOT normalized.** `status({porcelain: true}).raw` on the jj backend remains human-readable `jj st` stdout ("The working copy has no changes.\nWorking copy (@)..."), NOT synthesized porcelain lines, because the contract is pinned by live consumers: the router status verb (`src/vcs-command-router.cts:217`) passes `raw` through verbatim, `agents/gsd-executor.md` (~lines 441/553) displays `.raw` as human-readable output, and `src/vcs/__tests__/jj-status-log-diff.test.ts` pins raw-as-backend-stdout ("raw field always populated"). Consequence: `.raw` is **display-only** and must never be used as a cleanliness predicate — the cross-backend porcelain contract is the structured `entries` array (empty = clean).
+
+**(b) Two dormant `.raw`-keyed checks deliberately left in place:** `gsd-core/workflows/execute-phase.md` ~line 307 and `gsd-core/workflows/quick.md` ~line 208. Both sit inside branching blocks that only execute in git mode (`branching_strategy != "none"` implies a git working tree), so the jj false-dirty defect cannot fire there today. If those blocks ever grow a jj path, re-key them on `entries` the same way.
+
+**(c) Swallowed-exec-failure hole (checker finding, deferred).** `src/vcs/backends/jj.cts` `status()` (~lines 429-441) catches a non-zero `jj st` exec and returns `{entries: [], raw: <stderr>}` instead of propagating failure, and `src/vcs-command-router.cts` statusVerb (~line 217) unconditionally emits `ok: true` — so a failed backend exec (stale workspace, lock contention) presents as a CLEAN envelope and silently passes the entries-keyed gate, where the old `.raw` predicate accidentally aborted (stderr text is non-empty). Follow-up REQ:
+  - **REQ-18-04-A: propagate backend exec failure as ok:false (or a thrown error) through statusVerb/backends so the gate's existing non-ok FATAL branch catches it.**
+  - **Why not fixed in 18-04:** it changes the live status-verb contract pinned by `src/vcs/__tests__/jj-status-log-diff.test.ts` and router consumers — production CLI-bridge work beyond the 18-04 gap plan's workflow-markdown scope.
