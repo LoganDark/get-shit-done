@@ -1,130 +1,143 @@
 ---
 phase: 18-tactical-cleanup-test-flake-re-scoped
-reviewed: 2026-06-10T00:00:00Z
+reviewed: 2026-06-11T00:00:00Z
 depth: standard
-files_reviewed: 7
+files_reviewed: 10
 files_reviewed_list:
-  - gsd-core/workflows/transition.md
-  - src/vcs-command-router.cts
-  - src/vcs/__tests__/cmd-parallel-max-concurrency-cli.test.ts
-  - src/vcs/__tests__/cmd-parallel-jj.test.ts
-  - src/vcs/__tests__/cmd-parallel-git.test.ts
-  - scripts/dogfood-restore.sh
   - gsd-core/bin/lib/vcs-command-router.cjs
+  - gsd-core/workflows/execute-phase.md
+  - gsd-core/workflows/plan-phase.md
+  - gsd-core/workflows/transition.md
+  - gsd-core/workflows/undo.md
+  - scripts/dogfood-restore.sh
+  - src/vcs-command-router.cts
+  - src/vcs/__tests__/cmd-parallel-git.test.ts
+  - src/vcs/__tests__/cmd-parallel-jj.test.ts
+  - src/vcs/__tests__/cmd-parallel-max-concurrency-cli.test.ts
 findings:
-  critical: 0
+  critical: 1
   warning: 4
-  info: 3
-  total: 7
-status: fixed
-fixed: 2026-06-10
-fixed_by: gsd-code-fixer (all 7 findings; one jj change per finding/group, listed inline)
+  info: 4
+  total: 9
+status: issues_found
 ---
 
 # Phase 18: Code Review Report
 
-**Reviewed:** 2026-06-10
+**Reviewed:** 2026-06-11
 **Depth:** standard
-**Files Reviewed:** 7
-**Status:** fixed (all 7 findings resolved 2026-06-10; per-finding jj change ids below)
+**Files Reviewed:** 10
+**Status:** issues_found
 
 ## Summary
 
-Reviewed the Phase 18 tactical-cleanup surface: 5 `gsd_run query commit` grafts plus the `assert_clean_wc` gate in `transition.md`; two fail-closed envelopes (`plan_not_array`, `max_concurrency_invalid`) in the `workspace.parallel.dispatch` handler (.cts + emitted .cjs); the project-root assertion and overlay-asymmetry comment in `dogfood-restore.sh`; and the 6 new contract tests + describe-scoped `tmpDir` cleanup hoists in the three parallel test files.
+Fresh full re-review of the Phase 18 surface after plans 18-01/18-02/18-03/18-04. A prior 18-REVIEW.md (4 warnings, 3 info) was closed by plan 18-02 with `status: fixed`; this report supersedes it. The prior findings (WR-01..05 lineage: fail-closed status probe, entries-keyed predicate, `i + 1 < args.length` flag parse, positive-integer max-concurrency guard, tmpdir hygiene, `if (tmpDir)` afterEach guard) are all verified present and correctly implemented in the current sources.
 
-What checks out cleanly:
+What checks out cleanly this round:
 
-- **Emitted artifact is NOT stale.** `gsd-core/bin/lib/vcs-command-router.cjs:1082-1141` carries both new guards with identical logic, ordering, and comments as the `.cts` source. Both guards return before `createVcsAdapter` (.cts:1153, 1204 vs adapter call at 1208).
-- **Envelope shape consistency.** Both new envelopes are `{ data: { ok: false, reason: '<snake_case>' } }`, matching peers `phase_number_required`, `plan_required`, `plan_json_parse_failed`, `parallelization_disabled`.
-- **No raw git introduced.** All five transition.md grafts and the gate fence use bare `gsd_run` (the only `git rev-parse` occurrence is inside the pre-existing canonical launcher embed at line 166 — one embed, no duplicate, matching the execute-phase.md convention).
-- **Gate jq pipeline type-checks.** `DiffResult.nameOnly` is `string[]` (src/vcs/types.cts:194), so `jq '.nameOnly // [] | join("\n")'` operates on an array; verb routing `query diff --name-only` resolves through `routeVcsCommand` correctly.
-- **Missing REQUIREMENTS.md is safe in the line-168 commit.** `cmdCommit`'s #2014 filter (commands.cjs:524-533) drops nonexistent `--files` entries before `vcs.commit`, so projects without `.planning/REQUIREMENTS.md` do not fail the transition commit.
-- **Gate sweep claim verified.** graduation.md's Promote path commits its own writes atomically (graduation.md:138); Defer/Dismiss write only to STATE.md's `graduation_backlog`, which the line-404 sweep commit covers. The gate's "only Route B1/B config-set writes happen after" claim is accurate.
-- **dogfood-restore.sh ordering is correct.** Positional parse (34-48) → root assertion (56) → tarball check (73) → `jj op restore` (79) → `tar -xf` (92). The assertion fires pre-mutation as documented; stderr + exit-1 style matches the file.
-- **Test guard coverage is sound.** The `plan_not_array` table covers object/string/number/null; the `max_concurrency_invalid` tests supply a valid phase and valid array plan so only the target guard can fire; `recordedDispatchOpts` is reset at the top of every new `it` and the `length === 0` assertions prove the adapter boundary was never reached.
+- **The `assert_clean_wc` jq predicate is correct on both backends.** `if .ok == true and ((.entries // null) | type == "array") then ([.entries[] | (.path // error(...))] | join("\n")) else error(...) end` keys exclusively on `entries`, never `.raw`; empty array → empty string → `jq -e` exit 0 → clean; every malformed-envelope shape routes through `error()` → non-zero → FATAL abort. Verified fail-closed in all four placements (execute-phase.md:1697-1698, plan-phase.md:1787-1788, transition.md:440-441, undo.md:215).
+- **`@file:` spill is a non-issue for the gates.** gsd-tools.cjs:451-499 transparently resolves `@file:` references on the normal output path (#1891), so `STATUS_JSON` and `CLEANUP_JSON` consumers never see the sentinel. (Checked because the >50KB spill would otherwise have broken every new jq consumer.)
+- **Emitted artifact parity.** `gsd-core/bin/lib/vcs-command-router.cjs` carries the `plan_not_array` guard (1149-1151), the `max_concurrency_invalid` guard (1097-1101), and the WR-03 `i + 1 < args.length` form (1078) with logic identical to the `.cts` source (1216-1218, 1160-1167, 1140).
+- **Gate ordering in execute-phase.md and transition.md is sound.** `assert_clean_wc` sits in natural fall-through position before `offer_next` / `offer_next_phase` with no jump instruction bypassing it; transition.md's post-gate writes (Route B1/B `config-set` + tolerant commit) are documented and committed.
+- **dogfood-restore.sh root assertion fires pre-mutation** (line 56, before the tarball check at 73 and both mutations at 79/92), and the stderr/stdout separation + explicit jq-failure WARNs from the Phase 16 review fixes are intact.
+- **Test hygiene fixes hold.** CONFIG-02 describe-scoped `tmpDir` + guarded `afterEach` in both parallel test files; the CLEANUP-05/06 table-driven envelope tests cover all four non-array JSON types, all seven invalid max-concurrency shapes, and the boundary value 1.
+
+One Critical finding remains: plan-phase.md's §16 gate — the core deliverable of plans 18-01/18-04 for that file — is unreachable under literal instruction-following, because §14 and §15 both route to `<offer_next>` before §16 is encountered.
+
+## Narrative Findings (AI reviewer)
+
+## Critical Issues
+
+### CR-01: plan-phase.md §16 `assert_clean_wc` gate is bypassed by §14/§15 routing — unreachable on the manual path it exists to protect
+
+**File:** `gsd-core/workflows/plan-phase.md:1696-1698, 1761-1762, 1764`
+**Issue:** Section 14 ("Present Final Status") instructs: "Route to `<offer_next>` OR `auto_advance` depending on flags/config." Section 15's manual branch instructs: "**If neither `--auto` nor config enabled:** Route to `<offer_next>` (existing behavior)." Both routing instructions transfer control to the `<offer_next>` block (which lives *after* `</process>`) before the orchestrator ever encounters §16 ("Assert Clean Working Copy") at line 1764. §16's own prose acknowledges "This gate here protects the manual route only (where §15 routes to `<offer_next>`)" — but the manual route, as written, jumps straight over it. The auto route is covered by execute-phase's own gate, so under a literal reading of the workflow, the plan-phase gate is dead code on **both** paths. An orchestrator following the §15 jump will emit the "PHASE PLANNED ✓" banner without ever running the cleanliness probe — exactly the Phase 14 incident class (uncommitted `.planning/` mutations under a completion banner) this phase was scoped to close. Contrast: execute-phase.md and transition.md place their gates as ordinary fall-through steps before the offer step with no intervening jump instruction, so they are not affected.
+**Fix:** Make the gate part of the routed path instead of an orphaned trailing section. Either:
+```markdown
+## 14. Present Final Status
+
+Run §16 (Assert Clean Working Copy) FIRST, then route to `<offer_next>` OR `auto_advance`...
+```
+or move the gate to be §14 (renumbering Auto-Advance to §15 and Present Final Status to §16), so flow passes through the probe before any routing instruction. At minimum, §15's manual branch must read "Run the Assert Clean Working Copy gate (§16), then route to `<offer_next>`."
 
 ## Warnings
 
-### WR-01: assert_clean_wc gate is fail-open when its probe fails
+### WR-01: `plan_not_array` guard validates the container but not the entries — garbage arrays still reach the adapter and crash without an envelope
 
-**FIXED** — jj change `kkktupwtwwpz` (with WR-02, same probe). Probe replaced with fail-closed two-stage form: `STATUS_JSON=$(gsd_run query status --porcelain) || FATAL exit 1`, then `jq -re 'if .ok == true then .raw else error(...) end' || FATAL exit 1` — non-zero query exit, error envelope, missing jq output, and unparseable JSON all abort instead of resolving to "clean". `2>/dev/null` dropped. Applied byte-consistently to all three mirrors (transition.md, execute-phase.md:1686, plan-phase.md:1776). Verified against ephemeral /tmp fixtures: probe-failure and bad-envelope simulations both FATAL exit 1; clean → 0.
-
-**File:** `gsd-core/workflows/transition.md:429`
-**Issue:** The gate's only input is `DIRTY=$(gsd_run query diff --name-only 2>/dev/null | jq -r '.nameOnly // [] | join("\n")')`. Every probe-failure mode silently resolves to "clean":
-1. `gsd_run`/node failure → empty stdout, stderr suppressed by `2>/dev/null`, jq on empty input exits 0 with no output → `DIRTY=""` → gate passes.
-2. jq missing from PATH → same outcome.
-3. An `ok:false` error envelope has no `.nameOnly` key → `// []` defaults it to clean.
-4. On the jj backend, a failed `jj diff` subprocess returns `{ nameOnly: [] }` inside an `ok:true` envelope (src/vcs/backends/jj.cts:490) — indistinguishable from genuinely clean.
-
-A gate whose entire purpose is fail-closed dirty-WC detection (the step itself says "Do not bypass") rubber-stamps the transition whenever its own probe breaks. This is inherited verbatim from the mirror at execute-phase.md:1686, which has the same defect.
-**Fix:** Drop `2>/dev/null`; capture the envelope, assert `.ok == true` (and jq exit status) before deriving `DIRTY`; abort with a "probe failed, cannot verify cleanliness" error otherwise:
-```bash
-DIFF_JSON=$(gsd_run query diff --name-only) || { echo "FATAL: diff probe failed; cannot verify WC cleanliness" >&2; exit 1; }
-DIRTY=$(printf '%s' "$DIFF_JSON" | jq -re 'if .ok == true then (.nameOnly | join("\n")) else error("probe envelope not ok") end') \
-  || { echo "FATAL: diff probe returned error envelope" >&2; exit 1; }
-```
-
-### WR-02: gate is blind to untracked and staged-only changes on the git backend
-
-**FIXED** — jj change `kkktupwtwwpz` (with WR-01, same probe). Probe now uses `gsd_run query status --porcelain` (non-empty `.raw` = dirty) instead of `diff --name-only`; categorized PLANNING_DIRTY/OTHER_DIRTY diagnostics preserved via `.entries[].path` (raw-lines fallback if entries empty). Fixture-verified on a git-backend repo: untracked-only → exit 1, staged-only → exit 1, tracked-modified → exit 1, clean → exit 0; jj-backend dirty/clean parity confirmed. `audit-workflow-raw-git.cjs` stays exit 0 (fence remains bare-`gsd_run`).
-
-**File:** `gsd-core/workflows/transition.md:429`
-**Issue:** The probe maps to plain `git diff --name-only` on the git backend (src/vcs/backends/git.cts:348-371) — unstaged modifications to *tracked* files only. Untracked new files and staged-but-uncommitted changes are invisible. Newly created planning artifacts (SUMMARY/VERIFICATION-class files — exactly the leak class from the Phase 14 incident the gate exists to catch) are untracked on git until first commit, so the gate's "catch ALL forms of 'state isn't durable'" claim (line 454) does not hold for cases (b) and (d) on git. jj is unaffected (auto-tracking makes `jj diff` see new files). gsd-core ships cross-backend, so this is not jj-fork-only dead code. Same gap exists in the execute-phase.md:1686 mirror.
-**Fix:** Probe via `gsd_run query status --porcelain` and derive `DIRTY` from `.entries[].path` — `git status --porcelain` reports untracked (`??`) and staged entries; the jj status surface is equivalent.
-
-### WR-03: max_concurrency guard is weaker than the file's own numeric-validation precedent
-
-**FIXED** — jj change `yykktkqolpzq`. Guard strengthened to the line-1354 precedent: `Number.isNaN || !Number.isInteger || < 1` (rejects 0, -2, 2.5, Infinity); argv branch flipped to `i + 1 < args.length` so `--max-concurrency ''` reaches the validator (`Number('')` = 0 → rejected) instead of silently skipping. Reason string `max_concurrency_invalid` unchanged; absent flag still forwards `undefined`. Contract tests extended (rejects NaN/banana/0/-2/2.5/Infinity/''; accepts 1 and 4; absent → undefined) — 15/15 green. Emitted artifact rebuilt via `pnpm run build:lib` and committed alongside (`gsd-core/bin/lib/vcs-command-router.cjs`, 18-02 parity precedent).
-
-**File:** `src/vcs-command-router.cts:1153`
-**Issue:** The guard rejects only `Number.isNaN(maxConcurrency)`. `--max-concurrency 0`, `--max-concurrency -2`, `--max-concurrency 2.5`, and `--max-concurrency Infinity` all pass the guard and forward into `dispatch({ maxConcurrency })` — a zero or negative concurrency cap is precisely the nonsense scheduling input CLEANUP-06 set out to fail-closed on. The same file already established the stronger pattern for numeric flags at `cleanupSubagentWorkspacesVerb` (line 1354): `Number.isNaN(phase) || !Number.isInteger(phase) || phase < 0`. Additionally, `--max-concurrency ''` bypasses the guard entirely: the argv loop's truthy `args[i + 1]` check (line 1140) silently skips the flag, leaving `maxConcurrency` undefined — the Phase 16 WR-03 `i + 1 < args.length` form was applied to the cancel/cleanup verbs but the dispatch loop still uses truthiness.
+**File:** `src/vcs-command-router.cts:1216-1218` (emitted: `gsd-core/bin/lib/vcs-command-router.cjs:1149-1151`)
+**Issue:** The CLEANUP-05 guard rejects `{"not":"an array"}`, `"str"`, `42`, `null` — but `[null]`, `[42]`, `["x"]`, and `[{}]` all pass `Array.isArray` and flow into `vcs.workspace.parallel.dispatch({ ..., plan })`. The declared type is `readonly { agentId: string; planId: string; ... }[]`, but `JSON.parse` output is unchecked beyond the array test, so the adapter dereferences `agentId`/`planId` on non-object or shapeless entries and throws a raw TypeError (or builds nonsense workspace names like `phase-18-subagent-undefined`). That lands on gsd-tools' runMain thrown-error path instead of a typed `ok:false` envelope — defeating the stated goal of the guard ("fail closed BEFORE `createVcsAdapter` so the envelope is backend-agnostic", ASVS V5 input validation).
 **Fix:**
 ```ts
 if (
-  maxConcurrency !== undefined &&
-  (Number.isNaN(maxConcurrency) || !Number.isInteger(maxConcurrency) || maxConcurrency < 1)
+  !Array.isArray(plan) ||
+  plan.some(
+    (e) =>
+      e === null ||
+      typeof e !== 'object' ||
+      typeof (e as { agentId?: unknown }).agentId !== 'string' ||
+      typeof (e as { planId?: unknown }).planId !== 'string',
+  )
 ) {
-  return { data: { ok: false, reason: 'max_concurrency_invalid' } };
+  return { data: { ok: false, reason: 'plan_not_array' } };
 }
 ```
-(Mirror the change into the emitted .cjs, and extend the CLEANUP-06 test table with `'0'`, `'-1'`, `'2.5'`.)
+(or a distinct `plan_entry_invalid` reason for the element case, with matching contract tests alongside the existing CLEANUP-05 table).
 
-### WR-04: line-168 commit message uses `${completed_phase}` before the workflow defines it
+### WR-02: `commitToSubrepoVerb` reports the post-commit head as `id` — on jj this is the new empty working copy's change id, not the created commit
 
-**FIXED** — jj change `nklyoqzxkwmn`. Line-168 commit message now uses `${current_phase}` (in scope; `completed_phase == current_phase` by definition). The two later grafts (lines 269, 404) correctly keep `${completed_phase}` — they run after the extraction prose.
+**File:** `src/vcs-command-router.cts:886-894` (emitted: `gsd-core/bin/lib/vcs-command-router.cjs:834-843`)
+**Issue:** After `subVcs.commit(...)` succeeds, the handler resolves `id = subVcs.refs.resolveShort(subVcs.refs.head)`. On the jj backend the commit verb implements the squash model: the work lands in `@-` and `@` becomes a fresh empty change — so `refs.head` resolves to the empty WC change id, not the commit that was just created. This is the same defect class already filed as the v15 todo for `gsd-tools query commit` ("query commit reports head id, not created commit"); this second occurrence in the router was not captured by that todo. Any consumer recording the returned `id` into `.planning/` artifacts will persist a change id that points at an empty revision. Mitigating context: gsd-tools' upstream case keeps dispatch ownership of `commit-to-subrepo` until the 19-07 internals migration, so this handler is currently latent — but it ships as the migration target and will become live verbatim.
+**Fix:** On the jj backend resolve the parent of head (the squash destination), e.g. resolve `@-` via the expr layer, or have the adapter's `commit` return the created revision id in its result and use that instead of re-probing head. Fold this call site into the v15-query-commit-envelope-defects todo so 19-07 fixes both together.
 
-**File:** `gsd-core/workflows/transition.md:167-180`
-**Issue:** The grafted fence runs `gsd_run query phase.complete "${current_phase}"` then immediately commits with message `docs(phase-${completed_phase}): ...`. But `completed_phase` is only introduced at line 180 ("Extract from result: `completed_phase`, ...") — *after* the fence — and the load-bearing prose at line 171 explicitly forbids deferring the commit past the result parsing. Executed literally, the message renders as `docs(phase-): complete phase via transition`. The two later grafts (lines 269, 404) are fine — they live in steps that follow the extraction prose. Since `completed_phase == current_phase` by definition, the fence has the value available under its other name.
-**Fix:** Use `${current_phase}` in the line-168 commit message (or move the one-line extraction above the commit inside the same fence).
+### WR-03: `resolvePathUnderProject` falls back to the unresolved path when realpath fails — symlinked parent dirs can smuggle a nonexistent leaf past the escape guard
+
+**File:** `src/vcs-command-router.cts:176-192` (emitted: `gsd-core/bin/lib/vcs-command-router.cjs:154-171`)
+**Issue:** When `realpath(candidate)` throws (path does not exist yet), the guard compares the *non-canonicalized* candidate against the canonicalized `projectReal`. Two consequences: (a) **false accept** — for `proj/link-to-outside/newfile` where `link-to-outside` is a symlink escaping the project and `newfile` does not exist, `realpath` fails on the full path, the candidate is kept as-is, `relative()` says it is inside the project, and the path passes the guard while actually resolving outside it (Node's `realpath` requires the entire path to exist, so an existing symlinked parent with a nonexistent leaf is never canonicalized); (b) **false reject** — on macOS, an absolute `userPath` under `/tmp/...` for a nonexistent file is compared un-resolved against `projectReal` under `/private/tmp/...`, so legitimately in-project paths are rejected. Impact is bounded (the validated paths feed `vcs.commit --files`, and git/jj independently reject paths outside the repo), but the guard is the designated path-escape defense and should not depend on the VCS backend to catch what it misses.
+**Fix:** When the full-path realpath fails, canonicalize the deepest existing ancestor instead of skipping canonicalization entirely:
+```ts
+let probe = candidate;
+let suffix = '';
+while (true) {
+  try { realCandidate = join(await realpath(probe), suffix); break; }
+  catch { suffix = join(basename(probe), suffix); probe = dirname(probe); if (probe === dirname(probe)) { realCandidate = candidate; break; } }
+}
+```
+
+### WR-04: `workspaceParallelDispatchVerb` mixes flag-value guard forms — `--cwd`/`--phase`/`--main-bookmark`/`--plan` still use the truthiness form the file itself deprecates
+
+**File:** `src/vcs-command-router.cts:1131-1147` (emitted: `gsd-core/bin/lib/vcs-command-router.cjs:1065-1085`)
+**Issue:** Phase 18 upgraded only `--max-concurrency` to the `i + 1 < args.length` form (so empty-string values reach the validator), while the four sibling flags in the same loop keep `args[i + 1]` truthiness. Consequences: `--plan ''` silently skips the flag and surfaces as the misleading `plan_required` instead of a parse failure; `--cwd ''` silently falls back to `projectDir`, so the verb can operate on a different repo than the caller intended with no diagnostic; `--phase ''` is silently dropped (then caught by `phase_number_required`, masking the real cause). The file's own comments cite Phase 16 REVIEW WR-03 as the precedent that truthiness guards are a defect class — applying the fix to one of five flags in one loop leaves the inconsistency the precedent was meant to eliminate. (`workspaceParallelFanInVerb` at cts:1236-1244 has the same truthiness guards on `--cwd`/`--handle`/`--results`.)
+**Fix:** Convert all flag-value checks in `workspaceParallelDispatchVerb` and `workspaceParallelFanInVerb` to `i + 1 < args.length`, matching `workspaceParallelCancelVerb` and `cleanupSubagentWorkspacesVerb`. Empty values then flow to the existing validators (`Number('')` → 0 → rejected; empty `--plan` → JSON parse failure envelope; empty `--cwd` → adapter error rather than silent wrong-repo fallback).
 
 ## Info
 
-### IN-01: `|| true` rationale on Route B1/B tolerant commits documents a non-existent failure mode
+### IN-01: Stale module-path comments in cmd-parallel-max-concurrency-cli.test.ts
 
-**FIXED** — jj change `vkqwonkvsnvv`. Both Route B1 and Route B rationale paragraphs rewritten: `|| true` kept as defensive against unexpected launcher/node failures; the comment now states that the byte-identical no-change case already exits 0 with `nothing_to_commit` and never needed the tolerance.
+**File:** `src/vcs/__tests__/cmd-parallel-max-concurrency-cli.test.ts:11-14, 51-53`
+**Issue:** The header still names `sdk/src/query/workspace-parallel-dispatch.ts` as the shipping surface, and the `vi.mock` rationale comment explains the path as `'../index.js'` resolving to "exactly the module `src/query/workspace-parallel-dispatch.ts` imports" — but the mock target is now `'../index.cjs'` and the importer is `src/vcs-command-router.cts` (which the Phase 19 note at lines 32-34 already says). The two comment generations contradict each other within one file.
+**Fix:** Update lines 51-53 to describe the actual resolution: test file at `src/vcs/__tests__/` mocks `'../index.cjs'` → `src/vcs/index.cjs`, the same id `src/vcs-command-router.cts` imports via `'./vcs/index.cjs'`. Trim the retired-SDK framing in the header.
 
-**File:** `gsd-core/workflows/transition.md:618-621, 675-678`
-**Issue:** The comment claims `|| true` "is required because ... the VCS sees no change, and the commit is a harmless no-op." In fact `cmdCommit` short-circuits the byte-identical case itself with `{ committed: false, reason: 'nothing_to_commit' }` at exit 0 (commands.cjs:570-574) — and even `commit_failed` exits 0 by the envelope contract. The `|| true` never changes behavior for its stated reason; if anything it would also mask a genuinely unexpected non-zero exit (e.g., node crash). Harmless, but the rationale is misleading for future maintainers.
-**Fix:** Either drop `|| true` or reword the rationale to "defensive against unexpected launcher/node failures; the no-change case already exits 0 with `nothing_to_commit`."
+### IN-02: CLEANUP-05/06 tests cannot actually prove "guard returns BEFORE createVcsAdapter"
 
-### IN-02: CONFIG-02 `afterEach` lacks the `if (tmpDir)` guard every other cleanup hook in these files uses
+**File:** `src/vcs/__tests__/cmd-parallel-max-concurrency-cli.test.ts:148-153, 163-175, 196-209`
+**Issue:** The describe comment claims the guards "must return BEFORE `createVcsAdapter` is reached — proven by `recordedDispatchOpts.length === 0`". But `createVcsAdapter` is mocked and side-effect-free; only `dispatch` pushes to the recorder. A regression that moved either guard to *after* `createVcsAdapter` (breaking the backend-agnostic-envelope property on a non-repo cwd, since the real factory throws there) would still pass these tests. The envelope-reason assertions are still valuable; only the ordering claim is unproven.
+**Fix:** Either have the mocked `createVcsAdapter` itself record an invocation and assert that counter is 0, or soften the comment to "proven: the adapter's dispatch is never called."
 
-**FIXED** — jj change `uppnmvszoyxo`. `if (tmpDir)` guard added to the CONFIG-02 afterEach in both files (with a one-line rationale comment), matching the sibling afterAll hooks. Both full files re-run green (27/27).
+### IN-03: undo.md dirty-tree guard uses a one-liner pipeline instead of the sibling gates' two-step fail-closed probe
 
-**File:** `src/vcs/__tests__/cmd-parallel-jj.test.ts:784-786`, `src/vcs/__tests__/cmd-parallel-git.test.ts:1013-1015`
-**Issue:** `afterEach(async () => { await rm(tmpDir, { recursive: true, force: true }); })` — if the first `it`'s `mkdtemp` rejects, `tmpDir` is `undefined` and `rm(undefined)` rejects with `ERR_INVALID_ARG_TYPE`, layering a confusing hook failure on top of the real one. Every `afterAll` in both files guards (`if (dir) rmSync(...)`). Double-rm across tests is safe (`force: true` tolerates missing paths; vitest runs same-file tests serially, so no stale-closure cross-test deletion), so this only bites on an already-failing test — but the one-line guard restores file-local consistency.
-**Fix:** `afterEach(async () => { if (tmpDir) await rm(tmpDir, { recursive: true, force: true }); });`
+**File:** `gsd-core/workflows/undo.md:215`
+**Issue:** The three workflow gates separate the probe (`STATUS_JSON=$(...) || FATAL`) from the predicate, so a non-zero status query is caught directly. undo.md pipes `gsd_run query status --porcelain | jq -re '...'` — without `pipefail`, the displayed exit code is jq's, not the probe's. It is safe today only by a subtlety: a failed probe yields empty/garbage stdin and `jq -e` exits 4 (no output) or 5 (parse error), so the prose's "if the command FAILS, abort" still holds. That safety is an accident of jq's `-e` semantics rather than an explicit design, and diverges from the pattern the other three files share.
+**Fix:** Use the same two-line form as execute-phase.md:1697-1698 (capture `STATUS_JSON` with its own `|| abort`, then run jq on the captured string).
 
-### IN-03: stale line reference in dogfood-restore.sh comment after Phase 18 header insertion
+### IN-04: dogfood-restore.sh minor hygiene — bash shebang and a leakable stderr tmpfile
 
-**FIXED** — jj change `txqmossnpzvp`. Comment reworded to "in effect from the prologue's `set -euo pipefail`" (no line anchor to drift); optional label alignment also applied (root assertion now `FATAL:`, matching the tarball check — no test pinned the old `ERROR:` text). `bash -n` clean; wrong-cwd run still exits 1.
-
-**File:** `scripts/dogfood-restore.sh:113`
-**Issue:** The comment "`set -e` is in effect from line 29" is stale — the Phase 18 pre-condition comment block (lines 25-30) shifted `set -euo pipefail` to line 32. Minor: also note the new assertion uses the `ERROR:` label while the adjacent tarball check uses `FATAL:` for the same exit-1 severity class.
-**Fix:** Reword to "set -e is in effect from the prologue" (avoids future drift) and optionally align the label to `FATAL:`.
+**File:** `scripts/dogfood-restore.sh:1, 114-122`
+**Issue:** (a) Shebang is `#!/usr/bin/env bash` while the project convention for shell scripts is zsh (pre-existing; `set -euo pipefail` and the script body are bash-idiomatic, so a port is a deliberate change, not a one-line swap). (b) `CLEANUP_STDERR_FILE` is removed by an unconditional `rm -f` at line 122, but if the script aborts between `mktemp` (114) and the `rm` (e.g. the `cat` at 119 failing under `set -e`), the tmpfile leaks. A `trap 'rm -f "$CLEANUP_STDERR_FILE"' EXIT` after the mktemp would make cleanup crash-safe.
+**Fix:** Add the EXIT trap; defer the shebang question to a deliberate decision rather than an inline edit.
 
 ---
 
-_Reviewed: 2026-06-10_
+_Reviewed: 2026-06-11_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+_Supersedes: 18-REVIEW.md of 2026-06-10 (status: fixed — prior findings WR-01..05/IN-01..03 verified closed by plan 18-02 and remain closed in this re-review)_
