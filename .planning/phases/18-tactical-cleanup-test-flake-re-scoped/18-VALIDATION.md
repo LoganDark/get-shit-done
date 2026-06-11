@@ -39,13 +39,13 @@ approved: 2026-06-10
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| (filled by planner) | 01 | 1 | CLEANUP-01 | — | N/A | scripted fixture + grep | `grep -c 'gsd_run query diff --name-only' gsd-core/workflows/transition.md` ≥ 1; ephemeral fixture-repo gate script exits 1 dirty / 0 clean; `node scripts/audit-workflow-raw-git.cjs` exit 0 | ❌ W0 (ephemeral) | ⬜ pending |
-| (filled by planner) | 02 | 1 | CLEANUP-05 | T-18-01 | non-array plan fails closed with `{ok:false, reason:'plan_not_array'}` | unit (vi.mock) | `npx vitest run --project unit src/vcs/__tests__/cmd-parallel-max-concurrency-cli.test.ts` | ❌ W0 (new `it`s in existing file) | ⬜ pending |
-| (filled by planner) | 02 | 1 | CLEANUP-06 | T-18-02 | NaN `--max-concurrency` fails closed; absent flag stays `undefined` (D-07) | unit (vi.mock) | same file; D-07 test at L132 stays green | ❌ W0 (new `it`s in existing file) | ⬜ pending |
-| (filled by planner) | 02 | 1 | CLEANUP-03 | T-18-03 | wrong-cwd run aborts before any mutation | manual-equivalent + node:test | with `REPO="$PWD"` captured pre-cd: `cd /tmp && bash "$REPO/scripts/dogfood-restore.sh" x y` → exit 1 + `ERROR: dogfood-restore.sh must run from project root` on stderr (root assertion precedes the tarball check); `node --test tests/scripts/dogfood-restore-orphan-cleanup.test.cjs` green | ✅ | ⬜ pending |
-| (filled by planner) | 02 | 1 | CLEANUP-04 | — | overlay semantics documented or made clean | review + existing test green | same as CLEANUP-03 | ✅ | ⬜ pending |
-| (filled by planner) | 02 | 1 | CLEANUP-07 | — | N/A | targeted run + tmp inspect | run CONFIG-02 describes, then assert zero leaked tmpdirs | ✅ (edits to existing describes) | ⬜ pending |
-| (filled by planner) | 03 | 1 | TEST-17 | — | N/A | 3+ full-suite runs | `GSD_TEST_BACKENDS=git,jj npx vitest run` ×3 exit 0; `node scripts/check-skip-count.cjs` green (baseline 22) | ✅ | ⬜ pending |
+| (filled by planner) | 01 | 1 | CLEANUP-01 | — | N/A | scripted fixture + grep | `grep -c 'gsd_run query status --porcelain' gsd-core/workflows/transition.md` ≥ 1 (supersedes the plan-time `diff --name-only` literal — Phase 18 REVIEW WR-01/WR-02 replaced the probe with fail-closed `status --porcelain`); ephemeral fixture-repo gate script exits 1 dirty / 0 clean (transcripts in 18-01 SUMMARY); `node scripts/audit-workflow-raw-git.cjs` exit 0 | ❌ W0 (ephemeral) | ✅ green |
+| (filled by planner) | 02 | 1 | CLEANUP-05 | T-18-01 | non-array plan fails closed with `{ok:false, reason:'plan_not_array'}` | unit (vi.mock) | `npx vitest run --project unit src/vcs/__tests__/cmd-parallel-max-concurrency-cli.test.ts` | ✅ (landed in 18-02) | ✅ green |
+| (filled by planner) | 02 | 1 | CLEANUP-06 | T-18-02 | invalid `--max-concurrency` fails closed (REVIEW WR-03 strengthened NaN-only to positive-integer); absent flag stays `undefined` (D-07) | unit (vi.mock) | same file; D-07 test stays green | ✅ (landed in 18-02) | ✅ green |
+| (filled by planner) | 02 | 1 | CLEANUP-03 | T-18-03 | wrong-cwd run aborts before any mutation | manual-equivalent + node:test | with `REPO="$PWD"` captured pre-cd: `cd /tmp && bash "$REPO/scripts/dogfood-restore.sh" x y` → exit 1 + `FATAL: dogfood-restore.sh must run from project root` on stderr (label aligned ERROR→FATAL by REVIEW fix b133aa4a; root assertion precedes the tarball check); `node --test tests/scripts/dogfood-restore-orphan-cleanup.test.cjs` green | ✅ | ✅ green |
+| (filled by planner) | 02 | 1 | CLEANUP-04 | — | overlay semantics documented or made clean | review + existing test green | same as CLEANUP-03 | ✅ | ✅ green |
+| (filled by planner) | 02 | 1 | CLEANUP-07 | — | N/A | targeted run + tmp inspect | run CONFIG-02 describes, then assert zero leaked tmpdirs | ✅ (edits to existing describes) | ✅ green |
+| (filled by planner) | 03 | 1 | TEST-17 | — | N/A | 3+ full-suite runs | `GSD_TEST_BACKENDS=git,jj npx vitest run` ×3 — 618/618 ×3 recorded in 18-03 SUMMARY; `node scripts/check-skip-count.cjs` current=22 == documented fork baseline (script exits 1 vs origin/main=18 — pre-existing Phase 13 ledger item, zero skips added by this phase) | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -78,3 +78,15 @@ No standalone pre-execution Wave 0 exists for this phase: both items land inside
 - [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** approved 2026-06-10
+
+---
+
+## Validation Audit 2026-06-10
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+All 7 requirements audited COVERED post-execution (fresh runs, this audit): contract-test file 15/15, CONFIG-02 6/6 with 0 leaked `gsd-cfg02-*` dirs, jj-reap 5/5 (inclusion-filter 434ms), dogfood-restore node:test 2/2 + wrong-cwd FATAL exit 1, `audit-workflow-raw-git` PASS (230 hits / 0 regressions), both VCS lints 0 violations. Two stale plan-time command literals in the map were superseded in place (CLEANUP-01 probe → `status --porcelain`; CLEANUP-03 label → `FATAL:`) — both supersessions originate from Phase 18 REVIEW fixes that strengthened the implementation. No test generation needed; no manual-only escalations beyond the pre-existing CLEANUP-04 review row (performed: comment block verified present at scripts/dogfood-restore.sh:83-91 during /gsd-secure-phase).
