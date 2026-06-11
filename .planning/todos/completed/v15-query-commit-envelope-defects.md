@@ -1,3 +1,4 @@
+completed: 2026-06-11
 ---
 title: query commit envelope defects — reports head (@) change_id instead of created commit (@-) on jj; absolute --files paths silently return nothing_to_commit
 source: phase-18 UAT session (operator observation + gap-closure planner observation, 2026-06-11)
@@ -44,17 +45,20 @@ filesToCommit = filesRequested.filter(f => fs.existsSync(path.join(cwd, f)))
 ## Acceptance criteria for the fix plan
 
 Defect 1:
-- [ ] `cmdCommit` success envelope `id` comes from `commitResult.id` (the backend-computed created-revision id), not from re-resolving `refs.head`; shorten via `resolveShort` only if envelope length parity requires it
-- [ ] Contract test (both backends via `GSD_TEST_BACKENDS` matrix): commit, then assert envelope `id` resolves to the commit whose description is the message just passed — and on jj that it does NOT equal `@`'s change_id
-- [ ] Survey envelope consumers (workflows/agents parsing `.id`) for anything depending on the old head-id behavior; none expected, record findings
+
+- [x] `cmdCommit` success envelope `id` comes from `commitResult.id` (the backend-computed created-revision id), not from re-resolving `refs.head`; shorten via `resolveShort` only if envelope length parity requires it
+- [x] Contract test (both backends via `GSD_TEST_BACKENDS` matrix): commit, then assert envelope `id` resolves to the commit whose description is the message just passed — and on jj that it does NOT equal `@`'s change_id
+- [x] Survey envelope consumers (workflows/agents parsing `.id`) for anything depending on the old head-id behavior; none expected, record findings
 
 Defect 2:
-- [ ] Absolute `--files` paths under the repo root are normalized to repo-relative (e.g. `path.relative(cwd, f)` when `path.isAbsolute(f)`) before the missing-path filter and status-scope match — OR rejected loudly with a structured `{ok:false, reason:'absolute_path_unsupported'}`-style envelope; silent `nothing_to_commit` is not acceptable for this case
-- [ ] Absolute paths OUTSIDE the repo root fail loudly (never silently no-op, never escape the repo scope)
-- [ ] Contract test: commit with an absolute path to a genuinely-dirty tracked file asserts either a successful commit of that file or the loud rejection — not `nothing_to_commit`
+
+- [x] Absolute `--files` paths under the repo root are normalized to repo-relative (e.g. `path.relative(cwd, f)` when `path.isAbsolute(f)`) before the missing-path filter and status-scope match — OR rejected loudly with a structured `{ok:false, reason:'absolute_path_unsupported'}`-style envelope; silent `nothing_to_commit` is not acceptable for this case
+- [x] Absolute paths OUTSIDE the repo root fail loudly (never silently no-op, never escape the repo scope)
+- [x] Contract test: commit with an absolute path to a genuinely-dirty tracked file asserts either a successful commit of that file or the loud rejection — not `nothing_to_commit`
 
 Both:
-- [ ] No raw git introduced; all four lint/audit gates stay green (no-raw-git, no-commit-id, call-presence, audit-workflow-raw-git 230-hit baseline)
+
+- [x] No raw git introduced; all four lint/audit gates stay green (no-raw-git, no-commit-id, call-presence, audit-workflow-raw-git 230-hit baseline)
 
 ## References
 
