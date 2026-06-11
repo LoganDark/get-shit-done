@@ -2,6 +2,52 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.5 — Tactical cleanup + test-flake (Phase 18 carry-through)
+
+**Shipped:** 2026-06-11
+**Phases:** 1 (Phase 18 re-scoped) | **Plans:** 4 (3 planned + 1 gap-closure) | **Tasks:** 9 | **Requirements:** 7/7 Complete (CLEANUP-01, CLEANUP-03..07, TEST-17)
+
+### What Was Built
+
+- **18-01:** transition.md gained 5 commit-adjacency fences + an `assert_clean_wc` FATAL gate before `offer_next_phase` — a transition can no longer declare completion over an uncommitted working copy (the Phase 14 false-clean-WC recurrence site, closed).
+- **18-02:** dispatch-router fail-closed envelopes (`plan_not_array`, `max_concurrency_invalid`) with contract tests; dogfood-restore.sh project-root assertion + documented tar-overlay asymmetry; CONFIG-02 tmpDir leak elimination — 5 per-WR commits in the locked order.
+- **18-03:** TEST-17 closed as resolved-by-restructure — the jj-reap inclusion-filter flake did not reproduce in 3 full-suite runs under the 19-11 vitest config (419–473 ms every time); zero file edits.
+- **18-04 (gap closure):** UAT test 5 blocker — all three `assert_clean_wc` fences + the /gsd-undo dirty guard re-keyed on status `entries[]` instead of `.raw` (jj raw is human-readable text, never empty), proven by a 12-run dual-backend fixture matrix.
+- **Close-day fixes:** 18-REVIEW CR-01 (plan-phase.md §14/§15 routed to `<offer_next>` before §16, making the gate unreachable dead code — routing now runs the gate first); `query commit` envelope defects (envelope `id` was the post-commit empty `@` on jj instead of the created commit; absolute `--files` paths silently no-op'd — both fixed with 7 contract tests, both backends).
+
+### What Worked
+
+- **UAT caught what structural verification missed.** The 18-01 gate "passed" greps and a git-path fixture, then false-FATALed live on this jj repo. Conversational UAT (one test, live repo, real backend) surfaced the `.raw`-vs-`entries[]` contract violation within minutes.
+- **The diagnose → plan → execute gap-closure loop.** The UAT blocker flowed through automatic diagnosis into 18-04 with the root cause, artifacts, and fix list pre-filled; execution took 6 minutes.
+- **Adapter-pinned dual-backend fixtures with a backend meta-assertion.** 18-01's escape (fixture exercised git while claiming jj coverage) was closed by asserting the adapter actually in play via a backend-shaped raw probe before trusting the matrix.
+- **Resolve-before-close discipline.** The operator chose to fix the open `v15-query-commit-envelope-defects` todo (and the owed CR-01) instead of acknowledging them as deferred — both fixes live-proved themselves during this very close (the envelope fix on its own commit; the gates on the close's transition).
+
+### What Was Inefficient
+
+- **The 18-01 fixture validated the wrong backend.** Seeded config did not pin `vcs.adapter: jj`, so a colocated fixture auto-detected git and the jj path shipped unexercised — the direct cause of the UAT blocker. One line of config would have caught it pre-UAT.
+- **`.raw` keyed predicates slipped past review twice** (the 18-01 review pass and the WR-01/WR-02 hardening rewrite) because the git backend's empty-when-clean raw made them look correct. Cross-backend contracts need cross-backend evidence, not plausibility.
+- **No milestone audit was run** (minimal-milestone form) — acceptable here at 1 phase / 7 pre-validated REQ-IDs, but the close leaned on UAT + verification + disk state instead.
+
+### Patterns Established
+
+- **WC-cleanliness predicates key on status `entries[]` (empty = clean), never `.raw`** — `.raw` is display-only backend stdout; per-entry jq error alternative `[.entries[] | (.path // error(...))]` keeps empty streams clean-silent and pathless entries fail-closed.
+- **Backend-exercised meta-assertion in dual-backend fixtures** — assert the adapter actually in play before trusting a matrix result.
+- **Commit envelope `id` comes from `CommitResult.id`** (the backend-computed created revision), never from re-resolving head — on jj the squash model makes head the wrong side of the boundary.
+
+### Key Lessons
+
+1. **A predicate that is correct on one backend and untested on the other is untested.** Both close-blocking defects this milestone (`.raw` gate, head-keyed envelope) were git-correct/jj-wrong shapes that survived until exercised live on jj.
+2. **Minimal milestones work when scope is pre-validated.** Re-scope audit + 7 known REQ-IDs + 1 phase shipped in ~29 min of execution across 2 days, without new-milestone ceremony — but the missing audit/UAT-first posture means this form should stay reserved for carry-through scopes.
+3. **Workflow markdown is code: routing matters as much as content.** CR-01's gate was textually perfect and behaviorally unreachable — instruction-flow review (who jumps where, what falls through) belongs in workflow review checklists.
+
+### Cost Observations
+
+- **Model mix:** Opus-class orchestrator + subagents (session defaults).
+- **Sessions:** 1 execution session 2026-06-10 (plans 18-01..03), 1 UAT + gap-closure session 2026-06-11 (18-04), 1 close session 2026-06-11 (UAT re-verify + todo fix + CR-01 + archive).
+- **Notable:** smallest milestone to date (4 plans, 9 tasks); the gap-closure plan executed in 6 minutes because diagnosis was front-loaded into the UAT artifact.
+
+---
+
 ## Milestone: v1.4 — Clean, consistent state for next upstream pull
 
 **Shipped:** 2026-06-10
@@ -175,6 +221,7 @@
 | v1.2 unified revision model | 1 sustained autonomous chain | 1 (Phase 8) | Architectural-enforcement-as-lint pattern; audit JSON sidecar as literal allowlist seed; 3-iteration code-review-fix loop closed 12 findings before milestone close |
 | v1.3 jj octopus merge for subagents fully functional | many across 9 days | 6 (Phases 9-14) | Cross-backend parallel verb surface (`vcs.workspace.parallel.{dispatch,fanIn}`) on both backends; orchestrator rewired (raw-git in workflow markdown → zero in execute-phase + quick); A3 colocated pre-commit gap closed (inherited from v1.0); CI parallel-path lane validates verbs before default-flip; dogfood phase LAST with recovery anchor (Pitfall 10) |
 | v1.4 clean state + upstream pull | 2-day burst (15–17) + 1 long orchestrated session (19) | 5 (14.1, 15-17, 19; 18 deferred) | First upstream merge run as a first-class GSD phase (13 plans, disposition ledger, plan-checker iterations, per-wave spot-checks); upstream restructure ADOPTED — fork divergence collapsed to the VCS abstraction (`src/vcs/*.cts`); milestone closed at 4/5 phases with explicit deferral bookkeeping |
+| v1.5 tactical cleanup (Phase 18 carry-through) | 3 short sessions across 2 days | 1 (Phase 18 re-scoped) | First minimal milestone (re-scope + execute, no new-milestone ceremony); first UAT-driven gap-closure loop (blocker → diagnose → 18-04 → re-verify); resolve-before-close discipline (todo + CR-01 fixed at close instead of deferred) |
 
 ### Cumulative Quality
 
@@ -185,6 +232,7 @@
 | v1.2 | golden-parity re-recorded; new `toBeIdOf` matcher composable across both backends; 1033 files at 0 violations on no-commit-id lint, 1071 at 0 on no-raw-git | **+ `lint-vcs-no-commit-id.cjs`** (commit_id-leak guard) | preserved (18 = 18 baseline check) |
 | v1.3 | new `parallel-e2e` CI lane runs synthetic 2-plan parallel phase end-to-end on both backends, required-blocking on jj-colocated; `tests/scripts/*` now recursively collected by `scripts/run-tests.cjs` (4 previously stranded tests rescued); `tests/agent-prompts-no-raw-git.test.cjs` pins agent-prompt deny-list | **+ `scripts/audit-workflow-raw-git.cjs`** (baseline-regression guard, 127-hit per-file frozen baseline) wired into CI-06 step | +4 carried debt acknowledged (Phase 10/11 SDK files, not Phase-13-caused); LINT-05 allowlist net diff +1 (within budget) |
 | v1.4 | post-merge: 13,006/13,050 node:test (29 fails = 2 machine-gpg-environmental files, green on CI) + 612/612 vitest, green both backends from `src/vcs/__tests__/*.cts`; planted-violation fixtures prove lint non-vacuity; frozen pre-port baseline used for port attribution | **+ `scripts/lint-vcs-parallel-call-presence.cjs`** (LINT-06); all 4 gates re-pointed at post-restructure tree with SCAN_EXT +cts; workflow raw-git baseline re-derived at 230 hits / 93 files with per-file rationale ledger | re-baselined at 22 (`check-skip-count.cjs`) after restructure |
+| v1.5 | +22 contract tests (15 dispatch-guard + 7 commit-envelope, both backends); 12-run dual-backend gate fixture matrix; full suite 618/618 ×3 (TEST-17 evidence); all 4 gates green at close (no-raw-git 1074/0, no-commit-id 1027/0, call-presence 107/0, workflow raw-git at frozen 230 baseline) | (no new lint; XL workflow size budget re-baselined 98000→99500 for the gate work) | preserved |
 
 ### Top Lessons (Verified Across Milestones)
 
