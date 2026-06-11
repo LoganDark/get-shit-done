@@ -12,7 +12,14 @@ const path = require('node:path');
 const RELEASE_WORKFLOW = path.join(__dirname, '..', '.github', 'workflows', 'release.yml');
 
 describe('release-coverage-scope', () => {
-  test('release.yml uses test:coverage:unit (not full suite) in both rc and finalize gates', () => {
+  test('release.yml uses test:coverage:unit (not full suite) in both rc and finalize gates', (t) => {
+    // 19 security audit (jj fork): release.yml is OpenGSD's release train
+    // (org secrets + @opengsd/gsd-core publish) dropped from the fork
+    // (ledgered in 19-MERGE-AUDIT.md) — assertion revives on any re-adoption.
+    if (!fs.existsSync(RELEASE_WORKFLOW)) {
+      t.skip('release.yml dropped from the fork (org-automation release train; ledgered)');
+      return;
+    }
     const lines = fs.readFileSync(RELEASE_WORKFLOW, 'utf8').split('\n').map(l => l.trim());
     const bareCount = lines.filter(l => l === 'npm run test:coverage').length;
     const unitCount = lines.filter(l => l === 'npm run test:coverage:unit').length;

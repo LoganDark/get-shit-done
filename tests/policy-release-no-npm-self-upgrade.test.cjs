@@ -19,7 +19,14 @@ const NPM_SELF_UPGRADE_RE = /\bnpm\s+(install|i)\s+(-g|--global)\b[^\n]*\bnpm(@|
 describe('policy: no runtime npm self-upgrade in release lanes (#318)', () => {
   const releaseFile = path.join(WORKFLOWS_DIR, 'release.yml');
 
-  test('release.yml must not contain a runtime global npm self-upgrade step', () => {
+  test('release.yml must not contain a runtime global npm self-upgrade step', (t) => {
+    // 19 security audit (jj fork): release.yml is OpenGSD's release train
+    // (org secrets + @opengsd/gsd-core publish) dropped from the fork
+    // (ledgered in 19-MERGE-AUDIT.md) — assertion revives on any re-adoption.
+    if (!fs.existsSync(releaseFile)) {
+      t.skip('release.yml dropped from the fork (org-automation release train; ledgered)');
+      return;
+    }
     const content = fs.readFileSync(releaseFile, 'utf8');
     const lines = content.split('\n');
     const violations = lines
