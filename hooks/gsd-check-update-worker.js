@@ -88,11 +88,21 @@ if (configDir) {
 // through the shell-projection seam, which already owns the Windows shell-flag
 // policy, the timeout, and semver validation. A non-ok result leaves latest
 // null, exactly as the previous inline try/catch did.
+//
+// FORK: the registry tracks upstream @opengsd/gsd-core releases. This hard
+// fork must never be updated via /gsd-update (npm would overwrite the jj
+// port) — install only via `node bin/install.js` from the fork clone. The
+// lookup is disabled so update_available stays false and the statusline/
+// banner never advertise an upstream version. Stale-hook detection below is
+// purely local (hook headers vs installed VERSION) and remains active.
+const FORK_DISABLE_REGISTRY_UPDATE_CHECK = true;
 let latest = null;
-try {
-  const lv = checkLatestVersion();
-  if (lv && lv.ok) latest = lv.version;
-} catch (e) {}
+if (!FORK_DISABLE_REGISTRY_UPDATE_CHECK) {
+  try {
+    const lv = checkLatestVersion();
+    if (lv && lv.ok) latest = lv.version;
+  } catch (e) {}
+}
 
 const result = {
   update_available: latest && isSemverNewer(latest, installed),
