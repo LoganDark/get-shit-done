@@ -632,7 +632,56 @@ function cmdCommit(cwd: string, message: string | undefined, files: string[] | u
   // and removed files inside the tree are still recorded — matching the
   // original "stage all of .planning/" semantics.
   const explicitFiles = !!(files && files.length > 0);
-  const filesRequested = explicitFiles ? (files as string[]) : ['.planning/'];
+  // v15 envelope-defects fix (Defect 2): absolute --files paths previously
+  // reached the #2014 filter as `path.join(cwd, '/abs/path')` — POSIX join
+  // concatenates rather than re-roots, so every absolute path resolved to a
+  // nonexistent location, was filtered out, and the explicit-files
+  // short-circuit returned a silent `nothing_to_commit` (exit 0) without the
+  // commit ever being attempted. Normalize absolute paths under the repo
+  // root to cwd-relative before any filtering or status-scope matching;
+  // absolute paths OUTSIDE the repo root (or equal to it) fail loudly with a
+  // structured envelope — a silent no-op here is a data-loss-shaped failure.
+  // Symlink robustness: compare realpaths where resolvable. On macOS,
+  // TMPDIR-style roots are symlinked (/var/folders → /private/var/folders),
+  // so a lexical path.relative between the process cwd (realpath form) and a
+  // caller-supplied absolute path (symlink form) would falsely report
+  // "outside the repo". For a missing file (the #2014 filter tolerates
+  // those), realpath the dirname and re-join the basename.
+  const isOutside = (rel: string): boolean => rel === '' || rel.startsWith('..') || path.isAbsolute(rel);
+  const relativeToRepo = (f: string): string => {
+    let realCwd = cwd;
+    try { realCwd = fs.realpathSync(cwd); } catch { /* keep lexical cwd */ }
+    let target = f;
+    try {
+      target = fs.realpathSync(f);
+    } catch {
+      try { target = path.join(fs.realpathSync(path.dirname(f)), path.basename(f)); } catch { /* keep lexical f */ }
+    }
+    const realRel = path.relative(realCwd, target);
+    if (!isOutside(realRel)) return realRel;
+    return path.relative(cwd, f);
+  };
+  let filesRequested: string[];
+  if (explicitFiles) {
+    filesRequested = [];
+    for (const f of files ?? []) {
+      if (!path.isAbsolute(f)) { filesRequested.push(f); continue; }
+      const rel = relativeToRepo(f);
+      if (isOutside(rel)) {
+        const result = {
+          committed: false,
+          id: null,
+          reason: 'path_outside_repo',
+          error: `--files path '${f}' is absolute and does not resolve to a path under the repo root '${cwd}' — pass repo-relative paths`,
+        };
+        output(result, raw, 'failed');
+        return;
+      }
+      filesRequested.push(toPosixPath(rel));
+    }
+  } else {
+    filesRequested = ['.planning/'];
+  }
   // 19-review CR-03: the #2014 missing-path filter is SKIPPED under
   // --respect-staged. The hazard the filter guards against is `git add -A --
   // <missing-path>` silently staging a deletion — but respectStaged never
@@ -741,13 +790,22 @@ function cmdCommit(cwd: string, message: string | undefined, files: string[] | u
     return;
   }
 
-  // Get short revision id (backend-aware via resolveShort — short commit_id
-  // on git, short change_id on jj; unified revision model).
+  // Envelope id (unified revision model: short commit_id on git, short
+  // change_id on jj). v15 envelope-defects fix (Defect 1): the id comes from
+  // the backend-computed CommitResult.id — the newly-created commit per the
+  // contract at src/vcs/types.cts. Re-resolving refs.head here was correct
+  // on git (head after commit IS the created commit) but wrong on jj: the
+  // squash-model commit leaves @ as a NEW EMPTY change, so every commit in a
+  // session reported the same WC change_id instead of the created commit at
+  // @-. Shorten via resolveShort for envelope length parity; if shortening
+  // fails, fall back to the full backend id rather than a wrong head id.
   let id: string | null = null;
-  try {
-    id = vcs.refs.resolveShort(vcs.refs.head);                                     // (was: rev-parse --short HEAD)
-  } catch {
-    id = null;
+  if (commitResult.id) {
+    try {
+      id = vcs.refs.resolveShort(expr.rev(commitResult.id));
+    } catch {
+      id = commitResult.id;
+    }
   }
   const result = { committed: true, id, reason: 'committed' };
   output(result, raw, id || 'committed');
@@ -836,13 +894,18 @@ function cmdCommitToSubrepo(cwd: string, message: string | undefined, files: str
       continue;
     }
 
-    // Get short revision id (unified model: short commit_id on git, short
-    // change_id on jj).
+    // Envelope id (unified model: short commit_id on git, short change_id on
+    // jj). v15 envelope-defects fix (Defect 1, same shape as cmdCommit): use
+    // the backend-computed created-revision id from CommitResult.id — on jj,
+    // re-resolving head reports the post-commit empty WC change, not the
+    // created commit at @-.
     let id: string | null = null;
-    try {
-      id = subVcs.refs.resolveShort(subVcs.refs.head);                                     // (was: rev-parse --short HEAD)
-    } catch {
-      id = null;
+    if (commitResult.id) {
+      try {
+        id = subVcs.refs.resolveShort(expr.rev(commitResult.id));
+      } catch {
+        id = commitResult.id;
+      }
     }
     repos[repo] = { committed: true, id, files: repoFiles };
   }
