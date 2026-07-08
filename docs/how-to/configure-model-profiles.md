@@ -61,6 +61,8 @@ Valid values: `opus`, `sonnet`, `haiku`, `inherit`, or any fully-qualified model
 npx @opengsd/gsd-core@latest --codex --global   # or --opencode, --kilo, etc.
 ```
 
+GSD will also warn you if you forget: workflow entry commands (`gsd init plan-phase`, `gsd init execute-phase`, etc.) detect when `.planning/config.json` or `~/.gsd/defaults.json` is newer than your installed agent files and print a one-line stderr reminder naming the changed file and the re-install command. The check is read-only and runs only on `codex` and `opencode`; Claude Code resolves models at spawn time and is unaffected. (#1688)
+
 ---
 
 ## Per-phase-type models (`models`)
@@ -88,8 +90,9 @@ Phase types and their agents:
 | `planning` | `gsd-planner`, `gsd-roadmapper`, `gsd-pattern-mapper` |
 | `research` | `gsd-phase-researcher`, `gsd-project-researcher`, `gsd-research-synthesizer`, `gsd-codebase-mapper`, `gsd-ui-researcher` |
 | `execution` | `gsd-executor`, `gsd-debugger`, `gsd-doc-writer` |
-| `verification` | `gsd-verifier`, `gsd-plan-checker`, `gsd-integration-checker`, `gsd-nyquist-auditor`, `gsd-ui-checker`, `gsd-ui-auditor`, `gsd-doc-verifier` |
-| `discuss`, `completion` | Reserved — no subagent today; accepted by schema for forward compatibility |
+| `verification` | `gsd-verifier`, `gsd-plan-checker`, `gsd-integration-checker`, `gsd-nyquist-auditor`, `gsd-ui-checker`, `gsd-ui-auditor`, `gsd-doc-verifier`, `gsd-code-reviewer` |
+| `discuss` | `gsd-assumptions-analyzer` |
+| `completion` | Reserved — no subagent today; accepted by schema for forward compatibility |
 
 The `models` block accepts tier aliases only (`opus`, `sonnet`, `haiku`, `inherit`). For a fully-qualified model ID, use `model_overrides` per agent instead.
 
@@ -153,7 +156,7 @@ Every attempt uses `tier_models[default_tier]` regardless of outcome — useful 
 
 ## Using GSD on non-Anthropic runtimes
 
-If you installed GSD for Codex, OpenCode, Gemini CLI, or Kilo, the installer already set `resolve_model_ids: "omit"` in your config. This tells GSD to skip Anthropic model ID resolution and let the runtime choose its own default model. No manual setup is needed for the basic case.
+If you installed GSD for Codex, OpenCode, Antigravity CLI, or Kilo, the installer already set `resolve_model_ids: "omit"` in your config. This tells GSD to skip Anthropic model ID resolution and let the runtime choose its own default model. No manual setup is needed for the basic case.
 
 **If you want tiered models on Codex:**
 

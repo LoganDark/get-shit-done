@@ -369,7 +369,7 @@ GSD は LLM のシステムプロンプトになるマークダウンファイ�
 - `gsd-prompt-guard.js` — `.planning/` への Write/Edit 呼び出しでインジェクションパターンをスキャンする（常時有効、アドバイザリーのみ）
 - `gsd-workflow-guard.js` — GSD ワークフローコンテキスト外でのファイル編集を警告する（`hooks.workflow_guard` 経由でオプトイン）
 
-**CI スキャナー:** `prompt-injection-scan.test.cjs` はすべてのエージェント、ワークフロー、コマンドファイルに埋め込まれたインジェクションベクターをスキャンします。
+**CI スキャナー:** `prompt-injection-scan.security.test.cjs` はすべてのエージェント、ワークフロー、コマンドファイルに埋め込まれたインジェクションベクターをスキャンします。
 
 ---
 
@@ -474,8 +474,8 @@ claude --dangerously-skip-permissions
 ### 既存のコードベース
 
 ```bash
-/gsd-map-codebase           # Analyse what exists (parallel agents)
-/gsd-new-project            # Questions focus on what you're ADDING
+/gsd-onboard                # Safely map, ingest docs, and initialize planning
+# Follow printed handoff commands, then rerun /gsd-onboard
 # (normal phase workflow from here)
 ```
 
@@ -864,7 +864,8 @@ All subagent/executor commits MUST use `--no-verify`.
     themes/
       default.css         # Shared CSS variables for all sketches
     MANIFEST.md           # Index of all sketches with winners
-  codebase/               # Brownfield codebase mapping (from /gsd-map-codebase)
+  codebase/               # Brownfield codebase mapping (from /gsd-map-codebase or /gsd-onboard)
+  onboarding/             # Brownfield onboarding summary (from /gsd-onboard)
   phases/
     XX-phase-name/
       XX-YY-PLAN.md       # Atomic execution plans

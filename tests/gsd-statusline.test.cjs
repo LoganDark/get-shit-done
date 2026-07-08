@@ -358,11 +358,13 @@ describe('context meter respects CLAUDE_CODE_AUTO_COMPACT_WINDOW (#2219)', () =>
     assert.strictEqual(normalizedUsed, 60);
   });
 
-  test('CLAUDE_CODE_AUTO_COMPACT_WINDOW=400000: 50% remaining → ~83% normalized bar display', () => {
-    // With 1M total, 400k window → buffer = 40%. usableRemaining = (50 - 40) / (100 - 40) * 100 ≈ 16.67%
-    // normalized used ≈ 100 - 16.67 = 83.33 → rounded 83 (shown in statusline bar)
+  test('CLAUDE_CODE_AUTO_COMPACT_WINDOW=400000: 50% remaining → 100% normalized bar display', () => {
+    // ACW = 400k usable tokens out of 1M total → usable fraction = 40%, buffer = 60%.
+    // (1 - 400000/1000000) * 100 = 60% buffer. With 50% remaining already below the
+    // 60% buffer threshold, usableRemaining = max(0, (50-60)/(100-60)*100) = 0%,
+    // normalized used = 100 (bar shows full — context is within the compact-trigger buffer).
     const { normalizedUsed } = runHook(50, 1_000_000, 400_000);
-    assert.strictEqual(normalizedUsed, 83);
+    assert.strictEqual(normalizedUsed, 100);
   });
 
   test('CLAUDE_CODE_AUTO_COMPACT_WINDOW=0 falls back to default buffer', () => {
@@ -371,12 +373,12 @@ describe('context meter respects CLAUDE_CODE_AUTO_COMPACT_WINDOW (#2219)', () =>
     assert.strictEqual(normalizedUsed, 60);
   });
 
-  test('buffer capped at 100% when ACW exceeds total context', () => {
-    // Pathological: ACW > totalCtx → buffer = 100%. With no usable range left,
-    // usableRemaining = max(0, (50-100)/(100-100)*100) = max(0, -Inf) = 0,
-    // so normalized used = 100 (context reported as completely full in bar).
+  test('ACW exceeds total context: buffer clamped to 0% — used reflects real remaining', () => {
+    // Pathological: ACW > totalCtx → (1 - 2M/1M) * 100 = -100% → clamped to 0%.
+    // With 0% buffer, usableRemaining = 50%, normalized used = 50.
+    // The Math.max(0, ...) clamp prevents negative buffer from inverting the display.
     const { normalizedUsed } = runHook(50, 1_000_000, 2_000_000);
-    assert.strictEqual(normalizedUsed, 100);
+    assert.strictEqual(normalizedUsed, 50);
   });
 
   test('bridge used_pct is raw (CC-consistent) regardless of ACW setting (#2451)', () => {
@@ -386,6 +388,120 @@ describe('context meter respects CLAUDE_CODE_AUTO_COMPACT_WINDOW (#2219)', () =>
     const { rawUsedPct } = runHook(50, 1_000_000, 400_000);
     assert.strictEqual(rawUsedPct, 50,
       'bridge used_pct must be raw (100-50=50) regardless of CLAUDE_CODE_AUTO_COMPACT_WINDOW');
+  });
+});
+
+// ─── auto-compact buffer boundary tests (#1194) ─────────────────────────────
+
+describe('context meter boundary: acw at/near totalCtx does not pin used at 100% (#1194)', () => {
+  const { execFileSync } = require('node:child_process');
+  const hookPath = path.join(__dirname, '..', 'hooks', 'gsd-statusline.js');
+
+  /**
+   * Run the hook with a given acw and totalTokens; remaining fixed at 50%.
+   * Returns the normalizedUsed percentage shown in the statusline bar.
+   */
+  function runBoundaryHook(remainingPct, totalTokens, acwEnv) {
+    const sessionId = `test-1194-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const payload = JSON.stringify({
+      model: { display_name: 'Claude' },
+      workspace: { current_dir: os.tmpdir() },
+      session_id: sessionId,
+      context_window: {
+        remaining_percentage: remainingPct,
+        total_tokens: totalTokens,
+      },
+    });
+
+    const env = { ...process.env };
+    if (acwEnv != null) {
+      env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(acwEnv);
+    } else {
+      delete env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+    }
+
+    let stdout = '';
+    try {
+      stdout = execFileSync(process.execPath, [hookPath], {
+        input: payload,
+        env,
+        encoding: 'utf8',
+        timeout: 4000,
+      });
+    } catch (e) {
+      stdout = e.stdout || '';
+    }
+
+    // Strip ANSI escape codes then extract the percentage digit(s) before "%"
+    // eslint-disable-next-line no-control-regex -- \x1b is the required leading byte of ANSI SGR sequences
+    const clean = stdout.replace(/\x1b\[[0-9;]*m/g, '');
+    const match = clean.match(/(\d+)%/);
+    return match ? parseInt(match[1], 10) : null;
+  }
+
+  // acw == totalCtx - 1 (one token below total): buffer is near-zero (≈0%),
+  // so the full window is usable. With 50% remaining the bar should show ~50%.
+  test('acw = totalCtx - 1: used reflects actual remaining context (≈50%)', () => {
+    const totalCtx = 1_000_000;
+    const acw = totalCtx - 1; // 999999
+    const used = runBoundaryHook(50, totalCtx, acw);
+    // buffer ≈ 0% → usableRemaining ≈ 50% → used ≈ 50. Accept 49-51 for rounding.
+    assert.ok(
+      used !== null && used >= 49 && used <= 51,
+      `expected used ≈ 50 when acw=totalCtx-1, got: ${used}`
+    );
+  });
+
+  // acw == totalCtx (the triggering edge case): buffer should be 0%,
+  // NOT 100%.  The "used" value must reflect real remaining context, not 100.
+  test('acw = totalCtx: used MUST NOT stick at 100 (division-by-zero boundary)', () => {
+    const totalCtx = 1_000_000;
+    const acw = totalCtx; // 1000000
+    const used = runBoundaryHook(50, totalCtx, acw);
+    // Buffer = 0% → usableRemaining = 50% → used ≈ 50. Must not be 100.
+    assert.ok(
+      used !== null && used !== 100,
+      `expected used != 100 when acw==totalCtx (div-by-zero boundary), got: ${used}`
+    );
+    // Also assert the bar is in a sane range (should be around 50%)
+    assert.ok(
+      used >= 0 && used <= 99,
+      `expected used in 0-99 when acw==totalCtx, got: ${used}`
+    );
+  });
+
+  // acw == totalCtx + 1 (exceeds total): buffer would be negative without a clamp;
+  // the Math.max(0,...) clamp should keep buffer=0%, not a negative value.
+  test('acw = totalCtx + 1: does not produce negative buffer (clamp prevents it)', () => {
+    const totalCtx = 1_000_000;
+    const acw = totalCtx + 1; // 1000001
+    const used = runBoundaryHook(50, totalCtx, acw);
+    // Buffer clamped to 0 → used ≈ 50 (reflects real remaining, not 100)
+    assert.ok(
+      used !== null && used !== 100,
+      `expected used != 100 when acw=totalCtx+1, got: ${used}`
+    );
+    assert.ok(
+      used >= 0 && used <= 99,
+      `expected used in 0-99 when acw=totalCtx+1, got: ${used}`
+    );
+  });
+
+  // Default path (no env var / acw==0): must be unchanged. 50% remaining → ~60%.
+  test('acw = 0 (default path): unchanged, ~60% normalized for 50% remaining', () => {
+    const used = runBoundaryHook(50, 1_000_000, 0);
+    assert.strictEqual(used, 60, `default path must still produce 60, got: ${used}`);
+  });
+
+  // Normal partial value: 93% remaining → ~usesd ≈ 7% with default buffer.
+  test('normal partial value: 93% remaining → ~7% normalized used', () => {
+    // Default 16.5% buffer: usableRemaining = (93 - 16.5) / (100 - 16.5) * 100 = 91.6%
+    // used ≈ 100 - 91.6 = 8.4 → rounded 8
+    const used = runBoundaryHook(93, 1_000_000, null);
+    assert.ok(
+      used !== null && used >= 7 && used <= 10,
+      `expected used ≈ 7-10 for 93% remaining with default buffer, got: ${used}`
+    );
   });
 });
 
@@ -468,3 +584,611 @@ describe('todo-resolution: resolves in_progress task from the newest matching to
       `stdout must NOT contain "NOT AGENT 305", got: ${stdout}`);
   });
 });
+
+
+// ────────────────────────────────────────────────────────────────────────
+// Folded from tests/enh-2538-statusline-last-command.test.cjs — consolidation epic #1969 (B5 #1974)
+// ────────────────────────────────────────────────────────────────────────
+{
+  const { describe: __foldDescribe } = require('node:test');
+  __foldDescribe("folded:enh-2538-statusline-last-command (consolidation epic #1969 B5 #1974)", () => {
+'use strict';
+
+/**
+ * Enhancement #2538 — statusline `last: /cmd` suffix.
+ *
+ * Asserts that:
+ *   - default (flag absent) output does NOT include "last:" text
+ *   - with statusline.show_last_command=true AND a transcript containing
+ *     <command-name>/gsd-plan-phase</command-name>, output includes "last: /gsd-plan-phase"
+ *   - a missing transcript_path does not throw and produces no "last:" suffix
+ *   - an existing transcript with no slash commands produces no "last:" suffix
+ *   - the config key is registered in the schema so /gsd-settings can surface it
+ */
+
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { cleanup } = require('./helpers.cjs');
+
+const statusline = require('../hooks/gsd-statusline.js');
+const { VALID_CONFIG_KEYS } = require('../gsd-core/bin/lib/config-schema.cjs');
+
+function makeProject({ flag, transcript }) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'enh-2538-'));
+  fs.mkdirSync(path.join(dir, '.planning'), { recursive: true });
+  if (flag !== undefined) {
+    fs.writeFileSync(
+      path.join(dir, '.planning', 'config.json'),
+      JSON.stringify({ statusline: { show_last_command: flag } }),
+    );
+  }
+  let transcriptPath = null;
+  if (transcript !== undefined) {
+    transcriptPath = path.join(dir, 'transcript.jsonl');
+    fs.writeFileSync(transcriptPath, transcript);
+  }
+  return { dir, transcriptPath, cleanup: () => cleanup(dir) };
+}
+
+function buildInput(dir, transcriptPath) {
+  return {
+    model: { display_name: 'Claude' },
+    workspace: { current_dir: dir },
+    session_id: 'test-session',
+    transcript_path: transcriptPath,
+  };
+}
+
+test('config schema registers statusline.show_last_command', () => {
+  assert.ok(
+    VALID_CONFIG_KEYS.has('statusline.show_last_command'),
+    'statusline.show_last_command must be in VALID_CONFIG_KEYS',
+  );
+});
+
+test('default (flag absent) output has no "last:" suffix', () => {
+  const transcript =
+    JSON.stringify({ type: 'user', message: { content: '<command-name>/gsd-plan-phase</command-name>' } }) + '\n';
+  const { dir, transcriptPath, cleanup } = makeProject({ transcript });
+  try {
+    const out = statusline.renderStatusline(buildInput(dir, transcriptPath));
+    assert.ok(!out.includes('last:'), `expected no "last:" in output; got: ${out}`);
+  } finally {
+    cleanup();
+  }
+});
+
+test('flag=true with recorded command yields "last: /<cmd>"', () => {
+  const transcript =
+    JSON.stringify({ type: 'user', message: { content: '<command-name>/gsd-plan-phase</command-name>' } }) + '\n' +
+    JSON.stringify({ type: 'assistant', message: { content: 'ok' } }) + '\n';
+  const { dir, transcriptPath, cleanup } = makeProject({ flag: true, transcript });
+  try {
+    const out = statusline.renderStatusline(buildInput(dir, transcriptPath));
+    assert.ok(out.includes('last: /gsd-plan-phase'), `expected "last: /gsd-plan-phase" in output; got: ${out}`);
+  } finally {
+    cleanup();
+  }
+});
+
+test('flag=true picks the MOST RECENT command when multiple are present', () => {
+  const transcript =
+    JSON.stringify({ type: 'user', message: { content: '<command-name>/gsd-discuss-phase</command-name>' } }) + '\n' +
+    JSON.stringify({ type: 'user', message: { content: '<command-name>/gsd-plan-phase</command-name>' } }) + '\n' +
+    JSON.stringify({ type: 'user', message: { content: '<command-name>/gsd-execute-phase</command-name>' } }) + '\n';
+  const { dir, transcriptPath, cleanup } = makeProject({ flag: true, transcript });
+  try {
+    const out = statusline.renderStatusline(buildInput(dir, transcriptPath));
+    assert.ok(out.includes('last: /gsd-execute-phase'), `expected most-recent "gsd-execute-phase"; got: ${out}`);
+    assert.ok(!out.includes('last: /gsd-discuss-phase'), `should not show stale command; got: ${out}`);
+  } finally {
+    cleanup();
+  }
+});
+
+test('flag=true with missing transcript_path does not throw and omits suffix', () => {
+  const { dir, cleanup } = makeProject({ flag: true });
+  try {
+    let out;
+    assert.doesNotThrow(() => {
+      out = statusline.renderStatusline(buildInput(dir, undefined));
+    });
+    assert.ok(!out.includes('last:'), `expected no "last:" suffix when transcript missing; got: ${out}`);
+  } finally {
+    cleanup();
+  }
+});
+
+test('flag=true with transcript lacking command tags omits suffix', () => {
+  const transcript =
+    JSON.stringify({ type: 'user', message: { content: 'just a plain prompt' } }) + '\n';
+  const { dir, transcriptPath, cleanup } = makeProject({ flag: true, transcript });
+  try {
+    const out = statusline.renderStatusline(buildInput(dir, transcriptPath));
+    assert.ok(!out.includes('last:'), `expected no "last:" suffix with no commands; got: ${out}`);
+  } finally {
+    cleanup();
+  }
+});
+
+test('readLastSlashCommand returns null for nonexistent paths', () => {
+  assert.strictEqual(statusline.readLastSlashCommand('/nonexistent/path.jsonl'), null);
+  assert.strictEqual(statusline.readLastSlashCommand(null), null);
+  assert.strictEqual(statusline.readLastSlashCommand(undefined), null);
+});
+  });
+}
+
+
+// ────────────────────────────────────────────────────────────────────────
+// Folded from tests/enh-2833-phase-lifecycle-statusline.test.cjs — consolidation epic #1969 (B5 #1974)
+// ────────────────────────────────────────────────────────────────────────
+{
+  const { describe: __foldDescribe } = require('node:test');
+  __foldDescribe("folded:enh-2833-phase-lifecycle-statusline (consolidation epic #1969 B5 #1974)", () => {
+/**
+ * Tests for issue #2833 — phase-lifecycle status-line.
+ *
+ * Covers the additions made by the two preceding feat commits:
+ *
+ *   1. parseStateMd reads four new STATE.md frontmatter fields
+ *      - active_phase
+ *      - next_action
+ *      - next_phases (YAML flow array)
+ *      - progress (nested block: completed_phases / total_phases / percent)
+ *
+ *   2. formatGsdState renders three new scenes when those fields are populated
+ *      - Scene 1: active_phase set         → "Phase X.Y <stage>"
+ *      - Scene 2: idle + next_action set   → "next <action> <phases>"
+ *      - Scene 3: percent 100 / all done   → "milestone complete"
+ *      - Scene 4: default fallback         → unchanged "<status> · <phase>"
+ *
+ *   3. renderProgressBar() helper for the opt-in milestone bar.
+ *
+ *   4. Backward compatibility — existing STATE.md files (without any of the
+ *      new fields) render byte-for-byte identically to v1.38.x.
+ */
+
+'use strict';
+
+const { test, describe } = require('node:test');
+const assert = require('node:assert/strict');
+
+const {
+  parseStateMd,
+  formatGsdState,
+} = require('../hooks/gsd-statusline.js');
+
+// ─── parseStateMd: new lifecycle fields ─────────────────────────────────────
+
+describe('parseStateMd #2833 lifecycle fields', () => {
+  test('reads active_phase from frontmatter', () => {
+    const content = [
+      '---',
+      'milestone: v2.0',
+      'status: executing',
+      'active_phase: "4.5"',
+      '---',
+    ].join('\n');
+    const s = parseStateMd(content);
+    assert.equal(s.activePhase, '4.5');
+  });
+
+  test('reads next_action from frontmatter', () => {
+    const content = [
+      '---',
+      'milestone: v2.0',
+      'next_action: execute-phase',
+      '---',
+    ].join('\n');
+    const s = parseStateMd(content);
+    assert.equal(s.nextAction, 'execute-phase');
+  });
+
+  test('treats "null" literal as null for active_phase and next_action', () => {
+    const content = [
+      '---',
+      'active_phase: null',
+      'next_action: null',
+      '---',
+    ].join('\n');
+    const s = parseStateMd(content);
+    assert.equal(s.activePhase, null);
+    assert.equal(s.nextAction, null);
+  });
+
+  test('parses next_phases YAML flow array (single item)', () => {
+    const content = [
+      '---',
+      'next_phases: ["4.5"]',
+      '---',
+    ].join('\n');
+    const s = parseStateMd(content);
+    assert.deepEqual(s.nextPhases, ['4.5']);
+  });
+
+  test('parses next_phases YAML flow array (multiple items)', () => {
+    const content = [
+      '---',
+      'next_phases: ["4.5", "4.6", "5"]',
+      '---',
+    ].join('\n');
+    const s = parseStateMd(content);
+    assert.deepEqual(s.nextPhases, ['4.5', '4.6', '5']);
+  });
+
+  test('parses progress nested block — all three fields', () => {
+    const content = [
+      '---',
+      'progress:',
+      '  total_phases: 17',
+      '  completed_phases: 10',
+      '  percent: 59',
+      '---',
+    ].join('\n');
+    const s = parseStateMd(content);
+    assert.equal(s.totalPhases, '17');
+    assert.equal(s.completedPhases, '10');
+    assert.equal(s.percent, '59');
+  });
+
+  test('returns undefined for absent lifecycle fields', () => {
+    const content = [
+      '---',
+      'milestone: v1.9',
+      'status: executing',
+      '---',
+    ].join('\n');
+    const s = parseStateMd(content);
+    assert.equal(s.activePhase, undefined);
+    assert.equal(s.nextAction, undefined);
+    assert.equal(s.nextPhases, undefined);
+    assert.equal(s.percent, undefined);
+  });
+});
+
+// ─── formatGsdState: new scenes ─────────────────────────────────────────────
+
+describe('formatGsdState #2833 lifecycle scenes', () => {
+  test('Scene 1 — active_phase set renders "Phase X.Y <stage>"', () => {
+    const out = formatGsdState({
+      milestone: 'v2.0',
+      status: 'executing',
+      activePhase: '4.5',
+      percent: '59',
+    });
+    assert.equal(out, 'v2.0 [█████░░░░░] 59% · Phase 4.5 executing');
+  });
+
+  test('Scene 1 — active_phase without status renders "Phase X.Y"', () => {
+    const out = formatGsdState({
+      milestone: 'v2.0',
+      activePhase: '4.5',
+    });
+    assert.equal(out, 'v2.0 · Phase 4.5');
+  });
+
+  test('Scene 2 — idle + next_action renders "next <action> <phases>"', () => {
+    const out = formatGsdState({
+      milestone: 'v2.0',
+      activePhase: null,
+      nextAction: 'execute-phase',
+      nextPhases: ['4.5'],
+      percent: '59',
+    });
+    assert.equal(out, 'v2.0 [█████░░░░░] 59% · next execute-phase 4.5');
+  });
+
+  test('Scene 2 — multiple next_phases joined with /', () => {
+    const out = formatGsdState({
+      milestone: 'v2.0',
+      nextAction: 'discuss-phase',
+      nextPhases: ['4.7', '6.5'],
+    });
+    assert.equal(out, 'v2.0 · next discuss-phase 4.7/6.5');
+  });
+
+  test('Scene 3 — percent=100 renders "milestone complete"', () => {
+    const out = formatGsdState({
+      milestone: 'v2.0',
+      percent: '100',
+    });
+    assert.equal(out, 'v2.0 [██████████] 100% · milestone complete');
+  });
+
+  test('Scene 3 — completed_phases equals total_phases also triggers complete', () => {
+    const out = formatGsdState({
+      milestone: 'v2.0',
+      completedPhases: '17',
+      totalPhases: '17',
+    });
+    assert.equal(out, 'v2.0 · milestone complete');
+  });
+});
+
+// ─── Backward compatibility — CRITICAL: existing STATE.md unchanged ─────────
+
+describe('formatGsdState #2833 backward compatibility', () => {
+  test('legacy STATE.md (only status + milestone + phase) renders unchanged', () => {
+    // Identical to the format documented in #1989 (the foundation issue).
+    // No new lifecycle fields populated → must render exactly as v1.38.x did.
+    const out = formatGsdState({
+      status: 'executing',
+      milestone: 'v1.9',
+      milestoneName: 'Code Quality',
+      phaseNum: '1',
+      phaseTotal: '5',
+      phaseName: 'fix-graphiti-deployment',
+    });
+    assert.equal(out, 'v1.9 Code Quality · executing · fix-graphiti-deployment (1/5)');
+  });
+
+  test('only status set (no phase, no lifecycle fields) renders just "<milestone> · <status>"', () => {
+    const out = formatGsdState({
+      milestone: 'v1.9',
+      status: 'executing',
+    });
+    assert.equal(out, 'v1.9 · executing');
+  });
+
+  test('empty state renders empty string', () => {
+    const out = formatGsdState({});
+    assert.equal(out, '');
+  });
+
+  test('progress.percent is opt-in — absent percent leaves milestone segment unchanged', () => {
+    const out = formatGsdState({
+      milestone: 'v1.9',
+      milestoneName: 'Code Quality',
+      status: 'executing',
+    });
+    // No bar rendered when percent is absent.
+    assert.equal(out, 'v1.9 Code Quality · executing');
+  });
+});
+
+// ─── renderProgressBar (exported indirectly via formatGsdState behavior) ────
+
+describe('progress bar rendering', () => {
+  test('0% renders 10 empty segments', () => {
+    // percent=0 doesn't trigger Scene 3 (only percent='100' does), so
+    // Scene 4 fallback fires with no extra parts — just milestone + bar.
+    const out = formatGsdState({ milestone: 'v2.0', percent: '0' });
+    assert.ok(out.includes('[░░░░░░░░░░] 0%'));
+  });
+
+  test('50% renders 5 filled + 5 empty', () => {
+    const out = formatGsdState({ milestone: 'v2.0', percent: '50' });
+    assert.ok(out.includes('[█████░░░░░] 50%'));
+  });
+
+  test('100% renders 10 filled (and triggers Scene 3)', () => {
+    const out = formatGsdState({ milestone: 'v2.0', percent: '100' });
+    assert.equal(out, 'v2.0 [██████████] 100% · milestone complete');
+  });
+
+  test('percent absent → no bar rendered (opt-in)', () => {
+    const out = formatGsdState({ milestone: 'v2.0', status: 'executing' });
+    assert.ok(!out.includes('['));
+    assert.ok(!out.includes('░'));
+    assert.ok(!out.includes('█'));
+  });
+
+  test('percent over 100 clamps to 100', () => {
+    const out = formatGsdState({ milestone: 'v2.0', percent: '150' });
+    assert.ok(out.includes('[██████████] 100%'));
+  });
+
+  test('percent below 0 clamps to 0', () => {
+    const out = formatGsdState({ milestone: 'v2.0', percent: '-10' });
+    assert.ok(out.includes('[░░░░░░░░░░] 0%'));
+  });
+});
+
+// ─── Scene priority — first-match-wins guarantee ────────────────────────────
+
+describe('formatGsdState #2833 scene priority', () => {
+  test('active_phase wins over next_action when both populated', () => {
+    // active_phase populated should win — orchestrator is in flight,
+    // any "next" recommendation would be misleading.
+    const out = formatGsdState({
+      milestone: 'v2.0',
+      status: 'executing',
+      activePhase: '4.5',
+      nextAction: 'execute-phase',
+      nextPhases: ['4.5'],
+    });
+    assert.ok(out.includes('Phase 4.5 executing'));
+    assert.ok(!out.includes('next execute-phase'));
+  });
+
+  test('next_action wins over Scene 4 fallback when active_phase null', () => {
+    const out = formatGsdState({
+      milestone: 'v2.0',
+      status: 'in_progress',  // would be Scene 4 fallback alone
+      activePhase: null,
+      nextAction: 'execute-phase',
+      nextPhases: ['4.5'],
+      phaseNum: '1',
+      phaseTotal: '5',
+    });
+    assert.ok(out.includes('next execute-phase 4.5'));
+    assert.ok(!out.includes('in_progress'));
+    assert.ok(!out.includes('1/5'));
+  });
+
+  test('percent=100 wins over Scene 4 even with phase set', () => {
+    const out = formatGsdState({
+      milestone: 'v2.0',
+      percent: '100',
+      phaseNum: '1',
+      phaseTotal: '5',
+    });
+    assert.ok(out.includes('milestone complete'));
+    assert.ok(!out.includes('1/5'));
+  });
+});
+  });
+}
+
+
+// ────────────────────────────────────────────────────────────────────────
+// Folded from tests/enh-2937-statusline-context-position.test.cjs — consolidation epic #1969 (B5 #1974)
+// ────────────────────────────────────────────────────────────────────────
+{
+  const { describe: __foldDescribe } = require('node:test');
+  __foldDescribe("folded:enh-2937-statusline-context-position (consolidation epic #1969 B5 #1974)", () => {
+'use strict';
+
+/**
+ * Enhancement #2937 — statusline opt-in `context_position` config.
+ *
+ * Asserts that:
+ *   - VALID_CONFIG_KEYS registers statusline.context_position (parity guard)
+ *   - Default (no config) renders ctx at tail — "end" layout
+ *   - Explicit "end" is byte-identical to default (regression guard)
+ *   - Explicit "front" puts ctx after model, before first " │ "
+ *   - Empty ctx with "front" leaves no stray separator
+ *   - Invalid value (e.g. "middle") silently falls back to "end" at runtime
+ *   - gsdUpdate warning stays leftmost in both "front" and "end" modes
+ */
+
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+
+const { composeStatusline } = require('../hooks/gsd-statusline.js');
+const { VALID_CONFIG_KEYS } = require('../gsd-core/bin/lib/config-schema.cjs');
+const { runGsdTools, createTempProject, cleanup } = require('./helpers.cjs');
+
+// ── Parity guard ─────────────────────────────────────────────────────────────
+
+test('config schema registers statusline.context_position', () => {
+  assert.ok(
+    VALID_CONFIG_KEYS.has('statusline.context_position'),
+    'statusline.context_position must be in VALID_CONFIG_KEYS',
+  );
+});
+
+// ── Default / "end" layout ───────────────────────────────────────────────────
+
+test('default (no position arg) renders ctx at tail — end layout', () => {
+  const ctx = ' \x1b[32m████░░░░░░ 40%\x1b[0m';
+  const out = composeStatusline({ model: 'Claude', dirname: 'myproject', ctx });
+  // ctx should appear after dirname, not before first │
+  const dirIdx = out.indexOf('myproject');
+  const ctxIdx = out.indexOf(ctx);
+  assert.ok(ctxIdx > dirIdx, `ctx should be after dirname; got: ${out}`);
+});
+
+test('explicit "end" is byte-identical to default', () => {
+  const ctx = ' \x1b[32m████░░░░░░ 40%\x1b[0m';
+  const args = { model: 'Claude', dirname: 'myproject', ctx };
+  const defaultOut = composeStatusline(args);
+  const endOut = composeStatusline({ ...args, position: 'end' });
+  assert.strictEqual(endOut, defaultOut, 'explicit "end" must equal default output');
+});
+
+test('"end" with middle segment places ctx after dirname', () => {
+  const ctx = ' \x1b[32m████░░░░░░ 40%\x1b[0m';
+  const out = composeStatusline({ model: 'Claude', ctx, middle: 'doing work', dirname: 'proj', position: 'end' });
+  const dirIdx = out.indexOf('proj');
+  const ctxIdx = out.indexOf(ctx);
+  assert.ok(ctxIdx > dirIdx, `ctx should be after dirname in end mode; got: ${out}`);
+});
+
+// ── "front" layout ───────────────────────────────────────────────────────────
+
+test('"front" puts ctx after model name, before first │', () => {
+  const ctx = ' \x1b[32m████░░░░░░ 40%\x1b[0m';
+  const out = composeStatusline({ model: 'Claude', dirname: 'myproject', ctx, position: 'front' });
+  const firstPipe = out.indexOf(' │ ');
+  const ctxIdx = out.indexOf(ctx);
+  assert.ok(ctxIdx !== -1, `ctx should appear in output; got: ${out}`);
+  assert.ok(ctxIdx < firstPipe, `ctx should come before first │ in front mode; got: ${out}`);
+});
+
+test('"front" with middle segment: ctx after model, before first │', () => {
+  const ctx = ' \x1b[32m████░░░░░░ 40%\x1b[0m';
+  const out = composeStatusline({ model: 'Claude', ctx, middle: 'doing work', dirname: 'proj', position: 'front' });
+  const firstPipe = out.indexOf(' │ ');
+  const ctxIdx = out.indexOf(ctx);
+  assert.ok(ctxIdx < firstPipe, `ctx must precede first │; got: ${out}`);
+});
+
+// ── Empty ctx ────────────────────────────────────────────────────────────────
+
+test('empty ctx + "front" renders no stray separator', () => {
+  const out = composeStatusline({ model: 'Claude', dirname: 'myproject', ctx: '', position: 'front' });
+  // Should not have double-separator or leading │
+  assert.ok(!out.includes(' │  │ '), `stray separator found; got: ${out}`);
+  // Should still contain the single separator between model area and dirname
+  assert.ok(out.includes(' │ '), `expected at least one separator; got: ${out}`);
+});
+
+test('empty ctx + "end" renders no stray separator', () => {
+  const out = composeStatusline({ model: 'Claude', dirname: 'myproject', ctx: '', position: 'end' });
+  assert.ok(!out.includes(' │  │ '), `stray separator found; got: ${out}`);
+});
+
+// ── Invalid value fallback ───────────────────────────────────────────────────
+
+test('invalid position value silently falls back to "end" layout', () => {
+  const ctx = ' \x1b[32m████░░░░░░ 40%\x1b[0m';
+  const invalid = composeStatusline({ model: 'Claude', dirname: 'myproject', ctx, position: 'middle' });
+  const end = composeStatusline({ model: 'Claude', dirname: 'myproject', ctx, position: 'end' });
+  assert.strictEqual(invalid, end, `invalid position should produce same output as "end"; got: ${invalid}`);
+});
+
+test('invalid position "banana" silently falls back to "end"', () => {
+  const ctx = ' \x1b[33m██████░░░░ 60%\x1b[0m';
+  const invalid = composeStatusline({ model: 'Claude', dirname: 'proj', ctx, position: 'banana' });
+  const end = composeStatusline({ model: 'Claude', dirname: 'proj', ctx, position: 'end' });
+  assert.strictEqual(invalid, end, `invalid "banana" should fall back to "end"; got: ${invalid}`);
+});
+
+// ── gsdUpdate leftmost invariant ─────────────────────────────────────────────
+
+test('gsdUpdate warning is leftmost in "end" mode', () => {
+  const gsdUpdate = '\x1b[33m⬆ /gsd:update\x1b[0m │ ';
+  const out = composeStatusline({ gsdUpdate, model: 'Claude', dirname: 'proj', position: 'end' });
+  assert.ok(out.startsWith(gsdUpdate), `gsdUpdate should be leftmost in end mode; got: ${out}`);
+});
+
+test('gsdUpdate warning is leftmost in "front" mode', () => {
+  const gsdUpdate = '\x1b[33m⬆ /gsd:update\x1b[0m │ ';
+  const ctx = ' \x1b[32m████░░░░░░ 40%\x1b[0m';
+  const out = composeStatusline({ gsdUpdate, model: 'Claude', dirname: 'proj', ctx, position: 'front' });
+  assert.ok(out.startsWith(gsdUpdate), `gsdUpdate should be leftmost in front mode; got: ${out}`);
+});
+
+// ── CLI write-path enforcement (config-set rejects invalid enum) ─────────────
+// Locked design: hard reject at config-set time AND silent fallback at runtime.
+// The runtime fallback is covered by the "Invalid position value silently falls
+// back" tests above. This test covers the other half — that the CLI write path
+// actually refuses to persist an invalid value in the first place.
+
+test('config-set rejects invalid statusline.context_position', () => {
+  const tmpDir = createTempProject();
+  try {
+    const r = runGsdTools(
+      ['config-set', 'statusline.context_position', 'middle'],
+      tmpDir,
+    );
+    assert.equal(
+      r.success,
+      false,
+      `config-set should exit non-zero on invalid enum; got success=${r.success}, output=${r.output}`,
+    );
+    assert.ok(
+      /statusline\.context_position|Invalid/i.test(r.error),
+      `stderr must reference key or "Invalid"; got: ${r.error}`,
+    );
+  } finally {
+    cleanup(tmpDir);
+  }
+});
+  });
+}

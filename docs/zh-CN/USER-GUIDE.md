@@ -368,7 +368,7 @@ GSD 生成的 Markdown 文件会成为 LLM 系统提示。这意味着流入规�
 - `gsd-prompt-guard.js` — 扫描写入 `.planning/` 的 Write/Edit 调用中的注入模式（始终活跃，仅建议）
 - `gsd-workflow-guard.js` — 对 GSD 工作流上下文之外的文件编辑发出警告（通过 `hooks.workflow_guard` 选择性启用）
 
-**CI 扫描器：** `prompt-injection-scan.test.cjs` 扫描所有 agent、工作流和命令文件中的嵌入式注入向量。
+**CI 扫描器：** `prompt-injection-scan.security.test.cjs` 扫描所有 agent、工作流和命令文件中的嵌入式注入向量。
 
 ---
 
@@ -473,8 +473,8 @@ claude --dangerously-skip-permissions
 ### 现有代码库
 
 ```bash
-/gsd-map-codebase           # Analyse what exists (parallel agents)
-/gsd-new-project            # Questions focus on what you're ADDING
+/gsd-onboard                # Safely map, ingest docs, and initialize planning
+# Follow printed handoff commands, then rerun /gsd-onboard
 # (normal phase workflow from here)
 ```
 
@@ -863,7 +863,8 @@ All subagent/executor commits MUST use `--no-verify`.
     themes/
       default.css         # Shared CSS variables for all sketches
     MANIFEST.md           # Index of all sketches with winners
-  codebase/               # Brownfield codebase mapping (from /gsd-map-codebase)
+  codebase/               # Brownfield codebase mapping (from /gsd-map-codebase or /gsd-onboard)
+  onboarding/             # Brownfield onboarding summary (from /gsd-onboard)
   phases/
     XX-phase-name/
       XX-YY-PLAN.md       # Atomic execution plans

@@ -369,7 +369,7 @@ O GSD gera arquivos markdown que se tornam prompts de sistema de LLM. Isso signi
 - `gsd-prompt-guard.js` — Verifica chamadas Write/Edit para `.planning/` em busca de padrões de injeção (sempre ativo, somente consultivo)
 - `gsd-workflow-guard.js` — Avisa sobre edições de arquivos fora do contexto do workflow GSD (opt-in via `hooks.workflow_guard`)
 
-**Scanner de CI:** `prompt-injection-scan.test.cjs` verifica todos os arquivos de agentes, workflows e comandos em busca de vetores de injeção incorporados.
+**Scanner de CI:** `prompt-injection-scan.security.test.cjs` verifica todos os arquivos de agentes, workflows e comandos em busca de vetores de injeção incorporados.
 
 ---
 
@@ -474,8 +474,8 @@ claude --dangerously-skip-permissions
 ### Base de código existente
 
 ```bash
-/gsd-map-codebase           # Analyse what exists (parallel agents)
-/gsd-new-project            # Questions focus on what you're ADDING
+/gsd-onboard                # Safely map, ingest docs, and initialize planning
+# Follow printed handoff commands, then rerun /gsd-onboard
 # (normal phase workflow from here)
 ```
 
@@ -864,7 +864,8 @@ Para desativar a execução paralela completamente: `/gsd-settings` → defina `
     themes/
       default.css         # Shared CSS variables for all sketches
     MANIFEST.md           # Index of all sketches with winners
-  codebase/               # Brownfield codebase mapping (from /gsd-map-codebase)
+  codebase/               # Brownfield codebase mapping (from /gsd-map-codebase or /gsd-onboard)
+  onboarding/             # Brownfield onboarding summary (from /gsd-onboard)
   phases/
     XX-phase-name/
       XX-YY-PLAN.md       # Atomic execution plans

@@ -21,32 +21,11 @@ import { execTool, platformWriteSync } from './shell-command-projection.cjs';
 // intentionally NOT imported (project_no_raw_git).
 import { createVcsAdapter, expr } from './vcs/index.cjs';
 
-// ─── Config Gate ─────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import capabilityStateMod = require('./capability-state.cjs');
+const { isCapabilityActive } = capabilityStateMod;
 
-/**
- * Check whether graphify is enabled in the project config.
- * Reads config.json directly via fs. Returns false by default
- * (when no config, no graphify key, or on error).
- */
-function isGraphifyEnabled(planningDir: string): boolean {
-  try {
-    const configPath = path.join(planningDir, 'config.json');
-    if (!fs.existsSync(configPath)) return false;
-    const config: unknown = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    if (
-      config &&
-      typeof config === 'object' &&
-      'graphify' in config &&
-      config.graphify &&
-      typeof config.graphify === 'object' &&
-      'enabled' in config.graphify &&
-      (config.graphify as Record<string, unknown>).enabled === true
-    ) return true;
-    return false;
-  } catch {
-    return false;
-  }
-}
+// ─── Config Gate ─────────────────────────────────────────────────────────────
 
 interface DisabledResponse {
   disabled: true;
@@ -428,17 +407,52 @@ function countCommitsBetween(cwd: string, from: string, to: string): number | nu
   }
 }
 
+// ─── Graph location resolution (#1825) ───────────────────────────────────────
+//
+// `graphify.graph_path` (in .planning/config.json) lets one umbrella-level graph
+// serve multiple sibling projects without a per-project mirror. When set, query /
+// status / diff read the configured graph, and the diff snapshot travels with it
+// (alongside graph.json). When unset/blank/non-string, behaviour is byte-identical
+// to the historical `<planningDir>/graphs/graph.json`.
+
+const GRAPH_FILENAME = 'graph.json';
+const SNAPSHOT_FILENAME = '.last-build-snapshot.json';
+
+interface GraphLocation {
+  /** Absolute path to graph.json. */
+  graphPath: string;
+  /** True iff graphify.graph_path was explicitly configured (non-empty string). */
+  configured: boolean;
+}
+
+/**
+ * Resolve the absolute graph.json location. Honors `graphify.graph_path` in
+ * config.json (resolved relative to the project root, `cwd`); falls back to the
+ * default `<planningDir>/graphs/graph.json` when unset/blank/non-string.
+ */
+function resolveGraphLocation(cwd: string, planningDir: string): GraphLocation {
+  const config = safeReadJson(path.join(planningDir, 'config.json'));
+  const graphify = (config && (config as Record<string, unknown>)['graphify']) as Record<string, unknown> | undefined;
+  const configuredValue = graphify && graphify['graph_path'];
+  if (typeof configuredValue === 'string' && configuredValue.trim().length > 0) {
+    return { graphPath: path.resolve(cwd, configuredValue), configured: true };
+  }
+  return { graphPath: path.join(planningDir, 'graphs', GRAPH_FILENAME), configured: false };
+}
+
 /**
  * Query the knowledge graph for nodes matching a term, with optional budget cap.
  * Uses seed-then-expand BFS traversal (D-01).
  */
 function graphifyQuery(cwd: string, term: string, options: { budget?: number | null } = {}): unknown {
   const planningDir = path.join(cwd, '.planning');
-  if (!isGraphifyEnabled(planningDir)) return disabledResponse();
+  if (!isCapabilityActive('graphify', cwd)) return disabledResponse();
 
-  const graphPath = path.join(planningDir, 'graphs', 'graph.json');
+  const { graphPath, configured } = resolveGraphLocation(cwd, planningDir);
   if (!fs.existsSync(graphPath)) {
-    return { error: 'No graph built yet. Run graphify build first.' };
+    return { error: configured
+      ? `Configured graph not found at ${graphPath}. Set graphify.graph_path or run /gsd:graphify build.`
+      : 'No graph built yet. Run graphify build first.' };
   }
 
   const graph = safeReadJson(graphPath);
@@ -473,11 +487,13 @@ function graphifyQuery(cwd: string, term: string, options: { budget?: number | n
  */
 function graphifyStatus(cwd: string): unknown {
   const planningDir = path.join(cwd, '.planning');
-  if (!isGraphifyEnabled(planningDir)) return disabledResponse();
+  if (!isCapabilityActive('graphify', cwd)) return disabledResponse();
 
-  const graphPath = path.join(planningDir, 'graphs', 'graph.json');
+  const { graphPath, configured } = resolveGraphLocation(cwd, planningDir);
   if (!fs.existsSync(graphPath)) {
-    return { exists: false, message: 'No graph built yet. Run graphify build to create one.' };
+    return { exists: false, message: configured
+      ? `Configured graph not found at ${graphPath}. Set graphify.graph_path or run /gsd:graphify build.`
+      : 'No graph built yet. Run graphify build to create one.' };
   }
 
   const stat = fs.statSync(graphPath);
@@ -536,10 +552,10 @@ function graphifyStatus(cwd: string): unknown {
  */
 function graphifyDiff(cwd: string): unknown {
   const planningDir = path.join(cwd, '.planning');
-  if (!isGraphifyEnabled(planningDir)) return disabledResponse();
+  if (!isCapabilityActive('graphify', cwd)) return disabledResponse();
 
-  const snapshotPath = path.join(planningDir, 'graphs', '.last-build-snapshot.json');
-  const graphPath = path.join(planningDir, 'graphs', 'graph.json');
+  const { graphPath } = resolveGraphLocation(cwd, planningDir);
+  const snapshotPath = path.join(path.dirname(graphPath), SNAPSHOT_FILENAME);
 
   if (!fs.existsSync(snapshotPath)) {
     return { no_baseline: true, message: 'No previous snapshot. Run graphify build first, then build again to generate a diff baseline.' };
@@ -592,14 +608,18 @@ function graphifyDiff(cwd: string): unknown {
  */
 function graphifyBuild(cwd: string): unknown {
   const planningDir = path.join(cwd, '.planning');
-  if (!isGraphifyEnabled(planningDir)) return disabledResponse();
+  if (!isCapabilityActive('graphify', cwd)) return disabledResponse();
 
   const installed = checkGraphifyInstalled();
   if (!installed.installed) return { error: installed.message };
 
   const version = checkGraphifyVersion();
 
-  // Ensure output directory exists (D-05)
+  // Ensure output directory exists (D-05). Build stays project-scoped: the build
+  // skill cp's artifacts into `<planningDir>/graphs/` regardless of graph_path, so
+  // graphs_dir reflects that real destination (not the configured read location).
+  // A shared umbrella graph is built in the umbrella project; sub-projects only
+  // READ it via graphify.graph_path (#1825).
   const graphsDir = path.join(planningDir, 'graphs');
   fs.mkdirSync(graphsDir, { recursive: true });
 
@@ -632,7 +652,8 @@ interface SnapshotResult {
  * using platformWriteSync for crash safety.
  */
 function writeSnapshot(cwd: string): SnapshotResult | { error: string } {
-  const graphPath = path.join(cwd, '.planning', 'graphs', 'graph.json');
+  const planningDir = path.join(cwd, '.planning');
+  const { graphPath } = resolveGraphLocation(cwd, planningDir);
   const graph = safeReadJson(graphPath);
   if (!graph) return { error: 'Cannot write snapshot: graph.json not parseable' };
 
@@ -643,7 +664,7 @@ function writeSnapshot(cwd: string): SnapshotResult | { error: string } {
     edges: graph.edges || graph.links || [],
   };
 
-  const snapshotPath = path.join(cwd, '.planning', 'graphs', '.last-build-snapshot.json');
+  const snapshotPath = path.join(path.dirname(graphPath), SNAPSHOT_FILENAME);
   platformWriteSync(snapshotPath, JSON.stringify(snapshot, null, 2));
   return {
     saved: true,
@@ -657,7 +678,6 @@ function writeSnapshot(cwd: string): SnapshotResult | { error: string } {
 
 export = {
   // Config gate
-  isGraphifyEnabled,
   disabledResponse,
   // Subprocess
   execGraphify,

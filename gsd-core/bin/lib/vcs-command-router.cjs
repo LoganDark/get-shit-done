@@ -19,8 +19,8 @@
  * was a spawnSync back-bridge INTO gsd-tools' own `worktree cleanup-wave`
  * case, i.e. the upstream case IS the implementation):
  *
- *   status, log, diff, head-ref, current-branch, branch-list, push, merge,
- *   reset, restore, revert, commit-to-subrepo, hooks.fire, migrate-vcs,
+ *   status, log, diff, head-ref, read-blob, current-branch, branch-list,
+ *   push, merge, reset, restore, revert, commit-to-subrepo, hooks.fire, migrate-vcs,
  *   workspace.assert-dispatched-cwd, workspace.parallel.dispatch,
  *   workspace.parallel.fan-in, workspace.parallel.cancel,
  *   cleanup-subagent-workspaces
@@ -363,6 +363,44 @@ const headRefVerb = (args, projectDir) => {
         },
     };
 };
+// 19-12 next-merge port: read a file's content at a revision through the
+// adapter (git: `git show <rev>:<path>`; jj: `jj file show -r <rev> <path>`).
+// Consumed by quick.md's executor-side PLAN.md materialization (#1265) so the
+// workflow never shells raw `git show`. Envelope: {ok, content} — pick
+// `content` with --pick to write the exact blob to a file.
+const readBlobVerb = (args, projectDir) => {
+    let cwd = projectDir;
+    let rev;
+    let filePath;
+    for (let i = 0; i < args.length; i++) {
+        if (args[i] === '--cwd' && args[i + 1]) {
+            cwd = args[i + 1];
+            i++;
+        }
+        else if (args[i] === '--rev' && args[i + 1]) {
+            rev = args[i + 1];
+            i++;
+        }
+        else if (args[i] === '--path' && args[i + 1]) {
+            filePath = args[i + 1];
+            i++;
+        }
+    }
+    if (!rev) {
+        return { data: { ok: false, error: 'read-blob: --rev <revision> required' } };
+    }
+    if (!filePath) {
+        return { data: { ok: false, error: 'read-blob: --path <repo-relative-path> required' } };
+    }
+    const vcs = (0, index_cjs_1.createVcsAdapter)(cwd);
+    try {
+        const content = vcs.refs.readBlob(expr_cjs_1.expr.rev(rev), filePath);
+        return { data: { ok: true, content } };
+    }
+    catch (err) {
+        return { data: { ok: false, error: `read-blob failed: ${err.message}` } };
+    }
+};
 const currentBranchVerb = (args, projectDir) => {
     let cwd = projectDir;
     for (let i = 0; i < args.length; i++) {
@@ -422,6 +460,7 @@ const pushVerb = (args, projectDir) => {
     let remote;
     let bookmark;
     let force = false;
+    let setUpstream = false;
     for (let i = 0; i < args.length; i++) {
         if (args[i] === '--cwd' && args[i + 1]) {
             cwd = args[i + 1];
@@ -437,6 +476,12 @@ const pushVerb = (args, projectDir) => {
         }
         else if (args[i] === '--force') {
             force = true;
+        }
+        else if (args[i] === '--set-upstream') {
+            // 19-12 PushOpts.setUpstream passthrough (VCS-audit fix): establishes
+            // upstream tracking on git; documented no-op on jj (jj git push
+            // records the remote-tracking relationship natively).
+            setUpstream = true;
         }
     }
     let ref;
@@ -461,6 +506,7 @@ const pushVerb = (args, projectDir) => {
             remote,
             ref,
             force,
+            setUpstream,
         });
     }
     catch (err) {
@@ -659,8 +705,14 @@ const restoreVerb = (args, projectDir) => {
     }
     // jj path: no adapter verb yet — dispatch via vcsExec directly
     // (fork gap-fill carry-over; see src/vcs/backends/jj.cts TODO).
+    // Carries the adapter's mandatory jj flag set (--no-pager --color never
+    // --quiet) so pager/ANSI noise can't leak into the JSON envelope — same
+    // WR-06 discipline as the `revert` jj leg below.
     const jjFrom = from ?? '@-';
-    const result = (0, exec_cjs_1.vcsExec)(cwd, 'jj', ['restore', '--from', jjFrom, '--', ...files]);
+    const result = (0, exec_cjs_1.vcsExec)(cwd, 'jj', [
+        '--no-pager', '--color', 'never', '--quiet',
+        'restore', '--from', jjFrom, '--', ...files,
+    ]);
     return {
         data: {
             ok: result.exitCode === 0,
@@ -1336,6 +1388,7 @@ const VCS_VERB_TABLE = {
     'log': logVerb,
     'diff': diffVerb,
     'head-ref': headRefVerb,
+    'read-blob': readBlobVerb,
     'current-branch': currentBranchVerb,
     'branch-list': branchListVerb,
     'push': pushVerb,

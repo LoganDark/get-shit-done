@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
-import { createJjAdapter } from '../backends/jj.cjs';
+import { createJjAdapter, parseJjDiffEntries } from '../backends/jj.cjs';
 import { __vcsTestOnly } from '../types.cjs';
 import { expr } from '../expr.cjs';
 
@@ -138,6 +138,22 @@ describe.skipIf(!jjAvailable)('Phase 3 plan 03-05 — jj log/status/diff', () =>
       const r = vcs.status();
       expect(typeof r.raw).toBe('string');
     });
+
+    // VCS-audit follow-up 2026-07-08: entries come from the machine-readable
+    // `jj diff -T` NDJSON channel (TreeDiffEntry source/target paths), so
+    // renames carry exact uncompressed paths — path = post-state, origPath =
+    // pre-state (19-12 rename contract).
+    it('returns R with post-state path + origPath for a WC rename', () => {
+      const { renameSync } = require('node:fs') as typeof import('node:fs');
+      writeFileSync(join(dir, 'ren-src.txt'), 'rename me\n');
+      vcs.commit({ files: ['ren-src.txt'], message: 'seed rename source' });
+      renameSync(join(dir, 'ren-src.txt'), join(dir, 'ren-dst.txt'));
+      const r = vcs.status();
+      const entry = r.entries.find((e) => e.worktree === 'R');
+      expect(entry).toBeDefined();
+      expect(entry!.path).toBe('ren-dst.txt');
+      expect(entry!.origPath).toBe('ren-src.txt');
+    });
   });
 
   // ─────────────────────────────────── diff ──────────────────────────────────
@@ -171,6 +187,22 @@ describe.skipIf(!jjAvailable)('Phase 3 plan 03-05 — jj log/status/diff', () =>
       // jj has no index, so staged is meaningfully a no-op — both calls
       // return the same WC content.
       expect(stagedR.nameOnly.sort()).toEqual(unstagedR.nameOnly.sort());
+    });
+
+    // VCS-audit follow-up 2026-07-08: nameStatus/diffFilter ride the
+    // `jj diff -T` NDJSON channel; rename entries must report the POST-state
+    // path (git-backend cols[2] convention) with no display compression.
+    it('nameStatus reports the post-state path for renames', () => {
+      const { renameSync } = require('node:fs') as typeof import('node:fs');
+      writeFileSync(join(dir, 'd-ren-a.txt'), 'v\n');
+      vcs.commit({ files: ['d-ren-a.txt'], message: 'seed diff rename' });
+      renameSync(join(dir, 'd-ren-a.txt'), join(dir, 'd-ren-b.txt'));
+      const r = vcs.diff({ nameStatus: true });
+      const entry = r.nameStatus!.find((e) => e.status === 'R');
+      expect(entry).toBeDefined();
+      expect(entry!.path).toBe('d-ren-b.txt');
+      const filtered = vcs.diff({ nameOnly: true, diffFilter: 'renamed' });
+      expect(filtered.nameOnly).toContain('d-ren-b.txt');
     });
   });
 
@@ -245,5 +277,59 @@ describe.skipIf(!jjAvailable)('Phase 3 plan 03-05 — jj log/status/diff', () =>
       // Probe with a path that does not exist at HEAD~.
       expect(() => vcs.refs.readBlob(vcs.refs.parent, 'never-existed.txt')).toThrow();
     });
+  });
+
+  // ─── VCS-audit 2026-07-08 — workspace.context() real body ────────────────
+  describe('workspace.context()', () => {
+    it('resolves effectiveRoot to the workspace root, even from a subdirectory', () => {
+      const { mkdirSync: mkd } = require('node:fs') as typeof import('node:fs');
+      mkd(join(dir, 'ctx-sub'), { recursive: true });
+      // jj prints the REAL path of the workspace root; mkdtempSync on macOS
+      // hands back the /var/folders symlink form — compare realpaths.
+      const realDir = realpathSync(dir);
+      const atRoot = vcs.workspace.context();
+      expect(realpathSync(atRoot.effectiveRoot)).toBe(realDir);
+      expect(atRoot.isLinked).toBe(false);
+      expect(atRoot.mode).toBe('main');
+      const fromSub = createJjAdapter(join(dir, 'ctx-sub')).workspace.context();
+      // The Phase-3 stub returned the construction cwd verbatim; the real
+      // body resolves through `jj workspace root` upward discovery.
+      expect(realpathSync(fromSub.effectiveRoot)).toBe(realDir);
+      expect(fromSub.mode).toBe('main');
+    });
+  });
+});
+
+// ─── VCS-audit follow-up 2026-07-08 — parseJjDiffEntries (pure) ─────────────
+describe('parseJjDiffEntries', () => {
+  it('maps the five TreeDiffEntry status words to porcelain letters', () => {
+    const ndjson = [
+      '{"status":"added","source":"a.txt","target":"a.txt"}',
+      '{"status":"modified","source":"m.txt","target":"m.txt"}',
+      '{"status":"removed","source":"d.txt","target":"d.txt"}',
+      '{"status":"renamed","source":"old.txt","target":"new.txt"}',
+      '{"status":"copied","source":"src.txt","target":"copy.txt"}',
+    ].join('\n');
+    expect(parseJjDiffEntries(ndjson).map((e) => e.status)).toEqual([
+      'A', 'M', 'D', 'R', 'C',
+    ]);
+  });
+
+  it('carries exact source/target paths (spaces and unicode intact)', () => {
+    const entries = parseJjDiffEntries(
+      '{"status":"renamed","source":"dir with space/ol d.txt","target":"dir with space/ne w.txt"}\n',
+    );
+    expect(entries).toEqual([
+      { status: 'R', source: 'dir with space/ol d.txt', target: 'dir with space/ne w.txt' },
+    ]);
+  });
+
+  it('surfaces an unknown status word as its uppercased first letter', () => {
+    expect(parseJjDiffEntries('{"status":"weirded","source":"x","target":"x"}')[0].status).toBe('W');
+  });
+
+  it('skips blank lines and throws loudly on non-JSON lines (no-fallback contract)', () => {
+    expect(parseJjDiffEntries('\n\n')).toEqual([]);
+    expect(() => parseJjDiffEntries('R {a => b}/c.txt')).toThrow(/non-JSON line/);
   });
 });

@@ -333,12 +333,16 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
         const path = tok.slice(3);
         // Phase 2.1 D-16: `index` is dropped from the public StatusEntry; the
         // local `index` variable still gates the rename/copy heuristic below.
-        entries.push({ path, worktree });
+        const entry: StatusEntry = { path, worktree };
         // Rename/copy entries are followed by a second token holding origPath.
-        // Consume it so it is not interpreted as a fresh entry.
+        // Consume it so it is not interpreted as a fresh entry; surface it on
+        // the entry (19-12: cmdPrSubrepo's rename contract needs both paths).
         if (index === 'R' || index === 'C' || worktree === 'R' || worktree === 'C') {
+          const orig = tokens[i + 1];
+          if (orig) entry.origPath = orig;
           i += 1;
         }
+        entries.push(entry);
       }
     }
     return { entries, raw: rawRes.stdout };
@@ -604,6 +608,15 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     return r.exitCode === 0;
   };
 
+  // 19-12 next-merge port (cmdPrSubrepo): read-only remote-URL probe.
+  const remoteUrl = (name: string): string | null => {
+    if (!name || name.startsWith('-')) return null;
+    const r = execGitVcs(cwd, ['remote', 'get-url', name]);
+    if (r.exitCode !== 0) return null;
+    const url = r.stdout.trim();
+    return url.length > 0 ? url : null;
+  };
+
   const remotes = (): string[] => {
     const r = execGitVcs(cwd, ['remote']);
     if (r.exitCode !== 0) return [];
@@ -630,6 +643,7 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     matchPrefix,
     isIgnored,
     remotes,
+    remoteUrl,
   });
 
   // Phase 2.1 D-03: top-level stage / unstage verbs DELETED. Callers refactor
@@ -892,6 +906,9 @@ export function createGitAdapter(cwd: string): GitVcsAdapter {
     // Phase 2.1 D-08: PushOpts.noVerify is the sole public knob for skipping
     // pre-push hook firing on the cross-backend surface.
     if (opts.noVerify) args.push('--no-verify');
+    // 19-12 next-merge port: upstream tracking for the pushed ref (cmdPrSubrepo
+    // needs the branch discoverable by `gh pr create` after push).
+    if (opts.setUpstream) args.push('--set-upstream');
     if (opts.remote) args.push(opts.remote);
     if (opts.ref) args.push(toGitRev(opts.ref));
     return execGitVcs(cwd, args);

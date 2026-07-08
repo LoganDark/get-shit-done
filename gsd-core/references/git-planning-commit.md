@@ -22,6 +22,10 @@ To fold `.planning/` file changes into the previous commit:
 gsd-tools query commit "" --files .planning/codebase/*.md --amend
 ```
 
+On the jj backend `--amend` is not supported (squash commit model) — the
+envelope returns `reason: "not_supported_on_jj"`; fall back to a regular
+`gsd-tools query commit "docs: ..." --files ...` commit when you see it.
+
 ## Commit Message Patterns
 
 | Command | Scope | Example |
@@ -37,4 +41,4 @@ gsd-tools query commit "" --files .planning/codebase/*.md --amend
 
 - `commit_docs: false` in config
 - `.planning/` is gitignored
-- No changes to commit (check with `git status --porcelain .planning/`)
+- No changes to commit (check with `gsd-tools query status --porcelain` — filter `.entries[]` for `.planning/` paths; works on both backends)

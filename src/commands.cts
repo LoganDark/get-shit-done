@@ -22,33 +22,28 @@ import { platformWriteSync, platformReadSync, platformEnsureDir } from './shell-
 import { createVcsAdapter, expr } from './vcs/index.cjs';
 import { VcsNotImplementedError } from './vcs/types.cjs';
 import type { StatusEntry } from './vcs/types.cjs';
+import { requireSafePath, sanitizeForDisplay } from './security.cjs';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-import core = require('./core.cjs');
-const {
-  loadConfig,
-  isGitIgnored,
-  normalizePhaseName,
-  comparePhaseNum,
-  getArchivedPhaseDirs,
-  generateSlugInternal,
-  getMilestoneInfo,
-  getMilestonePhaseFilter,
-  resolveModelInternal,
-  resolveEffortInternal,
-  resolveFastModeInternal,
-  resolveEffortForTier,
-  stripShippedMilestones: _stripShippedMilestones,
-  extractCurrentMilestone,
-  toPosixPath,
-  output,
-  error,
-  findPhaseInternal,
-  extractOneLinerFromBody,
-  getRoadmapPhaseInternal,
-  extractPhaseToken,
-  resolveGranularityInternal,
-  assertValidGranularityOverride,
-} = core;
+import ioMod = require('./io.cjs');
+const { output, error } = ioMod;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import configLoaderMod = require('./config-loader.cjs');
+const { loadConfig, isGitIgnored } = configLoaderMod;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import coreUtilsMod = require('./core-utils.cjs');
+const { toPosixPath, generateSlugInternal, extractOneLinerFromBody } = coreUtilsMod;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import phaseIdMod = require('./phase-id.cjs');
+const { normalizePhaseName, comparePhaseNum, extractPhaseToken } = phaseIdMod;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import phaseLocatorMod = require('./phase-locator.cjs');
+const { getArchivedPhaseDirs, findPhaseInternal } = phaseLocatorMod;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import roadmapParserMod = require('./roadmap-parser.cjs');
+const { extractCurrentMilestone, stripShippedMilestones: _stripShippedMilestones, getMilestoneInfo, getMilestonePhaseFilter, getRoadmapPhaseInternal } = roadmapParserMod;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import modelResolverMod = require('./model-resolver.cjs');
+const { resolveModelInternal, resolveEffortInternal, resolveFastModeInternal, resolveEffortForTier, resolveGranularityInternal, assertValidGranularityOverride } = modelResolverMod;
 import { renderEffortForRuntime, RUNTIMES_WITH_FAST_MODE } from './model-catalog.cjs';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import planningWorkspace = require('./planning-workspace.cjs');
@@ -127,9 +122,17 @@ function determinePhaseStatus(plans: number, summaries: number, phaseDir: string
     const verificationFile = files.find(f => f === 'VERIFICATION.md' || f.endsWith('-VERIFICATION.md'));
     if (verificationFile) {
       const content = platformReadSync(path.join(phaseDir, verificationFile)) || '';
-      if (/status:\s*passed/i.test(content)) return 'Complete';
-      if (/status:\s*human_needed/i.test(content)) return 'Needs Review';
-      if (/status:\s*gaps_found/i.test(content)) return 'Executed';
+      // #1159 (Defect A): read ONLY the frontmatter `status` key to avoid false
+      // matches from historical body metadata such as `previous_status: gaps_found`.
+      // Full-text regexes like /status:\s*gaps_found/ match the substring inside
+      // `previous_status: gaps_found`, producing incorrect phase status labels.
+      const fm = extractFrontmatter(content) as Record<string, unknown>;
+      // Normalise to lower-case to preserve the prior case-insensitive behaviour
+      // while reading only the frontmatter `status` key (not the full body text).
+      const fmStatus = typeof fm['status'] === 'string' ? fm['status'].trim().toLowerCase() : '';
+      if (fmStatus === 'passed') return 'Complete';
+      if (fmStatus === 'human_needed') return 'Needs Review';
+      if (fmStatus === 'gaps_found') return 'Executed';
       // Verification exists but unrecognized status — treat as executed
       return 'Executed';
     }
@@ -208,6 +211,120 @@ function cmdListTodos(cwd: string, area: string | undefined, raw: boolean): void
 
   const result = { count, todos };
   output(result, raw, count.toString());
+}
+
+/**
+ * List captured seeds from .planning/seeds/SEED-*.md for browsing/audit (#441).
+ *
+ * Unlike audit.scanSeeds (which returns only *unimplemented* seeds for the
+ * milestone surface), this lists seeds of every status with the richer fields a
+ * human audit needs (scope, trigger, planted date). An optional case-insensitive
+ * status filter narrows the set. Seed content is user-controlled, so every
+ * displayed field is passed through sanitizeForDisplay and each file path is
+ * validated with requireSafePath before reading. Read-only — never mutates.
+ */
+/**
+ * Derive the canonical `{ seed_id, slug }` from a seed filename stem and the
+ * frontmatter `id:` value. Pure (no I/O) so it can be property-tested directly.
+ *
+ * seed_id: frontmatter `id:` when it matches `SEED-NNN`, else the numeric prefix
+ * of the filename (`SEED-NNN-…`), else the whole stem. slug: the descriptive
+ * remainder after `SEED-NNN-`, else the stem with a leading `SEED-` stripped.
+ * `rawFmId` is `unknown` because frontmatter values are not guaranteed strings.
+ */
+function deriveSeedIdentity(stem: string, rawFmId: unknown): { seed_id: string; slug: string } {
+  const fmId = typeof rawFmId === 'string' ? rawFmId.trim() : '';
+  let seedId: string;
+  if (/^SEED-\d+$/i.test(fmId)) {
+    seedId = fmId;
+  } else {
+    const numMatch = stem.match(/^(SEED-\d+)/i);
+    seedId = numMatch ? numMatch[1] : stem;
+  }
+  const slugMatch = stem.match(/^SEED-\d+-(.+)$/i);
+  const slug = slugMatch ? slugMatch[1] : stem.replace(/^SEED-/i, '');
+  return { seed_id: seedId, slug };
+}
+
+function cmdListSeeds(cwd: string, statusFilter: string | undefined, raw: boolean): void {
+  const planDir = planningDir(cwd);
+  const seedsDir = path.join(planDir, 'seeds');
+  const wantStatus = statusFilter ? statusFilter.trim().toLowerCase() : null;
+
+  const seeds: Array<{
+    seed_id: string; slug: string; status: string; scope: string;
+    trigger_when: string; planted: string; title: string; path: string;
+  }> = [];
+  const summary: Record<string, number> = {};
+
+  // Frontmatter values are not guaranteed to be scalars: extractFrontmatter
+  // yields {} for a bare `key:` line and an array for `key: [a, b]`. Coerce every
+  // read to a string so one malformed seed cannot crash the whole audit list
+  // (`.toLowerCase()` on a non-string throws) or leak a raw object/array into the
+  // JSON contract. Mirrors the existing `typeof fm.id === 'string'` guard below.
+  const fmStr = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+  let files: fs.Dirent[];
+  try {
+    files = fs.readdirSync(seedsDir, { withFileTypes: true });
+  } catch {
+    // No seeds dir (or unreadable) — an empty, non-error result. The seed dir is
+    // created lazily by the first plant-seed, so absence is the normal zero case.
+    output({ count: 0, seeds: [], summary: {} }, raw, '0');
+    return;
+  }
+
+  for (const entry of files) {
+    if (!entry.isFile()) continue;
+    if (!entry.name.startsWith('SEED-') || !entry.name.endsWith('.md')) continue;
+
+    let safeFilePath: string;
+    try {
+      safeFilePath = requireSafePath(path.join(seedsDir, entry.name), planDir, 'seed file', { allowAbsolute: true });
+    } catch {
+      continue;
+    }
+    const content = platformReadSync(safeFilePath);
+    if (content === null) continue;
+
+    const fm = extractFrontmatter(content) as Record<string, unknown>;
+    const status = (fmStr(fm.status) || 'dormant').toLowerCase().trim() || 'dormant';
+
+    // Match on the raw lowercased status (both sides already normalized);
+    // sanitizeForDisplay is for output, not comparison.
+    if (wantStatus && status !== wantStatus) continue;
+
+    // Canonical seed id is `SEED-NNN` (frontmatter `id:`, e.g. SEED-001). Fall
+    // back to the numeric prefix of the filename, then to the whole stem. The
+    // descriptive remainder of the filename (`SEED-NNN-<slug>.md`) is the slug.
+    const stem = path.basename(entry.name, '.md');
+    const { seed_id: seedId, slug } = deriveSeedIdentity(stem, fm.id);
+
+    let title = sanitizeForDisplay(fmStr(fm.title).slice(0, 100));
+    if (!title) {
+      const headingMatch = content.match(/^#\s*(.+)$/m);
+      if (headingMatch) title = sanitizeForDisplay(headingMatch[1].trim().slice(0, 100));
+    }
+
+    const safeStatus = sanitizeForDisplay(status);
+    summary[safeStatus] = (summary[safeStatus] || 0) + 1;
+
+    seeds.push({
+      seed_id: sanitizeForDisplay(seedId),
+      slug: sanitizeForDisplay(slug),
+      status: safeStatus,
+      scope: sanitizeForDisplay(fmStr(fm.scope) || 'unknown'),
+      trigger_when: sanitizeForDisplay(fmStr(fm.trigger_when)),
+      planted: sanitizeForDisplay(fmStr(fm.planted)),
+      title,
+      path: toPosixPath(path.relative(cwd, safeFilePath)),
+    });
+  }
+
+  // Stable order: by seed_id so output is deterministic across filesystems.
+  seeds.sort((a, b) => a.seed_id.localeCompare(b.seed_id));
+
+  output({ count: seeds.length, seeds, summary }, raw, seeds.length.toString());
 }
 
 function cmdVerifyPathExists(cwd: string, targetPath: string | undefined, raw: boolean): void {
@@ -464,9 +581,11 @@ function cmdEffortSync(cwd: string, raw: boolean, opts?: { dryRun?: boolean; con
   // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/unbound-method
   const { getGlobalConfigDir } = require('./runtime-homes.cjs') as { getGlobalConfigDir(runtime: string, explicitDir?: string | null): string };
   // Use install-time resolvers: they merge ~/.gsd/defaults.json with project config,
-  // matching the exact logic used when agents were originally installed.
+  // matching the exact logic used when agents were originally installed. #2071: these
+  // live in the shipped sibling install-effort-resolver.cjs (extracted from the
+  // package-root bin/install.js, which the installer never copies into a runtime home).
   // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/unbound-method
-  const { readGsdEffectiveEffortConfig, resolveInstallTimeEffort } = require('../../../bin/install.js') as {
+  const { readGsdEffectiveEffortConfig, resolveInstallTimeEffort } = require('./install-effort-resolver.cjs') as {
     readGsdEffectiveEffortConfig(cwd: string): Record<string, unknown>;
     resolveInstallTimeEffort(cfg: Record<string, unknown>, agentName: string): string;
   };
@@ -868,13 +987,12 @@ function cmdCommit(cwd: string, message: string | undefined, files: string[] | u
 /**
  * Route a list of changed files to their sub-repo prefixes.
  *
- * Bucket sub-repos by their first path segment. Any file that matches a
+ * Bucket sub-repos by their first path segment (#311). Any file that matches a
  * sub-repo prefix must share that sub-repo's first segment, so we only scan
- * the (small) bucket for the file's first segment instead of all sub-repos
- * — O(F + R) expected vs the prior O(F*R) find-in-loop. Candidates stay in
- * sub-repo array order, preserving the original first-match semantics
- * (incl. multi-segment sub-repos like "vendor/pkg", which resolve via the
- * inner startsWith). (#311)
+ * the (small) same-first-segment bucket instead of all sub-repos. Within that
+ * bucket all candidates are scanned to find the longest (most-specific)
+ * matching prefix, so nested sub_repos (e.g. ['packages', 'packages/core'])
+ * route to the deepest match regardless of sub_repos array order (#391).
  *
  * @param files    - changed file paths (relative to project root)
  * @param subRepos - sub-repo path prefixes from config.sub_repos
@@ -891,7 +1009,23 @@ function groupFilesBySubrepo(files: string[], subRepos: string[]): GroupFilesByS
   const unmatched: string[] = [];
   for (const file of files) {
     const candidates = reposByFirstSeg.get(file.split('/')[0]);
-    const match = candidates ? candidates.find(repo => file.startsWith(repo + '/')) : undefined;
+    // Select the longest (most-specific) matching sub-repo prefix so nested
+    // sub_repos (e.g. ['packages', 'packages/core']) route correctly regardless
+    // of array order. (#391) String() guards the length read so non-string
+    // entries never throw, matching the tolerance of the prior `.find` path.
+    let match: string | undefined;
+    let matchLen = -1;
+    if (candidates) {
+      for (const repo of candidates) {
+        if (file.startsWith(repo + '/')) {
+          const repoLen = String(repo).length;
+          if (repoLen > matchLen) {
+            match = repo;
+            matchLen = repoLen;
+          }
+        }
+      }
+    }
     if (match) {
       (grouped[match] ||= []).push(file);
     } else {
@@ -970,6 +1104,201 @@ function cmdCommitToSubrepo(cwd: string, message: string | undefined, files: str
     unmatched: unmatched.length > 0 ? unmatched : undefined,
   };
   output(result, raw, Object.entries(repos).map(([r, v]) => `${r}:${v.id || 'skip'}`).join(' '));
+}
+
+/**
+ * Prepare a sub-repo for a companion PR branch.
+ *
+ * Detects uncommitted changes, creates a new branch, stages every changed
+ * file explicitly (never git add -A per universal-anti-patterns.md:44), commits,
+ * and pushes with --set-upstream. Returns a structured result the workflow uses
+ * to call `gh pr create`.
+ *
+ * On a stage/commit failure (nothing committed yet), the branch is deleted and
+ * the caller is returned to the original HEAD so the repo is left clean. On a
+ * push failure, the commit already exists — the branch is left in place instead
+ * so the user's work is not lost; the error includes a retry instruction.
+ */
+function cmdPrSubrepo(
+  cwd: string,
+  repo: string | undefined,
+  branch: string | undefined,
+  commitMessage: string | undefined,
+  raw: boolean,
+): void {
+  if (!repo) {
+    error('--repo required');
+  }
+  if (!branch) {
+    error('--branch required');
+  }
+  if (!commitMessage || commitMessage.startsWith('--')) {
+    error('commit message required');
+  }
+  if ((branch as string).startsWith('-')) {
+    error(`Branch name must not start with '-': ${branch}`);
+  }
+
+  // 0. Security: validate repo path is contained within the workspace root.
+  //    Uses security.cjs validatePath (symlink-safe realpathSync + startsWith guard)
+  //    to reject ../escape, absolute paths, and symlink traversal.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/unbound-method
+  const { validatePath } = require('./security.cjs') as {
+    validatePath(filePath: string, baseDir: string): { safe: boolean; resolved: string; error?: string };
+  };
+  const pathCheck = validatePath(repo as string, cwd);
+  if (!pathCheck.safe) {
+    error(`Sub-repo path is unsafe: ${pathCheck.error}`);
+  }
+  const repoCwd = pathCheck.resolved;
+  if (!fs.existsSync(repoCwd)) {
+    error(`Sub-repo not found: ${repoCwd}`);
+  }
+
+  // 19-12 next-merge port (AUDIT-01): this command routes through the ported
+  // adapter with backend AUTO-DETECT — the sub-repo may be git or jj
+  // independently of the parent. Branch mechanics differ per backend:
+  //   - git: checkout -b via refs.bookmarks.switch({create}) BEFORE the
+  //     commit (git's commit lands on the checked-out branch).
+  //   - jj: anonymous-branch model — commit first, then pin the exact-named
+  //     bookmark at the created revision via refs.bookmarks.create(..,
+  //     {raw:true}) (raw escapes the adapter's gsd/ namespace prefix; PR
+  //     branch names are user-facing, not fork-internal).
+  const subVcs = createVcsAdapter(repoCwd);
+
+  // 1. Collect changed tracked files via structured status entries (18-04
+  //    discipline: entries[], never .raw, is the predicate surface). Git
+  //    reports untracked files as worktree '?' — excluded to preserve
+  //    upstream's tracked-modifications-only contract. jj has no untracked
+  //    concept (WC auto-tracks), so its entries are all committable.
+  let statusEntries: StatusEntry[];
+  try {
+    statusEntries = subVcs.status({ porcelain: true }).entries;
+  } catch (err) {
+    error(`VCS status failed in ${repo}: ${(err as Error).message}`);
+    return;
+  }
+  const changedFiles = statusEntries
+    .filter((e) => e.worktree !== '?')
+    .flatMap((e) => (e.origPath ? [e.origPath, e.path] : [e.path]));
+
+  if (changedFiles.length === 0) {
+    output(
+      { ok: true, repo, branch, committed: false, reason: 'nothing_to_commit', files: [] },
+      raw,
+      'nothing_to_commit',
+    );
+    return;
+  }
+
+  // 2. Guard: refuse if the branch/bookmark already exists — branch creation
+  //    is non-idempotent on both backends.
+  if (subVcs.refs.bookmarks.exists(branch as string, { raw: true })) {
+    error(`Branch already exists in ${repo}: ${branch}. Delete it first or choose a unique name.`);
+  }
+
+  // Capture the current branch before switching so rollback can return
+  // explicitly (git only — `git checkout -` fails on a fresh single-branch
+  // repo with no prior HEAD; on jj there is nothing to switch away from).
+  const prevBranchName = subVcs.kind === 'git'
+    ? (subVcs.refs.currentBookmarks()[0] ?? null)                            // (was: rev-parse --abbrev-ref HEAD)
+    : null;
+
+  // 3. git: create + switch to the PR branch BEFORE committing.
+  if (subVcs.kind === 'git') {
+    try {
+      subVcs.refs.bookmarks.switch(branch as string, { create: true });      // (was: checkout -b <branch>)
+    } catch (err) {
+      error(`Failed to create branch ${branch} in ${repo}: ${(err as Error).message}`);
+    }
+  }
+
+  // Helper: rollback the created branch and return to the previous HEAD
+  // (git-side only; on jj nothing exists yet until the bookmark is pinned).
+  const rollback = (): void => {
+    if (subVcs.kind !== 'git') return;
+    try {
+      if (prevBranchName) {
+        subVcs.refs.bookmarks.switch(prevBranchName);                        // (was: checkout <prev>)
+      }
+      subVcs.refs.bookmarks.delete(branch as string, { force: true });       // (was: branch -D <branch>)
+    } catch {
+      // Best-effort rollback — the primary error is surfaced by the caller.
+    }
+  };
+
+  // 4+5. Commit every changed tracked path in one adapter call —
+  //    vcs.commit({files}) captures the WC state of the named paths
+  //    internally (git: read-tree reset + add -A -- <paths> + commit; jj:
+  //    squash <paths>), so the explicit per-file staging loop is gone while
+  //    the never-`git add -A`-unscoped contract (universal-anti-patterns.md:44)
+  //    is preserved by the explicit path list.
+  let commitId: string | null = null;
+  try {
+    const commitResult = subVcs.commit({ message: commitMessage as string, files: changedFiles });
+    if (commitResult.exitCode !== 0 || !commitResult.id) {
+      rollback();
+      error(`Failed to commit in ${repo}: ${commitResult.stderr || commitResult.stdout}`);
+      return;
+    }
+    commitId = commitResult.id;
+  } catch (err) {
+    rollback();
+    error(`Failed to commit in ${repo}: ${(err as Error).message}`);
+    return;
+  }
+
+  // 3b. jj: pin the exact-named bookmark at the created revision (raw:true
+  //     escapes the gsd/ namespace prefix — PR branches are user-facing).
+  if (subVcs.kind === 'jj') {
+    try {
+      subVcs.refs.bookmarks.create(branch as string, expr.rev(commitId), { raw: true });
+    } catch (err) {
+      error(`Failed to create bookmark ${branch} in ${repo}: ${(err as Error).message}`);
+    }
+  }
+
+  // 6. Capture the short revision id from the backend-computed created
+  //    revision (v15 envelope discipline: CommitResult.id, never re-resolved
+  //    head — on jj the head is the post-commit empty WC change).
+  let commitHash: string | null = null;
+  try {
+    commitHash = subVcs.refs.resolveShort(expr.rev(commitId));               // (was: rev-parse --short HEAD)
+  } catch {
+    commitHash = commitId;
+  }
+
+  // 7. Capture remote URL and derive GitHub owner/repo slug for gh pr create.
+  const remoteUrl = subVcs.refs.remoteUrl('origin');                         // (was: remote get-url origin)
+  let remoteSlug: string | null = null;
+  if (remoteUrl) {
+    const m = remoteUrl.match(/github\.com[:/](.+?)(?:\.git)?$/);
+    remoteSlug = m ? m[1] : null;
+  }
+
+  // 8. Push with upstream tracking so gh pr create can find the branch.
+  //    Do NOT rollback on push failure — the commit already exists on the
+  //    branch/bookmark. Deleting it here would destroy the only ref holding
+  //    the user's work. Leave it in place so the user can retry the push.
+  //    (git: push --set-upstream origin <branch>; jj: git push --remote
+  //    origin --bookmark <branch> — jj tracks pushed bookmarks natively, so
+  //    setUpstream is a documented no-op there.)
+  const pushResult = subVcs.push({ remote: 'origin', ref: expr.bookmark(branch as string), setUpstream: true });
+  if (pushResult.exitCode !== 0) {
+    error(`Failed to push ${branch} in ${repo}: ${pushResult.stderr}\nBranch ${branch} was created locally — retry the push (git: \`git -C ${repo} push --set-upstream origin ${branch}\`; jj: \`jj -R ${repo} git push --remote origin --bookmark ${branch}\`).`);
+  }
+
+  const result = {
+    ok: true,
+    repo,
+    branch,
+    committed: true,
+    files: changedFiles,
+    commit_hash: commitHash,
+    remote_url: remoteUrl,
+    remote_slug: remoteSlug,
+  };
+  output(result, raw, `${repo}@${commitHash ?? 'unknown'}`);
 }
 
 function cmdSummaryExtract(cwd: string, summaryPath: string | undefined, fields: string[] | undefined, raw: boolean): void {
@@ -1477,7 +1806,8 @@ function cmdStats(cwd: string, format: string | undefined, raw: boolean): void {
     const roadmapContent = extractCurrentMilestone(roadmapRaw, cwd);
     // Matches both plain numeric (Phase 1:) and milestone-prefixed (Phase 2-01:) headings.
     // Also tolerates optional [bracket-token] scope prefix on phase headings.
-    const headingPattern = /#{2,4}\s*(?:\[[^\]]+\]\s*)?Phase\s+([\w][\w.-]*)\s*:\s*([^\n]+)/gi;
+    // #1729: `(?:\s*\([^)\n]*\))?` tolerates a pre-colon ( ) tag (literal mirror of OPTIONAL_PHASE_TAG_SOURCE).
+    const headingPattern = /#{2,4}\s*(?:\[[^\]]+\]\s*)?Phase\s+([\w][\w.-]*)(?:\s*\([^)\n]*\))?\s*:\s*([^\n]+)/gi;
     let match: RegExpExecArray | null;
     while ((match = headingPattern.exec(roadmapContent)) !== null) {
       const key = normalizePhaseName(match[1]);
@@ -1674,6 +2004,8 @@ export = {
   cmdGenerateSlug,
   cmdCurrentTimestamp,
   cmdListTodos,
+  cmdListSeeds,
+  deriveSeedIdentity,
   cmdVerifyPathExists,
   cmdHistoryDigest,
   cmdResolveModel,
@@ -1682,6 +2014,7 @@ export = {
   cmdEffortSync,
   cmdCommit,
   cmdCommitToSubrepo,
+  cmdPrSubrepo,
   cmdSummaryExtract,
   cmdWebsearch,
   cmdProgressRender,

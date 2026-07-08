@@ -28,7 +28,7 @@ import { parseJjLog } from '../parse/jj-log.cjs';
 import { parseJjWorkspaceList } from '../parse/jj-workspace-list.cjs';
 import { parseJjBookmarkRecord } from '../parse/jj-bookmark.cjs';
 import { validateRefname } from '../refs-validator.cjs';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { acquireJjWriteLock } from '../jj/lock.cjs';
 import { performJjReap } from '../jj/reap.cjs';
 import { performJjParallelDispatch, performJjParallelFanIn, performJjParallelCancel } from '../jj/parallel.cjs';
@@ -76,6 +76,77 @@ import type {
   FanInResult,
   CancelResult,
 } from '../types.cjs';
+
+/**
+ * Machine-readable per-file diff plumbing (VCS-audit follow-up 2026-07-08).
+ *
+ * `jj diff -T` renders each file entry through the TreeDiffEntry template
+ * type (empirically verified on jj 0.42; the flag predates the fork's jj
+ * 0.41 floor). The template emits one strict-JSON object per line, so entry
+ * extraction is JSON.parse — no scraping of the human renderer's
+ * `{old => new}` path compression, which is presentation output jj is free
+ * to reshape (and did at 0.42, breaking the previous scraper).
+ *
+ * `jj status` still has no template mode, but its "Working copy changes"
+ * section is definitionally the WC change's tree diff, so status() sources
+ * its entries from this same template channel (`.raw` keeps the human
+ * `jj st` text).
+ *
+ * Operator decision 2026-07-08: NO scraper fallback is kept — when the
+ * underlying repo commands succeed but the template probe fails, that is
+ * template-contract drift (or a jj below the `diff -T` floor) and surfaces
+ * as a typed error rather than a silent empty entry list.
+ */
+const DIFF_ENTRY_JSON_TEMPLATE =
+  '"{\\"status\\":" ++ json(status) ++ ",\\"source\\":" ++ json(source.path()) ++ ",\\"target\\":" ++ json(target.path()) ++ "}\\n"';
+
+/**
+ * TreeDiffEntry.status() word → the porcelain letter both
+ * StatusEntry.worktree and DiffNameStatusEntry.status carry (git parity).
+ * The five words are jj's documented TreeDiffEntry status set.
+ */
+const DIFF_STATUS_LETTER: Readonly<Record<string, string>> = Object.freeze({
+  added: 'A',
+  modified: 'M',
+  removed: 'D',
+  renamed: 'R',
+  copied: 'C',
+});
+
+export interface JjDiffEntry {
+  /** Porcelain letter (A/M/D/R/C); unknown status words surface as their
+   * uppercased first letter so a future jj addition is visible, not dropped. */
+  status: string;
+  /** Pre-state path (=== target for non-rename/copy entries). */
+  source: string;
+  /** Post-state path. */
+  target: string;
+}
+
+/**
+ * Parse the NDJSON emitted by DIFF_ENTRY_JSON_TEMPLATE. Exported for unit
+ * tests; production callers are status() and diff() in createJjAdapter.
+ * Throws on a non-JSON line — with --no-pager/--color never/--quiet pinned,
+ * anything unparsable on stdout is contract drift (no-fallback decision).
+ */
+export function parseJjDiffEntries(stdout: string): JjDiffEntry[] {
+  const entries: JjDiffEntry[] = [];
+  for (const line of stdout.split('\n')) {
+    if (!line.trim()) continue;
+    let parsed: { status: string; source: string; target: string };
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      throw new Error(`parseJjDiffEntries: non-JSON line from jj diff -T: '${line}'`);
+    }
+    entries.push({
+      status: DIFF_STATUS_LETTER[parsed.status] ?? parsed.status.charAt(0).toUpperCase(),
+      source: parsed.source,
+      target: parsed.target,
+    });
+  }
+  return entries;
+}
 
 export function createJjAdapter(cwd: string): JjVcsAdapter {
   // ─── helpers ────────────────────────────────────────────────────────────
@@ -368,92 +439,53 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
    * Parse `jj status` human-readable output into `StatusEntry[]`.
    *
    * Phase 2.1 D-16: `StatusEntry` has NO `index` field — jj has no index.
-   * The `worktree` letter is whatever jj prints (A/M/D/R/C).
+   * `worktree` carries the porcelain letter (A/M/D/R/C).
    *
-   * Output sample (jj 0.41):
-   *   Working copy changes:
-   *   A a.txt
-   *   M b.txt
-   *   Working copy  (@) : wttxkypv e4595a81 (no description set)
-   *   Parent commit (@-): ...
+   * `.raw` keeps the human `jj st` text (18-04: status predicates key on
+   * `entries[]`, never `.raw`). Entries come from the machine-readable
+   * `jj diff -T` NDJSON channel — the WC change's tree diff IS the status
+   * "Working copy changes" section (jj auto-tracks on snapshot, so adds/
+   * mods/dels/renames all appear; ignored files appear in neither, matching
+   * the retired jj-st scraper). Rename/copy entries canonicalize `path` on
+   * the post-state and surface the pre-state as `origPath` (19-12 rename
+   * contract — mirrors the git backend's `-z` parser at git.ts:340).
    *
-   * RESEARCH §`status()`: jj has no structured `--porcelain` analog; the
-   * parser hand-rolls the human-readable lines starting with A/M/D/R/C
-   * between the `Working copy changes:` header and the `Working copy  (@)`
-   * (or `Parent commit`) separator.
-   */
-  const parseJjStatus = (raw: string): StatusEntry[] => {
-    const lines = raw.split('\n');
-    const entries: StatusEntry[] = [];
-    let inSection = false;
-    for (const line of lines) {
-      if (line.startsWith('Working copy changes:')) {
-        inSection = true;
-        continue;
-      }
-      if (line.startsWith('Working copy  (@)') || line.startsWith('Parent commit')) break;
-      if (!inSection) continue;
-      // WR-05: widen the regex to tolerate (a) extra whitespace between
-      // the status letter and the path (alignment-driven), and (b) the
-      // rename arrow form `R old -> new`. For rename/copy we canonicalize
-      // on the post-state (new path), matching the git backend's
-      // `(letter === 'R' || letter === 'C') ? cols[2] : cols[1]` heuristic
-      // at git.ts:316.
-      const m = /^([AMDRC])\s+(.+)$/.exec(line);
-      if (!m) {
-        // IN-06: defensive — once inSection, any non-entry line ends
-        // the section. The explicit `Working copy  (@)` / `Parent commit`
-        // markers above remain for known steady-state output; this
-        // catches future jj template reshapes that drop those markers.
-        break;
-      }
-      const letter = m[1];
-      const rest = m[2];
-      if (letter === 'R' || letter === 'C') {
-        const arrowIdx = rest.indexOf(' -> ');
-        const path = arrowIdx >= 0 ? rest.slice(arrowIdx + ' -> '.length) : rest;
-        entries.push({ path, worktree: letter });
-      } else {
-        entries.push({ path: rest, worktree: letter });
-      }
-    }
-    return entries;
-  };
-
-  /**
-   * `vcs.status(opts)` — parses `jj st` text output. Per git-backend parity,
-   * `opts.porcelain === false` returns `{entries: [], raw: stdout}` so
-   * callers wanting the raw human-readable form can read `.raw` without
-   * entry parsing.
+   * Per git-backend parity, `opts.porcelain === false` returns
+   * `{entries: [], raw: stdout}` without running the entries probe.
    */
   const status = (opts: StatusOpts = {}): StatusResult => {
     // Phase 7 D-07 (VCS-11): scoped variant — defaults to adapter's construction
     // cwd if omitted. The jjArgv mandatory `--repository <cwd>` prefix stays
     // pinned to the adapter root; only the spawned-process cwd switches —
-    // jj 0.41 uses the spawned cwd to select the workspace within the repo.
+    // jj (verified 0.41/0.42) uses the spawned cwd to select the workspace.
     const targetCwd = opts.cwd ?? cwd;
     const r = vcsExec(targetCwd, 'jj', jjArgv('status'));
     if (r.exitCode !== 0) return { entries: [], raw: r.stderr || r.stdout };
     if (opts.porcelain === false) {
       return { entries: [], raw: r.stdout };
     }
-    return { entries: parseJjStatus(r.stdout), raw: r.stdout };
-  };
-
-  /**
-   * Parse `jj diff --summary` line-by-line into `DiffNameStatusEntry[]`.
-   * Output sample: `M path/to/file.ts`, `A other.txt`, etc. The letter set
-   * matches `DiffNameStatusEntry.status` (`A|M|D|R|C|T|U|X|B`).
-   */
-  const parseDiffSummary = (raw: string): DiffNameStatusEntry[] => {
-    const entries: DiffNameStatusEntry[] = [];
-    for (const line of raw.split('\n')) {
-      const m = /^([AMDRCTUXB]) (.+)$/.exec(line);
-      if (m) {
-        entries.push({ path: m[2], status: m[1] as DiffNameStatusEntry['status'] });
-      }
+    // Entries via the template channel — same workspace-selection mechanics
+    // (spawned cwd = targetCwd, --repository pinned). Bare `jj diff` (no -r)
+    // is the working-copy change, exactly the status section.
+    const d = vcsExec(targetCwd, 'jj', jjArgv('diff', '-T', DIFF_ENTRY_JSON_TEMPLATE));
+    if (d.exitCode !== 0) {
+      // `jj status` succeeded but the template probe failed: template-
+      // contract drift (or a jj below the `diff -T` floor) — loud per the
+      // no-fallback operator decision, never a silent empty entry list.
+      throw new VcsExecError(`status: jj diff -T entry probe failed: ${d.stderr || d.stdout}`, {
+        exitCode: d.exitCode,
+        stdout: d.stdout,
+        stderr: d.stderr,
+        timedOut: d.timedOut,
+        args: ['diff', '-T', DIFF_ENTRY_JSON_TEMPLATE],
+      });
     }
-    return entries;
+    const entries: StatusEntry[] = parseJjDiffEntries(d.stdout).map((e) =>
+      e.source !== e.target
+        ? { path: e.target, worktree: e.status, origPath: e.source }
+        : { path: e.target, worktree: e.status },
+    );
+    return { entries, raw: r.stdout };
   };
 
   /**
@@ -465,7 +497,12 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
    *
    * Argv per RESEARCH §`diff()`:
    *  - `opts.nameOnly` → `--name-only`
-   *  - `opts.nameStatus` → `--summary` (jj's name-status equivalent)
+   *  - `opts.nameStatus`/`opts.diffFilter` → `-T DIFF_ENTRY_JSON_TEMPLATE`
+   *    (machine-readable NDJSON per file entry; replaced the retired
+   *    `--summary` scraper whose compressed `{old => new}` rename rendering
+   *    was presentation output). NOTE: in this mode `.raw` carries the
+   *    template NDJSON — it is still the underlying command's verbatim
+   *    stdout; patch-text consumers use the default (format-flag-free) call.
    *  - `opts.rev` → `-r toJjRev(rev)`
    *  - `opts.paths` → trailing positional, prefixed with `--` end-of-options
    *    separator (WR-01: verified working on jj 0.41; mirrors the git
@@ -473,15 +510,15 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
    */
   const diff = (opts: DiffOpts = {}): DiffResult => {
     const args: string[] = ['diff'];
-    // Phase 7 D-06 (VCS-10): when diffFilter is set, the jj backend must
-    // probe --summary output to parse status letters and then post-filter.
-    // jj 0.41 rejects `--name-only --summary` together (mutually exclusive),
-    // so when diffFilter is requested we use --summary alone and derive
-    // nameOnly from the filtered nameStatus result below.
-    const useSummary = opts.nameStatus === true || opts.diffFilter !== undefined;
-    const useNameOnly = opts.nameOnly === true && !useSummary;
+    // Phase 7 D-06 (VCS-10): when nameStatus/diffFilter ask for per-file
+    // statuses, use the `-T` NDJSON template and post-filter parsed entries.
+    // `-T` and `--name-only` are both format selectors (mutually exclusive
+    // at the jj CLI, same as the old `--summary`); when both are requested,
+    // nameOnly derives from the parsed entries below.
+    const useEntryTemplate = opts.nameStatus === true || opts.diffFilter !== undefined;
+    const useNameOnly = opts.nameOnly === true && !useEntryTemplate;
     if (useNameOnly) args.push('--name-only');
-    if (useSummary) args.push('--summary');
+    if (useEntryTemplate) args.push('-T', DIFF_ENTRY_JSON_TEMPLATE);
     if (opts.rev) args.push('-r', toJjRev(opts.rev));
     if (opts.paths && opts.paths.length > 0) args.push('--', ...opts.paths);
     // opts.staged: no-op on jj (no index concept). See JSDoc above.
@@ -495,11 +532,16 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
         ? r.stdout.split('\n').map((s) => s.trim()).filter(Boolean)
         : [],
     };
-    if (useSummary) {
-      result.nameStatus = parseDiffSummary(r.stdout);
-      // When the caller requested nameOnly:true alongside summary-shaped
-      // probes (because diffFilter forced --summary), derive nameOnly from
-      // the parsed entries so the contract surface matches the request.
+    if (useEntryTemplate) {
+      // Post-state path convention for rename/copy entries (git backend's
+      // `cols[2]` heuristic — the new path is what consumers act on).
+      result.nameStatus = parseJjDiffEntries(r.stdout).map((e) => ({
+        path: e.target,
+        status: e.status as DiffNameStatusEntry['status'],
+      }));
+      // When the caller requested nameOnly:true alongside entry-shaped
+      // probes (because diffFilter forced the template), derive nameOnly
+      // from the parsed entries so the contract surface matches the request.
       if (opts.nameOnly === true) {
         result.nameOnly = result.nameStatus.map((e) => e.path);
       }
@@ -517,33 +559,18 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
   };
 
   /**
-   * Phase 3 RESEARCH A3 (medium-risk → empirically resolved during plan
-   * 03-05 execution): enumerate conflicted paths for a given revision.
+   * Phase 3 RESEARCH A3 (empirically resolved): enumerate conflicted paths
+   * for a given revision via `jj resolve --list -r <rev>` — the sole form
+   * since the VCS-audit follow-up (2026-07-08) deleted the dormant
+   * `--summary` fallback (dead on every probe since 0.41, and its `C`-line
+   * filter meant *copied*, not conflicted). Line format and the spaced-path
+   * extraction fix are documented at the sidecar (jj/conflict-paths.cts).
    *
-   * **PRIMARY form** (verified working on jj 0.41.0 locally during plan
-   * execution): `jj resolve --list -r <rev>`. Output is one line per
-   * conflicted path with the conflict description after several spaces:
-   *
-   *     f.txt    2-sided conflict
-   *     other.md 3-sided conflict
-   *
-   * The regex `/^(\S+)/` extracts only the path token, discarding the
-   * trailing diagnostic prose.
-   *
-   * **Fallback** (kept for resilience against future jj output reshaping):
-   * `jj diff -r <rev> --summary` filtered for lines starting with `C`.
-   * (IN-04: `U` was dropped from the regex — `jj diff --summary` on jj
-   * 0.41 emits only `A/M/D/R/C/T/X/B`; the `U` branch was dead.) On jj
-   * 0.41 the primary form succeeded for every probe, so this branch is
-   * dormant in practice but provides soft-degradation against contract
-   * drift.
-   *
-   * WR-04: the sentinel `'<UNRESOLVABLE>'` is returned when the
-   * `conflicts()` revset flagged this rev but neither enumeration form
-   * yielded paths. CONFLICT-03 (verify gate) thus cannot mistake an
-   * empty array for "no conflicts" when the upstream revset clearly
-   * said the commit IS conflicted — surface drift instead of silently
-   * passing.
+   * WR-04: the sentinel `'<UNRESOLVABLE>'` is returned when enumeration
+   * fails or prints nothing for a rev the `conflicts()` revset flagged.
+   * CONFLICT-03 (verify gate) thus cannot mistake an empty array for "no
+   * conflicts" when the upstream revset clearly said the commit IS
+   * conflicted — surface drift instead of silently passing.
    */
   // Phase 9 plan 02 (UPSTREAM-02): the enumeration body lives in the sidecar
   // at `../jj/conflict-paths.ts` so both `reap.ts` (D-09/D-10/D-11 classifier)
@@ -567,8 +594,9 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
    * - `scope: 'all'` → revset `conflicts()` (every in-tree conflicted commit)
    * - `scope: 'working-copy'` → revset `conflicts() & @` (filter to @)
    *
-   * Path enumeration uses `enumerateConflictedPaths(rev)` which dispatches
-   * `jj resolve --list -r <rev>` (primary) with a `--summary`-based fallback.
+   * Path enumeration uses `enumerateConflictedPaths(rev)` — `jj resolve
+   * --list -r <rev>` (sole form; the dormant `--summary` fallback was
+   * deleted in the 2026-07-08 VCS-audit follow-up).
    *
    * CONFLICT-03: the verify-gate caller invokes `findConflicts({scope:'all'})`
    * — already wired on the git backend (git.ts:520); flipping the allowlist
@@ -625,6 +653,9 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
    * leading `-` (rules out flag-injection like `--bookmark='--delete'`).
    */
   const push = (opts: PushOpts = {}): ExecResult => {
+    // 19-12 next-merge port: PushOpts.setUpstream is a documented no-op on jj
+    // — `jj git push --bookmark` records the remote-tracking relationship
+    // natively, so there is no flag to forward.
     const args: string[] = ['git', 'push'];
     if (opts.remote) args.push('--remote', opts.remote);
     if (opts.ref) {
@@ -1071,6 +1102,26 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
         .map((s) => s.trim())
         .filter(Boolean);
     },
+
+    // 19-12 next-merge port (cmdPrSubrepo): read-only remote-URL probe.
+    // Templated `jj git remote list` emits one `name<TAB>url` record per
+    // remote; a TAB separator is safe because refname bytes exclude control
+    // characters (refs-validator) and URLs cannot contain raw TABs.
+    remoteUrl: (name: string): string | null => {
+      if (!name || name.startsWith('-')) return null;
+      const args = jjArgv('git', 'remote', 'list', '-T', 'name ++ "\\t" ++ url ++ "\\n"');
+      const r = vcsExec(cwd, 'jj', args);
+      if (r.exitCode !== 0) return null;
+      for (const line of r.stdout.split('\n')) {
+        const tab = line.indexOf('\t');
+        if (tab === -1) continue;
+        if (line.slice(0, tab) === name) {
+          const url = line.slice(tab + 1).trim();
+          return url.length > 0 ? url : null;
+        }
+      }
+      return null;
+    },
   });
 
   // ─── workspace namespace (plan 04-01 fills add/forget/prune real bodies) ─
@@ -1208,22 +1259,46 @@ export function createJjAdapter(cwd: string): JjVcsAdapter {
       return parseJjWorkspaceList(r.stdout);
     },
     /**
-     * `vcs.workspace.context()` — Phase 3 stub returning the cross-backend
-     * shape literally. T-03.06-03: `mode: 'main'` is a documented Phase-3
-     * boundary; Phase 4 implements real multi-workspace context (effectiveRoot
-     * resolution when @ points into a linked workspace, isLinked detection
-     * via `.jj/working_copy/<name>` sentinel files, etc.).
+     * `vcs.workspace.context()` — real jj body (VCS-audit fix 2026-07-08;
+     * replaces the Phase-3 `{effectiveRoot: cwd, mode: 'main'}` stub whose
+     * cwd literal was wrong whenever the adapter was constructed in a
+     * SUBDIRECTORY of the workspace — git-base-branch's worktreeInfo and
+     * init's nested-subdir detection never fired on jj because of it).
      *
-     * No jj invocation — pure literal, returned frozen so callers cannot
-     * mutate the shape (matches Object.freeze convention used throughout
-     * the adapter).
+     * - effectiveRoot: `jj workspace root` (resolves correctly from any
+     *   subdirectory; empirically verified on jj 0.42). Falls back to cwd
+     *   when jj fails (non-repo) — the jj leg stays lenient rather than
+     *   adopting the git backend's throw, preserving existing callers'
+     *   no-throw expectations on this branch.
+     * - isLinked: a secondary jj workspace carries `.jj/repo` as a pointer
+     *   FILE (containing the path to the main repo store); the main
+     *   workspace has it as a DIRECTORY. Empirically verified on jj 0.42.
      */
-    context: (): WorkspaceContext =>
-      Object.freeze({
-        effectiveRoot: cwd,
-        mode: 'main' as const,
-        isLinked: false,
-      }),
+    context: (): WorkspaceContext => {
+      // Deliberately NOT jjArgv(): the mandatory `--repository <cwd>` pin
+      // defeats jj's upward workspace discovery (with -R pointed at a
+      // subdirectory, `workspace root` echoes the subdirectory back) — and
+      // discovery is exactly what this probe exists for. The remaining
+      // mandatory flags are carried verbatim.
+      const rootRes = vcsExec(cwd, 'jj', [
+        '--no-pager', '--color', 'never', '--quiet', 'workspace', 'root',
+      ]);
+      const effectiveRoot =
+        rootRes.exitCode === 0 && rootRes.stdout.trim().length > 0
+          ? rootRes.stdout.trim()
+          : cwd;
+      let isLinked = false;
+      try {
+        isLinked = statSync(join(effectiveRoot, '.jj', 'repo')).isFile();
+      } catch {
+        /* no .jj at root (non-repo fallback) — treat as main */
+      }
+      return Object.freeze({
+        effectiveRoot,
+        mode: (isLinked ? 'linked' : 'main') as 'main' | 'linked',
+        isLinked,
+      });
+    },
     prune: (): ExecResult => {
       // jj has no `jj workspace prune` subcommand (verified locally on 0.41).
       // The equivalent is `vcs.workspace.reap({...})` (Phase 4 verb) which

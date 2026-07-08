@@ -139,7 +139,7 @@ eager なスキルリストはターンごとの 2 つの主要コストの一�
 
 #### ワークフローのプログレッシブディスクロージャー
 
-ワークフローファイルは、対応する `/gsd-*` コマンドが呼び出されるたびに Claude のコンテキストにそのまま読み込まれます。そのコストを制限するため、`tests/workflow-size-budget.test.cjs` で強制されるワークフローサイズバジェットは #2361 のエージェントバジェットを反映します：
+ワークフローファイルは、対応する `/gsd-*` コマンドが呼び出されるたびに Claude のコンテキストにそのまま読み込まれます。そのコストを制限するため、`tests/workflow-size-budget.test.cjs` で強制されるワークフローサイズバジェットはエージェントサイズバジェット規則を反映します：
 
 | ティア | ファイルごとの行数制限 |
 |-----------|--------------------|
@@ -474,7 +474,8 @@ UI-SPEC.md (per phase) ───────────────────
 │   ├── FEATURES.md
 │   ├── ARCHITECTURE.md
 │   └── PITFALLS.md
-├── codebase/               # ブラウンフィールドマッピング（/gsd-map-codebase から）
+├── codebase/               # ブラウンフィールドマッピング（/gsd-map-codebase または /gsd-onboard から）
+├── onboarding/             # ブラウンフィールドオンボーディング概要（/gsd-onboard から）
 │   ├── STACK.md
 │   ├── ARCHITECTURE.md
 │   ├── CONVENTIONS.md

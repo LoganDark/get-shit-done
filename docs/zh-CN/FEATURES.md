@@ -38,6 +38,7 @@
   - [模型配置](#26-model-profiles)
 - [棕地功能](#brownfield-features)
   - [代码库映射](#27-codebase-mapping)
+  - [现有代码库接入](#27b-现有代码库接入)
 - [实用功能](#utility-features)
   - [调试系统](#28-debug-system)
   - [待办事项管理](#29-todo-management)
@@ -783,7 +784,7 @@
 
 **命令：** `/gsd-map-codebase [area]`
 
-**目的：** 在启动新项目之前分析现有代码库，使 GSD 了解已有内容。
+**目的：** 在启动新项目之前，或作为 `/gsd-onboard` 的映射交接，分析现有代码库，使 GSD 了解已有内容。
 
 **需求：**
 - REQ-MAP-01：系统必须为每个分析领域派生并行映射智能体
@@ -804,6 +805,27 @@
 | `INTEGRATIONS.md` | 外部服务、API、第三方依赖 |
 
 **增量重映射 — `--paths` (#2003)：** 映射器接受可选的 `--paths <p1,p2,...>` 范围提示。提供时，它将探索限制在列出的仓库相对前缀，而非扫描整个代码树。这是执行后代码库漂移门控用于仅刷新阶段实际修改的子树的路径。每个生成的文档在其 YAML 前置元数据中携带 `last_mapped_commit`，以便相对于映射点（而非 HEAD）来测量漂移。
+
+### 27b. 现有代码库接入
+
+**命令：** `/gsd-onboard [--fast] [--text]`
+
+**目的：** 引导现有仓库完成首次设置，检查 brownfield 状态，并安全交接到代码库映射、docs 摄取和项目初始化。
+
+**需求：**
+- REQ-ONBOARD-01：系统必须检测现有代码、package manifest、规划文档、部分 `.planning/` 状态以及缺失的代码库映射文件。
+- REQ-ONBOARD-02：当 brownfield 缺少所需 `.planning/codebase/` 映射文件时，系统必须交接到 `/gsd-map-codebase` 或 `/gsd-map-codebase --fast`。fast 映射 readiness 是部分状态，不得视为足以运行 `/gsd-new-project`。
+- REQ-ONBOARD-03：当存在 ADR/PRD/SPEC/RFC 候选且 project 不存在时，系统必须在 `/gsd-new-project` 前提供 `/gsd-ingest-docs`。
+- REQ-ONBOARD-04：在 `PROJECT.md`、`REQUIREMENTS.md`、`ROADMAP.md`、`STATE.md` 全部存在前，系统不得报告 onboarding 完成。
+- REQ-ONBOARD-05：系统必须仅在 project setup 后创建或确认 `.planning/onboarding/SUMMARY.md`。
+- REQ-ONBOARD-06：系统必须为没有交互式菜单的运行时支持 `--text` 编号纯文本关卡。
+
+**产出：**
+| Artifact | 说明 |
+|----------|-------------|
+| `.planning/codebase/` | 由 `/gsd-map-codebase` 交接生成的代码库映射 |
+| `.planning/PROJECT.md`, `REQUIREMENTS.md`, `ROADMAP.md`, `STATE.md` | 由 `/gsd-new-project` 或 `/gsd-ingest-docs` 生成的规划设置 |
+| `.planning/onboarding/SUMMARY.md` | Onboarding status、artifact index 和 next-command summary |
 
 ### 27a. 执行后代码库漂移检测
 
@@ -1244,7 +1266,7 @@ PreToolUse 钩子，扫描针对 `.planning/` 的 Write/Edit 调用中的注入�
 **3. 工作流守护钩子**（`gsd-workflow-guard.js`）
 PreToolUse 钩子，检测 Claude 在 GSD 工作流上下文之外尝试文件编辑的情况。建议使用 `/gsd-quick` 或 `/gsd-fast` 替代直接编辑。可通过 `hooks.workflow_guard` 配置（默认：false）。
 
-**4. CI 就绪注入扫描器**（`prompt-injection-scan.test.cjs`）
+**4. CI 就绪注入扫描器**（`prompt-injection-scan.security.test.cjs`）
 扫描所有智能体、工作流和命令文件中嵌入注入向量的测试套件。
 
 **需求：**
@@ -1778,7 +1800,7 @@ PreToolUse 钩子，检测 Claude 在 GSD 工作流上下文之外尝试文件�
 - REQ-CTXRED-01：系统必须截断超大 Markdown 构件以适应上下文预算
 - REQ-CTXRED-02：系统必须为缓存友好的组装对提示进行排序（稳定的前缀优先）
 - REQ-CTXRED-03：压缩必须保留必要信息（标题、需求、任务结构）
-- REQ-CTXRED-04：技能 `description:` 字段必须 ≤ 100 个字符；由 `npm run lint:descriptions` 强制执行（参见 `scripts/lint-descriptions.cjs` 和 `tests/enh-2789-description-budget.test.cjs`）
+- REQ-CTXRED-04：技能 `description:` 字段必须 ≤ 100 个字符；由 `npm run lint:descriptions` 强制执行（参见 `scripts/lint-descriptions.cjs` 和 `tests/skill-frontmatter-contract.test.cjs`）
 
 **流程：**
 1. **测量** — 计算工作流的总提示大小
@@ -2670,10 +2692,10 @@ capture_thought({
 | 槽位 | 分配的智能体 |
 |------|-----------------|
 | `planning` | `gsd-planner`、`gsd-roadmapper`、`gsd-pattern-mapper` |
-| `discuss` | （为未来子智能体保留） |
+| `discuss` | `gsd-assumptions-analyzer` |
 | `research` | `gsd-phase-researcher`、`gsd-project-researcher`、`gsd-research-synthesizer`、`gsd-codebase-mapper`、`gsd-ui-researcher` |
 | `execution` | `gsd-executor`、`gsd-debugger`、`gsd-doc-writer` |
-| `verification` | `gsd-verifier`、`gsd-plan-checker`、`gsd-integration-checker`、`gsd-nyquist-auditor`、`gsd-ui-checker`、`gsd-ui-auditor`、`gsd-doc-verifier` |
+| `verification` | `gsd-verifier`、`gsd-plan-checker`、`gsd-integration-checker`、`gsd-nyquist-auditor`、`gsd-ui-checker`、`gsd-ui-auditor`、`gsd-doc-verifier`、`gsd-code-reviewer` |
 | `completion` | （为未来子智能体保留） |
 
 **接受的值：** `"opus"` / `"sonnet"` / `"haiku"` / `"inherit"`

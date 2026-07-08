@@ -53,8 +53,8 @@ must_haves:
       exports: ["PostCard"]
   key_links:
     - from: "src/components/PostFeed.tsx"
-      to: "/api/feed"
-      via: "fetch in useEffect"
+      to: "src/app/api/feed/route.ts"
+      via: "fetch in useEffect — calls /api/feed endpoint"
       pattern: "fetch.*api/feed"
 ---
 ```
@@ -92,9 +92,9 @@ must_haves:
 | `artifacts[].exports` | array of strings (optional) | Expected named exports to verify. |
 | `artifacts[].contains` | string (optional) | Regex or literal pattern that must appear in the file. |
 | `key_links` | array of objects | Critical connections between artifacts — the wiring that makes the system work end-to-end. |
-| `key_links[].from` | string | Source file or component. |
-| `key_links[].to` | string | Target file, endpoint, or module. |
-| `key_links[].via` | string | Description of how they connect (e.g. `fetch in useEffect`, `Prisma query`, `import`). |
+| `key_links[].from` | string | Source file (relative path from project root). Must be a literal file path — describe components or symbols in `via:`. |
+| `key_links[].to` | string | Target file (relative path from project root). Must be a literal file path — describe endpoints, modules, or APIs in `via:`. |
+| `key_links[].via` | string | Description of how they connect, including any endpoint, component, or symbol name (e.g. `fetch in useEffect — calls /api/feed`, `Prisma query via prisma.message`, `import`). |
 | `key_links[].pattern` | string (optional) | Regex to verify the connection exists in source. |
 
 ---
@@ -187,7 +187,7 @@ Plans that contain any checkpoint task must set `autonomous: false` in frontmatt
 | `<read_first>` | Files the executor must read before touching anything — the file being modified, any source-of-truth pattern file, any file whose types or conventions must be replicated. |
 | `<action>` | Concrete instructions with exact identifiers, file paths, function signatures, and expected values. Never says "align X with Y" without specifying the target state. Never contains fenced code blocks or full implementations. |
 | `<verify>` | A runnable command or check that proves the task succeeded. Must distinguish pass from fail — `echo "done"` is not valid. |
-| `<acceptance_criteria>` | Verifiable conditions: grep-verifiable strings, command exit codes, observable behaviours. No subjective language ("looks correct", "properly configured"). |
+| `<acceptance_criteria>` | Verifiable conditions: grep-verifiable strings, command exit codes, observable behaviours. No subjective language ("looks correct", "properly configured"). Negative greps (`! grep -Eq 'PAT' file`) are file-scoped — region-scope them (`sed -n`/`awk` range, then grep) when a sibling task needs the construct elsewhere in the same file (#968). |
 | `<done>` | A short measurable statement of the completed outcome. |
 
 ---

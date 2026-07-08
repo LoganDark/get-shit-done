@@ -10,8 +10,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-import core = require('./core.cjs');
-const { output, error, ERROR_REASON, CONFIG_DEFAULTS } = core;
+import io = require('./io.cjs');
+const { output, error, ERROR_REASON } = io;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import configLoader = require('./config-loader.cjs');
+const { CONFIG_DEFAULTS } = configLoader;
 import { platformWriteSync, platformEnsureDir } from './shell-command-projection.cjs';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import planningWorkspace = require('./planning-workspace.cjs');
@@ -21,9 +24,9 @@ import modelProfiles = require('./model-profiles.cjs');
 const { VALID_PROFILES, getAgentToModelMapForProfile, formatAgentToModelMapAsTable } = modelProfiles;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import configSchema = require('./config-schema.cjs');
-const { VALID_CONFIG_KEYS, isValidConfigKey } = configSchema;
+const { VALID_CONFIG_KEYS, isValidConfigKey, getCapabilityConfigSchema } = configSchema;
 import { isSecretKey, maskSecret } from './secrets.cjs';
-import { normalizeConfiguredDefaultReviewers } from './review-reviewer-selection.cjs';
+import { normalizeConfiguredDefaultReviewers, INSTANCE_NAME_PATTERN, KNOWN_REVIEWER_SLUGS } from './review-reviewer-selection.cjs';
 import { migrateOnDisk } from './configuration.cjs';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -32,6 +35,14 @@ interface SetConfigValueResult {
   updated: boolean;
   key: string;
   value: unknown;
+  previousValue: unknown;
+}
+
+interface UnsetConfigValueResult {
+  updated: boolean;
+  unset: true;
+  key: string;
+  value: null;
   previousValue: unknown;
 }
 
@@ -235,8 +246,9 @@ function buildNewProjectConfig(userChoices: Record<string, unknown>): Record<str
       ui_phase: true,
       ui_safety_gate: true,
       ai_integration_phase: true,
-      tdd_mode: false,
+      api_coverage_gate: true,
       human_verify_mode: 'end-of-phase',
+      context_guard_mode: 'warn',
       text_mode: false,
       research_before_questions: false,
       discuss_mode: 'discuss',
@@ -263,7 +275,7 @@ function buildNewProjectConfig(userChoices: Record<string, unknown>): Record<str
     project_code: null,
     phase_naming: 'sequential',
     agent_skills: {},
-    claude_md_path: './CLAUDE.md',
+    claude_md_path: './.claude/CLAUDE.md',
     plan_review: {
       source_grounding: true,
       source_grounding_authority: 'grep',
@@ -409,6 +421,128 @@ function cmdConfigEnsureSection(cwd: string, raw: boolean): void {
 }
 
 /**
+ * Shared helper: write a single key-path into an in-memory config object.
+ *
+ * Prototype-pollution guard: reject dangerous segments via inline literal
+ * comparisons on the exact key used to index `current`, immediately before
+ * each write. The inline comparison is the barrier CodeQL's
+ * js/prototype-pollution-utility query recognises — the previous Set-based
+ * pre-loop check was functionally correct but not traced through, so
+ * code-scanning alert #26 kept firing. Behaviour is unchanged from #663.
+ *
+ * Returns the previous value at the leaf key (undefined if absent).
+ * Never writes to disk — callers handle persistence.
+ * Calls error() (process.exit(1)) on prototype-pollution attempts.
+ */
+function _setNestedValue(
+  config: Record<string, unknown>,
+  keyPath: string,
+  parsedValue: unknown,
+): unknown {
+  const keys = keyPath.split('.');
+  let current: Record<string, unknown> = config;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const key = keys[i];
+    if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
+      error('Invalid config key (prototype pollution guard): ' + keyPath, ERROR_REASON.CONFIG_PARSE_FAILED);
+    }
+    const existingChild = current[key];
+    if (existingChild === undefined || existingChild === null || typeof existingChild !== 'object' || Array.isArray(existingChild)) {
+      current[key] = {};
+    }
+    current = current[key] as Record<string, unknown>;
+  }
+  const lastKey = keys[keys.length - 1];
+  if (lastKey === '__proto__' || lastKey === 'prototype' || lastKey === 'constructor') {
+    error('Invalid config key (prototype pollution guard): ' + keyPath, ERROR_REASON.CONFIG_PARSE_FAILED);
+  }
+  const previousValue = current[lastKey];
+  current[lastKey] = parsedValue;
+  return previousValue;
+}
+
+/**
+ * Deletes a value from the config object, allowing nested values via dot
+ * notation (e.g., "review.models.gemini"). Mirrors `_setNestedValue`'s
+ * prototype-pollution guard on every path segment (including intermediates).
+ *
+ * Unlike `_setNestedValue`, this NEVER creates missing intermediate objects —
+ * if any segment along the path is missing (or not a plain, non-array
+ * object), the key doesn't exist and we return early without mutating
+ * `config` at all.
+ *
+ * Does not prune now-empty parent objects after deletion (matches the
+ * conservative, structure-preserving behaviour callers expect from a bare
+ * unset).
+ *
+ * Returns { previousValue, existed } — existed is false when the leaf key
+ * (or an intermediate segment) was never present.
+ * Calls error() (process.exit(1)) on prototype-pollution attempts.
+ */
+function _unsetNestedValue(
+  config: Record<string, unknown>,
+  keyPath: string,
+): { previousValue: unknown; existed: boolean } {
+  const keys = keyPath.split('.');
+  let current: Record<string, unknown> = config;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const key = keys[i];
+    if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
+      error('Invalid config key (prototype pollution guard): ' + keyPath, ERROR_REASON.CONFIG_PARSE_FAILED);
+    }
+    const existingChild = current[key];
+    if (existingChild === undefined || existingChild === null || typeof existingChild !== 'object' || Array.isArray(existingChild)) {
+      // Path doesn't exist — nothing to unset, and we must not create it.
+      return { previousValue: undefined, existed: false };
+    }
+    current = existingChild as Record<string, unknown>;
+  }
+  const lastKey = keys[keys.length - 1];
+  if (lastKey === '__proto__' || lastKey === 'prototype' || lastKey === 'constructor') {
+    error('Invalid config key (prototype pollution guard): ' + keyPath, ERROR_REASON.CONFIG_PARSE_FAILED);
+  }
+  const existed = Object.prototype.hasOwnProperty.call(current, lastKey);
+  const previousValue = current[lastKey];
+  if (existed) {
+    delete current[lastKey];
+  }
+  return { previousValue, existed };
+}
+
+/**
+ * Deletes a key from the config file, allowing nested values via dot
+ * notation. Mirrors `setConfigValue`'s load/lock/write cycle.
+ *
+ * Does not call `output()`, so can be used as one step in a command without triggering `exit(0)` in
+ * the happy path. But note that `error()` will still `exit(1)` out of the process.
+ */
+function unsetConfigValue(cwd: string, keyPath: string): UnsetConfigValueResult {
+  const configPath = path.join(planningDir(cwd), 'config.json');
+
+  return withPlanningLock(cwd, () => {
+    // Load existing config or start with empty object
+    let config: Record<string, unknown> = {};
+    try {
+      if (fs.existsSync(configPath)) {
+        config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
+      }
+    } catch (err) {
+      error('Failed to read config.json: ' + (err as Error).message, ERROR_REASON.CONFIG_PARSE_FAILED);
+    }
+
+    const { previousValue, existed } = _unsetNestedValue(config, keyPath);
+
+    // Write back
+    try {
+      platformWriteSync(configPath, JSON.stringify(config, null, 2));
+      return { updated: existed, unset: true, key: keyPath, value: null, previousValue };
+    } catch (err) {
+      error('Failed to write config.json: ' + (err as Error).message);
+    }
+  }) as UnsetConfigValueResult;
+}
+
+/**
  * Sets a value in the config file, allowing nested values via dot notation (e.g.,
  * "workflow.research").
  *
@@ -429,31 +563,7 @@ function setConfigValue(cwd: string, keyPath: string, parsedValue: unknown): Set
       error('Failed to read config.json: ' + (err as Error).message, ERROR_REASON.CONFIG_PARSE_FAILED);
     }
 
-    // Set nested value using dot notation (e.g., "workflow.research").
-    // Prototype-pollution guard: reject dangerous segments via inline literal
-    // comparisons on the exact key used to index `current`, immediately before
-    // each write. The inline comparison is the barrier CodeQL's
-    // js/prototype-pollution-utility query recognises — the previous Set-based
-    // pre-loop check was functionally correct but not traced through, so
-    // code-scanning alert #26 kept firing. Behaviour is unchanged from #663.
-    const keys = keyPath.split('.');
-    let current: Record<string, unknown> = config;
-    for (let i = 0; i < keys.length - 1; i++) {
-      const key = keys[i];
-      if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
-        error('Invalid config key (prototype pollution guard): ' + keyPath, ERROR_REASON.CONFIG_PARSE_FAILED);
-      }
-      if (current[key] === undefined || typeof current[key] !== 'object') {
-        current[key] = {};
-      }
-      current = current[key] as Record<string, unknown>;
-    }
-    const lastKey = keys[keys.length - 1];
-    if (lastKey === '__proto__' || lastKey === 'prototype' || lastKey === 'constructor') {
-      error('Invalid config key (prototype pollution guard): ' + keyPath, ERROR_REASON.CONFIG_PARSE_FAILED);
-    }
-    const previousValue = current[lastKey]; // Capture previous value before overwriting
-    current[lastKey] = parsedValue;
+    const previousValue = _setNestedValue(config, keyPath, parsedValue);
 
     // Write back
     try {
@@ -463,6 +573,70 @@ function setConfigValue(cwd: string, keyPath: string, parsedValue: unknown): Set
       error('Failed to write config.json: ' + (err as Error).message);
     }
   }) as SetConfigValueResult;
+}
+
+/**
+ * Batched sibling of setConfigValue: apply multiple key-path writes in a
+ * single load → set-all → write cycle inside ONE withPlanningLock call.
+ *
+ * Returns { updated: true, results: SetConfigValueResult[] } on success.
+ * An empty entries array is a no-op and returns { updated: false, results: [] }.
+ *
+ * Prototype-pollution guards are enforced per entry (identical inline-literal
+ * guards as setConfigValue — CodeQL barrier requirement).
+ */
+function setConfigValues(
+  cwd: string,
+  entries: Array<{ keyPath: string; value: unknown }>,
+): { updated: boolean; results: SetConfigValueResult[] } {
+  if (entries.length === 0) {
+    return { updated: false, results: [] };
+  }
+
+  const configPath = path.join(planningDir(cwd), 'config.json');
+
+  return withPlanningLock(cwd, () => {
+    // Load existing config or start with empty object
+    let config: Record<string, unknown> = {};
+    try {
+      if (fs.existsSync(configPath)) {
+        config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
+      }
+    } catch (err) {
+      error('Failed to read config.json: ' + (err as Error).message, ERROR_REASON.CONFIG_PARSE_FAILED);
+    }
+
+    const results: SetConfigValueResult[] = [];
+    for (const entry of entries) {
+      const previousValue = _setNestedValue(config, entry.keyPath, entry.value);
+      results.push({ updated: true, key: entry.keyPath, value: entry.value, previousValue });
+    }
+
+    // Write back once for all entries
+    try {
+      platformWriteSync(configPath, JSON.stringify(config, null, 2));
+      return { updated: true, results };
+    } catch (err) {
+      error('Failed to write config.json: ' + (err as Error).message);
+    }
+  }) as { updated: boolean; results: SetConfigValueResult[] };
+}
+
+/**
+ * Type-safe enum guard for config-set string-enum keys.
+ *
+ * Rejects any parsedValue that is not a plain string AND a member of `allowed`.
+ * This closes the JSON-array coercion bypass: String(["val"]) === "val" satisfies
+ * a bare .includes(String(parsedValue)) check, but typeof parsedValue !== 'string'
+ * catches the array before the includes test.
+ *
+ * The `label` parameter is used verbatim in the error message so callers can
+ * preserve existing message text byte-for-byte.
+ */
+function assertEnumValue(parsedValue: unknown, rawVal: string, allowed: readonly string[], label: string): void {
+  if (typeof parsedValue !== 'string' || !allowed.includes(parsedValue)) {
+    error(`Invalid ${label} '${rawVal}'. Valid values: ${allowed.join(', ')}`);
+  }
 }
 
 /**
@@ -494,7 +668,7 @@ function cmdConfigSet(cwd: string, keyPath: string | undefined, value: string | 
 
   validateKnownConfigKeyPath(kp);
 
-  if (!isValidConfigKey(kp)) {
+  if (!isValidConfigKey(kp, cwd)) {
     error(`Unknown config key: "${kp}". Valid keys: ${[...VALID_CONFIG_KEYS].sort().join(', ')}, agent_skills.<agent-type>, features.<feature_name>`, ERROR_REASON.CONFIG_INVALID_KEY);
   }
 
@@ -502,24 +676,60 @@ function cmdConfigSet(cwd: string, keyPath: string | undefined, value: string | 
   let parsedValue: unknown = val;
   if (val === 'true') parsedValue = true;
   else if (val === 'false') parsedValue = false;
-  else if (!isNaN(Number(val)) && val !== '') parsedValue = Number(val);
+  else if (val === 'null') parsedValue = null;
+  // #1581: Number.isFinite (not !isNaN) so 'Infinity'/'-Infinity' are NOT
+  // coerced to non-finite numbers that JSON.stringify later renders as `null`
+  // (disk=null while the CLI echoed 'Infinity'). They fall through to the
+  // JSON branch (which rejects them) and stay strings, then per-key validators
+  // reject them with a non-zero exit.
+  else if (Number.isFinite(Number(val)) && val !== '') parsedValue = Number(val);
   else if (typeof val === 'string' && (val.startsWith('[') || val.startsWith('{'))) {
     try { parsedValue = JSON.parse(val); } catch { /* keep as string */ }
   }
 
-  const VALID_CONTEXT_VALUES = ['dev', 'research', 'review'];
-  if (kp === 'context' && !VALID_CONTEXT_VALUES.includes(String(parsedValue))) {
-    error(`Invalid context value '${val}'. Valid values: ${VALID_CONTEXT_VALUES.join(', ')}`);
+  // #2046: a bare `null` unsets (deletes) the key — the documented "Clear" action.
+  // Short-circuits before every typed per-key validator so clearing a typed key
+  // (enum/boolean/number) removes it rather than being rejected. Deleting (not
+  // persisting JSON null) is the correct "clear": a persisted null is still a
+  // present, truthy-adjacent value that consumers must special-case — worst for
+  // secret keys where a leftover value can be passed as a real credential.
+  if (parsedValue === null) {
+    const unsetResult = unsetConfigValue(cwd, kp);
+    if (isSecretKey(kp)) {
+      const maskedPrev = unsetResult.previousValue === undefined
+        ? undefined
+        : maskSecret(unsetResult.previousValue as Parameters<typeof maskSecret>[0]);
+      output({ ...unsetResult, value: null, previousValue: maskedPrev, masked: true }, raw, `${kp} unset`);
+      return;
+    }
+    output(unsetResult, raw, `${kp} unset`);
+    return;
   }
+
+  // #1581: project_code is an identifier string — never number-coerce it. A
+  // leading-zero code like '007' must persist verbatim (not collapse to 7).
+  if (kp === 'project_code') {
+    parsedValue = val;
+  }
+
+  const VALID_CONTEXT_VALUES = ['dev', 'research', 'review'];
+  if (kp === 'context') assertEnumValue(parsedValue, val, VALID_CONTEXT_VALUES, 'context value');
 
   // Codebase drift detector (#2003)
   const VALID_DRIFT_ACTIONS = ['warn', 'auto-remap'];
-  if (kp === 'workflow.drift_action' && !VALID_DRIFT_ACTIONS.includes(String(parsedValue))) {
-    error(`Invalid workflow.drift_action '${val}'. Valid values: ${VALID_DRIFT_ACTIONS.join(', ')}`);
-  }
+  if (kp === 'workflow.drift_action') assertEnumValue(parsedValue, val, VALID_DRIFT_ACTIONS, 'workflow.drift_action');
   if (kp === 'workflow.drift_threshold') {
     if (typeof parsedValue !== 'number' || !Number.isInteger(parsedValue) || parsedValue < 1) {
       error(`Invalid workflow.drift_threshold '${val}'. Must be a positive integer.`);
+    }
+  }
+
+  // #1581: context_window must be a finite positive integer. 'Infinity' is no
+  // longer number-coerced (see the parse block above) so it reaches here as a
+  // string and is rejected; '0', negatives, and non-integers are also rejected.
+  if (kp === 'context_window') {
+    if (typeof parsedValue !== 'number' || !Number.isFinite(parsedValue) || !Number.isInteger(parsedValue) || parsedValue < 1) {
+      error(`Invalid context_window '${val}'. Must be a positive integer (token count).`, ERROR_REASON.USAGE);
     }
   }
 
@@ -543,25 +753,21 @@ function cmdConfigSet(cwd: string, keyPath: string | undefined, value: string | 
 
   // Human verification checkpoint mode (#3309)
   const VALID_HUMAN_VERIFY_MODES = ['mid-flight', 'end-of-phase'];
-  if (kp === 'workflow.human_verify_mode' && !VALID_HUMAN_VERIFY_MODES.includes(String(parsedValue))) {
-    error(`Invalid workflow.human_verify_mode '${val}'. Valid values: ${VALID_HUMAN_VERIFY_MODES.join(', ')}`);
-  }
+  if (kp === 'workflow.human_verify_mode') assertEnumValue(parsedValue, val, VALID_HUMAN_VERIFY_MODES, 'workflow.human_verify_mode');
+
+  // Context exhaustion guard mode (#1452)
+  const VALID_CONTEXT_GUARD_MODES = ['auto', 'warn', 'off'];
+  if (kp === 'workflow.context_guard_mode') assertEnumValue(parsedValue, val, VALID_CONTEXT_GUARD_MODES, 'workflow.context_guard_mode');
 
   // Context position enum validation (#2937)
   const VALID_CONTEXT_POSITIONS = ['front', 'end'];
-  if (kp === 'statusline.context_position' && !VALID_CONTEXT_POSITIONS.includes(String(parsedValue))) {
-    error(`Invalid statusline.context_position '${val}'. Valid values: ${VALID_CONTEXT_POSITIONS.join(', ')}`);
-  }
+  if (kp === 'statusline.context_position') assertEnumValue(parsedValue, val, VALID_CONTEXT_POSITIONS, 'statusline.context_position');
 
   // Fallow scope + profile enum validation (#3424)
   const VALID_FALLOW_SCOPES = ['phase', 'repo'];
-  if (kp === 'code_quality.fallow.scope' && !VALID_FALLOW_SCOPES.includes(String(parsedValue))) {
-    error(`Invalid code_quality.fallow.scope '${val}'. Valid values: ${VALID_FALLOW_SCOPES.join(', ')}`);
-  }
+  if (kp === 'code_quality.fallow.scope') assertEnumValue(parsedValue, val, VALID_FALLOW_SCOPES, 'code_quality.fallow.scope');
   const VALID_FALLOW_PROFILES = ['minimal', 'standard', 'strict'];
-  if (kp === 'code_quality.fallow.profile' && !VALID_FALLOW_PROFILES.includes(String(parsedValue))) {
-    error(`Invalid code_quality.fallow.profile '${val}'. Valid values: ${VALID_FALLOW_PROFILES.join(', ')}`);
-  }
+  if (kp === 'code_quality.fallow.profile') assertEnumValue(parsedValue, val, VALID_FALLOW_PROFILES, 'code_quality.fallow.profile');
 
   // plan_review.source_grounding (#22) — boolean only
   if (kp === 'plan_review.source_grounding') {
@@ -572,8 +778,43 @@ function cmdConfigSet(cwd: string, keyPath: string | undefined, value: string | 
 
   // plan_review.source_grounding_authority (#22) — enum
   const VALID_SOURCE_GROUNDING_AUTHORITIES = ['grep', 'intel', 'treesitter', 'lsp', 'scip'];
-  if (kp === 'plan_review.source_grounding_authority' && !VALID_SOURCE_GROUNDING_AUTHORITIES.includes(String(parsedValue))) {
-    error(`Invalid plan_review.source_grounding_authority '${val}'. Valid values: ${VALID_SOURCE_GROUNDING_AUTHORITIES.join(', ')}`);
+  if (kp === 'plan_review.source_grounding_authority') assertEnumValue(parsedValue, val, VALID_SOURCE_GROUNDING_AUTHORITIES, 'plan_review.source_grounding_authority');
+
+  // Generic capability-registry validation (#1628). Capability-owned keys declare
+  // their type/values in the registry but most lack a hardcoded guard, so out-of-
+  // domain values (including JSON array/object coercion) were stored silently.
+  const capDef = getCapabilityConfigSchema(cwd)[kp] as { type?: string; values?: unknown[] } | undefined;
+  if (capDef && typeof capDef.type === 'string') {
+    switch (capDef.type) {
+      case 'enum':
+        if (Array.isArray(capDef.values)) {
+          assertEnumValue(parsedValue, val, capDef.values.map((v) => String(v)), kp);
+        }
+        break;
+      case 'boolean':
+        if (typeof parsedValue !== 'boolean') {
+          error(`Invalid ${kp} '${val}'. Must be a boolean (true or false).`);
+        }
+        break;
+      case 'number':
+        if (typeof parsedValue !== 'number' || !Number.isFinite(parsedValue)) {
+          error(`Invalid ${kp} '${val}'. Must be a number.`);
+        }
+        break;
+      case 'string':
+        if (typeof parsedValue !== 'string') {
+          error(`Invalid ${kp} '${val}'. Must be a string.`);
+        }
+        break;
+    }
+  }
+
+  // Security — ASVS level range (#1628)
+  // Must be an integer in {1, 2, 3} (OWASP ASVS levels).
+  if (kp === 'workflow.security_asvs_level') {
+    if (typeof parsedValue !== 'number' || !Number.isInteger(parsedValue) || parsedValue < 1 || parsedValue > 3) {
+      error(`Invalid workflow.security_asvs_level '${val}'. Must be an integer 1, 2, or 3.`);
+    }
   }
 
   if (kp === 'review.default_reviewers') {
@@ -582,6 +823,33 @@ function cmdConfigSet(cwd: string, keyPath: string | undefined, value: string | 
       error(normalized.errors[0]);
     }
     parsedValue = normalized.values;
+  }
+
+  // #1517: validate review.reviewer_instances.<name>.<field> leaves at the
+  // invocation boundary (Postel/Kerckhoffs — strict at accept). The config
+  // schema dynamic pattern admits the path; this block validates the name + the
+  // field value so a misconfigured instance is rejected at config-set time, not
+  // silently at review time. Single-source validators live in
+  // review-reviewer-selection.cjs (INSTANCE_NAME_PATTERN, KNOWN_REVIEWER_SLUGS).
+  const instanceLeaf = kp.match(/^review\.reviewer_instances\.([a-zA-Z0-9_-]+)\.(cli|model|agent)$/);
+  if (instanceLeaf) {
+    const [, instanceName, field] = instanceLeaf;
+    if (!INSTANCE_NAME_PATTERN.test(instanceName)) {
+      error(`Invalid reviewer instance name '${instanceName}'. Must match ^[a-z0-9][a-z0-9-]*$.`);
+    }
+    if (KNOWN_REVIEWER_SLUGS.includes(instanceName)) {
+      error(`Reviewer instance name '${instanceName}' must not equal a built-in reviewer slug.`);
+    }
+    if (field === 'cli') {
+      if (typeof parsedValue !== 'string' || !KNOWN_REVIEWER_SLUGS.includes(parsedValue)) {
+        error(`Invalid reviewer_instances.${instanceName}.cli '${val}'. Must be a known reviewer adapter: ${KNOWN_REVIEWER_SLUGS.join(', ')}.`);
+      }
+    } else {
+      // model | agent — opaque pass-through strings (never interpolated into shell).
+      if (typeof parsedValue !== 'string') {
+        error(`Invalid reviewer_instances.${instanceName}.${field} '${val}'. Must be a string.`);
+      }
+    }
   }
 
   const setConfigValueResult = setConfigValue(cwd, kp, parsedValue);
@@ -801,4 +1069,7 @@ export = {
   cmdConfigNewProject,
   cmdConfigPath,
   cmdMigrateConfig,
+  // Exported for programmatic use by capability-writer and tests
+  setConfigValue,
+  setConfigValues,
 };

@@ -270,12 +270,13 @@ When `workflow.tdd_mode` is enabled in config, the RED/GREEN/REFACTOR gate seque
 
 After completing a `type: tdd` plan, the executor validates the git log:
 ```bash
+_TDD_LOG=$(gsd_run query log --max-count 200)
 # Check for RED gate commit
-git log --oneline --grep="^test(${PHASE}-${PLAN})" | head -1
-# Check for GREEN gate commit  
-git log --oneline --grep="^feat(${PHASE}-${PLAN})" | head -1
+TEST_COMMIT=$(printf '%s' "$_TDD_LOG" | jq -r --arg p "test(${PHASE}-${PLAN})" '[.entries[] | select(.subject | startswith($p))] | last | .id // empty')
+# Check for GREEN gate commit
+FEAT_COMMIT=$(printf '%s' "$_TDD_LOG" | jq -r --arg p "feat(${PHASE}-${PLAN})" '[.entries[] | select(.subject | startswith($p))] | last | .id // empty')
 # Check for optional REFACTOR gate commit
-git log --oneline --grep="^refactor(${PHASE}-${PLAN})" | head -1
+REFACTOR_COMMIT=$(printf '%s' "$_TDD_LOG" | jq -r --arg p "refactor(${PHASE}-${PLAN})" '[.entries[] | select(.subject | startswith($p))] | last | .id // empty')
 ```
 
 If RED or GREEN gate commits are missing, add a `## TDD Gate Compliance` section to SUMMARY.md with the violation details.

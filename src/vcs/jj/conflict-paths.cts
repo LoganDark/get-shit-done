@@ -8,11 +8,17 @@
  * helper without violating UPSTREAM-02 (no `from '../backends/jj'` imports
  * inside `sdk/src/vcs/jj/*`).
  *
- * Behavior preserved verbatim:
- *  - primary: `jj resolve --list -r <rev>` (jj 0.41 path)
- *  - fallback: `jj diff -r <rev> --summary` filtered for `C ` status
- *    (IN-04: `U` removed in 0.41 — never emitted on `diff --summary`)
- *  - WR-04: returns `['<UNRESOLVABLE>']` when neither form succeeds
+ * Enumeration: `jj resolve --list -r <rev>` (sole form; jj has no template
+ * mode for conflict listing). WR-04: returns `['<UNRESOLVABLE>']` when the
+ * command fails or prints nothing — callers gate on the `conflicts()` revset
+ * FIRST (see parallel.ts fan-in stage 1), so the sentinel only surfaces for
+ * revs the revset already flagged as conflicted.
+ *
+ * VCS-audit follow-up 2026-07-08 (operator decision — remove unreachable
+ * code): the historical `jj diff -r <rev> --summary` fallback is DELETED.
+ * It was dormant on every probe since jj 0.41, and its `C `-line filter was
+ * semantically wrong anyway — `C` in summary output means *copied*, not
+ * conflicted, so had the branch ever fired it would have enumerated copies.
  *
  * UPSTREAM-02 sidecar discipline: this file does NOT import from
  * `backends/jj.ts`. The mandatory-flags prefix is inlined verbatim per the
@@ -30,44 +36,35 @@ function jjArgvFlags(repo: string): string[] {
 }
 
 /**
- * Enumerate the conflicted-path list at a revision.
+ * Enumerate the conflicted-path list at a revision via
+ * `jj resolve --list -r <rev>`.
  *
- * Primary path: `jj resolve --list -r <rev>` — succeeds on every probe under
- * jj 0.41 in practice. Fallback path: `jj diff -r <rev> --summary` filtered
- * for the `C` status letter (IN-04: `U` removed — jj 0.41 never emits it on
- * `diff --summary`). WR-04: returns `['<UNRESOLVABLE>']` when `conflicts()`
- * flagged the rev but neither enumeration form yielded paths — surfaces
- * drift rather than silently passing `[]` to the downstream verify gate.
+ * Line format (empirically verified, jj 0.42 — the path is NOT quoted and
+ * may contain single spaces; the description column is padded with 2+
+ * spaces for alignment):
+ *
+ *     con flict.txt    2-sided conflict
+ *     plain.txt        2-sided conflict
+ *
+ * Path extraction strips the column-aligned `N-sided conflict…` description
+ * by its known grammar. (The old `/^(\S+)/` extraction truncated spaced
+ * paths at the first space — `con flict.txt` came back as `con`.) When a
+ * line does not carry the description suffix, the whole trimmed line passes
+ * through — format drift then surfaces as a bogus path at the downstream
+ * verify gate instead of being silently mangled.
+ *
+ * WR-04: returns `['<UNRESOLVABLE>']` when the command fails or prints
+ * nothing — callers gate on the `conflicts()` revset first, so an empty
+ * enumeration on a revset-flagged rev surfaces drift rather than silently
+ * passing `[]` to the verify gate.
  */
 export function enumerateConflictedPaths(cwd: string, rev: string): string[] {
-	// Primary: jj resolve --list -r <rev>
-	const primaryArgs = [...jjArgvFlags(cwd), 'resolve', '--list', '-r', rev];
-	const primary = vcsExec(cwd, 'jj', primaryArgs);
-	if (primary.exitCode === 0 && primary.stdout.trim().length > 0) {
-		return primary.stdout
-			.split('\n')
-			.map((s) => s.trim())
-			.filter(Boolean)
-			.map((line) => {
-				// Output: `<path>   <conflict description>` — extract path only.
-				const m = /^(\S+)/.exec(line);
-				return m ? m[1] : line;
-			});
-	}
-	// Fallback: jj diff -r <rev> --summary, filter for the C status letter.
-	// IN-04: `U` removed — jj 0.41 never emits it on `diff --summary`.
-	const fallbackArgs = [...jjArgvFlags(cwd), 'diff', '-r', rev, '--summary'];
-	const fallback = vcsExec(cwd, 'jj', fallbackArgs);
-	if (fallback.exitCode !== 0) return ['<UNRESOLVABLE>'];
-	const paths = fallback.stdout
+	const args = [...jjArgvFlags(cwd), 'resolve', '--list', '-r', rev];
+	const r = vcsExec(cwd, 'jj', args);
+	if (r.exitCode !== 0 || r.stdout.trim().length === 0) return ['<UNRESOLVABLE>'];
+	return r.stdout
 		.split('\n')
+		.map((s) => s.trim())
 		.filter(Boolean)
-		.map((line) => {
-			const m = /^C (.+)$/.exec(line);
-			return m ? m[1] : '';
-		})
-		.filter(Boolean);
-	// WR-04: conflicts() flagged this rev but no enumeration form yielded
-	// anything — surface drift rather than silently passing [] to the verify gate.
-	return paths.length > 0 ? paths : ['<UNRESOLVABLE>'];
+		.map((line) => line.replace(/\s{2,}\d+-sided conflict.*$/, ''));
 }

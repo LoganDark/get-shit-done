@@ -369,7 +369,7 @@ GSD는 LLM 시스템 프롬프트가 되는 마크다운 파일을 생성합니�
 - `gsd-prompt-guard.js` — `.planning/`에 대한 Write/Edit 호출에서 인젝션 패턴 스캔 (항상 활성, 자문 전용)
 - `gsd-workflow-guard.js` — GSD 워크플로우 컨텍스트 외부에서 파일 편집 시 경고 (`hooks.workflow_guard`를 통한 옵트인)
 
-**CI 스캐너:** `prompt-injection-scan.test.cjs`는 모든 에이전트, 워크플로우, 명령어 파일에서 삽입된 인젝션 벡터를 스캔합니다.
+**CI 스캐너:** `prompt-injection-scan.security.test.cjs`는 모든 에이전트, 워크플로우, 명령어 파일에서 삽입된 인젝션 벡터를 스캔합니다.
 
 ---
 
@@ -474,8 +474,8 @@ claude --dangerously-skip-permissions
 ### 기존 코드베이스
 
 ```bash
-/gsd-map-codebase           # Analyse what exists (parallel agents)
-/gsd-new-project            # Questions focus on what you're ADDING
+/gsd-onboard                # Safely map, ingest docs, and initialize planning
+# Follow printed handoff commands, then rerun /gsd-onboard
 # (normal phase workflow from here)
 ```
 
@@ -864,7 +864,8 @@ All subagent/executor commits MUST use `--no-verify`.
     themes/
       default.css         # Shared CSS variables for all sketches
     MANIFEST.md           # Index of all sketches with winners
-  codebase/               # Brownfield codebase mapping (from /gsd-map-codebase)
+  codebase/               # Brownfield codebase mapping (from /gsd-map-codebase or /gsd-onboard)
+  onboarding/             # Brownfield onboarding summary (from /gsd-onboard)
   phases/
     XX-phase-name/
       XX-YY-PLAN.md       # Atomic execution plans

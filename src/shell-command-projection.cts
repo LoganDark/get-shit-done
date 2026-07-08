@@ -13,8 +13,11 @@
  * 19-07 AUDIT-01 disposition — substrate:adapter-internal exec seam (mirrors
  * the fork sdk/src/vcs/exec.ts precedent). This module's `execGit` is the
  * upstream-side spawn substrate consumed ONLY by the ledgered substrate
- * modules (worktree-safety.cts, worktree-base-ref.cts); all production
- * command modules route VCS reads/writes through src/vcs/ (createVcsAdapter).
+ * modules (VCS-audit 2026-07-08 recount: worktree-safety.cts,
+ * worktree-base-ref.cts, git-base-branch.cts base-branch ladder,
+ * capability-source.cts git-as-transport); all production command modules
+ * route VCS reads/writes through src/vcs/ (createVcsAdapter), which has its
+ * own exec.cts seam and does not consume this one.
  * Pitfall 10: the execGit signature and SpawnResultOutput shape here are
  * load-bearing for tests/mocks — do not reshape.
  */
@@ -32,16 +35,20 @@ import childProcess from 'node:child_process';
  * runtime/shell combination.
  *
  * Current evidence-backed policy:
- * - Gemini on Windows requires `& ` for quoted node/bash runners.
- * - Claude Code on Windows does NOT: its hook commands execute under bash/Git
- *   Bash and `& ` breaks there (#3413).
+ * - Claude Code on Windows does NOT need it: its hook commands execute under
+ *   bash/Git Bash and `& ` breaks there (#3413).
+ * - #1928: Gemini CLI — the ONLY runtime with a verified need for the `& `
+ *   prefix on Windows — was removed (Google sunset it 2026-06-18). No currently
+ *   supported runtime has a verified need, so this seam is now inert. It is
+ *   retained (not deleted) so a future runtime with a verified need is a
+ *   one-line re-enable, per the conservative policy below. Note: Antigravity —
+ *   the Gemini-backend successor — never matched the old `runtime === 'gemini'`
+ *   check, so its behavior (no prefix) is unchanged.
  *
  * Keep the policy conservative until another runtime has a verified need.
  */
-export function hookCommandNeedsPowerShellCallOperator(opts: { platform?: string; runtime?: string } = {}): boolean {
-  const platform = opts.platform || process.platform;
-  const runtime = opts.runtime || 'generic';
-  return platform === 'win32' && runtime === 'gemini';
+export function hookCommandNeedsPowerShellCallOperator(_opts: { platform?: string; runtime?: string } = {}): boolean {
+  return false;
 }
 
 /**
@@ -104,7 +111,7 @@ export function formatManagedHookScriptToken(scriptPath: string, opts: { platfor
 
 export function projectLocalHookPrefix({ runtime = 'claude', dirName }: { runtime?: string; dirName?: string | null }): string | undefined | null {
   if (!dirName) return dirName;
-  return (runtime === 'gemini' || runtime === 'antigravity')
+  return (runtime === 'antigravity')
     ? dirName
     : `"$CLAUDE_PROJECT_DIR"/${dirName}`;
 }
@@ -227,12 +234,25 @@ function managedHookCommandSurfaceSet(surface: string = 'settings-json', include
   return new Set([...base, ...aliases]);
 }
 
-export function isManagedHookCommand(commandText: unknown, opts: { surface?: string; includeLegacyAliases?: boolean; configDir?: string } = {}): boolean {
+export function isManagedHookCommand(commandText: unknown, opts: { surface?: string; includeLegacyAliases?: boolean; configDir?: string; args?: unknown[] } = {}): boolean {
   if (typeof commandText !== 'string') return false;
   const surface = opts.surface || 'settings-json';
   const includeLegacyAliases = opts.includeLegacyAliases === true;
   const managedBasenames = managedHookCommandSurfaceSet(surface, includeLegacyAliases);
   if (!managedBasenames || managedBasenames.size === 0) return false;
+
+  // args-form check: the managed hook filename may appear in args[] rather than
+  // in command when a windowless launcher wraps the Node invocation. (#976)
+  // Only treat as managed when an arg basename matches the managed hook set —
+  // prevents false-positives for non-GSD entries that happen to share a path segment.
+  if (Array.isArray(opts.args) && opts.args.length > 0) {
+    for (const arg of opts.args) {
+      if (typeof arg !== 'string') continue;
+      const argBasename = arg.replace(/\\/g, '/').split('/').pop() || '';
+      if (isManagedHookBasename(argBasename, { surface })) return true;
+    }
+  }
+
   const normalizedCommand = commandText.replace(/\\/g, '/');
 
   if (typeof opts.configDir === 'string' && opts.configDir.length > 0) {
@@ -247,6 +267,15 @@ export function isManagedHookCommand(commandText: unknown, opts: { surface?: str
   }
   return false;
 }
+
+/**
+ * Detect a `"$VAR"/rest` anchored hook-script token — a path whose leading
+ * shell variable is already double-quoted with the remainder left bare (the
+ * shape `projectLocalHookPrefix` emits for local installs, e.g.
+ * `"$CLAUDE_PROJECT_DIR"/.claude/hooks/gsd-x.js`). Such a token is ALREADY a
+ * valid, correctly-quoted shell argument and must never be re-quoted.
+ */
+const ANCHORED_HOOK_SCRIPT_TOKEN = /^"\$[A-Za-z_][A-Za-z0-9_]*"\//;
 
 /**
  * Projection helper for legacy settings.json hook rewrites.
@@ -270,8 +299,20 @@ export function projectLegacySettingsHookCommand({
 }): string | null {
   if (!absoluteRunner || !scriptPath) return null;
   const normalizedScriptPath = platform === 'win32' ? scriptPath.replace(/\\/g, '/') : scriptPath;
+  // #1693: a script path already carrying a `"$CLAUDE_PROJECT_DIR"`-anchored
+  // quoted prefix (local installs) is already a valid shell token — only the
+  // variable is quoted, the rest is bare. JSON.stringify-ing it on Windows
+  // yields `"\"$CLAUDE_PROJECT_DIR\"/..."` (escaped quotes inside an outer
+  // quote); node then receives an argument that *starts* with a `"`, treats it
+  // as relative, and dies with MODULE_NOT_FOUND. Emit anchored tokens verbatim;
+  // only bare absolute paths (which may contain spaces, e.g. "Program Files")
+  // need the JSON.stringify quoting. Scoped to win32: the non-Windows branch
+  // already preserves the caller's `scriptToken` (which is the bare anchored
+  // token for these inputs), so it never had the double-quote bug.
   const commandScriptToken = platform === 'win32'
-    ? JSON.stringify(normalizedScriptPath)
+    ? (ANCHORED_HOOK_SCRIPT_TOKEN.test(normalizedScriptPath)
+        ? normalizedScriptPath
+        : JSON.stringify(normalizedScriptPath))
     : (scriptToken || JSON.stringify(normalizedScriptPath));
   return projectShellCommandText({
     runnerToken: absoluteRunner,
@@ -370,6 +411,16 @@ export function projectPathActionProjection({
         label: 'bash',
         shell: 'bash',
         command: `echo 'export PATH="${bashTargetDir}:$PATH"' >> ~/.bashrc`,
+      },
+      // #323: fish has no `export`/`$PATH`-list syntax. `fish_add_path` is the
+      // fish-native API (>= fish 3.2, 2021) that persists to the universal
+      // variable store and de-duplicates. The directory is single-quoted with
+      // the same POSIX literal escaping as the zsh/bash siblings — `'\''` is
+      // also a valid escaped single quote in fish between quote spans.
+      {
+        label: 'fish',
+        shell: 'fish',
+        command: `fish_add_path '${bashTargetDir}'`,
       },
     ];
   } else {
@@ -545,17 +596,86 @@ export function normalizeContent(filePath: string, content: string, opts: { enco
   return { content: normalized, encoding };
 }
 
+// Rename errnos that are transient on Windows: a concurrent reader (or an AV
+// scanner / indexer) holding the target open makes renameSync fail briefly.
+// Same idiom as capability-ledger.cts / capability-consent.cts.
+const RENAME_RETRY_ERRNOS = new Set(['EPERM', 'EBUSY', 'EACCES']);
+const RENAME_MAX_ATTEMPTS = 3;
+const RENAME_RETRY_BACKOFF_MS = 50;
+
+/** Synchronous best-effort backoff sleep (Atomics.wait — same idiom as io.cts). */
+let _renameSleepBuf: Int32Array | null = null;
+function renameBackoff(): void {
+  if (_renameSleepBuf === null) _renameSleepBuf = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(_renameSleepBuf, 0, 0, RENAME_RETRY_BACKOFF_MS);
+}
+
+/**
+ * Atomic publish with bounded retry on transient Windows lock errnos.
+ * Returns null on success, or the final error if every attempt failed.
+ */
+function atomicRenameWithRetry(tmpPath: string, filePath: string): NodeJS.ErrnoException | null {
+  let renameErr: NodeJS.ErrnoException | null = null;
+  for (let attempt = 1; attempt <= RENAME_MAX_ATTEMPTS; attempt++) {
+    try {
+      fs.renameSync(tmpPath, filePath);
+      return null;
+    } catch (err) {
+      renameErr = err as NodeJS.ErrnoException;
+      if (attempt < RENAME_MAX_ATTEMPTS && RENAME_RETRY_ERRNOS.has(renameErr.code ?? '')) {
+        renameBackoff();
+        continue;
+      }
+      break;
+    }
+  }
+  return renameErr;
+}
+
+/**
+ * Drop-in replacement for `fs.renameSync(from, to)` that retries the transient
+ * Windows lock errnos (EPERM/EBUSY/EACCES — see DEFECT.WINDOWS-FS-OPS) a bounded
+ * number of times with a short backoff before rethrowing the final error.
+ *
+ * Idempotent on POSIX (the transient errnos do not occur), so callers retain
+ * identical semantics on macOS/Linux while gaining resilience on Windows where
+ * an antivirus scanner, indexer, or concurrent reader may briefly hold the
+ * target open. Enforced by local/require-fs-op-fallback (ADR-1703 Phase 6).
+ */
+export function retryRenameSync(fromPath: string, toPath: string): void {
+  const err = atomicRenameWithRetry(fromPath, toPath);
+  if (err !== null) throw err;
+}
+
 export function platformWriteSync(filePath: string, content: string, opts: { encoding?: BufferEncoding } = {}): void {
   const { content: normalized, encoding } = normalizeContent(filePath, content, opts);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const tmpPath = filePath + '.tmp.' + process.pid;
+
+  // Step 1: write the sibling tmp file. If THIS fails, nothing was published, so a
+  // direct fallback write cannot truncate a concurrent reader of an existing file.
   try {
     fs.writeFileSync(tmpPath, normalized, encoding);
-    fs.renameSync(tmpPath, filePath);
   } catch {
     try { fs.unlinkSync(tmpPath); } catch { /* already gone */ }
     fs.writeFileSync(filePath, normalized, encoding);
+    return;
   }
+
+  // Step 2: atomic publish, retrying transient Windows locks.
+  const renameErr = atomicRenameWithRetry(tmpPath, filePath);
+  if (renameErr === null) return;
+
+  try { fs.unlinkSync(tmpPath); } catch { /* already gone */ }
+  if (RENAME_RETRY_ERRNOS.has(renameErr.code ?? '')) {
+    // A live reader still holds the target open after every retry. A non-atomic
+    // direct write here would truncate that reader (the exact corruption this seam
+    // exists to prevent), so surface the error instead of falling back.
+    throw renameErr;
+  }
+  // Atomic publish is genuinely impossible here (e.g. EXDEV cross-device move):
+  // fall back to a direct write to preserve write availability.
+  fs.writeFileSync(filePath, normalized, encoding);
 }
 
 export function platformReadSync(filePath: string, opts: { encoding?: BufferEncoding; required?: boolean } = {}): string | null {

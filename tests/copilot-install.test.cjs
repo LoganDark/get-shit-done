@@ -25,6 +25,7 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { parseFrontmatter, createTempDir, cleanup } = require('./helpers.cjs');
+const { listAgentFiles } = require('./helpers/agent-roster.cjs');
 
 const {
   getDirName,
@@ -43,12 +44,13 @@ const {
   writeCopilotHookConfig,
   writeManifest,
   reportLocalPatches,
-  installRuntimeArtifacts,
   runtimeMap,
   allRuntimes,
   parseRuntimeInput,
   buildRuntimePromptText,
 } = require('../bin/install.js');
+
+const { installRuntimeArtifacts } = require('../gsd-core/bin/lib/install-engine.cjs');
 
 const { getGlobalConfigDir } = require('../gsd-core/bin/lib/runtime-homes.cjs');
 
@@ -68,7 +70,7 @@ describe('getDirName (Copilot)', () => {
   test('does not break existing runtimes', () => {
     assert.strictEqual(getDirName('claude'), '.claude');
     assert.strictEqual(getDirName('opencode'), '.opencode');
-    assert.strictEqual(getDirName('gemini'), '.gemini');
+    assert.strictEqual(getDirName('antigravity'), '.agents');
     assert.strictEqual(getDirName('kilo'), '.kilo');
     assert.strictEqual(getDirName('codex'), '.codex');
   });
@@ -170,7 +172,7 @@ describe('getConfigDirFromHome (Copilot)', () => {
   test('does not break existing runtimes', () => {
     assert.strictEqual(getConfigDirFromHome('opencode', true), "'.config', 'opencode'");
     assert.strictEqual(getConfigDirFromHome('claude', true), "'.claude'");
-    assert.strictEqual(getConfigDirFromHome('gemini', true), "'.gemini'");
+    assert.strictEqual(getConfigDirFromHome('cursor', true), "'.cursor'");
     assert.strictEqual(getConfigDirFromHome('kilo', true), "'.config', 'kilo'");
     assert.strictEqual(getConfigDirFromHome('codex', true), "'.codex'");
   });
@@ -538,7 +540,7 @@ description: Test skill
 
 Check ~/.claude/settings and ./.claude/local and $HOME/.claude/global.`;
 
-    const result = convertClaudeCommandToCopilotSkill(input, 'gsd-test', true);
+    const result = convertClaudeCommandToCopilotSkill(input, 'gsd-test', null, null, true);
     assert.ok(result.includes('~/.copilot/settings'), 'tilde path converted to global');
     assert.ok(result.includes('./.github/local'), 'dot-slash path converted');
     assert.ok(result.includes('$HOME/.copilot/global'), '$HOME path converted to global');
@@ -770,7 +772,7 @@ describe('installRuntimeArtifacts (copilot integration)', () => {
       'description preserved (round-trips through #2876 yamlQuote)',
     );
     // argument-hint round-trips
-    assert.equal(fm['argument-hint'], '[--from N] [--to N] [--only N] [--interactive]', 'argument-hint round-trips');
+    assert.equal(fm['argument-hint'], '[--from N] [--to N] [--only N] [--interactive] [--converge]', 'argument-hint round-trips');
     // allowed-tools comma-separated
     assert.ok(skillContent.includes('allowed-tools: Read, Write, Bash, Glob, Grep, AskUserQuestion, Agent'),
       'allowed-tools is comma-separated');
@@ -857,10 +859,11 @@ describe('Copilot agent conversion - real files', () => {
   });
 
   test('all 18 agents convert without error', () => {
+    // Not the shared listAgentFiles() helper: this needs full `.md` filenames
+    // (not stripped basenames) to readFileSync each agent below.
     const agents = fs.readdirSync(agentsSrc)
       .filter(f => f.startsWith('gsd-') && f.endsWith('.md'));
-    const expectedAgentCount = fs.readdirSync(agentsSrc)
-      .filter(f => f.startsWith('gsd-') && f.endsWith('.md')).length;
+    const expectedAgentCount = listAgentFiles(agentsSrc).length;
     assert.strictEqual(agents.length, expectedAgentCount, `expected ${expectedAgentCount} agents, got ${agents.length}`);
 
     for (const agentFile of agents) {
@@ -1350,8 +1353,8 @@ const crypto = require('crypto');
 const INSTALL_PATH = path.join(__dirname, '..', 'bin', 'install.js');
 const EXPECTED_SKILLS = fs.readdirSync(path.join(__dirname, '..', 'commands', 'gsd'))
   .filter(f => f.endsWith('.md')).length;
-const EXPECTED_AGENTS = fs.readdirSync(path.join(__dirname, '..', 'agents'))
-  .filter(f => f.startsWith('gsd-') && f.endsWith('.md')).length;
+// Source-roster count (gsd-*.md basenames) — shared helper.
+const EXPECTED_AGENTS = listAgentFiles().length;
 
 function runCopilotInstall(cwd) {
   const env = { ...process.env };
@@ -1438,6 +1441,7 @@ describe('E2E: Copilot full install verification', () => {
       'gsd-framework-selector.agent.md',
       'gsd-integration-checker.agent.md',
       'gsd-intel-updater.agent.md',
+      'gsd-mempalace-curator.agent.md',
       'gsd-nyquist-auditor.agent.md',
       'gsd-pattern-mapper.agent.md',
       'gsd-phase-researcher.agent.md',
@@ -1805,5 +1809,63 @@ describe('Claude uninstall preserves user-generated files (#1423)', () => {
     // Directories should be fully removed when no user files to preserve
     assert.ok(!fs.existsSync(gsdDir), 'gsd-core/ should not exist after clean uninstall');
     assert.ok(!fs.existsSync(cmdDir), 'commands/gsd/ should not exist after clean uninstall');
+  });
+});
+
+// ─── #1182 regression: agent converters accessible via module path ────────────
+// These tests require convertClaudeAgentToCopilotAgent and its dependency closure
+// (claudeToCopilotTools, convertCopilotToolName) THROUGH the runtime-artifact-conversion
+// module export — not via bin/install.js. Before the fix, the module returned
+// undefined for all three, causing ReferenceError when called.
+
+describe('#1182 convertClaudeAgentToCopilotAgent exported from runtime-artifact-conversion module', () => {
+  const _gsdLibDirModule = path.join(__dirname, '..', 'gsd-core', 'bin', 'lib');
+  const conversionModule = require(path.join(_gsdLibDirModule, 'runtime-artifact-conversion.cjs'));
+
+  test('module exports claudeToCopilotTools table', () => {
+    assert.strictEqual(typeof conversionModule.claudeToCopilotTools, 'object', 'claudeToCopilotTools must be exported');
+    assert.ok(conversionModule.claudeToCopilotTools !== null, 'not null');
+    assert.strictEqual(conversionModule.claudeToCopilotTools['Read'], 'read', 'Read maps to read');
+    assert.strictEqual(conversionModule.claudeToCopilotTools['Bash'], 'execute', 'Bash maps to execute');
+  });
+
+  test('module exports convertCopilotToolName function', () => {
+    assert.strictEqual(typeof conversionModule.convertCopilotToolName, 'function', 'convertCopilotToolName must be exported');
+    assert.strictEqual(conversionModule.convertCopilotToolName('Read'), 'read', 'maps Read -> read');
+    assert.strictEqual(conversionModule.convertCopilotToolName('Bash'), 'execute', 'maps Bash -> execute');
+    assert.strictEqual(conversionModule.convertCopilotToolName('mcp__context7__resolve-library-id'), 'io.github.upstash/context7/resolve-library-id', 'mcp__context7__ prefix mapped');
+  });
+
+  test('module exports convertClaudeAgentToCopilotAgent function', () => {
+    assert.strictEqual(typeof conversionModule.convertClaudeAgentToCopilotAgent, 'function', 'convertClaudeAgentToCopilotAgent must be exported');
+  });
+
+  test('convertClaudeAgentToCopilotAgent via module produces correct output (local mode)', () => {
+    const input = `---\nname: gsd-executor\ndescription: Executes GSD plans\ntools: Read, Write, Edit, Bash, Grep, Glob\ncolor: yellow\n---\n\nAgent body.`;
+    const result = conversionModule.convertClaudeAgentToCopilotAgent(input);
+    // Tools must be mapped and deduplicated
+    assert.ok(result.includes("tools: ['read', 'edit', 'execute', 'search']"), `expected mapped tools in: ${result}`);
+    assert.ok(result.includes('name: gsd-executor'), 'name preserved');
+    assert.ok(result.includes('color: yellow'), 'color preserved');
+  });
+
+  test('convertClaudeAgentToCopilotAgent via module applies path/command conversions (global mode)', () => {
+    const input = `---\nname: gsd-test\ndescription: Test\ntools: Read\n---\n\nCheck ~/.claude/settings and run gsd:health.`;
+    const result = conversionModule.convertClaudeAgentToCopilotAgent(input, true);
+    assert.ok(result.includes('~/.copilot/settings'), 'CONV-06 applied in global mode');
+    assert.ok(result.includes('gsd-health'), 'CONV-07 applied');
+  });
+
+  // Parity assertion: claudeToCopilotTools in module matches the table in bin/install.js
+  // Per DEFECT.GENERATIVE-FIX: shared constant across two surfaces needs a parity guard.
+  test('claudeToCopilotTools parity: module table matches bin/install.js table', () => {
+    const installJs = require('../bin/install.js');
+    const moduleTable = conversionModule.claudeToCopilotTools;
+    const installTable = installJs.claudeToCopilotTools;
+    assert.deepStrictEqual(
+      moduleTable,
+      installTable,
+      'claudeToCopilotTools must be identical in module and bin/install.js',
+    );
   });
 });

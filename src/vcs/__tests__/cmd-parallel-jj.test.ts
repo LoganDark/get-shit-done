@@ -308,10 +308,10 @@ describe.sequential.skipIf(!jjAvailable)(
 			expect(result.conflicted).toBe(true);
 			// ── Assertion (ii): conflictedPaths populated. The
 			// `enumerateConflictedPaths` sidecar (jj/conflict-paths.ts) returns
-			// either the actual file path or `'<UNRESOLVABLE>'` if neither the
-			// `jj resolve --list` nor the `jj diff --summary` enumeration form
-			// succeeded. Both forms are acceptable here — the load-bearing
-			// invariant is "the array is non-empty".
+			// either the actual file path or `'<UNRESOLVABLE>'` when the
+			// `jj resolve --list` enumeration fails or prints nothing. Both
+			// outcomes are acceptable here — the load-bearing invariant is
+			// "the array is non-empty".
 			expect(result.conflictedPaths.length).toBeGreaterThan(0);
 			expect(
 				result.conflictedPaths.some(

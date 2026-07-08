@@ -20,7 +20,7 @@ describe('release-coverage-scope', () => {
       t.skip('release.yml dropped from the fork (org-automation release train; ledgered)');
       return;
     }
-    const lines = fs.readFileSync(RELEASE_WORKFLOW, 'utf8').split('\n').map(l => l.trim());
+    const lines = fs.readFileSync(RELEASE_WORKFLOW, 'utf8').split(/\r?\n/).map(l => l.trim());
     const bareCount = lines.filter(l => l === 'npm run test:coverage').length;
     const unitCount = lines.filter(l => l === 'npm run test:coverage:unit').length;
     assert.strictEqual(bareCount, 0,

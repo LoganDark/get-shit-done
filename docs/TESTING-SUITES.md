@@ -29,6 +29,105 @@ Examples:
 
 The suite-suffix convention was chosen over a directory layout (`tests/security/`) so the 545+ existing test files don't need to move. Existing files all classify as `unit` until someone explicitly retags them.
 
+## Regression tests
+
+**Do not create new top-level `tests/bug-NNNN-*.test.cjs` files.** Add the
+regression case to the owning module's main test file instead (e.g. a
+`describe('regressions')` block in `tests/<module>.test.cjs`).
+
+`node --test` spawns one child process per FILE, so file count — not test
+count — is the unit of CI overhead, and it is worst on Windows lanes where
+every spawn is Defender-scanned. The 2026-06 CI audit found 244 one-off
+`bug-*` files (~38% of the suite). That population is grandfathered in
+`scripts/lint-regression-test-names.allowlist.json` and enforced by an
+identity ratchet (`npm run lint:regression-names`, part of `npm run lint:ci`):
+
+- A **new** `bug-*` file fails CI — fold it into the owning module's file.
+- **Deleting/consolidating** a grandfathered file requires pruning its
+  allowlist entry, so the baseline only ever shrinks.
+- **Inherited drift** (the failure names files your PR didn't add — e.g. the
+  base branch merged `bug-*` files without feeding the allowlist, or you
+  rebased and carried a pre-rebase allowlist): run
+  `node scripts/lint-regression-test-names.cjs --update` and commit the
+  regenerated allowlist. Snapshot artifacts like this allowlist (and
+  `docs/INVENTORY.md`) must be regenerated **after** rebasing, never carried
+  through a rebase.
+
+The ratchet deliberately covers only `bug-*`. Files named `feat-NNNN-*` /
+`enh-NNNN-*` are *feature* test files — one (or one per suite) per feature is
+the sanctioned layout (see the #443 strategy below), not a one-off regression
+pattern. If `issue-*`/`perf-*` one-offs start accumulating the same way
+`bug-*` did, extend the ratchet's regex and regenerate the allowlist.
+
+## Workflow & agent size budget
+
+> Tracked by issue [#1074](https://github.com/open-gsd/gsd-core/issues/1074).
+> Bytes (not lines) per [#717](https://github.com/open-gsd/gsd-core/issues/717);
+> LF-normalized per [#683](https://github.com/open-gsd/gsd-core/issues/683).
+
+Workflow files (`gsd-core/workflows/*.md`) and agent files (`agents/gsd-*.md`)
+both ship in the installed runtime and are loaded into context — workflows on
+every command, agents on every subagent dispatch — so their byte size is a real
+cost. Two sibling guards (`tests/workflow-size-budget.test.cjs` and
+`tests/agent-size-budget.test.cjs`) keep that cost from creeping up invisibly,
+sharing one byte-counter (`measureMdFiles`) and one `npm run size:baseline`
+command that regenerates **both** snapshots. Each is an **anti-creep ratchet**,
+sibling to the regression-name ratchet above — three layers (workflows), ordered
+from day-to-day to last-resort:
+
+| Layer | What it does | Where |
+|---|---|---|
+| **Per-file baseline** (primary) | Pins every workflow's *exact* current size in a committed snapshot. Any growth, shrink, add, or removal fails until the snapshot is regenerated — so sub-ceiling creep is caught by name and delta, not just at the tier's single largest file. | `tests/workflow-size-baseline.json` |
+| **Loose tier hard caps** (backstop) | Absolute outer red lines per tier — `XL ≤ 98304`, `LARGE ≤ 61440`, `DEFAULT ≤ 40960` bytes. Unlike the old tighten-only ceiling, a cap is **never raised** when a file approaches it: crossing it means *extract*, not bump. | `XL/LARGE/DEFAULT_CAP` |
+| **New-file cap** | A workflow not yet in the baseline must stay under `32768` bytes (the Codex `project_doc_max_bytes` anchor) unless explicitly tiered into `XL_WORKFLOWS`/`LARGE_WORKFLOWS` in the same PR. Keeps net-new orchestrators from being born oversized. | `NEW_FILE_CAP` |
+
+`discuss-phase.md` additionally has a thin-dispatcher target of `< 32000` bytes
+(the discuss-phase progressive-disclosure split, #717).
+
+**Agents** (`tests/agent-size-budget.test.cjs`) use the same per-agent baseline
+(`tests/agent-size-baseline.json`) + loose tier hard caps — `XL ≤ 57344` /
+`LARGE ≤ 49152` / `DEFAULT ≤ 24576` bytes. There is no new-agent cap: a net-new
+agent is DEFAULT-tier and already bounded by the DEFAULT cap. (This is distinct
+from the separate 45 KB-*char* extraction-evidence threshold on `gsd-planner`
+enforced by `tests/planner-decomposition.test.cjs` — that one proves mode
+sections were extracted; this one bounds total agent bytes.)
+
+### How-to: a workflow or agent grew and CI is red
+
+The baseline guard reports the file and the byte delta (the same flow for both
+the workflow and agent guards). To resolve:
+
+1. **Regenerate the snapshot** and inspect the one-line diff:
+   ```bash
+   npm run size:baseline
+   git diff tests/workflow-size-baseline.json
+   ```
+2. **Justify the growth in your PR** (a sentence in the description is enough) —
+   the committed baseline diff is the review record that the larger size was a
+   deliberate, seen decision, not silent drift.
+3. **Or shrink it instead of baselining.** Prefer extraction when the growth is
+   incidental: for a workflow, move per-mode bodies to `workflows/<name>/modes/`,
+   templates to `workflows/<name>/templates/`, and shared prose to
+   `gsd-core/references/`; for an agent, lift shared boilerplate into
+   `gsd-core/references/` and `@`-reference it — then load it **LAZILY**. Do *not* convert them to eager `@-required_reading`
+   includes: that shrinks the file's bytes without shrinking loaded context, so
+   it games the guard while making the real cost worse. See
+   `workflows/discuss-phase/` for the progressive-disclosure pattern.
+
+If a hard cap (not the baseline) is what failed, regeneration will **not** help —
+that is the signal to extract, per step 3.
+
+### Reference
+
+| Artifact | Role |
+|---|---|
+| `scripts/workflow-size.cjs` | Single source of truth — LF-normalized byte counter (`lfByteCount`) + generic `measureMdFiles(dir, predicate)` (backs both workflows and agents) + workflow enumeration (`listWorkflowStems`, `measureWorkflows`). Imported by **both** the guards and the generator so they can never measure differently. |
+| `scripts/update-size-baseline.cjs` (`npm run size:baseline`) | Regenerates **both** `tests/workflow-size-baseline.json` and `tests/agent-size-baseline.json` — sorted keys, trailing newline, idempotent. |
+| `tests/workflow-size-baseline.json` | The committed per-workflow snapshot (one entry per workflow). |
+| `tests/agent-size-baseline.json` | The committed per-agent snapshot (one entry per `gsd-*` agent). |
+| `tests/workflow-size-budget.test.cjs` | The three workflow guards above, plus the `discuss-phase` progressive-disclosure checks. |
+| `tests/agent-size-budget.test.cjs` | The per-agent baseline + tier hard-cap guards (the agent analog). |
+
 ## Running suites locally
 
 ```bash
@@ -53,6 +152,12 @@ node scripts/run-tests.cjs --files "tests/command-contract.test.cjs tests/core.t
 node scripts/run-tests.cjs --files-from .ci-selected-tests.txt
 ```
 
+`npm run test:affected` (scripts/run-affected-tests.cjs) is a **local-only**
+convenience that selects tests via the `require()` dependency graph of your
+working-tree diff. CI does not use it — CI selection is the rule table in
+`scripts/ci-test-scope.cjs`, which is the authoritative mapping. If the two
+disagree, trust (and fix) the rule table.
+
 Unknown suites exit non-zero with the list of valid suites. Empty suites (e.g. `--suite security` before any security-tagged file exists) exit `0` with a `no tests in suite "..."` notice on stderr so CI lanes don't go red while a suite is being populated.
 
 ## CI matrix
@@ -72,14 +177,30 @@ The `Tests` workflow runs every PR through a scoped gate generated by
   smoke set. They are for confidence on the affected surface, not for counting
   tests.
 
-The default PR gate runs the broad `unit`, `integration`, and `security` suites
-once on Ubuntu / Node 24, scoped smoke on Ubuntu / Node 22, scoped
-Windows/path/shell tests on Windows / Node 24, and unit coverage once on Ubuntu /
-Node 24. PRs touching workflow, package, test-runner, install, release, or
+The default PR gate runs the broad `unit` (under the c8 coverage gate),
+`integration`, and `security` suites once on Ubuntu / Node 24, scoped tests on
+Ubuntu / Node 22, and scoped tests on Windows / Node 24. "Scoped" means the
+diff-selected list from the rule table — not the full suite and not a fixed
+smoke set (the fixed smoke list is only the empty-selection fallback). The
+Windows lane's list is the Windows-sensitive subset of the selection, plus
+**every changed test file, unconditionally** (the #494 invariant, narrowed): a
+modified test is exercised on the divergent OS before merge at per-file cost,
+without paying for the three full parity lanes.
+
+PRs touching workflow, package, test-runner, install, release, or
 Windows-sensitive surfaces also run the full parity matrix on macOS and the
 older Windows runtime, plus `install` and `slow` on the primary Ubuntu lane.
-Coverage stays single-lane because multiplying coverage across OS/runtime lanes
-adds cost without improving the threshold signal.
+Everything (including the full parity matrix) runs on every push to `next`,
+which covers the residual macOS / Windows-Node-22 cross-product for scoped PRs.
+
+Coverage runs inside the Ubuntu / Node 24 full lane (not a separate job — that
+duplicated the entire unit run) and stays single-lane because multiplying
+coverage across OS/runtime lanes adds cost without improving the threshold
+signal. Note the gate's deliberate blind spot: it measures
+`gsd-core/bin/lib/*.cjs` only — `scripts/`, `hooks/`, and `bin/` are
+unenforced, and `stryker.config.mjs` additionally excludes ~48% of lib lines
+from mutation testing (see the UNMUTATED list there). Widening either gate is
+tracked work, not an accident to "fix" silently by raising thresholds.
 
 To inspect the scope locally:
 
@@ -100,8 +221,8 @@ node scripts/ci-test-scope.cjs --base origin/next --head HEAD
 ## Test strategy: #443 effort + fast_mode engine
 
 > Feature: unified cross-provider effort and fast_mode knobs (issue #443).
-> Test files: `tests/feat-443-effort-fast-mode.test.cjs` (unit),
-> `tests/feat-443-effort-fast-mode.integration.test.cjs` (integration).
+> Test files: `tests/model-resolver.test.cjs` (unit),
+> `tests/model-resolver.test.cjs` (integration).
 
 ### Testing pyramid
 

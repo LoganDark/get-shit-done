@@ -90,7 +90,7 @@ if (configDir) {
 // null, exactly as the previous inline try/catch did.
 //
 // FORK: the registry tracks upstream @opengsd/gsd-core releases. This hard
-// fork must never be updated via /gsd-update (npm would overwrite the jj
+// fork must never be updated via /gsd:update (npm would overwrite the jj
 // port) — install only via `node bin/install.js` from the fork clone. The
 // lookup is disabled so update_available stays false and the statusline/
 // banner never advertise an upstream version. Stale-hook detection below is

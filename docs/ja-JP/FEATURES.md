@@ -38,6 +38,7 @@
   - [モデルプロファイル](#26-モデルプロファイル)
 - [ブラウンフィールド機能](#ブラウンフィールド機能)
   - [コードベースマッピング](#27-コードベースマッピング)
+  - [既存コードベースオンボーディング](#27b-既存コードベースオンボーディング)
 - [ユーティリティ機能](#ユーティリティ機能)
   - [デバッグシステム](#28-デバッグシステム)
   - [Todo 管理](#29-todo-管理)
@@ -781,7 +782,7 @@
 
 **コマンド:** `/gsd-map-codebase [area]`
 
-**目的:** 新しいプロジェクトを開始する前に既存のコードベースを分析し、GSD が既存の構成を理解できるようにします。
+**目的:** 新しいプロジェクトを開始する前、または `/gsd-onboard` からのマッピングハンドオフとして既存のコードベースを分析し、GSD が既存の構成を理解できるようにします。
 
 **要件:**
 - REQ-MAP-01: システムは各分析領域に対して並列マッパーエージェントを起動しなければならない
@@ -804,6 +805,27 @@
 **増分リマップ — `--paths` (#2003):** マッパーはオプションの
 `--paths <p1,p2,...>` スコープヒントを受け付けます。指定した場合、ツリー全体をスキャンする代わりに、リストされたリポジトリ相対プレフィックスに探索を制限します。
 これはフェーズが実際に変更したサブツリーのみを更新するために、実行後コードベースドリフトゲートが使用するパスウェイです。各生成ドキュメントはその YAML フロントマターに `last_mapped_commit` を持ち、ドリフトを HEAD ではなくマッピング時点と照らし合わせて計測できます。
+
+### 27b. 既存コードベースオンボーディング
+
+**コマンド:** `/gsd-onboard [--fast] [--text]`
+
+**目的:** 既存リポジトリの初回セットアップを案内し、brownfield 状態を確認してコードベースマッピング、docs 取り込み、プロジェクト初期化へ安全にハンドオフします。
+
+**要件:**
+- REQ-ONBOARD-01: 既存コード、package manifest、計画ドキュメント、部分的な `.planning/`、コードベースマップの不足を検出する。
+- REQ-ONBOARD-02: 必要な `.planning/codebase/` マップファイルがない brownfield では `/gsd-map-codebase` または `/gsd-map-codebase --fast` へハンドオフする。fast マップの readiness は部分的であり、`/gsd-new-project` に十分として扱ってはならない。
+- REQ-ONBOARD-03: ADR/PRD/SPEC/RFC 候補があり project がない場合、`/gsd-new-project` の前に `/gsd-ingest-docs` を提示する。
+- REQ-ONBOARD-04: `PROJECT.md`、`REQUIREMENTS.md`、`ROADMAP.md`、`STATE.md` が揃うまで完了扱いにしない。
+- REQ-ONBOARD-05: project setup 後にのみ `.planning/onboarding/SUMMARY.md` を作成または確認する。
+- REQ-ONBOARD-06: 対話型メニューがない runtime 向けに、`--text` で番号付きプレーンテキスト gate をサポートする。
+
+**生成物:**
+| Artifact | 説明 |
+|----------|-------------|
+| `.planning/codebase/` | `/gsd-map-codebase` handoff が生成するコードベースマップ |
+| `.planning/PROJECT.md`, `REQUIREMENTS.md`, `ROADMAP.md`, `STATE.md` | `/gsd-new-project` または `/gsd-ingest-docs` が生成する planning setup |
+| `.planning/onboarding/SUMMARY.md` | Onboarding status、artifact index、next-command summary |
 
 ### 27a. 実行後コードベースドリフト検出
 
@@ -1227,7 +1249,7 @@ fix(03-01): correct auth token expiry
 **3. ワークフローガードフック**（`gsd-workflow-guard.js`）
 Claude が GSD ワークフローコンテキスト外でファイル編集を試行した際に検出する PreToolUse フック。直接編集の代わりに `/gsd-quick` や `/gsd-fast` の使用をアドバイスします。`hooks.workflow_guard`（デフォルト: false）で設定可能です。
 
-**4. CI 対応インジェクションスキャナー**（`prompt-injection-scan.test.cjs`）
+**4. CI 対応インジェクションスキャナー**（`prompt-injection-scan.security.test.cjs`）
 すべてのエージェント、ワークフロー、コマンドファイルに埋め込まれたインジェクションベクターをスキャンするテストスイート。
 
 **要件:**
@@ -1762,7 +1784,7 @@ Claude が GSD ワークフローコンテキスト外でファイル編集を�
 - REQ-CTXRED-01: システムはコンテキスト予算内に収まるよう、大きすぎる Markdown アーティファクトを切り詰めなければならない
 - REQ-CTXRED-02: キャッシュフレンドリーなアセンブリのためにプロンプトを順序付けなければならない（安定したプレフィックスを先頭に）
 - REQ-CTXRED-03: 削減は必須情報（見出し、要件、タスク構造）を保持しなければならない
-- REQ-CTXRED-04: スキルの `description:` フィールドは ≤ 100 文字でなければならない；`npm run lint:descriptions` で強制（`scripts/lint-descriptions.cjs` と `tests/enh-2789-description-budget.test.cjs` 参照）
+- REQ-CTXRED-04: スキルの `description:` フィールドは ≤ 100 文字でなければならない；`npm run lint:descriptions` で強制（`scripts/lint-descriptions.cjs` と `tests/skill-frontmatter-contract.test.cjs` 参照）
 
 **プロセス:**
 1. **計測** — ワークフローの総プロンプトサイズを計算
@@ -2654,10 +2676,10 @@ capture_thought({
 | スロット | 割り当てられたエージェント |
 |---------|----------------------|
 | `planning` | `gsd-planner`、`gsd-roadmapper`、`gsd-pattern-mapper` |
-| `discuss` | （将来のサブエージェント用に予約） |
+| `discuss` | `gsd-assumptions-analyzer` |
 | `research` | `gsd-phase-researcher`、`gsd-project-researcher`、`gsd-research-synthesizer`、`gsd-codebase-mapper`、`gsd-ui-researcher` |
 | `execution` | `gsd-executor`、`gsd-debugger`、`gsd-doc-writer` |
-| `verification` | `gsd-verifier`、`gsd-plan-checker`、`gsd-integration-checker`、`gsd-nyquist-auditor`、`gsd-ui-checker`、`gsd-ui-auditor`、`gsd-doc-verifier` |
+| `verification` | `gsd-verifier`、`gsd-plan-checker`、`gsd-integration-checker`、`gsd-nyquist-auditor`、`gsd-ui-checker`、`gsd-ui-auditor`、`gsd-doc-verifier`、`gsd-code-reviewer` |
 | `completion` | （将来のサブエージェント用に予約） |
 
 **受け入れられる値:** `"opus"` / `"sonnet"` / `"haiku"` / `"inherit"`

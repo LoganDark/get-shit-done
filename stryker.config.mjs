@@ -21,6 +21,12 @@
  * to stay bounded. Full runs are for local exploration only.
  */
 
+import { createRequire } from 'node:module';
+const _require = createRequire(import.meta.url);
+// resolveMutationBreak: fail-closed resolver for MUTATION_BREAK env var.
+// undefined → 60 (local backstop); set-but-empty or non-numeric → throws.
+const { resolveMutationBreak } = _require('./scripts/mutation-matrix.cjs');
+
 // ADR-457: bin/lib/*.cjs are gitignored build artifacts (compiled from
 // src/*.cts by `npm run build:lib`, which the mutation CI job runs via `npm ci`
 // → prepare before Stryker). Stryker mutates the *built* .cjs directly — the
@@ -29,6 +35,15 @@
 // force a full tsc rebuild per mutant — far too slow for the 30-min CI budget.)
 // Large/low-coverage modules are excluded (the command's test set does not
 // exercise them, so they would only ever produce survived mutants).
+//
+// KNOWN BLIND SPOT (2026-06 CI audit): this list excludes ~14.2k of ~29.8k
+// lib lines (~48%), including the most central modules (state, core,
+// commands, phase, verify). Mutation results therefore speak only for the
+// well-tested half of the lib. Shrinking the list is deliberate tracked work:
+// bring one module into scope per release by first giving it per-module
+// *.unit.test.cjs / *.property.test.cjs coverage, then deleting its entry —
+// never delete an entry without that coverage (it will only produce survived
+// mutants and trip the break threshold).
 const UNMUTATED = [
   '!gsd-core/bin/lib/command-aliases.cjs',
   '!gsd-core/bin/lib/commands.cjs',
@@ -46,7 +61,8 @@ const UNMUTATED = [
 
 // Full test command used by local runs and as the fallback when CI does not
 // inject a per-shard command via MUTATION_TEST_CMD.
-const DEFAULT_TEST_CMD = 'node --test tests/context-utilization.property.test.cjs tests/prompt-budget.property.test.cjs tests/frontmatter.property.test.cjs tests/adr-parser.property.test.cjs tests/config-schema.property.test.cjs tests/adr-parser.test.cjs tests/active-workstream-store.test.cjs tests/active-workstream-store.unit.test.cjs tests/prompt-budget.unit.test.cjs tests/adr-parser.unit.test.cjs tests/frontmatter.unit.test.cjs';
+// Keep this list in sync with the tests arrays in scripts/mutation-matrix.cjs COVERED.
+const DEFAULT_TEST_CMD = 'node --test tests/context-utilization.property.test.cjs tests/prompt-budget.property.test.cjs tests/frontmatter.property.test.cjs tests/adr-parser.property.test.cjs tests/config-schema.property.test.cjs tests/adr-parser.test.cjs tests/active-workstream-store.test.cjs tests/active-workstream-store.unit.test.cjs tests/prompt-budget.unit.test.cjs tests/adr-parser.unit.test.cjs tests/frontmatter.unit.test.cjs tests/core-utils.test.cjs';
 
 /** @type {import('@stryker-mutator/core').PartialStrykerOptions} */
 export default {
@@ -74,10 +90,16 @@ export default {
   coverageAnalysis: 'off',
 
   // ── Thresholds ───────────────────────────────────────────────────────────────
+  // ADR-456 / issue #1187: CI passes the per-module minScore (from
+  // scripts/mutation-matrix.cjs) via the MUTATION_BREAK environment variable.
+  // Each CI shard sets MUTATION_BREAK to its module's floor so Stryker enforces
+  // the ratchet. Local runs without MUTATION_BREAK fall back to 60 (backstop).
+  // Do NOT raise the fallback here; raise individual minScore values in
+  // mutation-matrix.cjs instead.
   thresholds: {
     high: 80,
     low: 60,
-    break: 50,
+    break: resolveMutationBreak(process.env.MUTATION_BREAK),
   },
 
   // ── Incremental mode ─────────────────────────────────────────────────────────

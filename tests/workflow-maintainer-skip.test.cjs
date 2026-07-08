@@ -96,3 +96,66 @@ describe('PR policy workflow maintainer carve-outs', () => {
     assert.match(workflow, /CONTRIBUTING\.md#pull-request-guidelines/);
   });
 });
+
+describe('Require Issue Link back-merge automation carve-out', () => {
+  test('the fail step is skipped for same-repo auto-backmerge PRs', () => {
+    const workflow = readWorkflow('.github/workflows/require-issue-link.yml');
+
+    // Auto-backmerge PRs (chore/backmerge-main-to-next-*) map to no issue, and a
+    // `Closes #N` would pollute the released CHANGELOG. The fail step must carve
+    // them out — keyed on the workflow-authored branch name AND same-repo
+    // identity so a fork PR cannot forge the exemption (#1389).
+    assert.match(
+      workflow,
+      /startsWith\(github\.head_ref, 'chore\/backmerge-main-to-next-'\)/
+    );
+    assert.match(
+      workflow,
+      /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/
+    );
+
+    // The carve-out must live on the failing step's `if:` alongside the
+    // found=='false' check (step-level, so the required check still reports
+    // SUCCESS rather than a branch-protection-blocking "skipped").
+    assert.match(workflow, /steps\.check\.outputs\.found == 'false'/);
+  });
+});
+
+describe('Auto-backmerge needs_review version-manifest carve-out (#1404)', () => {
+  if (!workflowExists('.github/workflows/auto-backmerge.yml')) {
+    // jj-fork runtime skip guard (19-01 disposition, same treatment as the
+    // pr-target-validator/close-draft-prs-sweep tests above): auto-backmerge
+    // is org automation dropped from the fork.
+    test('skipped — auto-backmerge.yml dropped from the fork in 19-01 (org automation; ledgered)', () => {});
+    return;
+  }
+  const workflow = readWorkflow('.github/workflows/auto-backmerge.yml');
+
+  test('all version-bearing manifests are filtered via version-only detection', () => {
+    // package.json / package-lock.json / plugin.json / marketplace.json
+    // diverge every release; a drop that is ONLY "version" lines must not park
+    // (parking is what lets the back-merge go stale). A substantive change
+    // still parks. The grep matches the indented "version": line for
+    // marketplace.json's plugins[0].version too. (#1404 / #1855)
+    // #1928: gemini-extension.json was removed with the sunset gemini runtime.
+    assert.ok(
+      workflow.includes("VERSION_STAMP_MANIFESTS='package.json package-lock.json .claude-plugin/plugin.json .claude-plugin/marketplace.json'"),
+      'auto-backmerge.yml must version-only-filter all version-bearing manifests (incl. marketplace.json #1855)'
+    );
+    assert.ok(
+      workflow.includes(`grep -vE '^[+-][[:space:]]*"version":'`),
+      'auto-backmerge.yml must filter version-only diffs via the "version" grep'
+    );
+  });
+
+  test('package-lock.json is NOT blindly excluded (lockfile-only changes still park)', () => {
+    // A lockfile-only substantive change (e.g. npm audit fix) rewrites
+    // resolved/integrity lines, so version-only filtering lets it through to
+    // review rather than dropping it silently. Guard against regression to a
+    // blanket exclude. (#1404)
+    assert.ok(
+      !workflow.includes(":(exclude)package-lock.json"),
+      'package-lock.json must not be globally excluded; rely on version-only filtering'
+    );
+  });
+});

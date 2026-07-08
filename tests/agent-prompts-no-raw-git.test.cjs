@@ -95,13 +95,27 @@ const GIT_INVOCATION_RE = /\bgit\s+(rev-parse|status|log|ls-files|cat-file|show|
 // mentions in the block surface as test failures, prompting the planner to
 // confront the D-04 invariant).
 const PROHIBITION_RE = /<destructive_git_prohibition>[\s\S]*?<\/destructive_git_prohibition>/;
+// 19-12 next-merge carve-out: upstream's #1297 <worktree_metadata_capture>
+// block self-gates on `[ -f .git ]` (git-worktree detection) — it never runs
+// on jj workspaces (no .git file), so its git rev-parse trio is legacy-git
+// substrate, not a cross-backend read. Same positional carve-out treatment
+// as the prohibition block.
+const METADATA_CAPTURE_RE = /<worktree_metadata_capture>[\s\S]*?<\/worktree_metadata_capture>/;
 
 function readAgentFile(rel) {
 	return fs.readFileSync(path.join(repoRoot, rel), 'utf8');
 }
 
 function stripProhibitionBlock(content) {
-	return content.replace(PROHIBITION_RE, '');
+	// 19-12 next-merge carve-out: upstream now stamps the runtime-launcher
+	// preamble into agent files (sync-runtime-launcher.cjs). Its git-first
+	// RUNTIME_ROOT leg (`git rev-parse --show-toplevel || jj workspace root ||
+	// pwd`) is the audited launcher-embed baseline class, not an agent-authored
+	// VCS read — strip the one-liner before scanning.
+	return content
+		.replace(PROHIBITION_RE, '')
+		.replace(METADATA_CAPTURE_RE, '')
+		.replace(/^_GSD_SHIM_NAME=.*$/gm, '');
 }
 
 test.describe('Plan 11-11 / project_no_raw_git: agent prompts contain no raw-git invocations (full surface, prohibition-block-carved-out)', () => {

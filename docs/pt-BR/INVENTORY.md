@@ -78,6 +78,7 @@ Esses seis roteadores são entradas apenas descritivas que o modelo seleciona pr
 | Comando | Função | Fonte |
 |---------|--------|-------|
 | `/gsd-new-project` | Inicializa um novo projeto com coleta profunda de contexto e PROJECT.md. | [commands/gsd/new-project.md](../../commands/gsd/new-project.md) |
+| `/gsd-onboard` | Guia código existente por mapeamento, ingestão de docs, configuração de projeto e onboarding summary. | [commands/gsd/onboard.md](../../commands/gsd/onboard.md) |
 | `/gsd-workspace` | Gerencia workspaces GSD — criar (`--new`), listar (`--list`) ou remover (`--remove`) ambientes de workspace isolados. | [commands/gsd/workspace.md](../../commands/gsd/workspace.md) |
 | `/gsd-discuss-phase` | Coleta contexto da fase por meio de perguntas adaptativas antes do planejamento. | [commands/gsd/discuss-phase.md](../../commands/gsd/discuss-phase.md) |
 | `/gsd-mvp-phase` | Planeja uma fase como uma fatia vertical de MVP — história de usuário, divisão SPIDR, depois plan-phase. | [commands/gsd/mvp-phase.md](../../commands/gsd/mvp-phase.md) |
@@ -218,6 +219,7 @@ Registro completo em `get-shit-done/workflows/*.md`. Workflows são orquestrador
 | `milestone-summary.md` | Síntese do resumo do milestone — artefato de onboarding e revisão a partir dos artefatos do milestone. | `/gsd-milestone-summary` |
 | `new-milestone.md` | Inicia um novo ciclo de milestone — carregar contexto do projeto, coletar objetivos, atualizar PROJECT.md/STATE.md. | `/gsd-new-milestone` |
 | `new-project.md` | Fluxo unificado de novo projeto — questionamento, pesquisa (opcional), requisitos, roadmap. | `/gsd-new-project` |
+| `onboard.md` | Orquestração de onboarding brownfield — mapear código, ingerir docs, inicializar planning e resumir próximo passo. | `/gsd-onboard` |
 | `new-workspace.md` | Cria um workspace isolado com worktrees/clones do repositório e um `.planning/` independente. | `/gsd-workspace --new` |
 | `next.md` | Detecta o estado atual do projeto e avança automaticamente para o próximo passo lógico. | `/gsd-progress --next` |
 | `node-repair.md` | Operador de reparo autônomo para verificação de tarefa com falha; invocado por `execute-plan`. | `execute-plan.md` (recuperação) |
@@ -298,7 +300,7 @@ Registro completo em `get-shit-done/references/*.md`. Referências são document
 | `continuation-format.md` | Formato de continuação/retomada de sessão. |
 | `domain-probes.md` | Perguntas de sondagem específicas de domínio para a discuss-phase. |
 | `gate-prompts.md` | Templates de prompt de portão/checkpoint. |
-| `scout-codebase.md` | Tabela de seleção de tipo de fase → mapa de base de código para a etapa de scout da discuss-phase (extraída via #2551). |
+| `scout-codebase.md` | Tabela de seleção de tipo de fase → mapa de base de código para a etapa de scout da discuss-phase (extraída via a divisão progressiva discuss-phase/modes, #717). |
 | `revision-loop.md` | Padrões de iteração de revisão de plano. |
 | `universal-anti-patterns.md` | Antipadrões universais a detectar e evitar. |
 | `worktree-path-safety.md` | Suite de guarda do worktree: asserção de HEAD, sentinela de drift de cwd (etapa 0a, #3097) e guarda de caminho absoluto (etapa 0b, #3099) — carregados nos prompts de spawn do executor via `<execution_context>`. |

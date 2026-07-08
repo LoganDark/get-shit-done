@@ -28,6 +28,8 @@ const EXPECTED_ALL_HOOKS = [
   'gsd-check-update.js',
   'gsd-config-reload.js',
   'gsd-context-monitor.js',
+  // #997: SessionStart canonical-path bootstrap for plugin installs.
+  'gsd-ensure-canonical-path.js',
   'gsd-prompt-guard.js',
   'gsd-read-guard.js',
   'gsd-read-injection-scanner.js',
@@ -40,26 +42,27 @@ const EXPECTED_ALL_HOOKS = [
 
 const RUNTIME_META = {
   claude:       { localDir: '.claude',           globalSuffix: '.claude' },
-  antigravity:  { localDir: '.agent',            globalSuffix: path.join('.gemini', 'antigravity') },
+  antigravity:  { localDir: '.agents',           globalSuffix: path.join('.gemini', 'antigravity') },
   augment:      { localDir: '.augment',          globalSuffix: '.augment' },
   cline:        { localDir: '.cline',            globalSuffix: '.cline' },
   codebuddy:    { localDir: '.codebuddy',        globalSuffix: '.codebuddy' },
   codex:        { localDir: '.codex',            globalSuffix: '.codex' },
   copilot:      { localDir: '.github',           globalSuffix: '.copilot' },
   cursor:       { localDir: '.cursor',           globalSuffix: '.cursor' },
-  gemini:       { localDir: '.gemini',           globalSuffix: '.gemini' },
   hermes:       { localDir: '.hermes',           globalSuffix: '.hermes' },
+  kimi:         { localDir: '.kimi-code',        globalSuffix: path.join('.config', 'agents') },
   kilo:         { localDir: '.kilo',             globalSuffix: path.join('.config', 'kilo') },
   opencode:     { localDir: '.opencode',         globalSuffix: path.join('.config', 'opencode') },
   qwen:         { localDir: '.qwen',             globalSuffix: '.qwen' },
   trae:         { localDir: '.trae',             globalSuffix: '.trae' },
-  windsurf:     { localDir: '.windsurf',         globalSuffix: path.join('.codeium', 'windsurf') },
+  windsurf:     { localDir: '.windsurf',          globalSuffix: path.join('.codeium', 'windsurf') },
+  zcode:        { localDir: '.zcode',             globalSuffix: '.zcode' },
 };
 
 // Runtimes that emit per-skill files under skills/ (not rules-based or commands-based)
 const SKILL_RUNTIMES = [
-  'claude', 'opencode', 'gemini', 'kilo', 'codex', 'copilot', 'antigravity',
-  'cursor', 'windsurf', 'augment', 'trae', 'qwen', 'codebuddy',
+  'claude', 'opencode', 'kilo', 'codex', 'copilot', 'antigravity',
+  'cursor', 'augment', 'trae', 'qwen', 'codebuddy',
 ];
 
 // ─── Helper functions ─────────────────────────────────────────────────────────
@@ -109,8 +112,8 @@ function runMinimalInstall({ runtime, scope, extraArgs = [] }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), `gsd-${runtime}-${scope}-`));
   try {
     const LOCAL_DIR_NAME = {
-      claude: '.claude', opencode: '.opencode', gemini: '.gemini', kilo: '.kilo',
-      codex: '.codex', copilot: '.github', antigravity: '.agent', cursor: '.cursor',
+      claude: '.claude', opencode: '.opencode', kilo: '.kilo',
+      codex: '.codex', copilot: '.github', antigravity: '.agents', cursor: '.cursor',
       windsurf: '.windsurf', augment: '.augment', trae: '.trae', qwen: '.qwen',
       codebuddy: '.codebuddy', cline: '.',
     };
@@ -151,11 +154,19 @@ function manifestSkillSet(manifest) {
       const seg = key.split('/')[1].replace(/^gsd-/, '').replace(/\.md$/, '');
       out.add(seg);
     } else if (key.startsWith('command/')) {
+      // OpenCode/Kilo: command/gsd-<cmd>.md
       const file = key.split('/')[1];
       out.add(file.replace(/^gsd-/, '').replace(/\.md$/, ''));
     } else if (key.startsWith('commands/gsd/')) {
+      // Gemini: commands/gsd/<cmd>.toml (nested, colon-namespaced)
       const file = key.split('/')[2];
       out.add(file.replace(/\.(md|toml)$/, ''));
+    } else if (key.startsWith('commands/') && key.split('/').length === 2) {
+      // Claude local (#1367 fix): flat commands/gsd-<cmd>.md
+      const file = key.split('/')[1];
+      if (file.startsWith('gsd-') && file.endsWith('.md')) {
+        out.add(file.replace(/^gsd-/, '').replace(/\.md$/, ''));
+      }
     }
   }
   return out;
@@ -191,6 +202,15 @@ function collectSkillBasenamesOnDisk(configDir) {
     for (const file of fs.readdirSync(commandsGsdDir)) {
       if (file.endsWith('.md') || file.endsWith('.toml')) {
         out.add(file.replace(/\.(md|toml)$/, ''));
+      }
+    }
+  }
+  // Claude local (#1367 fix): flat gsd-*.md files at commands/ level
+  const flatCommandsDir = path.join(configDir, 'commands');
+  if (fs.existsSync(flatCommandsDir)) {
+    for (const file of fs.readdirSync(flatCommandsDir)) {
+      if (file.startsWith('gsd-') && file.endsWith('.md')) {
+        out.add(file.replace(/^gsd-/, '').replace(/\.md$/, ''));
       }
     }
   }

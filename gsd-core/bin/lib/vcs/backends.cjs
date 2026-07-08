@@ -88,6 +88,12 @@ exports.BACKENDS_AVAILABLE_FOR_VERB = Object.freeze({
     'refs.exists': Object.freeze(['git', 'jj-colocated']),
     'refs.isIgnored': Object.freeze(['git']), // jj-side: VcsNotImplementedError (audit-confirmed no jj caller)
     'refs.remotes': Object.freeze(['git', 'jj-colocated']),
+    // 19-12 next-merge port (cmdPrSubrepo): read-only remote-URL probe on both
+    // backends (git: remote get-url; jj: templated `jj git remote list`).
+    // Capability matrix string-key add — TSC does NOT catch object-key
+    // omissions on the runtime lookup path; backends.test.ts regression-asserts
+    // presence (Pitfall 1 / Pitfall 3 mitigation per v1.2 retro CR-01 precedent).
+    'refs.remoteUrl': Object.freeze(['git', 'jj-colocated']),
     // VcsBookmarks — plan 03-03 flipped every mutator + list to admit
     // 'jj-colocated'. `refs.bookmarks.switch` stays git-only: the jj backend
     // throws `VcsNotImplementedError`. The original rationale ("both production

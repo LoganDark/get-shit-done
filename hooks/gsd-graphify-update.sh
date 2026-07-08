@@ -45,13 +45,23 @@ process.stdin.on("end", () => {
 });
 ' 2>/dev/null || printf '\n')
 TOOL_NAME=$(printf '%s\n' "$TOOL_INFO" | sed -n '1p')
-COMMAND=$(printf '%s\n' "$TOOL_INFO" | sed -n '2p')
+# Capture the FULL command (line 2 through EOF). Agent runtimes routinely emit
+# HEAD-advancing commits as multi-line scripts (`cd /path` then `git add` then
+# `git commit …`); reading only line 2 (`sed -n '2p'`) missed a `git commit`
+# that was not on the first command line and silently no-op'd the rebuild
+# (#1772). Line 2..EOF preserves embedded newlines; the `case` glob below
+# matches the substring anywhere in the multi-line string.
+COMMAND=$(printf '%s\n' "$TOOL_INFO" | sed -n '2,$p')
 
 [ "$TOOL_NAME" = "Bash" ] || exit 0
 
-# Gate 2 — HEAD-advancing git op (shell-direct or exact `gsd-tools query commit`)
+# Gate 2 — HEAD-advancing VCS op (shell-direct git/jj or exact `gsd-tools query commit`)
+# VCS-audit 2026-07-08: jj command shapes added — native `jj commit`/`jj squash`
+# advance @- exactly like `git commit` advances HEAD; without them the opt-in
+# rebuild never fired for jj-native users driving jj directly.
 case "$COMMAND" in
   *"git commit"*|*"git merge"*|*"git pull"*|*"git rebase --continue"*|*"git cherry-pick"*) ;;
+  *"jj commit"*|*"jj squash"*) ;;
   *"gsd-tools query commit"|*"gsd-tools query commit "*) ;;
   *) exit 0 ;;
 esac
@@ -59,8 +69,15 @@ esac
 # Gate 3 — not CI
 [ -z "${CI:-}" ] || exit 0
 
-# Gate 4 — inside git repo
-git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+# Gate 4 — inside a git or jj repo (VCS-audit 2026-07-08: jj-aware; jj is
+# probed FIRST so colocated jj repos take the jj leg — their colocated git
+# HEAD is normally detached, which used to defeat gate 5 silently).
+IS_JJ=0
+if jj workspace root >/dev/null 2>&1; then
+  IS_JJ=1
+else
+  git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+fi
 
 # Gate 5 — current branch == default branch
 DEFAULT_BRANCH=""
@@ -74,7 +91,9 @@ try {
 fi
 if [ -z "$DEFAULT_BRANCH" ]; then
   for cand in main master trunk; do
-    if git rev-parse --verify "$cand" >/dev/null 2>&1; then
+    if [ "$IS_JJ" = "1" ]; then
+      jj bookmark list -T 'name ++ "\n"' 2>/dev/null | grep -qx "$cand" && { DEFAULT_BRANCH="$cand"; break; }
+    elif git rev-parse --verify "$cand" >/dev/null 2>&1; then
       DEFAULT_BRANCH="$cand"
       break
     fi
@@ -82,8 +101,17 @@ if [ -z "$DEFAULT_BRANCH" ]; then
 fi
 [ -n "$DEFAULT_BRANCH" ] || exit 0
 
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
-[ "$CURRENT_BRANCH" = "$DEFAULT_BRANCH" ] || exit 0
+if [ "$IS_JJ" = "1" ]; then
+  # jj leg: "on the default branch" means the default bookmark points at @-
+  # (jj's @ is the in-progress working-copy change; @- is the last commit).
+  # Bookmark template renders one name per line with an optional trailing
+  # `*` ahead-of-remote marker — strip it before the exact match.
+  jj log -r @- -T 'bookmarks.join("\n")' --no-graph -n 1 2>/dev/null \
+    | sed 's/\*$//' | grep -qx "$DEFAULT_BRANCH" || exit 0
+else
+  CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+  [ "$CURRENT_BRANCH" = "$DEFAULT_BRANCH" ] || exit 0
+fi
 
 # Gate 6 — both graphify gates true in config
 [ -f .planning/config.json ] || exit 0
@@ -112,7 +140,13 @@ fi
 
 # All gates passed. Write initial running status synchronously so observers
 # (the next planner load_graph_context step) see the in-flight signal.
-HEAD_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
+# On jj, the underlying COMMIT id (hex) of @- keeps the status file's
+# head_at_build within graphify's hex fence.
+if [ "$IS_JJ" = "1" ]; then
+  HEAD_SHA=$(jj log -r @- -T 'commit_id' --no-graph -n 1 2>/dev/null || echo "")
+else
+  HEAD_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
+fi
 STATUS_FILE=".planning/graphs/.last-build-status.json"
 TS_START=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")
 MS_START=$(node -e 'process.stdout.write(String(Date.now()))' 2>/dev/null || echo "0")

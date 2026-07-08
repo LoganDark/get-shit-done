@@ -367,12 +367,14 @@ describe('AUDIT-FIX: test-then-commit pattern', () => {
 
   test('tests appear before commit in workflow order', () => {
     const content = fs.readFileSync(wfPath, 'utf-8');
-    // Within the fix-loop step, test must come before commit
+    // Within the fix-loop step, test must come before commit.
+    // VCS-audit 2026-07-08 re-point: the commit is adapter-routed
+    // (`gsd_run query commit`), replacing raw `git commit`.
     const fixLoopStart = content.indexOf('fix-loop');
     const testIdx = content.indexOf('npm test', fixLoopStart);
-    const commitIdx = content.indexOf('git commit', fixLoopStart);
+    const commitIdx = content.indexOf('gsd_run query commit', fixLoopStart);
     assert.ok(testIdx > -1, 'must have npm test in fix-loop');
-    assert.ok(commitIdx > -1, 'must have git commit in fix-loop');
+    assert.ok(commitIdx > -1, 'must have gsd_run query commit in fix-loop');
     assert.ok(
       testIdx < commitIdx,
       'npm test must appear before commit in fix-loop (test-then-commit pattern)'
@@ -419,10 +421,12 @@ describe('AUDIT-FIX: revert on test failure', () => {
 
   test('test failure does not leave partial changes', () => {
     const content = fs.readFileSync(wfPath, 'utf-8');
-    // git checkout scoped to changed files is the revert mechanism
+    // VCS-audit 2026-07-08 re-point: the revert mechanism is the adapter's
+    // cross-backend restore verb scoped to changed files (was raw
+    // `git checkout -- {changed_files}`).
     assert.ok(
-      content.includes('git checkout -- {changed_files}'),
-      'must use git checkout -- {changed_files} to clean partial changes on failure'
+      content.includes('gsd_run query restore {changed_files}'),
+      'must use gsd_run query restore {changed_files} to clean partial changes on failure'
     );
   });
 });

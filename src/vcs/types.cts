@@ -159,6 +159,13 @@ export interface StatusOpts {
 export interface StatusEntry {
   path: string;
   worktree: string;
+  /**
+   * 19-12 next-merge port (cmdPrSubrepo rename contract): for rename/copy
+   * entries, the pre-rename path (git porcelain's `old -> new` origin; the
+   * `-z` parser's second record). Absent for ordinary entries and on backends
+   * that don't surface an origin path.
+   */
+  origPath?: string;
   // Phase 2.1 D-16: `index` REMOVED — meaningless cross-backend after
   // stage/unstage drop (D-03). Sites that probed git's index character
   // either no longer have callers (audited) or now use raw git inside an
@@ -172,7 +179,8 @@ export interface StatusResult {
 // Phase 7 D-06: typed enum for diff status filtering. No leaking of git's
 // single-letter convention onto the cross-backend surface (Phase 2.1 D-01).
 // Backends translate internally: git emits --diff-filter=<letter>; jj
-// post-filters `jj diff --summary` output via parseDiffSummary.
+// post-filters the machine-readable `jj diff -T` NDJSON entry stream
+// (parseJjDiffEntries — VCS-audit follow-up 2026-07-08).
 export type DiffFilter = 'added' | 'modified' | 'deleted' | 'renamed' | 'typechange';
 
 export interface DiffOpts {
@@ -316,6 +324,13 @@ export interface PushOpts {
    * skips internal `fireHook` invocation pre-push.
    */
   noVerify?: boolean;
+  /**
+   * 19-12 next-merge port (cmdPrSubrepo): establish upstream tracking for the
+   * pushed ref. Git: passes `--set-upstream`. Jj: documented no-op — jj
+   * tracks pushed bookmarks natively (`jj git push --bookmark` records the
+   * remote-tracking relationship without an extra flag).
+   */
+  setUpstream?: boolean;
 }
 export interface FetchOpts {
   remote?: string;
@@ -420,6 +435,13 @@ export interface VcsRefs {
   matchPrefix(id: RevisionExpr, prefix: string): boolean;
   isIgnored(path: string): boolean;
   remotes(): string[];
+  /**
+   * 19-12 next-merge port (cmdPrSubrepo): fetch/push URL of a named remote,
+   * or null when the remote does not exist. Git: `git remote get-url <name>`.
+   * Jj: parsed from `jj git remote list` templated output. Read-only probe —
+   * used to derive the GitHub owner/repo slug for `gh pr create`.
+   */
+  remoteUrl(name: string): string | null;
 }
 
 export interface VcsBookmarks {

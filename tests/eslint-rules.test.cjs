@@ -8,6 +8,7 @@
  *   - local/no-magic-sleep-in-tests
  *   - local/no-elapsed-assertion
  *   - local/no-raw-rmsync-in-tests
+ *   - local/no-adhoc-markdown-parsing
  */
 
 const { test, describe } = require('node:test');
@@ -18,6 +19,8 @@ const noSourceGrep = require('../eslint-rules/no-source-grep.cjs');
 const noMagicSleepInTests = require('../eslint-rules/no-magic-sleep-in-tests.cjs');
 const noElapsedAssertion = require('../eslint-rules/no-elapsed-assertion.cjs');
 const noRawRmsyncInTests = require('../eslint-rules/no-raw-rmsync-in-tests.cjs');
+const noTautologicalAssert = require('../eslint-rules/no-tautological-assert.cjs');
+const noAdhocMarkdownParsing = require('../eslint-rules/no-adhoc-markdown-parsing.cjs');
 
 const ruleTester = new RuleTester({
   languageOptions: {
@@ -29,6 +32,10 @@ const ruleTester = new RuleTester({
 // ─── no-source-grep ──────────────────────────────────────────────────────────
 
 describe('no-source-grep rule', () => {
+  test('rule module exports a create function', () => {
+    assert.strictEqual(typeof noSourceGrep.create, 'function');
+  });
+
   test('valid: readFileSync on .md file is allowed', () => {
     ruleTester.run('no-source-grep', noSourceGrep, {
       valid: [
@@ -53,7 +60,6 @@ describe('no-source-grep rule', () => {
       ],
       invalid: [],
     });
-    assert.ok(true, 'no-source-grep valid cases passed');
   });
 
   test('invalid: readFileSync on .cjs source file followed by .includes()', () => {
@@ -64,7 +70,7 @@ describe('no-source-grep rule', () => {
           code: `
             const fs = require('fs');
             const path = require('path');
-            const src = fs.readFileSync(path.join(__dirname, '..', 'gsd-core', 'bin', 'lib', 'core.cjs'), 'utf-8');
+            const src = fs.readFileSync(path.join(__dirname, '..', 'gsd-core', 'bin', 'lib', 'io.cjs'), 'utf-8');
             src.includes('someFunction');
           `,
           filename: 'tests/foo.test.cjs',
@@ -72,7 +78,6 @@ describe('no-source-grep rule', () => {
         },
       ],
     });
-    assert.ok(true, 'no-source-grep invalid case detected');
   });
 
   test('invalid: readFileSync on .cjs source file followed by .match()', () => {
@@ -91,7 +96,6 @@ describe('no-source-grep rule', () => {
         },
       ],
     });
-    assert.ok(true, 'no-source-grep match case detected');
   });
 
   test('valid: file with allow-test-rule annotation is exempt', () => {
@@ -103,7 +107,7 @@ describe('no-source-grep rule', () => {
             // allow-test-rule: pending migration
             const fs = require('fs');
             const path = require('path');
-            const src = fs.readFileSync(path.join(__dirname, '..', 'gsd-core', 'bin', 'lib', 'core.cjs'), 'utf-8');
+            const src = fs.readFileSync(path.join(__dirname, '..', 'gsd-core', 'bin', 'lib', 'io.cjs'), 'utf-8');
             src.includes('someFunction');
           `,
           filename: 'tests/foo.test.cjs',
@@ -111,7 +115,6 @@ describe('no-source-grep rule', () => {
       ],
       invalid: [],
     });
-    assert.ok(true, 'no-source-grep allow-test-rule annotation works');
   });
 
   test('valid: require() of a .cjs file is allowed (not readFileSync)', () => {
@@ -119,7 +122,7 @@ describe('no-source-grep rule', () => {
       valid: [
         {
           code: `
-            const mod = require('../gsd-core/bin/lib/core.cjs');
+            const mod = require('../gsd-core/bin/lib/io.cjs');
             mod.someMethod();
           `,
           filename: 'tests/foo.test.cjs',
@@ -127,13 +130,16 @@ describe('no-source-grep rule', () => {
       ],
       invalid: [],
     });
-    assert.ok(true, 'no-source-grep require() is allowed');
   });
 });
 
 // ─── no-magic-sleep-in-tests ─────────────────────────────────────────────────
 
 describe('no-magic-sleep-in-tests rule', () => {
+  test('rule module exports a create function', () => {
+    assert.strictEqual(typeof noMagicSleepInTests.create, 'function');
+  });
+
   test('valid: setTimeout used outside tests (no-op since rule only applies to *.test.cjs)', () => {
     // Rule only applies to *.test.cjs files; a non-test filename is always valid
     ruleTester.run('no-magic-sleep-in-tests', noMagicSleepInTests, {
@@ -147,7 +153,6 @@ describe('no-magic-sleep-in-tests rule', () => {
       ],
       invalid: [],
     });
-    assert.ok(true, 'no-magic-sleep-in-tests does not apply outside test files');
   });
 
   test('invalid: Atomics.wait() in test file', () => {
@@ -165,7 +170,6 @@ describe('no-magic-sleep-in-tests rule', () => {
         },
       ],
     });
-    assert.ok(true, 'no-magic-sleep-in-tests flags Atomics.wait()');
   });
 
   test('invalid: setTimeout used for synchronization in Promise in test file', () => {
@@ -183,7 +187,6 @@ describe('no-magic-sleep-in-tests rule', () => {
         },
       ],
     });
-    assert.ok(true, 'no-magic-sleep-in-tests flags setTimeout in Promise');
   });
 
   test('valid: setTimeout with callback (not synchronization pattern) in test file', () => {
@@ -202,13 +205,16 @@ describe('no-magic-sleep-in-tests rule', () => {
       ],
       invalid: [],
     });
-    assert.ok(true, 'no-magic-sleep-in-tests allows simple callback setTimeout');
   });
 });
 
 // ─── no-elapsed-assertion ─────────────────────────────────────────────────────
 
 describe('no-elapsed-assertion rule', () => {
+  test('rule module exports a create function', () => {
+    assert.strictEqual(typeof noElapsedAssertion.create, 'function');
+  });
+
   test('valid: assert on non-timing property', () => {
     ruleTester.run('no-elapsed-assertion', noElapsedAssertion, {
       valid: [
@@ -230,7 +236,6 @@ describe('no-elapsed-assertion rule', () => {
       ],
       invalid: [],
     });
-    assert.ok(true, 'no-elapsed-assertion valid cases passed');
   });
 
   test('invalid: assert on .elapsed property', () => {
@@ -248,7 +253,6 @@ describe('no-elapsed-assertion rule', () => {
         },
       ],
     });
-    assert.ok(true, 'no-elapsed-assertion flags assert on .elapsed');
   });
 
   test('invalid: assert on .duration property', () => {
@@ -265,7 +269,6 @@ describe('no-elapsed-assertion rule', () => {
         },
       ],
     });
-    assert.ok(true, 'no-elapsed-assertion flags assert on .duration');
   });
 
   test('invalid: assert on .took property', () => {
@@ -282,7 +285,6 @@ describe('no-elapsed-assertion rule', () => {
         },
       ],
     });
-    assert.ok(true, 'no-elapsed-assertion flags assert on .took');
   });
 
   test('invalid: assert on .ms property', () => {
@@ -299,7 +301,6 @@ describe('no-elapsed-assertion rule', () => {
         },
       ],
     });
-    assert.ok(true, 'no-elapsed-assertion flags assert on .ms');
   });
 
   test('invalid: assert.equal with timing comparison', () => {
@@ -316,13 +317,16 @@ describe('no-elapsed-assertion rule', () => {
         },
       ],
     });
-    assert.ok(true, 'no-elapsed-assertion flags assert.equal with timing comparison');
   });
 });
 
 // ─── no-raw-rmsync-in-tests ──────────────────────────────────────────────────
 
 describe('no-raw-rmsync-in-tests rule', () => {
+  test('rule module exports a create function', () => {
+    assert.strictEqual(typeof noRawRmsyncInTests.create, 'function');
+  });
+
   // ── INVALID cases (must error) ────────────────────────────────────────────
 
   test('invalid: fs.rmSync() in a test file', () => {
@@ -339,7 +343,6 @@ describe('no-raw-rmsync-in-tests rule', () => {
         },
       ],
     });
-    assert.ok(true, 'no-raw-rmsync-in-tests flags fs.rmSync() in test file');
   });
 
   test('invalid: computed member fs["rmSync"]() in a test file', () => {
@@ -356,7 +359,6 @@ describe('no-raw-rmsync-in-tests rule', () => {
         },
       ],
     });
-    assert.ok(true, 'no-raw-rmsync-in-tests flags fs["rmSync"]() in test file');
   });
 
   test('invalid: destructured rmSync from require("fs") in a test file', () => {
@@ -373,7 +375,6 @@ describe('no-raw-rmsync-in-tests rule', () => {
         },
       ],
     });
-    assert.ok(true, 'no-raw-rmsync-in-tests flags destructured rmSync from require("fs")');
   });
 
   test('invalid: aliased const del = fs.rmSync; del() in a test file', () => {
@@ -391,7 +392,6 @@ describe('no-raw-rmsync-in-tests rule', () => {
         },
       ],
     });
-    assert.ok(true, 'no-raw-rmsync-in-tests flags aliased fs.rmSync');
   });
 
   test('invalid: allow-test-rule annotation no longer suppresses this rule (Defect 1 fixed)', () => {
@@ -411,7 +411,6 @@ describe('no-raw-rmsync-in-tests rule', () => {
         },
       ],
     });
-    assert.ok(true, 'no-raw-rmsync-in-tests is NOT suppressed by allow-test-rule annotation');
   });
 
   // ── VALID cases (must NOT error) ──────────────────────────────────────────
@@ -429,7 +428,6 @@ describe('no-raw-rmsync-in-tests rule', () => {
       ],
       invalid: [],
     });
-    assert.ok(true, 'no-raw-rmsync-in-tests allows helpers.cleanup()');
   });
 
   test('valid: bare rmSync() that is NOT fs-derived (local function) is not flagged', () => {
@@ -447,7 +445,6 @@ describe('no-raw-rmsync-in-tests rule', () => {
       ],
       invalid: [],
     });
-    assert.ok(true, 'no-raw-rmsync-in-tests does not flag a locally-defined rmSync()');
   });
 
   // NOTE: The inline `// eslint-disable-next-line local/no-raw-rmsync-in-tests -- reason`
@@ -469,7 +466,6 @@ describe('no-raw-rmsync-in-tests rule', () => {
       ],
       invalid: [],
     });
-    assert.ok(true, 'no-raw-rmsync-in-tests is inert in non-test files');
   });
 
   test('valid: member access / assignment without calling (not a CallExpression)', () => {
@@ -486,6 +482,499 @@ describe('no-raw-rmsync-in-tests rule', () => {
       ],
       invalid: [],
     });
-    assert.ok(true, 'no-raw-rmsync-in-tests ignores member access / assignment without call');
+  });
+});
+
+// ─── no-tautological-assert ──────────────────────────────────────────────────
+
+describe('no-tautological-assert rule', () => {
+  test('rule module exports a create function', () => {
+    assert.strictEqual(typeof noTautologicalAssert.create, 'function');
+  });
+
+  // ── VALID cases (must NOT error) ──────────────────────────────────────────
+
+  test('valid: assert.ok with a non-literal identifier argument', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.ok(result);
+          `,
+          filename: 'tests/foo.test.cjs',
+        },
+      ],
+      invalid: [],
+    });
+  });
+
+  test('valid: assert.strictEqual with mixed literal/identifier arguments', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.strictEqual(actual, true);
+          `,
+          filename: 'tests/foo.test.cjs',
+        },
+      ],
+      invalid: [],
+    });
+  });
+
+  test('valid: assert.strictEqual with identifier and numeric literal', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.strictEqual(x, 5);
+          `,
+          filename: 'tests/foo.test.cjs',
+        },
+      ],
+      invalid: [],
+    });
+  });
+
+  test('valid: assert.ok with a CallExpression argument', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.ok(fn());
+          `,
+          filename: 'tests/foo.test.cjs',
+        },
+      ],
+      invalid: [],
+    });
+  });
+
+  test('valid: assert.deepStrictEqual with two identifier arguments', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.deepStrictEqual(got, expected);
+          `,
+          filename: 'tests/foo.test.cjs',
+        },
+      ],
+      invalid: [],
+    });
+  });
+
+  test('valid: assert.strictEqual with two different identifier arguments', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.strictEqual(a, b);
+          `,
+          filename: 'tests/foo.test.cjs',
+        },
+      ],
+      invalid: [],
+    });
+  });
+
+  // ── INVALID cases (must error) ────────────────────────────────────────────
+
+  test('invalid: assert.ok(true) — always-truthy boolean literal', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [],
+      invalid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.ok(true);
+          `,
+          filename: 'tests/foo.test.cjs',
+          errors: [{ messageId: 'tautologicalTruthiness' }],
+        },
+      ],
+    });
+  });
+
+  test('invalid: assert(true) — bare assert with always-truthy boolean literal', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [],
+      invalid: [
+        {
+          code: `
+            const assert = require('node:assert');
+            assert(true);
+          `,
+          filename: 'tests/foo.test.cjs',
+          errors: [{ messageId: 'tautologicalTruthiness' }],
+        },
+      ],
+    });
+  });
+
+  test('invalid: assert.ok(1) — always-truthy non-zero numeric literal', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [],
+      invalid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.ok(1);
+          `,
+          filename: 'tests/foo.test.cjs',
+          errors: [{ messageId: 'tautologicalTruthiness' }],
+        },
+      ],
+    });
+  });
+
+  test('invalid: assert.ok("always") — always-truthy non-empty string literal', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [],
+      invalid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.ok('always');
+          `,
+          filename: 'tests/foo.test.cjs',
+          errors: [{ messageId: 'tautologicalTruthiness' }],
+        },
+      ],
+    });
+  });
+
+  test('invalid: assert.ok([]) — always-truthy array literal', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [],
+      invalid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.ok([]);
+          `,
+          filename: 'tests/foo.test.cjs',
+          errors: [{ messageId: 'tautologicalTruthiness' }],
+        },
+      ],
+    });
+  });
+
+  test('invalid: assert.ok(cond || true) — logical OR whose right side is true', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [],
+      invalid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.ok(cond || true);
+          `,
+          filename: 'tests/foo.test.cjs',
+          errors: [{ messageId: 'tautologicalTruthiness' }],
+        },
+      ],
+    });
+  });
+
+  test('invalid: assert.strictEqual(true, true) — identical boolean literals', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [],
+      invalid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.strictEqual(true, true);
+          `,
+          filename: 'tests/foo.test.cjs',
+          errors: [{ messageId: 'tautologicalEquality' }],
+        },
+      ],
+    });
+  });
+
+  test('invalid: assert.equal(1, 1) — identical numeric literals', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [],
+      invalid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.equal(1, 1);
+          `,
+          filename: 'tests/foo.test.cjs',
+          errors: [{ messageId: 'tautologicalEquality' }],
+        },
+      ],
+    });
+  });
+
+  // ── Fix #3: true || cond (left-side true) ────────────────────────────────
+
+  test('invalid: assert.ok(true || x) — left side is literal true (always short-circuits)', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [],
+      invalid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.ok(true || x);
+          `,
+          filename: 'tests/foo.test.cjs',
+          errors: [{ messageId: 'tautologicalTruthiness' }],
+        },
+      ],
+    });
+  });
+
+  test('invalid: assert(true || y) — bare assert, left side is literal true', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [],
+      invalid: [
+        {
+          code: `
+            const assert = require('node:assert');
+            assert(true || y);
+          `,
+          filename: 'tests/foo.test.cjs',
+          errors: [{ messageId: 'tautologicalTruthiness' }],
+        },
+      ],
+    });
+  });
+
+  // ── Fix #4: empty [] / {} deep-equality ──────────────────────────────────
+
+  test('invalid: assert.deepStrictEqual([], []) — two empty arrays are always deep-equal', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [],
+      invalid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.deepStrictEqual([], []);
+          `,
+          filename: 'tests/foo.test.cjs',
+          errors: [{ messageId: 'tautologicalEquality' }],
+        },
+      ],
+    });
+  });
+
+  test('invalid: assert.deepStrictEqual({}, {}) — two empty objects are always deep-equal', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [],
+      invalid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.deepStrictEqual({}, {});
+          `,
+          filename: 'tests/foo.test.cjs',
+          errors: [{ messageId: 'tautologicalEquality' }],
+        },
+      ],
+    });
+  });
+
+  // ── Conservative: non-empty arrays/objects must NOT be flagged ────────────
+
+  test('valid: assert.deepStrictEqual([1], [2]) — non-empty arrays with different content are not flagged', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.deepStrictEqual([1], [2]);
+          `,
+          filename: 'tests/foo.test.cjs',
+        },
+      ],
+      invalid: [],
+    });
+  });
+
+  test('valid: assert.deepStrictEqual(got, expected) — identifier arguments are not flagged', () => {
+    ruleTester.run('no-tautological-assert', noTautologicalAssert, {
+      valid: [
+        {
+          code: `
+            const assert = require('node:assert/strict');
+            assert.deepStrictEqual(got, expected);
+          `,
+          filename: 'tests/foo.test.cjs',
+        },
+      ],
+      invalid: [],
+    });
+  });
+});
+
+// ─── no-adhoc-markdown-parsing ───────────────────────────────────────────────
+
+describe('no-adhoc-markdown-parsing rule', () => {
+  test('rule module exports a create function', () => {
+    assert.strictEqual(typeof noAdhocMarkdownParsing.create, 'function');
+  });
+
+  // ── POSITIVE cases: flag fence-block-strip and section-collect ────────────
+
+  test('invalid: fence-block-strip regex with triple-backtick and multiline body', () => {
+    ruleTester.run('no-adhoc-markdown-parsing', noAdhocMarkdownParsing, {
+      valid: [],
+      invalid: [
+        {
+          // /```[\s\S]*?```/ — triple-backtick + [\s\S] body → flagged as fenceRegex
+          code: String.raw`const stripFences = /` + '```' + String.raw`[\s\S]*?` + '```' + '/;',
+          filename: 'src/some-module.cts',
+          errors: [{ messageId: 'fenceRegex' }],
+        },
+      ],
+    });
+  });
+
+  test('invalid: fence-block-strip regex with triple-tilde and multiline body', () => {
+    ruleTester.run('no-adhoc-markdown-parsing', noAdhocMarkdownParsing, {
+      valid: [],
+      invalid: [
+        {
+          // /~~~[\s\S]*?~~~/ — triple-tilde + [\s\S] body → flagged as fenceRegex
+          code: String.raw`const stripTildes = /~~~[\s\S]*?~~~/;`,
+          filename: 'src/some-module.cts',
+          errors: [{ messageId: 'fenceRegex' }],
+        },
+      ],
+    });
+  });
+
+  test('invalid: section-collect regex with heading capture, multiline body, heading lookahead', () => {
+    ruleTester.run('no-adhoc-markdown-parsing', noAdhocMarkdownParsing, {
+      valid: [],
+      invalid: [
+        {
+          // /(##\s*X\n)([\s\S]*?)(?=\n##|$)/ — the classic section-collect fingerprint
+          code: String.raw`const pat = /(##\s*X\n)([\s\S]*?)(?=\n##|$)/;`,
+          filename: 'src/some-module.cts',
+          errors: [{ messageId: 'sectionCollect' }],
+        },
+      ],
+    });
+  });
+
+  // ── NEGATIVE cases: single-line fence tests and heading matches NOT flagged ─
+
+  test('valid: bare single-line fence-opener /^```/ is NOT flagged', () => {
+    ruleTester.run('no-adhoc-markdown-parsing', noAdhocMarkdownParsing, {
+      valid: [
+        {
+          code: 'const fenceRegex = /^' + '```' + '/;',
+          filename: 'src/some-module.cts',
+        },
+      ],
+      invalid: [],
+    });
+  });
+
+  test('valid: /^\\s*(?:```|~~~)/ fence-line test is NOT flagged', () => {
+    ruleTester.run('no-adhoc-markdown-parsing', noAdhocMarkdownParsing, {
+      valid: [
+        {
+          code: String.raw`const isFenceLine = /^\s*(?:` + '```' + String.raw`|~~~)/;`,
+          filename: 'src/some-module.cts',
+        },
+      ],
+      invalid: [],
+    });
+  });
+
+  test('valid: /^#\\s+/ single-line title-find is NOT flagged', () => {
+    ruleTester.run('no-adhoc-markdown-parsing', noAdhocMarkdownParsing, {
+      valid: [
+        {
+          code: String.raw`const titleRe = /^#\s+/;`,
+          filename: 'src/some-module.cts',
+        },
+      ],
+      invalid: [],
+    });
+  });
+
+  test('valid: /^###\\s+(.+?)\\s*$/ single-line heading-category match is NOT flagged', () => {
+    ruleTester.run('no-adhoc-markdown-parsing', noAdhocMarkdownParsing, {
+      valid: [
+        {
+          code: String.raw`const headingRe = /^###\s+(.+?)\s*$/;`,
+          filename: 'src/some-module.cts',
+        },
+      ],
+      invalid: [],
+    });
+  });
+
+  test('valid: /^(#{1,6})\\s+(.*)/ single-line heading match is NOT flagged', () => {
+    ruleTester.run('no-adhoc-markdown-parsing', noAdhocMarkdownParsing, {
+      valid: [
+        {
+          code: String.raw`const headingM = line.match(/^(#{1,6})\s+(.*)/);`,
+          filename: 'src/some-module.cts',
+        },
+      ],
+      invalid: [],
+    });
+  });
+
+  test('valid: seam usage (no regex, just an import reference) is NOT flagged', () => {
+    ruleTester.run('no-adhoc-markdown-parsing', noAdhocMarkdownParsing, {
+      valid: [
+        {
+          code: `
+            const { collectSection } = require('./markdown-sectionizer');
+            const result = collectSection(content, 'Introduction');
+          `,
+          filename: 'src/some-module.cts',
+        },
+      ],
+      invalid: [],
+    });
+  });
+
+  test('valid: annotated fence-block-strip with allow-adhoc-markdown is NOT flagged', () => {
+    ruleTester.run('no-adhoc-markdown-parsing', noAdhocMarkdownParsing, {
+      valid: [
+        {
+          // Trailing annotation on the same line suppresses the finding
+          code:
+            'const stripFences = /```' +
+            String.raw`[\s\S]*?` +
+            '`' +
+            '``/; // allow-adhoc-markdown: pre-seam write path; pending migration #1372',
+          filename: 'src/some-module.cts',
+        },
+      ],
+      invalid: [],
+    });
+  });
+
+  test('valid: rule is inert outside src/*.cts files', () => {
+    ruleTester.run('no-adhoc-markdown-parsing', noAdhocMarkdownParsing, {
+      valid: [
+        {
+          // Same fence-block-strip regex in a test file → rule does not apply
+          code: String.raw`const stripFences = /~~~[\s\S]*?~~~/;`,
+          filename: 'tests/some.test.cjs',
+        },
+        {
+          // Same regex in a scripts file → rule does not apply
+          code: String.raw`const p = /(##\s*X\n)([\s\S]*?)(?=\n##|$)/;`,
+          filename: 'scripts/helper.cjs',
+        },
+      ],
+      invalid: [],
+    });
   });
 });

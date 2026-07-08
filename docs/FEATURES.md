@@ -38,6 +38,7 @@
   - [Model Profiles](#26-model-profiles)
 - [Brownfield Features](#brownfield-features)
   - [Codebase Mapping](#27-codebase-mapping)
+  - [Existing Codebase Onboarding](#27b-existing-codebase-onboarding)
 - [Utility Features](#utility-features)
   - [Debug System](#28-debug-system)
   - [Todo Management](#29-todo-management)
@@ -164,6 +165,12 @@
   - [Statusline Context Position](#140-statusline-context-position)
   - [Milestone Tag Creation Toggle](#141-milestone-tag-creation-toggle)
   - [Structured JSON Error Mode](#142-structured-json-error-mode)
+  - [UAT-Passed Predicate](#143-uat-passed-predicate)
+  - [Spec-Phase Edge-Completeness Probe](#144-spec-phase-edge-completeness-probe)
+- [v1.43.0 Features](#v1430-features)
+  - [MemPalace Memory Capability](#145-mempalace-memory-capability)
+  - [Spec-Phase Prohibition Probe](#146-spec-phase-prohibition-probe)
+  - [Capability Management Command](#147-capability-management-command)
 
 ---
 
@@ -783,7 +790,7 @@
 
 **Command:** `/gsd-map-codebase [area]`
 
-**Purpose:** Analyze an existing codebase before starting a new project, so GSD understands what exists.
+**Purpose:** Analyze an existing codebase before starting a new project or as the mapping handoff from `/gsd-onboard`, so GSD understands what exists.
 
 **Requirements:**
 - REQ-MAP-01: System MUST spawn parallel mapper agents for each analysis area
@@ -810,6 +817,27 @@ This is the pathway used by the post-execute codebase-drift gate to refresh
 only the subtrees the phase actually changed. Each produced document carries
 `last_mapped_commit` in its YAML frontmatter so drift can be measured
 against the mapping point, not HEAD.
+
+### 27b. Existing Codebase Onboarding
+
+**Command:** `/gsd-onboard [--fast] [--text]`
+
+**Purpose:** Guide first-time setup for an existing repository by checking brownfield state, routing through codebase mapping and docs ingest, then handing off to project initialization without silently overwriting planning artifacts.
+
+**Requirements:**
+- REQ-ONBOARD-01: System MUST detect existing code, package manifests, planning documents, partial `.planning/` state, and complete or missing codebase-map files.
+- REQ-ONBOARD-02: System MUST hand off to `/gsd-map-codebase` or `/gsd-map-codebase --fast` when brownfield code lacks the required `.planning/codebase/` map files; fast-map readiness is partial and MUST NOT be treated as sufficient for `/gsd-new-project`.
+- REQ-ONBOARD-03: System MUST offer `/gsd-ingest-docs` before `/gsd-new-project` when ADR/PRD/SPEC/RFC candidates exist and no project exists.
+- REQ-ONBOARD-04: System MUST refuse to report onboarding complete until `PROJECT.md`, `REQUIREMENTS.md`, `ROADMAP.md`, and `STATE.md` all exist.
+- REQ-ONBOARD-05: System MUST create or confirm `.planning/onboarding/SUMMARY.md` only after project setup exists.
+- REQ-ONBOARD-06: System MUST support `--text` for numbered plain-text gates on runtimes without interactive menus.
+
+**Produces:**
+| Artifact | Description |
+|----------|-------------|
+| `.planning/codebase/` | Codebase map produced by the `/gsd-map-codebase` handoff |
+| `.planning/PROJECT.md`, `REQUIREMENTS.md`, `ROADMAP.md`, `STATE.md` | Planning setup produced by `/gsd-new-project` or `/gsd-ingest-docs` |
+| `.planning/onboarding/SUMMARY.md` | Onboarding status, artifact index, and next-command summary |
 
 ### 27a. Post-Execute Codebase Drift Detection
 
@@ -1005,27 +1033,52 @@ fix(03-01): correct auth token expiry
 **Purpose:** Run GSD across multiple AI coding agent runtimes.
 
 **Requirements:**
-- REQ-RUNTIME-01: System MUST support Claude Code, OpenCode, Gemini CLI, Kilo, Codex, Copilot, Antigravity, Trae, Cline, Augment Code, CodeBuddy, Qwen Code
+- REQ-RUNTIME-01: System MUST support Claude Code, OpenCode, Kilo, Codex, Copilot, Antigravity, Trae, Cline, Augment Code, CodeBuddy, Qwen Code
 - REQ-RUNTIME-02: Installer MUST transform content per runtime (tool names, paths, frontmatter)
 - REQ-RUNTIME-03: Installer MUST support interactive and non-interactive (`--claude --global`) modes
 - REQ-RUNTIME-04: Installer MUST support both global and local installation
 - REQ-RUNTIME-05: Uninstall MUST cleanly remove all GSD files without affecting other configurations
 - REQ-RUNTIME-06: Installer MUST handle platform differences (Windows, macOS, Linux, WSL, Docker)
+- REQ-RUNTIME-07: Runtimes with lifecycle hook support MUST register per-turn context-headroom tracking events at install time
+- REQ-RUNTIME-08: Native packaging manifests MUST be version-stamped and enable runtime-native install/update/uninstall flows
 
 **Runtime Transformations:**
 
-| Aspect | Claude Code | OpenCode | Gemini | Kilo | Codex | Copilot | Antigravity | Cursor | Trae | Cline | Augment | CodeBuddy | Qwen Code |
-|--------|------------|----------|--------|-------|-------|---------|-------------|--------|------|-------|---------|-----------|-----------|
-| Commands | Slash commands | Slash commands | Slash commands | Slash commands | Skills (TOML) | Slash commands | Skills | Skills + Slash commands | Skills | Rules | Skills | Skills | Skills |
-| Agent format | Claude native | `mode: subagent` | Claude native | `mode: subagent` | Skills | Tool mapping | Skills | Skills | Skills | Rules | Skills | Skills | Skills |
-| Hook events | `PostToolUse` | N/A | `AfterTool` | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
-| Config | `settings.json` | `opencode.json(c)` | `settings.json` | `kilo.json(c)` | TOML | Instructions | Config | Config | Config | `.clinerules` | Config | Config | Config |
+| Aspect | Claude Code | OpenCode | Kilo | Codex | Copilot | Antigravity | Cursor | Trae | Cline | Augment | CodeBuddy | Qwen Code |
+|--------|------------|----------|-------|-------|---------|-------------|--------|------|-------|---------|-----------|-----------|
+| Commands | Slash commands | Slash commands | Slash commands | Skills (TOML) | Slash commands | Skills | Skills + Slash commands | Skills | Rules | Skills + Slash commands | Slash commands | Skills |
+| Agent format | Claude native | `mode: subagent` | `mode: subagent` | Skills | Tool mapping | Skills | Skills | Skills | Rules | Skills | Skills | Skills |
+| Skills emission | N/A | On-demand SKILL.md (1.4.0) | On-demand SKILL.md (1.4.0) | `/skills` picker (1.4.0) | N/A | N/A | SKILL.md | N/A | On-demand SKILL.md (1.4.0) | N/A | N/A | N/A |
+| Hook events | `SessionStart`, `PreToolUse`, `PostToolUse`, `SubagentStop`, `Stop`, `PreCompact`, `FileChanged` | N/A | N/A | `SessionStart`, `SubagentStart`, `Stop`, `PostToolUse` | `sessionStart` | N/A | `sessionStart`, `postToolUse` | N/A | `PreToolUse` | N/A | N/A | `SessionStart`, `PreToolUse`, `PostToolUse`, `SubagentStop`, `Stop`, `PreCompact` |
+| Config | `settings.json` | `opencode.json(c)` | `kilo.json(c)` | TOML | Instructions | Config | Config | Config | `.clinerules` | Config | Config | Config |
 
 **Cursor artifact surfaces:** `gsd install --cursor` writes two artifact kinds:
 - `~/.cursor/skills/gsd-<name>/SKILL.md` — rich skills with YAML frontmatter, Cursor tool-name mapping, and adapter context header (existing surface)
-- `~/.cursor/commands/gsd-<name>.md` — plain markdown slash commands (no frontmatter) invocable via `/` in the Agent input (Cursor 1.6+, added in #785)
+- `~/.cursor/commands/gsd-<name>.md` — plain markdown slash commands (no frontmatter) invocable via `/` in the Agent input (Cursor 1.6+)
 
-**Claude Code native plugin distribution:** GSD Core ships a `.claude-plugin/plugin.json` manifest, enabling installation and lifecycle management via `claude plugin install|enable|disable|update gsd-core`. Commands load under the `/gsd-core:` namespace (e.g. `/gsd-core:plan-phase`), avoiding slash-command collisions with the classic npm installer which uses `/gsd:`. Always-on guard and update hooks are wired automatically via `hooks/hooks.json`. The plugin path is additive — the npm installer (`npx @opengsd/gsd-core`) remains fully supported.
+**Native skills emission (1.4.0):** Three runtimes now emit GSD as on-demand native skills (`skills/<name>/SKILL.md`) at install time, in addition to their existing command and agent surfaces. Skills respect the active install profile and are removed on uninstall.
+- **Cline** (global installs, Cline >= v3.48.0) — emits skills alongside the existing `.clinerules/` directory
+- **Kilo** — emits skills alongside `command/` and `agents/`
+- **OpenCode** — emits skills alongside its existing surfaces
+
+**New slash-command surfaces (1.4.0):**
+- **CodeBuddy** — `/gsd-*` slash commands written to `~/.codebuddy/commands/`
+- **Augment** — `commands/gsd-<name>.md` written to `~/.augment/commands/`
+- **Cursor** (Cursor >= 1.6) — `.cursor/commands/gsd-<name>.md` so GSD appears in the `/` command menu
+
+**Cross-runtime lifecycle hooks (1.4.0):** Each supported runtime registers lifecycle hook events for per-turn context-headroom tracking and workflow state management. Notable registrations:
+- **Claude Code:** `SubagentStop`, `Stop`, `PreCompact` (context-headroom warnings), `FileChanged` (hot-reloads `.planning/config.json` mid-session)
+- **Qwen Code:** `SubagentStop`, `Stop`, `PreCompact`
+- **Codex:** `SubagentStart`, `Stop`, `PostToolUse` (new in 1.4.0); on Windows the `SessionStart` hook entry gains a `commandWindows` field so the `.cmd` shim is used for native execution
+- **Cline:** `PreToolUse`
+- **Cursor:** `sessionStart` (injects workflow state), `postToolUse` (nudges `.planning` updates)
+- **Copilot:** `sessionStart`
+
+**Runtime-specific enrichments (1.4.0):**
+- Codex emits `service_tier: flex` for light-tier agents; GSD skills appear in the Codex `/skills` picker via `SKILL.md` (no `agents/openai.yaml` sidecar is emitted — doing so caused duplicate autocomplete entries, #1326)
+
+**Native packaging:**
+- **Claude Code:** GSD Core ships a `.claude-plugin/plugin.json` manifest, enabling installation and lifecycle management via `claude plugin install|enable|disable|update gsd-core`. Commands load under the `/gsd-core:` namespace (e.g. `/gsd-core:plan-phase`), avoiding slash-command collisions with the classic npm installer which uses `/gsd:`. Always-on guard and update hooks are wired automatically via `hooks/hooks.json`. The plugin path is additive — the npm installer (`npx @opengsd/gsd-core`) remains fully supported.
 
 ---
 
@@ -1189,6 +1242,7 @@ When verification returns `human_needed`, items are persisted as a trackable HUM
 
 **User configuration note:**
 - Set `review.default_reviewers` in `.planning/config.json` (or via `gsd config-set`) to control no-flag `/gsd-review` fan-out.
+- `review.default_reviewers` may include configured `review.reviewer_instances` names; each instance runs as an independent reviewer identity backed by its configured adapter/model. Instance names are not CLI flags.
 - Use `--all` for a full pre-merge sweep without changing project defaults.
 - For local model servers with small context windows, set `review.max_prompt_tokens_per_reviewer` to auto-trim prompts per reviewer — see [Prompt budgets for small-context reviewers](../docs/CONFIGURATION.md#prompt-budgets-for-small-context-reviewers) in CONFIGURATION.md.
 
@@ -1196,9 +1250,9 @@ When verification returns `human_needed`, items are persisted as a trackable HUM
 
 ### 43. Backlog Parking Lot
 
-**Commands:** `/gsd-capture --backlog <description>`, `/gsd-review-backlog`, `/gsd-capture --seed <idea>`
+**Commands:** `/gsd-capture --backlog <description>`, `/gsd-review-backlog`, `/gsd-capture --seed <idea>`, `/gsd-capture --list-seeds [status]`
 
-**Purpose:** Capture ideas that aren't ready for active planning. Backlog items use 999.x numbering to stay outside the active phase sequence. Seeds are forward-looking ideas with trigger conditions that surface automatically at the right milestone.
+**Purpose:** Capture ideas that aren't ready for active planning. Backlog items use 999.x numbering to stay outside the active phase sequence. Seeds are forward-looking ideas with trigger conditions that surface automatically at the right milestone. `--list-seeds` provides a read-only audit of all parked seeds (with optional status filter) without waiting for the next milestone.
 
 **Requirements:**
 - REQ-BACKLOG-01: Backlog items MUST use 999.x numbering to stay outside active phase sequence
@@ -1207,6 +1261,7 @@ When verification returns `human_needed`, items are persisted as a trackable HUM
 - REQ-BACKLOG-04: Promoted items MUST be renumbered into the active milestone sequence
 - REQ-SEED-01: Seeds MUST capture the full WHY and WHEN to surface conditions
 - REQ-SEED-02: `/gsd-new-milestone` MUST scan seeds and present matches
+- REQ-SEED-03: `/gsd-capture --list-seeds` MUST list seeds with status, scope, and trigger for audit, with optional status filtering
 
 **Produces:**
 | Artifact | Description |
@@ -1265,7 +1320,7 @@ PreToolUse hook that scans Write/Edit calls targeting `.planning/` for injection
 **3. Workflow Guard Hook** (`gsd-workflow-guard.js`)
 PreToolUse hook that detects when Claude attempts file edits outside a GSD workflow context. Advises using `/gsd-quick` or `/gsd-fast` instead of direct edits. Configurable via `hooks.workflow_guard` (default: false).
 
-**4. CI-Ready Injection Scanner** (`prompt-injection-scan.test.cjs`)
+**4. CI-Ready Injection Scanner** (`prompt-injection-scan.security.test.cjs`)
 Test suite that scans all agent, workflow, and command files for embedded injection vectors.
 
 **Requirements:**
@@ -1445,7 +1500,7 @@ Test suite that scans all agent, workflow, and command files for embedded inject
 **Purpose:** Select multiple runtimes in a single interactive install session.
 
 **Requirements:**
-- REQ-MULTI-RT-01: Interactive prompt MUST support multi-select (e.g., Claude Code + Gemini)
+- REQ-MULTI-RT-01: Interactive prompt MUST support multi-select (e.g., Claude Code + Antigravity)
 - REQ-MULTI-RT-02: CLI flags MUST continue to work for non-interactive installs
 
 **Process:**
@@ -1686,13 +1741,13 @@ Test suite that scans all agent, workflow, and command files for embedded inject
 **Requirements:**
 - REQ-SKILLS-01: Installer MUST write `skills/gsd-*/SKILL.md` for Claude Code 2.1.88+
 - REQ-SKILLS-02: Installer MUST auto-clean legacy `commands/gsd/` directory
-- REQ-SKILLS-03: Installer MUST maintain backward compatibility with older Claude Code versions via Gemini path
+- REQ-SKILLS-03: Installer MUST maintain backward compatibility with older Claude Code versions via the legacy `commands/gsd/` path
 
 **Process:**
 1. **Detect** — Check Claude Code version to determine skills support
 2. **Migrate** — Write `skills/gsd-*/SKILL.md` files for each GSD command
 3. **Clean** — Remove legacy `commands/gsd/` directory if skills are installed
-4. **Fallback** — Maintain Gemini path compatibility for older Claude Code versions
+4. **Fallback** — Maintain legacy `commands/gsd/` path compatibility for older Claude Code versions
 
 ---
 
@@ -1799,7 +1854,7 @@ Test suite that scans all agent, workflow, and command files for embedded inject
 - REQ-CTXRED-01: System MUST truncate oversized markdown artifacts to fit within context budgets
 - REQ-CTXRED-02: System MUST order prompts for cache-friendly assembly (stable prefixes first)
 - REQ-CTXRED-03: Reduction MUST preserve essential information (headings, requirements, task structure)
-- REQ-CTXRED-04: Skill `description:` fields MUST be ≤ 100 chars; enforced by `npm run lint:descriptions` (see `scripts/lint-descriptions.cjs` and `tests/enh-2789-description-budget.test.cjs`)
+- REQ-CTXRED-04: Skill `description:` fields MUST be ≤ 100 chars; enforced by `npm run lint:descriptions` (see `scripts/lint-descriptions.cjs` and `tests/skill-frontmatter-contract.test.cjs`)
 
 **Process:**
 1. **Measure** — Calculate total prompt size for the workflow
@@ -2477,9 +2532,10 @@ Users who run a memory / knowledge-base MCP server (for example, ExoCortex-style
 **Purpose:** Allow projects to store their CLAUDE.md in a non-root location. The `claude_md_path` config key controls where `/gsd-profile-user` and related commands write the generated CLAUDE.md file.
 
 **Requirements:**
-- REQ-CMDPATH-01: `claude_md_path` defaults to `./CLAUDE.md`
+- REQ-CMDPATH-01: `claude_md_path` defaults to `./.claude/CLAUDE.md` (a valid project-scoped memory location; changed from `./CLAUDE.md` in v1.5 per [#1098](https://github.com/open-gsd/gsd-core/issues/1098) so generated content does not pollute a hand-crafted repo-root `CLAUDE.md`)
 - REQ-CMDPATH-02: Profile generation commands read the path from config and write to the specified location
 - REQ-CMDPATH-03: Relative paths are resolved from the project root
+- REQ-CMDPATH-04: `generate-claude-md` never overwrites an existing instruction file that lacks GSD section markers (a hand-crafted file) unless `--force` is passed
 
 **Configuration:** `claude_md_path`
 
@@ -2592,8 +2648,9 @@ Users who run a memory / knowledge-base MCP server (for example, ExoCortex-style
 - REQ-GRAPH-03: Build runs within the configurable `graphify.build_timeout` (seconds); exceeding the timeout aborts cleanly without leaving a partial graph.
 - REQ-GRAPH-04: `graphify.cjs` falls back to `graph.links` when `graph.edges` is absent so older graph artifacts keep rendering.
 - REQ-GRAPH-05: Graphify is invoked through `gsd-tools.cjs graphify ...` command handlers.
+- REQ-GRAPH-06: The knowledge-graph location is configurable via `graphify.graph_path` (issue #1825) so one umbrella-level cross-repo graph can serve multiple sibling projects; `query`/`status`/`diff` read the configured graph (relative to project root), with a byte-identical `.planning/graphs/` default when unset.
 
-**Configuration:** `graphify.enabled`, `graphify.build_timeout`
+**Configuration:** `graphify.enabled`, `graphify.build_timeout`, `graphify.graph_path`
 **Reference files:** `commands/gsd/graphify.md`, `bin/lib/graphify.cjs`
 
 ---
@@ -2602,7 +2659,7 @@ Users who run a memory / knowledge-base MCP server (for example, ExoCortex-style
 
 ### 122. Skill Surface Consolidation
 
-**Purpose:** Cut the eager skill-listing overhead by folding 31 micro-skills into 4 new grouped parents and 6 existing parents that absorb sub-operations as flags. Zero functional loss — every removed micro-skill's behavior survives via a flag on a consolidated parent. After consolidation, `commands/gsd/*.md` ships 59 sub-skills (plus 6 namespace meta-skills, see #123).
+**Purpose:** Cut the eager skill-listing overhead by folding 31 micro-skills into 4 new grouped parents and 6 existing parents that absorb sub-operations as flags. Zero functional loss — every removed micro-skill's behavior survives via a flag on a consolidated parent. After consolidation, `commands/gsd/*.md` ships 60 sub-skills (plus 6 namespace meta-skills, see #123).
 
 **Requirements:**
 - REQ-CONSOLIDATE-01: Four new grouped skills replace clusters of micro-skills:
@@ -2611,8 +2668,9 @@ Users who run a memory / knowledge-base MCP server (for example, ExoCortex-style
   - `/gsd-config` — folds settings-advanced (`--advanced`), settings-integrations (`--integrations`), set-profile (`--profile`)
   - `/gsd-workspace` — folds new-workspace (`--new`), list-workspaces (`--list`), remove-workspace (`--remove`)
 - REQ-CONSOLIDATE-02: Six existing parents absorb wrap-up / sub-operations as flags: `/gsd-update --sync`, `/gsd-update --reapply`, `/gsd-sketch --wrap-up`, `/gsd-spike --wrap-up`, `/gsd-map-codebase --fast`, `/gsd-map-codebase --query`, `/gsd-code-review --fix`, `/gsd-progress --do`, `/gsd-progress --next`.
-- REQ-CONSOLIDATE-03: Deleted micro-skill slash forms (the bare `gsd-add-todo`, `gsd-add-backlog`, `gsd-plant-seed`, `gsd-check-todos`, `gsd-add-phase`, `gsd-insert-phase`, `gsd-remove-phase`, `gsd-edit-phase`, `gsd-new-workspace`, `gsd-list-workspaces`, `gsd-remove-workspace`, `gsd-settings-advanced`, `gsd-settings-integrations`, `gsd-set-profile`, `gsd-sketch-wrap-up`, `gsd-spike-wrap-up`, `gsd-reapply-patches`, `gsd-code-review-fix`, …) MUST resolve to "Unknown command" — no shadow stubs.
-- REQ-CONSOLIDATE-04: `autonomous.md` invokes `/gsd-code-review --fix` (was previously calling the deleted `gsd-code-review-fix`).
+- REQ-CONSOLIDATE-03: `/gsd:next` is not the retired workflow-advance command; it is reserved for the state-aware smart-entry launcher. Workflow advancement remains under `/gsd-progress --next`.
+- REQ-CONSOLIDATE-04: Deleted micro-skill slash forms (the bare `gsd-add-todo`, `gsd-add-backlog`, `gsd-plant-seed`, `gsd-check-todos`, `gsd-add-phase`, `gsd-insert-phase`, `gsd-remove-phase`, `gsd-edit-phase`, `gsd-new-workspace`, `gsd-list-workspaces`, `gsd-remove-workspace`, `gsd-settings-advanced`, `gsd-settings-integrations`, `gsd-set-profile`, `gsd-sketch-wrap-up`, `gsd-spike-wrap-up`, `gsd-reapply-patches`, `gsd-code-review-fix`, …) MUST resolve to "Unknown command" — no shadow stubs.
+- REQ-CONSOLIDATE-05: `autonomous.md` invokes `/gsd-code-review --fix` (was previously calling the deleted `gsd-code-review-fix`).
 
 **Reference issue:** [#2790](https://github.com/open-gsd/gsd-core/issues/2790)
 
@@ -2623,7 +2681,7 @@ Users who run a memory / knowledge-base MCP server (for example, ExoCortex-style
 **Purpose:** Replace the flat eager skill listing with a two-stage hierarchical routing layer. The model sees 6 namespace routers instead of 86 entries, selects a namespace, then routes to the sub-skill. Descriptions use pipe-separated keyword tags (≤ 60 chars) for routing density.
 
 **Commands:**
-- `/gsd-workflow` — phase pipeline router (discuss / plan / execute / verify / phase / progress)
+- `/gsd-workflow` — phase pipeline router (discuss / plan / execute / verify / phase / progress / next)
 - `/gsd-project` — project lifecycle (milestones, audits, summary)
 - `/gsd-quality` — quality gates (code review, debug, audit, security, eval, ui)
 - `/gsd-context` — codebase intelligence (map, graphify, docs, learnings)
@@ -2641,10 +2699,12 @@ Users who run a memory / knowledge-base MCP server (for example, ExoCortex-style
 - REQ-NS-01: Six `commands/gsd/ns-*.md` namespace routers ship with pipe-separated keyword-tag descriptions (≤ 60 chars).
 - REQ-NS-02: Existing sub-skills are unchanged and still invocable directly — namespace skills are additive, not a replacement for direct slash forms.
 - REQ-NS-03: The body of each namespace router contains a routing table that maps user intent to the correct concrete sub-skill on the post-#2790 consolidated surface.
+- REQ-NS-04: Tests validate namespace files exist, include matching command `requires`, and reference only existing sub-skill files.
 
 **Reference issue:** [#2792](https://github.com/open-gsd/gsd-core/issues/2792)
 
 ---
+
 
 ### 124. Context-Window Utilization Guard
 
@@ -2691,10 +2751,10 @@ Users who run a memory / knowledge-base MCP server (for example, ExoCortex-style
 | Slot | Agents assigned |
 |------|-----------------|
 | `planning` | `gsd-planner`, `gsd-roadmapper`, `gsd-pattern-mapper` |
-| `discuss` | (reserved for future subagent) |
+| `discuss` | `gsd-assumptions-analyzer` |
 | `research` | `gsd-phase-researcher`, `gsd-project-researcher`, `gsd-research-synthesizer`, `gsd-codebase-mapper`, `gsd-ui-researcher` |
 | `execution` | `gsd-executor`, `gsd-debugger`, `gsd-doc-writer` |
-| `verification` | `gsd-verifier`, `gsd-plan-checker`, `gsd-integration-checker`, `gsd-nyquist-auditor`, `gsd-ui-checker`, `gsd-ui-auditor`, `gsd-doc-verifier` |
+| `verification` | `gsd-verifier`, `gsd-plan-checker`, `gsd-integration-checker`, `gsd-nyquist-auditor`, `gsd-ui-checker`, `gsd-ui-auditor`, `gsd-doc-verifier`, `gsd-code-reviewer` |
 | `completion` | (reserved for future subagent) |
 
 **Accepted values:** `"opus"` / `"sonnet"` / `"haiku"` / `"inherit"`
@@ -2957,7 +3017,7 @@ explicit reviewer flags -> --all -> review.default_reviewers -> all detected rev
 
 **Requirements:**
 - REQ-QUOTA-01: Quota failures MUST NOT offer immediate retry as the primary recovery.
-- REQ-QUOTA-02: Classification MUST cover Claude, Copilot, Codex, Gemini, and generic provider sentinels.
+- REQ-QUOTA-02: Classification MUST cover Claude, Copilot, Codex, and generic provider sentinels.
 - REQ-QUOTA-03: Non-quota failures MUST continue through the normal execution failure path.
 
 **Reference:** [Provider Rate Limit Signals](research/provider-rate-limit-signals.md)
@@ -3018,6 +3078,38 @@ explicit reviewer flags -> --all -> review.default_reviewers -> all detected rev
 
 ---
 
+### 143. UAT-Passed Predicate
+
+**CLI:** `node gsd-tools.cjs phase uat-passed <N> [--require-verification]`
+
+**Purpose:** Provide a runtime-neutral, automatable predicate that evaluates HUMAN-UAT results for a phase and returns a structured pass/fail verdict with full diagnostic detail.
+
+**Behavior:** Locates `*-UAT.md` and optionally `*-VERIFICATION.md` files for the given phase, parses UAT test blocks (heading-block parser, column-0 result lines) with a markdown-aware stripper that removes false-positive contexts (YAML frontmatter, fenced code blocks, HTML comments, and blockquotes). Returns `passed: true` only when at least one check exists AND all checks pass AND no blockers — fail-closed, no vacuous pass. The `--require-verification` flag requires at least one `*-VERIFICATION.md` with an allowlisted passing status; the command fails without one.
+
+**Output envelope:** `{ passed, uat_files[], verification_files[], checks[], blockers[], no_uat_artifacts, policy: { require_verification } }`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `passed` | `boolean` | `true` only when ≥1 check exists AND all passing AND no blockers |
+| `uat_files` | `string[]` | Filenames of `*-UAT.md` files evaluated |
+| `verification_files` | `string[]` | Filenames of `*-VERIFICATION.md` files evaluated |
+| `checks[]` | `{ file, test, name, result, passing }[]` | Per-item results from heading blocks |
+| `blockers[]` | `string[]` | Human-readable failure reasons (frontmatter, failing/missing items, policy, malformed markdown) |
+| `no_uat_artifacts` | `boolean` | `true` when no test items were parsed; `passed` is always `false` when `true` |
+| `policy.require_verification` | `boolean` | Whether `--require-verification` was active |
+
+**Requirements:**
+- REQ-UAT-PRED-01: The predicate MUST ignore result lines inside YAML frontmatter, fenced code blocks, HTML comments, and blockquotes.
+- REQ-UAT-PRED-02: `passed: true` MUST require at least one check AND all checks passing AND no blockers (fail-closed, no vacuous pass).
+- REQ-UAT-PRED-03: `--require-verification` MUST cause the command to fail when no `*-VERIFICATION.md` file with an allowlisted passing status is found.
+- REQ-UAT-PRED-04: `blockers[]` contains all human-readable failure reasons including frontmatter issues, policy violations, and malformed markdown — NOT limited to a subset of `checks[]`.
+- REQ-UAT-PRED-05: The module MUST be runtime-neutral (no runtime-specific env checks or exit shortcuts).
+- REQ-UAT-PRED-06: A heading block with no column-0 `result:` line emits `result:'missing'` (blocker); test items are never silently dropped.
+
+**Reference:** [Phase Management Commands](COMMANDS.md#phase-uat-passed-n---require-verification)
+
+---
+
 ## Related
 
 - [Commands](COMMANDS.md)
@@ -3025,3 +3117,140 @@ explicit reviewer flags -> --all -> review.default_reviewers -> all detected rev
 - [docs index](README.md)
 
 **Reference:** [JSON Error Mode](json-errors.md)
+
+---
+
+### 144. Spec-Phase Edge-Completeness Probe
+
+**Command:** `/gsd-spec-phase`
+
+**Purpose:** Surface the omitted domain-boundary edges that silently invalidate a requirement — touching intervals, empty inputs, rounding ties, grapheme truncation — before they become production defects. Runs as `Step 5.5` of spec-phase, after the ambiguity gate.
+
+**Behavior:** For each SPEC requirement the probe classifies its data/behavior shape, then raises only the *applicable* categories from a closed 8-category taxonomy (boundary, adjacency, empty, encoding, ordering, precision, idempotency, concurrency) via a relevance filter. Each raised category proposes one concrete candidate edge, which the author resolves to exactly one of four states:
+
+| State | Meaning | Downstream effect |
+|-------|---------|-------------------|
+| `covered` | An acceptance criterion handles the edge | Pass/fail line written into the SPEC Acceptance Criteria block; lifted into `plan-phase` `must_haves.truths` |
+| `dismissed` | The edge cannot occur (requires a non-empty reason) | Recorded with its reason; empty dismissals are rejected |
+| `backstop` | Intent recorded, needs a held-out/property-based test | Lifted into `must_haves.truths` as a non-inferable check |
+| `unresolved` | Deferred | Soft-gates the spec; row stamped `⚠ Edge unresolved — planner must treat as assumption` |
+
+When a requirement's prose matches **no** shape cue, the probe does not silently drop it (#1110): it emits a single `unclassified — review manually` candidate so the zero-cue requirement is surfaced for the author to resolve like any other (specify / dismiss-with-reason / defer) — a manual-review nudge, not a hard block.
+
+The resolved edges populate a `## Edge Coverage` section in `SPEC.md`. Unresolved *applicable* edges trigger a soft gate (Resolve / Write-anyway-flagged / Keep-probing) rather than a hard block. Under `--auto`, the probe **never auto-dismisses** — it auto-covers where a defensible criterion exists, otherwise auto-backstops, and logs `[auto] edge coverage: C covered, B backstop, U unresolved`. The one exception is an `unclassified` candidate: `--auto` leaves it **`unresolved`** (surfaced as a flagged assumption), never auto-`backstop` — a missing shape is not evidence an edge exists, so minting a held-out edge obligation would be a false claim.
+
+The load-bearing wire is the `plan-phase` lift: `covered` and `backstop` edges become `must_haves.truths` the verifier can check, so the section is not merely documentation. A `backstop` edge is lifted as a **structured non-inferable marker** (`{ statement, verification: backstop }`, a flat scalar — not a prose note), which the **honest verifier** then consumes (see below) — closing the loop the edge-probe opened.
+
+**Honest verifier — abstention on non-inferable checks (#1154).** A non-inferable (`backstop`) truth is one whose correct behavior is not derivable from the spec alone, so the verifier cannot self-detect the gap and would confidently false-pass it (~100% of the time). At verify time, a `backstop` truth the verifier cannot confirm with **explicit evidence** (a passing wired held-out/property-based test, or a directly-observed behavior) **abstains** → `human_needed` with reason `insufficient_spec` (reported as `unverified — held-out test recommended`), **never a silent `passed`**. This is the verify-time, truth-axis mirror of the prohibition judgment-tier disposition (ADR-550 D4): exogenous (driven by the `backstop` tag, never a self-judged "abstain if unsure"), routing-not-diagnosis (the held-out test carries the omitted rule), and capable-tier dependent (reliable on `sonnet`+; the budget `haiku` tier degrades toward current behavior). An inferable truth is never abstained (the over-abstention guard). Reference: [Honest Verifier](../gsd-core/references/honest-verifier.md).
+
+**Requirements:**
+- REQ-EDGE-01: The edge pass MUST run after the ambiguity gate and emit a `## Edge Coverage` SPEC section.
+- REQ-EDGE-02: The relevance filter MUST raise only applicable categories; each raised edge resolves to exactly one of covered/dismissed/backstop/unresolved.
+- REQ-EDGE-03: A `dismissed` resolution MUST require a non-empty reason.
+- REQ-EDGE-04: An unresolved applicable edge MUST trigger the soft gate; write-anyway stamps the row as a planner assumption.
+- REQ-EDGE-05: `--auto` MUST never auto-dismiss — auto-cover or auto-backstop only.
+- REQ-EDGE-06: `plan-phase` MUST lift `covered` criteria and `backstop` notes into `must_haves.truths`.
+- REQ-EDGE-07: A requirement whose prose matches no shape cue MUST surface an `unclassified — review manually` candidate (never silently dropped); `--auto` MUST leave it `unresolved`, never auto-`backstop`.
+- REQ-EDGE-08: `plan-phase` MUST lift a `backstop` edge into `must_haves.truths` as a structured flat-scalar marker (`{ statement, verification: backstop }`), never a prose parenthetical.
+- REQ-HONEST-01: At verify time a `backstop` truth that cannot be confirmed with explicit evidence MUST abstain → `human_needed` (reason `insufficient_spec`), never `passed`; an inferable truth MUST never be abstained (over-abstention guard); abstention MUST be exogenous (driven by the `backstop` tag, not self-judgment).
+
+**Reference:** [Edge Probe](../gsd-core/references/edge-probe.md)
+
+---
+
+## v1.43.0 Features
+
+### 145. MemPalace Memory Capability
+
+**Purpose:** Opt-in cross-session and cross-project memory via the [MemPalace](https://github.com/MemPalace/mempalace) external service (local-first, MCP + CLI). Wires deliberate recall before discuss/plan and verbatim capture + temporal-KG sync at phase boundaries through the ADR-857 capability mechanism. Default-resilient: disabled by default, every hook is `onError: skip`, and an absent MemPalace installation leaves the loop unchanged.
+
+**Commands:** `/gsd-mempalace-recall`, `/gsd-mempalace-capture`
+
+**Requirements:**
+- REQ-MP-01: Opt-in via `mempalace.enabled: true`. Default `false` — the loop is unchanged when unset.
+- REQ-MP-02: At `plan:pre`, skill `mempalace-recall` produces `MEMORY-RECALL.md` from prior decisions, patterns, and surprises retrieved via wake-up + semantic search + KG timeline. When MemPalace is unreachable, writes an "unavailable" stub and continues.
+- REQ-MP-03: At `discuss:post`, `plan:post`, and `verify:post`, skill `mempalace-capture` files the phase artifact verbatim into the appropriate MemPalace room (`decisions`, `planning`, `milestones`). Capture is idempotent via `mempalace_check_duplicate`.
+- REQ-MP-04: At `ship:post`, agent `gsd-mempalace-curator` writes a diary entry, proposes cross-project tunnels (when `mempalace.cross_project_tunnels: true`), and runs wing-scoped sync pruning.
+- REQ-MP-05: `mempalace.memory_mode` has three wired values: `augment` (default — palace is an additive recall layer alongside GSD native memory, which stays authoritative), `kg_backend` (knowledge-graph queries resolve against the palace's temporal KG as the primary source, `.planning/graphs/` as fallback; non-KG drawer recall stays additive), `replace` (recall resolves through the palace as the source of truth, native memory as fallback). Every mode is `onError:skip` and default-resilient — an unreachable palace degrades to native memory and GSD keeps writing `.planning/graphs/`, so no mode loses memory. Cross-mode migration of existing `.planning/graphs/` into the palace is out of scope (not yet implemented).
+- REQ-MP-06: Every hook is `onError: skip`. No hook carries `blocking: true`. Memory never halts or fails a phase.
+- REQ-MP-07: Interactive runs prefer MCP tools; headless/cron runs prefer the MemPalace CLI (`mempalace wake-up`, `mempalace search`, `mempalace mine`, `mempalace sync`).
+- REQ-MP-08: `mempalace.auto_capture_hooks` is **forward-declared and not yet functional**. No native Claude Code hooks (`stop`, `precompact`, `session-start`) are installed by this key; the capability's hooks array is empty. This key is reserved for the future "Connected Capability" phase. Default `false`.
+
+**Configuration:** `mempalace.enabled`, `mempalace.memory_mode`, `mempalace.wing`, `mempalace.recall_on_discuss`, `mempalace.recall_on_plan`, `mempalace.capture_artifacts`, `mempalace.mirror_kg`, `mempalace.cross_project_tunnels`, `mempalace.diary_journal`, `mempalace.auto_capture_hooks`
+
+See [Configuration Reference](CONFIGURATION.md#mempalace-settings) for full schema and [How to enable cross-session memory with MemPalace](how-to/enable-cross-session-memory-with-mempalace.md) for a setup walkthrough.
+
+### 146. Spec-Phase Prohibition Probe
+
+**Command:** `/gsd-spec-phase`
+
+**Purpose:** Surface the unwritten *must-NOT* constraints — the values/safety/ethics interpretations a feature could silently become that the author would never want but the spec does not forbid — before any code is written. The edge probe reaches data-shape edges; it structurally cannot reach prohibitions. This is the missing instrument, running as `Step 5.6` of spec-phase, after the edge probe.
+
+**Behavior:** A two-stage, prose-orchestrated pass per requirement (no compiled recall engine — recall is inherently model-driven, ADR-550 D7b):
+
+1. **Recall (adversarial probe):** *"What could this feature silently become that the author would NOT want, but the spec does not forbid?"* — model-robust open-vocabulary elicitation across values/safety/ethics.
+2. **Precision (one-pass classifier):** drop routine-engineering items, keep genuine values/safety/ethics prohibitions — collapses the raw list to the load-bearing few.
+
+Each surfaced prohibition is resolved to exactly one of three states:
+
+| State | Meaning | Downstream effect |
+|-------|---------|-------------------|
+| `resolved` | Confirmed a real must-NOT | NEGATIVE acceptance criterion written into the SPEC `## Prohibitions (must-NOT)` section; lifted into `plan-phase` `must_haves.prohibitions` (its own sibling block, never `truths`) |
+| `dismissed` | Not a genuine prohibition (requires a non-empty reason) | Recorded with its reason; empty dismissals are rejected |
+| `unresolved` | Deferred | Soft-gates the spec; surfaced as a planner assumption |
+
+Each resolved prohibition carries a `verification` tier — `test` (a negative test can enforce it) or `judgment` (only human/LLM judgment can). At verify time, judgment-tier prohibitions route to a never-silent / never-hard-halt soft gate (autonomous emits an `unverified-prohibition — human review recommended` flag); test-tier prohibitions are enforced via the deterministic `check prohibition-enforcement` gate — green when the wired negative test / lint rule passes, hard-gate (flagged, non-green) when missing or failing, in both interactive and autonomous modes (#1259, ADR-550 D5d). Under `--auto`, the probe **never auto-dismisses**. Canon-bound concerns (OWASP / GDPR / fairness) are referred to `/gsd:secure-phase` rather than minting SPEC prohibitions (ADR-550 D6).
+
+The load-bearing wire is the `plan-phase` lift into `must_haves.prohibitions`, so the section is not merely documentation.
+
+**Deterministic prohibition-check descriptor source (#1278).** A resolved `test`-tier prohibition MAY carry an optional **`check` descriptor** — the flat-scalar keys `check_kind` (`node-test` | `lint-rule`), `check_target`, and `check_rule` (lint-rule only) — authored at spec-phase. `projectProhibitions` projects these scalars deterministically and verify-phase reads them back to locate the check handed to `check prohibition-enforcement`, so a wired, passing test closes the gap with **zero manual descriptor authoring** (previously the verify-phase LLM had to invent `{kind, target, rule}` each run, #1259). The descriptor is **optional and backward-compatible** — a descriptor-less prohibition parses and disposes byte-identically to today — and **fail-closed**: a partial, invalid, or absent descriptor falls through to the producer's existing fail-closed locate, never a silent green. `failFirst` stays a verify-time caller attestation (machine-proven fail-first is tracked in #1279).
+
+**Requirements:**
+- REQ-PROHIB-01: The prohibition pass MUST run after the edge probe and emit a `## Prohibitions (must-NOT)` SPEC section.
+- REQ-PROHIB-02: Stage 1 MUST ask the adversarial recall question; Stage 2 MUST drop routine-engineering items and keep values/safety/ethics prohibitions.
+- REQ-PROHIB-03: A `dismissed` resolution MUST require a non-empty reason.
+- REQ-PROHIB-04: `--auto` MUST never auto-dismiss.
+- REQ-PROHIB-05: `plan-phase` MUST lift resolved prohibitions into `must_haves.prohibitions` (never `truths`).
+- REQ-PROHIB-06: A well-formed but unwired `test`-tier prohibition MUST fail closed at verify time — never a silent pass.
+- REQ-PROHIB-07: A `test`-tier prohibition with a **machine-proven-fail-first**, genuinely-passing (non-vacuous) wired mechanical check (a `node --test` negative test OR a lint/AST rule) MUST dispose green and be satisfiable; a missing, un-provable, or non-passing check MUST hard-gate (flagged, non-green) in both interactive and autonomous modes. Fail-first is **machine-proven, not caller-attested** (#1279, ADR-550 D5d): before a clean pass greens, the producer independently runs the wired check against a known violation (the descriptor's `violationFixture`) and confirms it goes RED — a lint rule via the violating fixture, a node test via the violating subject injected through the `GSD_PROHIB_SUBJECT` convention; absent a violation source it fails closed, never falling back to attestation. (Enforcement half shipped #1259; deterministic descriptor auto-locate in #1278.)
+
+**Reference:** [Prohibition Probe](../gsd-core/references/prohibition-probe.md)
+
+
+### 147. Capability Management Command
+
+**Command:** `gsd capability install | update | remove | list | outdated | disable | enable`
+
+**Purpose:** The user-facing CLI for the ADR-1244 capability ecosystem — install, upgrade, remove, list, check for updates, and toggle GSD capabilities (first-party and third-party overlays) from a registry / git / npm / tarball / local source. Wires the Phase-3/4 lifecycle library (source resolver, install ledger, trust gate) to a command users actually run.
+
+**Behavior:**
+- `install <spec> [--integrity sha512-…] [--scope global|project] [--yes] [--shared-file <rel>]…` — resolve (copy-only) → verify integrity / SHA pin → `engines.gsd` gate → disclose executable surfaces → consent (`--yes` grants; without it an executable install aborts after printing the disclosure and writes nothing) → validate → extract → record the ledger.
+- `update [<id> | --all] [--scope] [--yes]` — re-resolve the capability's recorded source and upgrade via atomic stage-then-swap; re-consent when the executable set changed; `--all` reports a per-capability outcome and exits non-zero on any partial failure.
+- `remove <id> [--purge-data] [--scope]` — strip the ledger-recorded files + marker-isolated shared edits; first-party capabilities are rejected (use the product uninstaller).
+- `list [--json]` — first-party + installed overlay capabilities (both scopes) as a JSON array.
+- `outdated [--json] [--scope]` — light remote peek of each installed overlay's recorded source (ADR-1244 D6 per-source matrix: git `ls-remote --tags`, npm `view … version` resolving the highest version matching the recorded range, local re-read; tarball → `manual`, registry → `unknown`) reporting `outdated` / `current` / `pinned` / `manual` / `unknown` per capability. A source pinned to an immutable ref (git `#sha:` or `#tag:`, or an exact npm version) is reported `pinned`. A bare git `#<ref>` is classified at the remote: if it resolves exclusively under `refs/tags/` it is an immutable tag → `pinned`; if it resolves to a mutable branch (or is ambiguous) it is `unknown`. Bounded subprocesses (git ≤30s, npm ≤60s) and a failing peek degrades that row to `unknown` without crashing the command. `--json` for machine output, default for a table.
+- `disable | enable <id>` — toggle activation state (equivalent to `gsd capability set <id> --off` / `--on`).
+
+**Trust boundary:** install never executes capability code (copy-only staging); executable surfaces require explicit consent; sources are gated by the **project-scoped** `capabilities.strict_known_registries` policy (fail-closed on a malformed/unparseable value); every shared-config write/delete is realpath-confined to the scope root, and a name collision with a user's `mcpServers` entry is never clobbered.
+
+**Reference:** [`gsd capability` command reference](reference/gsd-capability-command.md) · [ADR-1244](adr/1244-capability-ecosystem.md)
+### 148. Smart Entry Launcher
+
+**Command:** `/gsd:next`
+
+**Tool:** `gsd-tools smart-entry [--json]`
+
+**Purpose:** Provide a state-aware front door that reads project/workflow state, classifies the user's situation, presents a short menu, and dispatches exactly one existing GSD command.
+
+**Requirements:**
+- REQ-SMART-ENTRY-01: Detection MUST be read-only and deterministic; classification lives in `gsd-tools smart-entry`.
+- REQ-SMART-ENTRY-02: The launcher MUST never perform project work directly; it only displays a menu and dispatches one command.
+- REQ-SMART-ENTRY-03: The workflow MUST fall back to `/gsd-progress` if detection fails.
+- REQ-SMART-ENTRY-04: Each classified situation MUST provide exactly one recommended action and valid slash commands.
+- REQ-SMART-ENTRY-05: Text-mode runtimes MUST receive a numbered-list fallback instead of being stranded by interactive UI assumptions.
+
+**Situations:** no project, paused, blocked, verify failed, needs first phase, planning, executing, verify pending, idle stranded, complete, unknown.
+
+**Reference:** [Smart Entry Design](superpowers/specs/2026-06-27-gsd-smart-entry-design.md)
+
+---

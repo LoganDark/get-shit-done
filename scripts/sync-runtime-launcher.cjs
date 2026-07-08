@@ -2,8 +2,8 @@
 /**
  * sync-runtime-launcher.cjs
  *
- * Idempotent transform: for every gsd-core/workflows/*.md (and subdirs),
- * rewrite all bash/sh/shell fenced blocks to:
+ * Idempotent transform: for every gsd-core/workflows/*.md (and subdirs)
+ * AND every agents/*.md, rewrite all bash/sh/shell fenced blocks to:
  *   1. Strip ALL old resolver forms from every bash block (GSD_TOOLS=,
  *      GSD_SDK=, the if/elif/else/fi resolver, _GSD_SHIM_NAME=, and any
  *      previously-inserted gsd_run preamble).
@@ -20,6 +20,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const WORKFLOWS_DIR = path.join(__dirname, '..', 'gsd-core', 'workflows');
+const AGENTS_DIR = path.join(__dirname, '..', 'agents');
 const SNIPPET_FILE = path.join(WORKFLOWS_DIR, '_runtime-launcher.snippet.sh');
 
 // Read canonical preamble (full content of snippet file)
@@ -342,9 +343,12 @@ function transformFile(content, preamble) {
     }
   }
 
-  // Insert preamble into the first gsd_run block only
+  // Insert preamble into the first gsd_run block only — UNLESS this file
+  // delegates to the shared resolver reference (@-include). Delegating files keep
+  // the stripped blocks (any inline preamble removed) but never get one inserted.
+  const delegates = delegatesToResolverReference(content);
   const finalBlocks = strippedBlocks.map((stripped, bi) => {
-    if (bi === firstGsdRunBlockIdx) {
+    if (!delegates && bi === firstGsdRunBlockIdx) {
       return insertPreamble(stripped, preamble);
     }
     return stripped;
@@ -373,21 +377,51 @@ function escapeRegExp(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * A file "delegates to the shared resolver" when it pulls the canonical gsd_run
+ * preamble in from gsd-core/references/gsd-run-resolver.md via an @-include
+ * instead of inlining the snippet (see onboard.md / issue #1990).
+ *
+ * These files must NOT carry an inline preamble: the resolver reference ships the
+ * one canonical copy, and onboard-command.test.cjs asserts the inline form is
+ * absent. transformFile still STRIPS any inline preamble from them (so a stray
+ * copy is removed) but never re-inserts one — mirroring the exemption in
+ * runtime-launcher-parity.test.cjs (subtest B / B2).
+ */
+function delegatesToResolverReference(content) {
+  return content.includes('references/gsd-run-resolver.md');
+}
+
 // Main
 function main() {
   const preamble = loadPreamble();
-  const files = collectFiles(WORKFLOWS_DIR);
 
   let transformedCount = 0;
   let unchangedCount = 0;
 
-  for (const f of files) {
+  // Process workflow files
+  const workflowFiles = collectFiles(WORKFLOWS_DIR);
+  for (const f of workflowFiles) {
     const content = fs.readFileSync(f, 'utf8');
     const result = transformFile(content, preamble);
     if (result !== null) {
       fs.writeFileSync(f, result, 'utf8');
       transformedCount++;
-      console.log(`transformed: ${path.relative(WORKFLOWS_DIR, f)}`);
+      console.log(`transformed (workflow): ${path.relative(WORKFLOWS_DIR, f)}`);
+    } else {
+      unchangedCount++;
+    }
+  }
+
+  // Process agent files
+  const agentFiles = collectFiles(AGENTS_DIR);
+  for (const f of agentFiles) {
+    const content = fs.readFileSync(f, 'utf8');
+    const result = transformFile(content, preamble);
+    if (result !== null) {
+      fs.writeFileSync(f, result, 'utf8');
+      transformedCount++;
+      console.log(`transformed (agent): ${path.relative(AGENTS_DIR, f)}`);
     } else {
       unchangedCount++;
     }

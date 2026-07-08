@@ -19,8 +19,8 @@ import roadmapUpgrade = require('./roadmap-upgrade.cjs');
 import planningWorkspace = require('./planning-workspace.cjs');
 const { planningDir } = planningWorkspace;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-import core = require('./core.cjs');
-const { loadConfig } = core;
+import configLoaderMod = require('./config-loader.cjs');
+const { loadConfig } = configLoaderMod;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,9 +70,10 @@ function checkW021(content: string): W021Warning[] {
   const MILESTONE_RE = /^#{1,3}\s+(?:\[[^\]]+\]\s+|Roadmap\s+|[✅🚧]\s*)?v(\d+)\.\d+(?:\s|:|\s*—)/iu;
 
   // Migrated phase heading: ### Phase M-NN: Name  (M-NN or unpadded M-N form)
-  const PHASE_RE = /^#{2,4}\s*(?:\[[^\]]+\]\s*)?Phase\s+(\d+)-(\d+)(?:-\d+)*\s*:/i;
+  // #1729: `(?:\s*\([^)\n]*\))?` tolerates a pre-colon ( ) tag (literal mirror of OPTIONAL_PHASE_TAG_SOURCE).
+  const PHASE_RE = /^#{2,4}\s*(?:\[[^\]]+\]\s*)?Phase\s+(\d+)-(\d+)(?:-\d+)*(?:\s*\([^)\n]*\))?\s*:/i;
   // Unprefixed legacy phase heading: ### Phase N: Name  (no hyphen sub-index)
-  const UNPREFIXED_PHASE_RE = /^#{2,4}\s*(?:\[[^\]]+\]\s*)?Phase\s+(\d+[A-Za-z]?(?:\.\d+)*)\s*:/i;
+  const UNPREFIXED_PHASE_RE = /^#{2,4}\s*(?:\[[^\]]+\]\s*)?Phase\s+(\d+[A-Za-z]?(?:\.\d+)*)(?:\s*\([^)\n]*\))?\s*:/i;
 
   let currentMilestoneMajor: number | null = null;
   const lines = content.split('\n');
@@ -181,10 +182,25 @@ function routeRoadmapCommand({ roadmap, args, cwd, raw, error }: RouteRoadmapCom
       },
       'upgrade': () => {
         const dryRun = !args.includes('--apply');
-        const convention = args.find((_a, i) => args[i - 1] === '--convention') || 'milestone-prefixed';
+        // Parse `--convention <value>` and `--convention=<value>`. When the flag is
+        // absent entirely, default to the only supported convention; when present
+        // with a missing/unsupported value, fall through to the rejection below
+        // (fail-closed — never silently run a migration the user did not request).
+        let convention = 'milestone-prefixed';
+        const conventionFlagIdx = args.findIndex(
+          (a) => a === '--convention' || a.startsWith('--convention='),
+        );
+        if (conventionFlagIdx !== -1) {
+          const token = args[conventionFlagIdx];
+          convention = token.includes('=')
+            ? token.slice(token.indexOf('=') + 1)
+            : (args[conventionFlagIdx + 1] ?? '');
+        }
         if (convention !== 'milestone-prefixed') {
-          process.stderr.write('Only --convention milestone-prefixed is supported\n');
-          process.exit(1);
+          // No-throw hub contract (ADR-0012): a hub-dispatched handler must not call
+          // process.exit. Throw instead — the hub converts this to HandlerFailure and
+          // the adapter routes it through the injected error() boundary.
+          throw new Error('Only --convention milestone-prefixed is supported');
         }
         const plan = roadmapUpgrade.computeMigrationPlan(cwd);
         roadmapUpgrade.applyMigration(cwd, plan, { dryRun });

@@ -102,9 +102,13 @@ const GIT_PATTERNS = [
 // Word boundary + the requirement that a real subcommand verb follows
 // (one or more letters) keeps the pattern from triggering on prose like
 // `the git tool` (no `;`/`&&` prefix at column 0) or path-like `git/foo`.
+// VCS-audit 2026-07-08: widened to also match option-leading invocations
+// (`git -C <dir> <cmd>`, `git --git-dir=… <cmd>`, `git -c k=v <cmd>`) — the
+// letter-only tail made every `git -C` call invisible to both this lint and
+// scripts/audit-workflow-raw-git.cjs (which reuses the regex byte-identically).
 const SHELL_GIT_PATTERNS = [
   {
-    re: /(?:^|[ \t;&|(])git[ \t]+[a-zA-Z]/,
+    re: /(?:^|[ \t;&|(])git[ \t]+(?:[a-zA-Z]|-)/,
     label: "shell `git <cmd>`",
   },
 ];

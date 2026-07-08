@@ -13,16 +13,22 @@
  *       preserves key-value pairs for simple flat string values
  *   (d) spliceFrontmatter never throws on any string/object combination
  *   (e) extractFrontmatter returns {} for content without a leading ---...--- block
+ *   (f) prohibitions bijection (#644): over a generated must_haves.prohibitions block,
+ *       parseMustHavesBlock(spliceFrontmatter(doc, parseFrontmatter(doc)), 'prohibitions')
+ *       deepEquals the original parse — the new parse ↔ splice path is identity-preserving.
  */
 
 const { describe, test } = require('node:test');
 const assert = require('node:assert/strict');
 const fc = require('./helpers/fast-check-setup.cjs');
+const yaml = require('js-yaml');
 
 const {
   extractFrontmatter,
   reconstructFrontmatter,
   spliceFrontmatter,
+  parseFrontmatter,
+  parseMustHavesBlock,
 } = require('../gsd-core/bin/lib/frontmatter.cjs');
 
 // ─── Arbitraries ─────────────────────────────────────────────────────────────
@@ -189,6 +195,101 @@ describe('frontmatter: spliceFrontmatter properties', () => {
           }
         }
       )
+    );
+  });
+});
+
+// ─── (f) prohibitions bijection (#644) ────────────────────────────────────────
+// Locks the new parseMustHavesBlock(…, 'prohibitions') ↔ spliceFrontmatter path that
+// the prohibition probe adds. The example-based version lives in
+// tests/prohibition-probe.schema.test.cjs; this generalizes it over generated blocks.
+
+// YAML-safe scalar: starts with a letter, no colon/quote/hash/newline (so it parses as a
+// plain string and is never coerced to a number by the parser's /^\d+$/ check).
+const safeScalar = fc.stringMatching(/^[A-Za-z][A-Za-z0-9 ._-]{0,50}$/);
+
+// One prohibition item with structurally realistic key shape per ADR-550 D7a:
+//   resolved  → carries a verification tier (test|judgment)
+//   dismissed → carries a non-empty reason (+ a tier)
+//   unresolved→ neither
+const prohibitionItem = fc.oneof(
+  fc.record({ statement: safeScalar, status: fc.constant('resolved'),
+    verification: fc.constantFrom('test', 'judgment') }),
+  fc.record({ statement: safeScalar, status: fc.constant('dismissed'),
+    verification: fc.constantFrom('test', 'judgment'), reason: safeScalar }),
+  fc.record({ statement: safeScalar, status: fc.constant('unresolved') })
+);
+
+// Emit a frontmatter doc with a must_haves.prohibitions sibling block (keys in a fixed
+// order: statement, status, verification?, reason?). Quoted strings carry the values.
+function buildDoc(items) {
+  const lines = ['---', 'phase: 01-x', 'plan: 01', 'must_haves:',
+    '  truths:', '    - "User sees a daily reminder"', '  prohibitions:'];
+  for (const it of items) {
+    lines.push(`    - statement: "${it.statement}"`);
+    lines.push(`      status: ${it.status}`);
+    if (it.verification !== undefined) lines.push(`      verification: ${it.verification}`);
+    if (it.reason !== undefined) lines.push(`      reason: "${it.reason}"`);
+  }
+  lines.push('---', '', 'Body text unchanged.', '');
+  return lines.join('\n');
+}
+
+describe('frontmatter: prohibitions parse ↔ splice bijection (#644)', () => {
+  test('property: generated prohibitions parse back with their statement and status', () => {
+    fc.assert(
+      fc.property(fc.array(prohibitionItem, { minLength: 1, maxLength: 5 }), (items) => {
+        const doc = buildDoc(items);
+        const parsed = parseMustHavesBlock(doc, 'prohibitions');
+        assert.equal(parsed.length, items.length, 'every prohibition item must parse out');
+        for (let i = 0; i < items.length; i++) {
+          assert.equal(parsed[i].statement, items[i].statement, `statement[${i}] mismatch`);
+          assert.equal(parsed[i].status, items[i].status, `status[${i}] mismatch`);
+        }
+      })
+    );
+  });
+
+  test('property: parse -> splice -> re-parse is identity-preserving for prohibitions', () => {
+    fc.assert(
+      fc.property(fc.array(prohibitionItem, { minLength: 1, maxLength: 5 }), (items) => {
+        const doc = buildDoc(items);
+        const before = parseMustHavesBlock(doc, 'prohibitions');
+        const parsed = parseFrontmatter(doc);
+        const spliced = spliceFrontmatter(doc, parsed.frontmatter ?? parsed);
+        const after = parseMustHavesBlock(spliced, 'prohibitions');
+        assert.deepEqual(after, before,
+          'prohibitions must survive a splice/re-parse round-trip unchanged');
+      })
+    );
+  });
+});
+
+// #1779 — reconstructFrontmatter must emit YAML that a STRICT parser accepts and
+// that preserves string values. The bijective contract is
+//   ∀ s: yaml.load(reconstructFrontmatter({ k: s })).k === s
+// over the documented safe-input subset. Two classes are out of scope and
+// excluded here, not silently passed:
+//   - lone UTF-16 surrogates (lossy through UTF-8 encoding) — filtered via
+//     fc.pre(s.isWellFormed());
+//   - numeric/boolean/null-looking BARE strings (e.g. "42", "true", "-5") that a
+//     YAML loader resolves to a non-string type — a separate pre-existing bug
+//     class (valid YAML, wrong type), so we assert equality only when the value
+//     loads back AS a string. An escaping defect (invalid YAML) still fails
+//     loudly because yaml.load() throws.
+describe('frontmatter: reconstructFrontmatter strict-YAML property (#1779)', () => {
+  test('property: every string value serializes to valid YAML and string-round-trips', () => {
+    fc.assert(
+      fc.property(fc.string({ maxLength: 200 }), (s) => {
+        fc.pre(s.isWellFormed());
+        // Throws → reconstructFrontmatter emitted invalid YAML → property fails
+        // (fast-check shrinks + prints the replay seed automatically).
+        const loaded = yaml.load(reconstructFrontmatter({ k: s }));
+        if (typeof loaded.k === 'string') {
+          assert.equal(loaded.k, s,
+            `value did not round-trip through strict YAML: ${JSON.stringify(s)}`);
+        }
+      })
     );
   });
 });

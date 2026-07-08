@@ -26,10 +26,17 @@ The git log should read like a changelog of what shipped, not a diary of plannin
 <git_check>
 
 ```bash
-[ -d .git ] && echo "GIT_EXISTS" || echo "NO_GIT"
+# VCS-audit 2026-07-08: probe BOTH backends. `-d .git` covers plain git and
+# colocated jj, `-f .git` covers git worktrees/submodule checkouts, `-d .jj`
+# covers jj-native repos — which have NO .git, so the old git-only probe
+# reported NO_GIT there and directed a stray `git init` INSIDE a jj repo
+# (an empty top-level .git flips the SDK's backend detection toward git).
+{ [ -d .git ] || [ -f .git ] || [ -d .jj ]; } && echo "VCS_EXISTS" || echo "NO_VCS"
 ```
 
-If NO_GIT: Run `git init` silently. GSD projects always get their own repo.
+If NO_VCS: Run `git init` silently (the greenfield default, matching the SDK
+resolver). GSD projects always get their own repo. NEVER run `git init` when
+`.jj` exists — jj manages its own git store.
 </git_check>
 
 <commit_formats>

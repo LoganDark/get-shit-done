@@ -18,12 +18,17 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-// eslint-disable-next-line @typescript-eslint/no-require-imports -- core.cjs is an export= CommonJS module
-import core = require('./core.cjs');
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- io.cjs is an export= CommonJS module
+import io = require('./io.cjs');
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- phase-id.cjs is an export= CommonJS module
+import phaseId = require('./phase-id.cjs');
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- frontmatter.cjs is an export= CommonJS module
 import frontmatterMod = require('./frontmatter.cjs');
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- plan-scan.cjs is an export= CommonJS module
+import scanPhasePlans = require('./plan-scan.cjs');
 
-const { output, extractPhaseToken } = core;
+const { output, error } = io;
+const { extractPhaseToken } = phaseId;
 const { extractFrontmatter } = frontmatterMod;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -71,6 +76,11 @@ const VERIFICATION_ROUTING_TABLE: Record<string, VerificationRoute> = {
     next_action: "Human verification required. Complete the manual tests in the phase's *-UAT.md, then re-run the verify step until status is passed.",
     next_command: '',
   },
+  stale: {
+    status: 'stale',
+    next_action: 'Verification is stale. Re-run verify-work before transition.',
+    next_command: '',
+  },
   // INTERNAL SENTINEL: constructed when no *-VERIFICATION.md file exists or when
   // the file has no parseable frontmatter status. Never emitted by the verifier.
   missing: {
@@ -92,6 +102,12 @@ const VERIFICATION_ROUTING_TABLE: Record<string, VerificationRoute> = {
 interface FsLike {
   readdirSync(dir: string): string[];
   readFileSync(filePath: string, encoding: 'utf-8'): string;
+  statSync(filePath: string): { mtimeMs: number };
+}
+
+interface StaleVerificationInfo {
+  verificationFile: string;
+  summaryFile: string;
 }
 
 /**
@@ -118,6 +134,39 @@ interface VerificationStatusResult {
   status: string;
   next_action: string;
   next_command: string;
+}
+
+function findStaleVerificationSummary(phaseDir: string, fsImpl: FsLike = fs): StaleVerificationInfo | null {
+  // FS errors (TOCTOU: a SUMMARY listed by scanPhasePlans then removed before statSync;
+  // unreadable dir; broken symlink; file->dir swap) must degrade to "not stale" rather
+  // than throw uncaught into callers that are NOT under the planning lock
+  // (init.manager / init.progress / uat-predicate). Mirrors readVerificationStatus's
+  // no-throw contract; `fsImpl` threads the same injectable-fs seam for parity/testing.
+  // (Review B1 on #1548.)
+  try {
+    const phaseFiles = fsImpl.readdirSync(phaseDir);
+    const verificationFile = phaseFiles.filter((f) => f.endsWith('-VERIFICATION.md')).sort()[0];
+    if (!verificationFile) return null;
+
+    const verificationMtimeMs = fsImpl.statSync(path.join(phaseDir, verificationFile)).mtimeMs;
+    let newestStaleSummary: { summaryFile: string; mtimeMs: number } | null = null;
+    const summaryFiles = (scanPhasePlans(phaseDir) as { summaryFiles: string[] }).summaryFiles;
+    for (const summaryFile of summaryFiles.sort()) {
+      const summaryMtimeMs = fsImpl.statSync(path.join(phaseDir, summaryFile)).mtimeMs;
+      if (summaryMtimeMs <= verificationMtimeMs) continue;
+      if (!newestStaleSummary || summaryMtimeMs > newestStaleSummary.mtimeMs) {
+        newestStaleSummary = { summaryFile, mtimeMs: summaryMtimeMs };
+      }
+    }
+
+    if (!newestStaleSummary) return null;
+    return {
+      verificationFile,
+      summaryFile: newestStaleSummary.summaryFile,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -183,19 +232,41 @@ function readVerificationStatus(
     return missingResult();
   }
 
-  // 3. Route — exclude internal sentinels from raw-file lookup (they are
-  // constructed internally above, never written by the verifier).
-  if (rawStatus in VERIFICATION_ROUTING_TABLE && rawStatus !== 'missing' && rawStatus !== 'unknown') {
-    const entry = VERIFICATION_ROUTING_TABLE[rawStatus];
-    // gaps_found: build the phase-specific command here rather than in the table.
-    const next_command =
-      rawStatus === 'gaps_found'
-        ? `/gsd:plan-phase ${phaseNumber} --gaps`
-        : entry.next_command;
+  // gaps_found takes priority over stale — gap closure is the correct next
+  // step regardless of whether summaries are newer than the verification file.
+  if (rawStatus === 'gaps_found') {
+    const entry = VERIFICATION_ROUTING_TABLE['gaps_found'];
     return {
       status: entry.status,
       next_action: entry.next_action,
-      next_command,
+      next_command: `/gsd:plan-phase ${phaseNumber} --gaps`,
+    };
+  }
+
+  const staleVerification = findStaleVerificationSummary(phaseDir, fsImpl);
+  if (staleVerification) {
+    const entry = VERIFICATION_ROUTING_TABLE['stale'];
+    return {
+      status: entry.status,
+      next_action: entry.next_action,
+      next_command: `/gsd:verify-work ${phaseNumber}`,
+    };
+  }
+
+  // 3. Route — exclude internal sentinels from raw-file lookup (they are
+  // constructed internally above, never written by the verifier).
+  if (
+    rawStatus in VERIFICATION_ROUTING_TABLE &&
+    rawStatus !== 'missing' &&
+    rawStatus !== 'unknown' &&
+    rawStatus !== 'stale' &&
+    rawStatus !== 'gaps_found'
+  ) {
+    const entry = VERIFICATION_ROUTING_TABLE[rawStatus];
+    return {
+      status: entry.status,
+      next_action: entry.next_action,
+      next_command: entry.next_command,
     };
   }
 
@@ -210,7 +281,7 @@ function readVerificationStatus(
 
 /**
  * CLI command handler: resolve phaseDir against cwd, call readVerificationStatus,
- * emit via core.output().
+ * emit via io.output().
  *
  * @param cwd         - Current working directory (used to resolve phaseDirArg).
  * @param phaseDirArg - Phase directory path (absolute or relative to cwd).
@@ -218,7 +289,7 @@ function readVerificationStatus(
  */
 function cmdVerificationStatus(cwd: string, phaseDirArg: string | undefined, raw: boolean): void {
   if (!phaseDirArg) {
-    core.error('phase directory required for verification.status');
+    error('phase directory required for verification.status');
     return;
   }
   const phaseDir = path.resolve(cwd, phaseDirArg);
@@ -229,6 +300,7 @@ function cmdVerificationStatus(cwd: string, phaseDirArg: string | undefined, raw
 export = {
   VERIFIER_STATUSES,
   VERIFICATION_ROUTING_TABLE,
+  findStaleVerificationSummary,
   readVerificationStatus,
   cmdVerificationStatus,
 };

@@ -10,19 +10,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
 // 19-07 (AUDIT-01, T-19-DG): raw child_process exec is gone from this module.
-// The clean-tree gate + HEAD capture route through the ported adapter; the
-// rollback path is non-destructive — filesystem rename-reversal plus the
-// adapter restore surface scoped to .planning/ (the only tree this tool
-// touches), replacing the prior whole-repo destructive hard-reset +
-// `git clean -fd` pair. vcsExec is the adapter-internal exec seam, used here
-// only for the jj-side restore (same fork gap-fill carry-over as the
-// vcs-command-router restore verb; see src/vcs/backends/jj.cts TODO).
+// The clean-tree gate routes through the ported adapter (backend-aware, so jj
+// working copies are gated correctly too). The rollback path is upstream's
+// #1542 surgical fs snapshot/restore — VCS-independent by construction, which
+// supersedes both the old destructive hard-reset + `git clean -fd` pair AND
+// the fork's interim adapter-restore rollback (no VCS baseline needed at all).
 import { createVcsAdapter } from './vcs/index.cjs';
-import { expr } from './vcs/expr.cjs';
-import { vcsExec } from './vcs/exec.cjs';
+import { retryRenameSync } from './shell-command-projection.cjs';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import planningWorkspace = require('./planning-workspace.cjs');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import phaseIdMod = require('./phase-id.cjs');
 const { planningDir } = planningWorkspace;
+const { stripProjectCodePrefix } = phaseIdMod;
 
 // ─── Regex helpers ────────────────────────────────────────────────────────────
 
@@ -175,7 +175,7 @@ function assignSubIndices(phaseEntries: ParsedPhaseEntry[]): Map<number, Assigne
  */
 function extractPhaseNumFromDir(dirName: string): string | null {
   // Strip optional project_code prefix: "GSD-01-setup" → "01-setup"
-  const stripped = dirName.replace(/^[A-Z]{1,6}-(?=\d)/i, '');
+  const stripped = stripProjectCodePrefix(dirName);
   // Matches: digits + optional letter + optional decimal suffix, followed by '-' or end.
   // e.g. "02.1-hotfix" → "02.1", "01-setup" → "01"
   const m = stripped.match(/^(\d+[A-Z]?(?:\.\d+)*)(?:-|$)/i);
@@ -191,7 +191,7 @@ function extractPhaseNumFromDir(dirName: string): string | null {
  */
 function buildNewDirName(oldDirName: string, newId: string, projectCode: string | null): string {
   // Strip existing project_code prefix
-  const stripped = oldDirName.replace(/^[A-Z]{1,6}-(?=\d)/i, '');
+  const stripped = stripProjectCodePrefix(oldDirName);
 
   // Extract slug: everything after "NN-" (the old phase num, including decimal like 02.1)
   const slugMatch = stripped.match(/^\d+[A-Z]?(?:\.\d+)*-(.*)/i);
@@ -501,32 +501,6 @@ function applyMigration(cwd: string, plan: MigrationPlan, options: { dryRun?: bo
     throw new Error('Working tree is dirty. Commit or stash changes before migrating.');
   }
 
-  // Capture the rollback baseline revision id BEFORE any mutation — unified
-  // revision model: LogEntry.id is the backend-canonical identifier (full hex
-  // commit_id on git, change_id on jj). (was: git rev-parse HEAD)
-  //
-  // 19-review CR-02: on jj the first log row is `@` — the working-copy
-  // commit's change_id. A change_id is a stable pointer to a MUTABLE change:
-  // by rollback time jj has auto-snapshotted the half-migrated working copy
-  // into `@`, so `jj restore --from <@'s change_id>` would restore the WC
-  // from itself — a silent no-op. Use `@-` (the parent of the working-copy
-  // commit) as the baseline on jj: it is the last landed state before this
-  // tool's mutations, and the clean-tree gate above guarantees `@` and `@-`
-  // have identical .planning/ content at capture time. On git, HEAD is an
-  // immutable commit and stays correct as-is.
-  let headRev: string;
-  try {
-    const headEntries = vcs.kind === 'jj'
-      ? vcs.log({ rev: expr.parent(), maxCount: 1 })   // @- : pre-mutation baseline
-      : vcs.log({ maxCount: 1 });                      // git HEAD (immutable)
-    if (headEntries.length === 0 || !headEntries[0].id) {
-      throw new Error('no commits found at HEAD');
-    }
-    headRev = headEntries[0].id;
-  } catch (err) {
-    throw new Error(`HEAD revision capture failed: ${(err as Error).message}`);
-  }
-
   const pDir = planningDir(cwd);
   const phasesDir = path.join(pDir, 'phases');
   const roadmapPath = path.join(pDir, 'ROADMAP.md');
@@ -534,12 +508,23 @@ function applyMigration(cwd: string, plan: MigrationPlan, options: { dryRun?: bo
 
   const renamedDirs: string[] = [];
   const editedFiles: string[] = [];
-  // 19-07 (T-19-DG): record each completed rename with absolute paths so the
-  // rollback can reverse them precisely via the filesystem (renames are WC
-  // operations — fs rename-reversal is the exact inverse; the prior
-  // `git clean -fd .planning/phases/` existed only to sweep the renamed-to
-  // dirs, which the reversal makes unnecessary).
-  const completedRenames: { oldPath: string; newPath: string }[] = [];
+
+  // Surgical, git-independent rollback state (#1542). A `git reset --hard` +
+  // `git clean` rollback restores NOTHING for a gitignored `.planning/`
+  // (commit_docs:false — the default) and is a whole-repo operation besides.
+  // Instead, record the exact renames performed and snapshot each file before
+  // rewriting it, then undo precisely those on failure — correct whether
+  // `.planning/` is git-tracked or ignored.
+  const performedRenames: Array<{ oldPath: string; newPath: string }> = [];
+  const fileBackups = new Map<string, { existed: boolean; content: string }>();
+  const snapshotFile = (filePath: string): void => {
+    if (fileBackups.has(filePath)) return;
+    try {
+      fileBackups.set(filePath, { existed: true, content: fs.readFileSync(filePath, 'utf8') });
+    } catch {
+      fileBackups.set(filePath, { existed: false, content: '' });
+    }
+  };
 
   try {
     // 1. Rename phase directories
@@ -547,8 +532,8 @@ function applyMigration(cwd: string, plan: MigrationPlan, options: { dryRun?: bo
       const oldPath = path.join(phasesDir, phaseEntry.oldDir);
       const newPath = path.join(phasesDir, phaseEntry.newDir);
       if (fs.existsSync(oldPath)) {
-        fs.renameSync(oldPath, newPath);
-        completedRenames.push({ oldPath, newPath });
+        retryRenameSync(oldPath, newPath);
+        performedRenames.push({ oldPath, newPath });
         renamedDirs.push(`${phaseEntry.oldDir} → ${phaseEntry.newDir}`);
       }
     }
@@ -566,6 +551,7 @@ function applyMigration(cwd: string, plan: MigrationPlan, options: { dryRun?: bo
         }
       }
 
+      snapshotFile(roadmapPath);
       fs.writeFileSync(roadmapPath, lines.join('\n'), 'utf8');
       editedFiles.push('ROADMAP.md');
     }
@@ -595,6 +581,7 @@ function applyMigration(cwd: string, plan: MigrationPlan, options: { dryRun?: bo
       }
 
       if (changed) {
+        snapshotFile(filePath);
         fs.writeFileSync(filePath, content, 'utf8');
         editedFiles.push(fileName);
       }
@@ -607,69 +594,28 @@ function applyMigration(cwd: string, plan: MigrationPlan, options: { dryRun?: bo
     } catch { /* config may not exist yet */ }
 
     configData['phase_id_convention'] = 'milestone-prefixed';
+    snapshotFile(configPath);
     fs.writeFileSync(configPath, JSON.stringify(configData, null, 2) + '\n', 'utf8');
     editedFiles.push('config.json');
 
   } catch (err) {
-    // 19-07 (T-19-DG): NON-DESTRUCTIVE rollback replacing the prior
-    // whole-repo destructive pair (hard-reset to <sha> + `git clean -fd
-    // .planning/phases/`). Two precise steps, scoped to what this tool
-    // actually touched:
-    //   1. Reverse the completed directory renames via the filesystem (exact
-    //      inverse of the WC operations performed above — also removes the
-    //      renamed-to dirs the old `clean -fd` swept).
-    //   2. Restore .planning/ file content from the captured pre-mutation
-    //      baseline through the adapter restore surface (git: gitOnly.restore
-    //      --source HEAD; jj: `jj restore --from <@-'s change_id>` via the
-    //      adapter-internal exec seam — same surface as the `gsd-tools query
-    //      restore` verb). 19-review CR-02: the jj baseline is `@-`, NOT `@`
-    //      — restoring from `@`'s change_id would be a no-op because jj
-    //      auto-snapshots the half-migrated WC into `@` (see capture site
-    //      above).
-    // If any rollback step fails, FAIL LOUDLY with manual-recovery
-    // instructions — never fall back to raw destructive git.
-    const rollbackErrors: string[] = [];
-
-    for (const r of [...completedRenames].reverse()) {
+    // Surgical rollback: reverse the renames (newest first) and restore every
+    // file we snapshotted (deleting files that did not previously exist). This
+    // actually restores `.planning/` regardless of git tracking — so the
+    // "rolled back" claim is truthful — and never touches anything else.
+    for (let i = performedRenames.length - 1; i >= 0; i--) {
+      const { oldPath, newPath } = performedRenames[i];
       try {
-        if (fs.existsSync(r.newPath) && !fs.existsSync(r.oldPath)) {
-          fs.renameSync(r.newPath, r.oldPath);
-        }
-      } catch (renameErr) {
-        rollbackErrors.push(`rename-reversal failed for ${r.newPath} → ${r.oldPath}: ${(renameErr as Error).message}`);
-      }
+        if (fs.existsSync(newPath)) retryRenameSync(newPath, oldPath);
+      } catch { /* best-effort */ }
     }
-
-    try {
-      if (vcs.kind === 'git') {
-        const res = vcs.gitOnly.restore({ files: ['.planning/'], from: headRev });
-        if (res.exitCode !== 0) {
-          rollbackErrors.push(`vcs restore failed (exit ${res.exitCode}): ${res.stderr || res.stdout}`);
-        }
-      } else {
-        // jj path: no adapter restore verb yet — dispatch via the
-        // adapter-internal exec seam (fork gap-fill carry-over; mirrors
-        // src/vcs-command-router.cts restoreVerb's jj branch).
-        const res = vcsExec(cwd, 'jj', ['restore', '--from', headRev, '--', '.planning/']);
-        if (res.exitCode !== 0) {
-          rollbackErrors.push(`jj restore failed (exit ${res.exitCode}): ${res.stderr || res.stdout}`);
-        }
-      }
-    } catch (restoreErr) {
-      rollbackErrors.push(`restore threw: ${(restoreErr as Error).message}`);
+    for (const [filePath, backup] of fileBackups) {
+      try {
+        if (backup.existed) fs.writeFileSync(filePath, backup.content, 'utf8');
+        else if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      } catch { /* best-effort */ }
     }
-
-    if (rollbackErrors.length > 0) {
-      throw new Error(
-        `Migration failed AND rollback is INCOMPLETE: ${(err as Error).message}\n` +
-        `Rollback issues:\n${rollbackErrors.map((e) => `  - ${e}`).join('\n')}\n` +
-        `Manual recovery (captured pre-migration revision: ${headRev}):\n` +
-        `  - git backend: git restore --source ${headRev} -- .planning/\n` +
-        `  - jj backend:  jj restore --from ${headRev} -- .planning/\n` +
-        `  then remove any leftover renamed directories under .planning/phases/.`,
-      );
-    }
-    throw new Error(`Migration failed (rolled back to ${headRev}): ${(err as Error).message}`);
+    throw new Error(`Migration failed and rolled back: ${(err as Error).message}`);
   }
 
   return { applied: true, renamedDirs, editedFiles };

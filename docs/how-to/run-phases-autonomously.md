@@ -54,6 +54,28 @@ If the phase is already complete, autonomous mode exits immediately with a messa
 
 ---
 
+## Run with plan convergence
+
+Use `--converge` when you want each phase to run the plan-review convergence loop before execution. Both `/gsd-autonomous` and `/gsd-progress --next --auto` support this flag.
+
+```bash
+gsd config-set workflow.plan_review_convergence true
+
+# Via autonomous (multi-phase or single-phase):
+/gsd-autonomous --only 4 --converge
+/gsd-autonomous --from 3 --to 5 --converge --all --max-cycles 5
+
+# Via progress --next --auto (step-chaining with convergence):
+/gsd-progress --next --auto --converge
+/gsd-progress --next --auto --converge --codex --max-cycles 4
+```
+
+`--cross-ai` is accepted as an alias for `--converge`. Reviewer flags supported by `/gsd-plan-review-convergence` pass through unchanged, including `--codex`, `--gemini`, `--claude`, `--opencode`, `--ollama`, `--lm-studio`, `--llama-cpp`, `--all`, and `--max-cycles N`.
+
+If `workflow.plan_review_convergence` is not enabled, the command stops before planning and prints the enable command instead of silently falling back to regular planning.
+
+---
+
 ## Run with interactive discuss
 
 By default, autonomous mode answers discuss questions automatically using smart discuss (batch table proposals). If you want to answer design questions yourself while keeping plan and execute out of the main context:
@@ -78,7 +100,7 @@ To run autonomously on a runtime that does not support the `AskUserQuestion` too
 /gsd-autonomous --from 3 --text
 ```
 
-All interactive prompts become plain numbered lists; type the choice number to respond.
+All interactive prompts become plain numbered lists; type the choice number to respond. When combined with `--converge`, `--text` is also forwarded to the convergence loop via `CONVERGENCE_ARGS` so reviewer prompts inside plan-review convergence use the same plain-text mode.
 
 ---
 
@@ -138,6 +160,13 @@ If autonomous mode stops — whether you chose "Stop autonomous mode" from the b
 ```
 
 GSD skips already-complete phases automatically, so it is safe to re-run from an earlier phase number if you are not sure where the run stopped.
+
+If a prior run recorded a `Deferred Verification` entry in `STATE.md`, later `/gsd-autonomous` reruns skip that phase instead of re-entering the same deferral prompt. Resume deferred work with the exact command shown in the table:
+
+```bash
+/gsd:verify-work 4          # for verification_deferred_human
+/gsd:plan-phase 6 --gaps   # for verification_deferred_gaps
+```
 
 ---
 

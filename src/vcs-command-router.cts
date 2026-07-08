@@ -18,8 +18,8 @@
  * was a spawnSync back-bridge INTO gsd-tools' own `worktree cleanup-wave`
  * case, i.e. the upstream case IS the implementation):
  *
- *   status, log, diff, head-ref, current-branch, branch-list, push, merge,
- *   reset, restore, revert, commit-to-subrepo, hooks.fire, migrate-vcs,
+ *   status, log, diff, head-ref, read-blob, current-branch, branch-list,
+ *   push, merge, reset, restore, revert, commit-to-subrepo, hooks.fire, migrate-vcs,
  *   workspace.assert-dispatched-cwd, workspace.parallel.dispatch,
  *   workspace.parallel.fan-in, workspace.parallel.cancel,
  *   cleanup-subagent-workspaces
@@ -391,6 +391,45 @@ const headRefVerb: VcsVerbHandler = (args, projectDir) => {
   };
 };
 
+// 19-12 next-merge port: read a file's content at a revision through the
+// adapter (git: `git show <rev>:<path>`; jj: `jj file show -r <rev> <path>`).
+// Consumed by quick.md's executor-side PLAN.md materialization (#1265) so the
+// workflow never shells raw `git show`. Envelope: {ok, content} — pick
+// `content` with --pick to write the exact blob to a file.
+const readBlobVerb: VcsVerbHandler = (args, projectDir) => {
+  let cwd = projectDir;
+  let rev: string | undefined;
+  let filePath: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && args[i + 1]) {
+      cwd = args[i + 1];
+      i++;
+    } else if (args[i] === '--rev' && args[i + 1]) {
+      rev = args[i + 1];
+      i++;
+    } else if (args[i] === '--path' && args[i + 1]) {
+      filePath = args[i + 1];
+      i++;
+    }
+  }
+
+  if (!rev) {
+    return { data: { ok: false, error: 'read-blob: --rev <revision> required' } };
+  }
+  if (!filePath) {
+    return { data: { ok: false, error: 'read-blob: --path <repo-relative-path> required' } };
+  }
+
+  const vcs = createVcsAdapter(cwd);
+  try {
+    const content = vcs.refs.readBlob(expr.rev(rev), filePath);
+    return { data: { ok: true, content } };
+  } catch (err) {
+    return { data: { ok: false, error: `read-blob failed: ${(err as Error).message}` } };
+  }
+};
+
 const currentBranchVerb: VcsVerbHandler = (args, projectDir) => {
   let cwd = projectDir;
 
@@ -457,6 +496,7 @@ const pushVerb: VcsVerbHandler = (args, projectDir) => {
   let remote: string | undefined;
   let bookmark: string | undefined;
   let force = false;
+  let setUpstream = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--cwd' && args[i + 1]) {
@@ -470,6 +510,11 @@ const pushVerb: VcsVerbHandler = (args, projectDir) => {
       i++;
     } else if (args[i] === '--force') {
       force = true;
+    } else if (args[i] === '--set-upstream') {
+      // 19-12 PushOpts.setUpstream passthrough (VCS-audit fix): establishes
+      // upstream tracking on git; documented no-op on jj (jj git push
+      // records the remote-tracking relationship natively).
+      setUpstream = true;
     }
   }
 
@@ -496,6 +541,7 @@ const pushVerb: VcsVerbHandler = (args, projectDir) => {
       remote,
       ref,
       force,
+      setUpstream,
     });
   } catch (err) {
     return {
@@ -704,8 +750,14 @@ const restoreVerb: VcsVerbHandler = (args, projectDir) => {
 
   // jj path: no adapter verb yet — dispatch via vcsExec directly
   // (fork gap-fill carry-over; see src/vcs/backends/jj.cts TODO).
+  // Carries the adapter's mandatory jj flag set (--no-pager --color never
+  // --quiet) so pager/ANSI noise can't leak into the JSON envelope — same
+  // WR-06 discipline as the `revert` jj leg below.
   const jjFrom = from ?? '@-';
-  const result = vcsExec(cwd, 'jj', ['restore', '--from', jjFrom, '--', ...files]);
+  const result = vcsExec(cwd, 'jj', [
+    '--no-pager', '--color', 'never', '--quiet',
+    'restore', '--from', jjFrom, '--', ...files,
+  ]);
   return {
     data: {
       ok: result.exitCode === 0,
@@ -1422,6 +1474,7 @@ const VCS_VERB_TABLE: Record<string, VcsVerbHandler> = {
   'log': logVerb,
   'diff': diffVerb,
   'head-ref': headRefVerb,
+  'read-blob': readBlobVerb,
   'current-branch': currentBranchVerb,
   'branch-list': branchListVerb,
   'push': pushVerb,

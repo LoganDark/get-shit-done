@@ -52,10 +52,16 @@ describe.skipIf(!jjAvailable)('Phase 3 plan 03-05 Task 2 — findConflicts on jj
     execSync('jj config set --repo user.email "test@test.com"', { cwd: conflictDir, stdio: 'pipe' });
     execSync('jj config set --repo user.name "Test"', { cwd: conflictDir, stdio: 'pipe' });
 
+    // Two conflicting files: a plain path AND one with a space — pins the
+    // resolve-list extraction (VCS-audit follow-up 2026-07-08: jj prints
+    // spaced paths unquoted, `con flict.txt    2-sided conflict`; the old
+    // /^(\S+)/ extraction truncated it to `con`).
     writeFileSync(join(conflictDir, 'f.txt'), 'baseline\n');
+    writeFileSync(join(conflictDir, 'con flict.txt'), 'baseline\n');
     execSync(`jj describe -m 'baseline'`, { cwd: conflictDir, stdio: 'pipe' });
     execSync(`jj new -m 'branchA'`, { cwd: conflictDir, stdio: 'pipe' });
     writeFileSync(join(conflictDir, 'f.txt'), 'branchA content\n');
+    writeFileSync(join(conflictDir, 'con flict.txt'), 'branchA content\n');
     // Snapshot branchA's change_id before moving off
     const branchA = execSync(
       `jj log -r '@' -T 'change_id.short()' --no-graph -n 1`,
@@ -63,6 +69,7 @@ describe.skipIf(!jjAvailable)('Phase 3 plan 03-05 Task 2 — findConflicts on jj
     ).trim();
     execSync(`jj new -m 'branchB' '@-'`, { cwd: conflictDir, stdio: 'pipe' });
     writeFileSync(join(conflictDir, 'f.txt'), 'branchB conflicting content\n');
+    writeFileSync(join(conflictDir, 'con flict.txt'), 'branchB conflicting content\n');
     const branchB = execSync(
       `jj log -r '@' -T 'change_id.short()' --no-graph -n 1`,
       { cwd: conflictDir, encoding: 'utf8' },
@@ -107,10 +114,24 @@ describe.skipIf(!jjAvailable)('Phase 3 plan 03-05 Task 2 — findConflicts on jj
     it('scope:all returns paths populated via `jj resolve --list`', () => {
       const vcs = createJjAdapter(conflictDir);
       const conflicts = vcs.findConflicts({ scope: 'all' });
-      // The conflict scenario only touches f.txt — every conflicted commit
-      // surfaced should report f.txt in its paths.
+      // The conflict scenario touches both fixture files — every conflicted
+      // commit surfaced should report both in its paths.
       for (const c of conflicts) {
         expect(c.paths).toContain('f.txt');
+        expect(c.paths).toContain('con flict.txt');
+      }
+    });
+
+    it('extracts spaced paths whole (not truncated at the first space)', () => {
+      const vcs = createJjAdapter(conflictDir);
+      const conflicts = vcs.findConflicts({ scope: 'working-copy' });
+      expect(conflicts.length).toBe(1);
+      // The exact spaced path, and no `con` fragment from /^(\S+)/-style
+      // truncation, and no description prose leaking into any path.
+      expect(conflicts[0].paths).toContain('con flict.txt');
+      expect(conflicts[0].paths).not.toContain('con');
+      for (const p of conflicts[0].paths) {
+        expect(p).not.toMatch(/-sided conflict/);
       }
     });
 

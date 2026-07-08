@@ -23,6 +23,8 @@ The `.planning/` directory is GSD Core's shared memory for a project. Every work
 │   ├── architecture.md
 │   ├── stack.md
 │   └── ...
+├── onboarding/                         # Brownfield onboarding summary (optional)
+│   └── SUMMARY.md
 ├── intel/                              # Queryable symbol index (optional, intel.enabled)
 │   └── API-SURFACE.md
 └── phases/
@@ -48,15 +50,17 @@ The `.planning/` directory is GSD Core's shared memory for a project. Every work
 | | |
 |---|---|
 | **Purpose** | Canonical project identity: what it is, who it is for, core value, requirements, constraints, and key decisions. Updated throughout the project lifecycle as the product evolves. |
-| **Produced by** | `/gsd-new-project` (initial creation); updated by `/gsd-complete-milestone` as decisions are validated. |
+| **Produced by** | `/gsd-new-project` (initial creation, including `/gsd-onboard` handoff); updated by `/gsd-complete-milestone` as decisions are validated. |
 | **Consumed by** | All planning workflows; `gsd-phase-researcher`, `gsd-planner` (context); `discuss-phase` (prior decisions); `gsd-plan-checker` (project constraints). |
+
+Includes an optional `## Business Context` section (Customer, Revenue model, Success metric, Strategy notes) for monetized or customer-facing projects — four one-line fields that connect business outcomes to requirement prioritization. It is deleted for internal tools, experiments, or meta workspaces, and reviewed at each milestone by `/gsd-complete-milestone` when present.
 
 ### `ROADMAP.md`
 
 | | |
 |---|---|
 | **Purpose** | Milestone and phase listing with goals, requirement IDs, success criteria, and canonical references per phase. The single source of truth for what the project is building and in what order. |
-| **Produced by** | `/gsd-new-project` (initial creation); updated by `/gsd-phase --insert` and `/gsd-complete-milestone`. |
+| **Produced by** | `/gsd-new-project` (initial creation, including `/gsd-onboard` handoff); updated by `/gsd-phase --insert` and `/gsd-complete-milestone`. |
 | **Consumed by** | `/gsd-discuss-phase`, `/gsd-plan-phase`, `/gsd-execute-phase`; all orchestration commands that need phase information; `gsd-planner`, `gsd-plan-checker`, `gsd-phase-researcher`. |
 
 ### `REQUIREMENTS.md`
@@ -64,7 +68,7 @@ The `.planning/` directory is GSD Core's shared memory for a project. Every work
 | | |
 |---|---|
 | **Purpose** | Numbered, checkable acceptance criteria for the project. Each requirement carries an ID (e.g., `AUTH-01`) that maps to roadmap phases. Marks requirements complete as phases are executed. |
-| **Produced by** | `/gsd-new-project` (initial creation); requirements marked complete by `execute-phase`. |
+| **Produced by** | `/gsd-new-project` (initial creation, including `/gsd-onboard` handoff); requirements marked complete by `execute-phase`. |
 | **Consumed by** | `gsd-planner` (plans must address all phase requirement IDs); `gsd-plan-checker` Dimension 1 (requirement coverage); `discuss-phase` (prior requirements). |
 
 ### `STATE.md`
@@ -72,7 +76,7 @@ The `.planning/` directory is GSD Core's shared memory for a project. Every work
 | | |
 |---|---|
 | **Purpose** | Living position tracker — current phase and plan, progress metrics, accumulated decisions, session continuity notes. Read at the start of every workflow run. Updated after every significant action. |
-| **Produced by** | `/gsd-new-project` (initial creation); updated continuously by all phase workflows, `/gsd-pause-work`, `/gsd-resume-work`. |
+| **Produced by** | `/gsd-new-project` (initial creation, including `/gsd-onboard` handoff); updated continuously by all phase workflows, `/gsd-pause-work`, `/gsd-resume-work`. |
 | **Consumed by** | All orchestration workflows; `/gsd-progress`; ad-hoc task execution via `/gsd-quick`; `gsd-planner` and `gsd-phase-researcher` (project decisions). |
 
 See [STATE.md schema](state-md.md) for the full field reference.
@@ -86,6 +90,14 @@ See [STATE.md schema](state-md.md) for the full field reference.
 | **Consumed by** | Every workflow and subagent — read at init time via `gsd-tools query config-get`. |
 
 See [CONFIGURATION](../CONFIGURATION.md) for the complete schema.
+
+### `onboarding/SUMMARY.md` (optional)
+
+| | |
+|---|---|
+| **Purpose** | Brownfield onboarding index that records artifact status, whether codebase mapping is complete, and the next recommended GSD command after first-time setup. |
+| **Produced by** | `/gsd-onboard` after `PROJECT.md`, `REQUIREMENTS.md`, `ROADMAP.md`, and `STATE.md` all exist. |
+| **Consumed by** | Humans reviewing first-time setup; future `/gsd-onboard` runs when confirming existing onboarding state. |
 
 ### `MILESTONES.md` (optional)
 
@@ -181,7 +193,7 @@ See [PLAN.md schema](plan-md.md) for the full field reference.
 
 | | |
 |---|---|
-| **Purpose** | Phase goal verification report. Checks `must_haves.truths`, `must_haves.artifacts`, and `must_haves.key_links` from all plans against the actual codebase after execution. Records `status: passed | gaps_found | human_needed`. |
+| **Purpose** | Phase goal verification report. Checks `must_haves.truths`, `must_haves.artifacts`, and `must_haves.key_links` from all plans against the actual codebase after execution. Records `status: passed \| gaps_found \| human_needed`. A truth whose correctness depends on runtime behaviour — a state transition or a cancellation/cleanup/ordering invariant — is marked `⚠️ PRESENT_BEHAVIOR_UNVERIFIED` (not `VERIFIED`) when no test exercises it: it is excluded from `score`, counted in the `behavior_unverified` frontmatter field, and routed to `human_needed`, so a behaviour-dependent gap can no longer count toward a clean N/N. |
 | **Produced by** | `/gsd-verify-work` (or the verify step within `/gsd-execute-phase`). |
 | **Consumed by** | `plan-phase` closed-phase gate (a `status: passed` VERIFICATION.md marks the phase `Complete` and blocks replanning without `--force`); `/gsd-progress`; human review. |
 
@@ -200,6 +212,54 @@ See [PLAN.md schema](plan-md.md) for the full field reference.
 | **Purpose** | Human-readable resume instructions written when work on a phase is paused. Contains context for resuming agents: critical anti-patterns, blocking issues, required reading, and the exact command to resume. |
 | **Produced by** | `/gsd-pause-work`. |
 | **Consumed by** | Any workflow that starts on a phase — `discuss-phase` and `plan-phase` both check for this file at entry and require the agent to demonstrate understanding of any `blocking` anti-patterns before proceeding. |
+
+### `.planning/async-jobs/<job>.json`
+
+**Purpose**: Durable manifest for an async external job dispatched during Execute (long-running compute, e.g. HPC solver/training jobs). Its presence makes an Execute step's SUMMARY-absent state a *legal* `external_job_waiting` deferral rather than an illegal partial-plan state.
+
+**Stability contract (Hyrum's Law).** This schema is a depended-upon interface across the core loop and every scheduler backend. The core loop consumes only the named fields below and ignores any others; producers MUST write these fields and MAY add their own. The `version` field is the escape hatch for evolving the schema without breaking consumers. Coordinate any change with both the core half (#1165) and the producer capability (#1164).
+
+**Produced by**: a scheduler-adapter Capability at the `execute:wave:post` loop extension point (the capability half — tracked in #1164, default-off). Core never writes this file.
+
+**Consumed by**: `execute-phase` safe-resume, `resume-project`, and `pause-work` (the core half — #1165).
+
+| Field | Type | Meaning |
+|---|---|---|
+| `version` | string | Manifest schema version (`"1.0"`). |
+| `job_id` | string | Backend-assigned job identifier. |
+| `plan_id` | string | `<phase>-<plan>` this job belongs to — the key tying the job to its Execute step. |
+| `phase` | string | Phase number. |
+| `backend` | string | Scheduler/backend name (e.g. `slurm`). **Opaque to core** — core never interprets or invokes it. |
+| `submit_command` | string | Exact command used to submit the job (audit / resubmit). |
+| `status` | enum | Scheduler-agnostic lifecycle state (see below). |
+| `expected_artifacts` | string[] | Paths the job is expected to produce; verified before the plan is closed. |
+| `verification_command` | string | Command that verifies the job's output before close-out. |
+| `resume_command` | string | Exact command to resume GSD reconciliation (re-enter the loop to re-check the job), e.g. `/gsd:execute-phase <phase>`. This is a GSD reconciliation entry point, not a scheduler resubmit. |
+| `submitted_at` | string | ISO 8601 submission timestamp. |
+| `terminal_details` | object \| null | Failure/terminal-state detail; `null` while non-terminal. |
+
+**`status` enum** — closed and scheduler-agnostic; producers map backend states onto these, and core reads only these:
+
+- `submitted`, `running` — **non-terminal**. The plan is in the legal `external_job_waiting` half-state; resume re-checks and never re-dispatches the plan.
+- `completed-unverified` — job finished but output not yet verified; resume MUST verify `expected_artifacts` / run `verification_command` before writing SUMMARY.md and closing the plan.
+- `failed`, `cancelled`, `timeout` — **terminal failure**; resume surfaces `terminal_details` and offers recovery: re-run reconciliation (`resume_command`), abort, or mark-and-skip. Resubmitting compute is a Capability/user action, never an automatic core action.
+
+**Trust boundary — manifest commands are untrusted input.** The manifest crosses a trust seam: a Capability (or anything that can write `.planning/`) produces it; the core loop consumes it. `submit_command`, `verification_command`, and `resume_command` are therefore UNTRUSTED. The core loop MUST NOT auto-execute them — before running any manifest-sourced command, surface the exact command and its manifest path to the user and require explicit confirmation. Validate before trusting a manifest: `version` is a recognized schema version, `plan_id` matches the plan under reconciliation, and `status` is one of the closed enum values. If a manifest is malformed or unrecognized, surface the anomaly and stop rather than acting on it.
+
+**Matching, multiple, and malformed manifests.** Match a manifest to a plan by its exact `plan_id` (string-equal — phase ids may contain `.`). If more than one manifest matches a single `plan_id`, or a matched manifest is not valid JSON, fail closed: surface the conflict and stop; never pick one heuristically.
+
+**No auto-dispatch (duplicate-execution guard).** A plan whose `plan_id` matches a manifest (any status) is excluded from EVERY dispatch path — `execute-phase` `safe_resume_gate`, `execute-phase` `discover_and_group_plans` (normal and cross-AI), and `execute-plan` plan-selection. Never spawn a fresh executor for such a plan; reconcile instead. Re-dispatching would duplicate the external job.
+
+**Matching a manifest to a plan** (glob-safe — tolerates an absent directory):
+```bash
+ASYNC_MANIFEST=$(find .planning/async-jobs -maxdepth 1 -name '*.json' -exec grep -lE "\"plan_id\"[[:space:]]*:[[:space:]]*\"${CURRENT_PLAN_ID}\"" {} + 2>/dev/null || true)
+```
+Match by exact `plan_id`. If more than one manifest matches, or any matched manifest is not valid JSON, fail closed: surface the conflict and stop.
+
+**Reconciliation by status** (manifest commands are untrusted — surface + require explicit user confirmation before running any):
+- `submitted` / `running` → non-terminal; still waiting. Report the job and stop; resume later. Never re-dispatch.
+- `completed-unverified` → after confirmation, verify `expected_artifacts` / run `verification_command`; only on success write SUMMARY.md and close the plan. If artifacts are missing, surface the anomaly — do not close.
+- `failed` / `cancelled` / `timeout` → terminal failure; surface `terminal_details` and offer recovery (re-run reconciliation via `resume_command`, abort, or mark-and-skip). Resubmitting compute is a Capability/user action, never automatic.
 
 ---
 
