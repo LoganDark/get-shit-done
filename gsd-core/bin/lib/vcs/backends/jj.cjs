@@ -78,6 +78,16 @@ const DIFF_STATUS_LETTER = Object.freeze({
  * Throws on a non-JSON line — with --no-pager/--color never/--quiet pinned,
  * anything unparsable on stdout is contract drift (no-fallback decision).
  */
+/**
+ * Machine-readable bookmark listing at a commit (VCS-audit follow-up
+ * 2026-07-08). The bare `bookmarks` keyword renders PRESENTATION markers
+ * (`*` local-ahead, `??` divergent) that the old implementation had to
+ * regex-strip and grammar-check; mapping over the CommitRef objects instead
+ * yields the plain refname via `b.name()` and divergence as a typed boolean
+ * via `b.conflict()` (both empirically verified on jj 0.42). One strict-JSON
+ * object per line.
+ */
+const COMMIT_BOOKMARKS_JSON_TEMPLATE = 'bookmarks.map(|b| "{\\"name\\":" ++ json(b.name()) ++ ",\\"divergent\\":" ++ json(b.conflict()) ++ "}").join("\\n") ++ "\\n"';
 function parseJjDiffEntries(stdout) {
     const entries = [];
     for (const line of stdout.split('\n')) {
@@ -489,11 +499,10 @@ function createJjAdapter(cwd) {
     };
     /**
      * Phase 3 RESEARCH A3 (empirically resolved): enumerate conflicted paths
-     * for a given revision via `jj resolve --list -r <rev>` — the sole form
-     * since the VCS-audit follow-up (2026-07-08) deleted the dormant
-     * `--summary` fallback (dead on every probe since 0.41, and its `C`-line
-     * filter meant *copied*, not conflicted). Line format and the spaced-path
-     * extraction fix are documented at the sidecar (jj/conflict-paths.cts).
+     * for a given revision via the machine-readable template channel —
+     * `jj file list -r <rev> -T 'if(conflict, json(path) ++ "\n")'` (see
+     * jj/conflict-paths.cts; the VCS-audit follow-up 2026-07-08 replaced the
+     * resolve --list scrape and deleted the dormant `--summary` fallback).
      *
      * WR-04: the sentinel `'<UNRESOLVABLE>'` is returned when enumeration
      * fails or prints nothing for a rev the `conflicts()` revset flagged.
@@ -521,9 +530,8 @@ function createJjAdapter(cwd) {
      * - `scope: 'all'` → revset `conflicts()` (every in-tree conflicted commit)
      * - `scope: 'working-copy'` → revset `conflicts() & @` (filter to @)
      *
-     * Path enumeration uses `enumerateConflictedPaths(rev)` — `jj resolve
-     * --list -r <rev>` (sole form; the dormant `--summary` fallback was
-     * deleted in the 2026-07-08 VCS-audit follow-up).
+     * Path enumeration uses `enumerateConflictedPaths(rev)` — the JSON
+     * `jj file list -T` conflict-filter template (jj/conflict-paths.cts).
      *
      * CONFLICT-03: the verify-gate caller invokes `findConflicts({scope:'all'})`
      * — already wired on the git backend (git.ts:520); flipping the allowlist
@@ -735,6 +743,40 @@ function createJjAdapter(cwd) {
         },
     });
     // ─── refs namespace (plan 03-03) ────────────────────────────────────────
+    /**
+     * Shared body for currentBookmarks/currentBookmarksIn: bookmarks at @-
+     * via the CommitRef JSON template (one strict-JSON {name, divergent}
+     * object per line; see COMMIT_BOOKMARKS_JSON_TEMPLATE). Non-zero exit →
+     * [] (parity with the git backend's detached/no-repo degrade); a
+     * divergent bookmark throws VcsBookmarkDivergentError; a non-JSON line is
+     * template-contract drift and throws loudly (no-fallback discipline).
+     */
+    const readBookmarksAtParent = (targetCwd, label) => {
+        const args = jjArgv('log', '-r', '@-', '-T', COMMIT_BOOKMARKS_JSON_TEMPLATE, '--no-graph', '-n', '1');
+        const r = (0, exec_cjs_1.vcsExec)(targetCwd, 'jj', args);
+        if (r.exitCode !== 0)
+            return [];
+        const names = [];
+        for (const line of r.stdout.split('\n')) {
+            if (!line.trim())
+                continue;
+            let rec;
+            try {
+                rec = JSON.parse(line);
+            }
+            catch {
+                throw new Error(`${label}: non-JSON line from bookmarks template: '${line}'`);
+            }
+            if (rec.divergent) {
+                throw new types_cjs_1.VcsBookmarkDivergentError({
+                    bookmarkName: stripPrefix(rec.name),
+                    divergentTargets: [],
+                });
+            }
+            names.push(stripPrefix(rec.name));
+        }
+        return names;
+    };
     const refs = Object.freeze({
         head: expr_cjs_1.expr.head(),
         parent: expr_cjs_1.expr.parent(),
@@ -744,82 +786,27 @@ function createJjAdapter(cwd) {
         // Opaque string per CF-03; consumers compose into regex patterns.
         idAlphabet: 'k-z',
         bookmarks,
-        currentBookmarks: () => {
-            // jj's "current bookmark" semantics map to bookmarks at @- (the parent
-            // of the working-copy commit), because @ is always the in-progress WC
-            // commit. Multiple bookmarks can point at the same revision; the
-            // template `bookmarks.join("\n")` emits each name on its own line.
-            const args = jjArgv('log', '-r', '@-', '-T', 'bookmarks.join("\\n")', '--no-graph', '-n', '1');
-            const r = (0, exec_cjs_1.vcsExec)(cwd, 'jj', args);
-            if (r.exitCode !== 0)
-                return [];
-            return r.stdout
-                .split('\n')
-                .map((s) => s.trim())
-                .filter(Boolean)
-                .map((s) => {
-                // WR-02 (D-02 enforcement on this read path): jj renders
-                // divergent bookmarks with a trailing `??` suffix in template
-                // output. Surface as `VcsBookmarkDivergentError` rather than
-                // letting `feature??` masquerade as a regular bookmark name
-                // after stripPrefix. `divergentTargets` is left empty here
-                // because the template form doesn't expose the targets; callers
-                // who need them can re-query through `bookmarks.list()`.
-                if (s.endsWith('??')) {
-                    throw new types_cjs_1.VcsBookmarkDivergentError({
-                        bookmarkName: stripPrefix(s.slice(0, -2)),
-                        divergentTargets: [],
-                    });
-                }
-                // WR-08: jj's `bookmarks` template appends `*` when the local
-                // bookmark is ahead of its remote-tracking counterpart. Strip
-                // only this known marker; any other non-refname suffix is
-                // contract drift and surfaces as a typed error so a future jj
-                // template reshape can't silently leak state markers into
-                // caller-visible names.
-                const stripped = s.replace(/\*$/, '');
-                // Refname grammar (the conservative slice we admit on this
-                // template-driven read path): leading alnum, then
-                // `[A-Za-z0-9._/-]*`. Anything else signals template drift.
-                if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(stripped)) {
-                    throw new Error(`currentBookmarks: template contract drift — '${s}' has an unrecognized suffix or shape (expected refname after '*'/'??' marker strip)`);
-                }
-                return stripped;
-            })
-                .map(stripPrefix);
-        },
+        // jj's "current bookmark" semantics map to bookmarks at @- (the parent
+        // of the working-copy commit), because @ is always the in-progress WC
+        // commit. Multiple bookmarks can point at the same revision. Names come
+        // from the CommitRef JSON template (VCS-audit follow-up 2026-07-08):
+        // `b.name()` is the plain refname — none of the presentation markers
+        // (`*` local-ahead, `??` divergent) the old `bookmarks.join` form leaked,
+        // so the marker-strip regexes and the grammar-drift check are gone.
+        // WR-02 (D-02 enforcement on this read path): divergence arrives as the
+        // typed `b.conflict()` boolean and surfaces as VcsBookmarkDivergentError.
+        // `divergentTargets` stays empty here — this template does not enumerate
+        // targets; callers who need them re-query through `bookmarks.list()`.
+        currentBookmarks: () => readBookmarksAtParent(cwd, 'currentBookmarks'),
         /**
          * Phase 7 D-04 (VCS-08): scoped current-bookmark probe. Same body as
          * `currentBookmarks` but the vcsExec call uses `targetCwd` as the
          * spawned-process cwd; the `jjArgv` mandatory `--repository <cwd>` prefix
-         * stays pinned to the adapter root. jj 0.41 uses the spawned process's
-         * cwd to select the workspace within the repo (matches existing
-         * acquireJjWriteLock convention at jj.ts:1011-1018).
+         * stays pinned to the adapter root. jj (verified 0.41/0.42) uses the
+         * spawned process's cwd to select the workspace within the repo (matches
+         * the acquireJjWriteLock convention).
          */
-        currentBookmarksIn: (targetCwd) => {
-            const args = jjArgv('log', '-r', '@-', '-T', 'bookmarks.join("\\n")', '--no-graph', '-n', '1');
-            const r = (0, exec_cjs_1.vcsExec)(targetCwd, 'jj', args);
-            if (r.exitCode !== 0)
-                return [];
-            return r.stdout
-                .split('\n')
-                .map((s) => s.trim())
-                .filter(Boolean)
-                .map((s) => {
-                if (s.endsWith('??')) {
-                    throw new types_cjs_1.VcsBookmarkDivergentError({
-                        bookmarkName: stripPrefix(s.slice(0, -2)),
-                        divergentTargets: [],
-                    });
-                }
-                const stripped = s.replace(/\*$/, '');
-                if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(stripped)) {
-                    throw new Error(`currentBookmarksIn: template contract drift — '${s}' has an unrecognized suffix or shape (expected refname after '*'/'??' marker strip)`);
-                }
-                return stripped;
-            })
-                .map(stripPrefix);
-        },
+        currentBookmarksIn: (targetCwd) => readBookmarksAtParent(targetCwd, 'currentBookmarksIn'),
         /**
          * Phase 7 D-05 (VCS-09): returns change_id (per D-05 user override despite
          * rebase-stability tradeoff). fork_point(x) is the jj revset for the common

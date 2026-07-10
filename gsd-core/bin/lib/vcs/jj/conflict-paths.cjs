@@ -9,17 +9,21 @@
  * helper without violating UPSTREAM-02 (no `from '../backends/jj'` imports
  * inside `sdk/src/vcs/jj/*`).
  *
- * Enumeration: `jj resolve --list -r <rev>` (sole form; jj has no template
- * mode for conflict listing). WR-04: returns `['<UNRESOLVABLE>']` when the
- * command fails or prints nothing — callers gate on the `conflicts()` revset
- * FIRST (see parallel.ts fan-in stage 1), so the sentinel only surfaces for
- * revs the revset already flagged as conflicted.
+ * Enumeration: `jj file list -r <rev> -T 'if(conflict, json(path) ++ "\n")'`
+ * — the machine-readable template channel (TreeEntry `conflict` boolean +
+ * JSON-encoded path; empirically verified on jj 0.42). One strict-JSON
+ * string per line; extraction is JSON.parse, no scraping.
  *
- * VCS-audit follow-up 2026-07-08 (operator decision — remove unreachable
- * code): the historical `jj diff -r <rev> --summary` fallback is DELETED.
- * It was dormant on every probe since jj 0.41, and its `C `-line filter was
- * semantically wrong anyway — `C` in summary output means *copied*, not
- * conflicted, so had the branch ever fired it would have enumerated copies.
+ * WR-04: returns `['<UNRESOLVABLE>']` when the command fails or prints
+ * nothing — callers gate on the `conflicts()` revset FIRST (see parallel.ts
+ * fan-in stage 1), so the sentinel only surfaces for revs the revset already
+ * flagged as conflicted.
+ *
+ * History (VCS-audit follow-up 2026-07-08): the `jj diff --summary` fallback
+ * was deleted (dormant since 0.41; its `C`-line filter meant *copied*, not
+ * conflicted), and the `jj resolve --list` scrape was replaced by this
+ * template — resolve --list prints spaced paths unquoted with a column-
+ * aligned description, which had to be regex-stripped.
  *
  * UPSTREAM-02 sidecar discipline: this file does NOT import from
  * `backends/jj.ts`. The mandatory-flags prefix is inlined verbatim per the
@@ -36,36 +40,41 @@ function jjArgvFlags(repo) {
     return ['--repository', repo, '--no-pager', '--color', 'never', '--quiet'];
 }
 /**
- * Enumerate the conflicted-path list at a revision via
- * `jj resolve --list -r <rev>`.
- *
- * Line format (empirically verified, jj 0.42 — the path is NOT quoted and
- * may contain single spaces; the description column is padded with 2+
- * spaces for alignment):
- *
- *     con flict.txt    2-sided conflict
- *     plain.txt        2-sided conflict
- *
- * Path extraction strips the column-aligned `N-sided conflict…` description
- * by its known grammar. (The old `/^(\S+)/` extraction truncated spaced
- * paths at the first space — `con flict.txt` came back as `con`.) When a
- * line does not carry the description suffix, the whole trimmed line passes
- * through — format drift then surfaces as a bogus path at the downstream
- * verify gate instead of being silently mangled.
+ * Template: for every tree entry at the rev, emit the JSON-encoded path on
+ * its own line IFF the entry is conflicted. `json(path)` handles spaces and
+ * every other pathological byte exactly (paths with spaces broke the old
+ * resolve --list scrape).
+ */
+const CONFLICT_PATHS_TEMPLATE = 'if(conflict, json(path) ++ "\\n")';
+/**
+ * Enumerate the conflicted-path list at a revision.
  *
  * WR-04: returns `['<UNRESOLVABLE>']` when the command fails or prints
  * nothing — callers gate on the `conflicts()` revset first, so an empty
  * enumeration on a revset-flagged rev surfaces drift rather than silently
- * passing `[]` to the verify gate.
+ * passing `[]` to the verify gate. A non-JSON stdout line is template-
+ * contract drift and throws loudly (no-fallback discipline).
+ *
+ * Cost note: `jj file list` walks the whole tree at the rev and filters in
+ * the template (resolve --list enumerated only conflicts). This runs only
+ * on revs already flagged conflicted — a rare, human-escalation event — so
+ * the tree walk is immaterial next to exactness.
  */
 function enumerateConflictedPaths(cwd, rev) {
-    const args = [...jjArgvFlags(cwd), 'resolve', '--list', '-r', rev];
+    const args = [...jjArgvFlags(cwd), 'file', 'list', '-r', rev, '-T', CONFLICT_PATHS_TEMPLATE];
     const r = (0, exec_cjs_1.vcsExec)(cwd, 'jj', args);
-    if (r.exitCode !== 0 || r.stdout.trim().length === 0)
+    if (r.exitCode !== 0)
         return ['<UNRESOLVABLE>'];
-    return r.stdout
-        .split('\n')
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((line) => line.replace(/\s{2,}\d+-sided conflict.*$/, ''));
+    const paths = [];
+    for (const line of r.stdout.split('\n')) {
+        if (!line.trim())
+            continue;
+        try {
+            paths.push(JSON.parse(line));
+        }
+        catch {
+            throw new Error(`enumerateConflictedPaths: non-JSON line from jj file list -T: '${line}'`);
+        }
+    }
+    return paths.length > 0 ? paths : ['<UNRESOLVABLE>'];
 }

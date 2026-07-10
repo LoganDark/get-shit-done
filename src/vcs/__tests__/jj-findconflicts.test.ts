@@ -14,8 +14,9 @@ import { createJjAdapter } from '../backends/jj.cjs';
  *  - Conflicted repo: scope:'all' surfaces the conflicted commit;
  *    scope:'working-copy' filters to @
  *  - rev is commit_id (40-char hex, NOT change_id)
- *  - paths array populated via `jj resolve --list -r <rev>` (PRIMARY path —
- *    empirically verified working on jj 0.41 during plan execution)
+ *  - paths array populated via the `jj file list -T` conflict-filter
+ *    template (VCS-audit follow-up 2026-07-08 — machine-readable channel;
+ *    exact paths incl. spaces, no scraping)
  *  - ⚠️ CRITICAL: uses `conflicts()` PLURAL revset (RESEARCH Q1 correction;
  *    upstream docs say singular `conflict()` — doc-fix in plan 03-07)
  *
@@ -52,10 +53,10 @@ describe.skipIf(!jjAvailable)('Phase 3 plan 03-05 Task 2 — findConflicts on jj
     execSync('jj config set --repo user.email "test@test.com"', { cwd: conflictDir, stdio: 'pipe' });
     execSync('jj config set --repo user.name "Test"', { cwd: conflictDir, stdio: 'pipe' });
 
-    // Two conflicting files: a plain path AND one with a space — pins the
-    // resolve-list extraction (VCS-audit follow-up 2026-07-08: jj prints
-    // spaced paths unquoted, `con flict.txt    2-sided conflict`; the old
-    // /^(\S+)/ extraction truncated it to `con`).
+    // Two conflicting files: a plain path AND one with a space — pins exact
+    // path extraction through the `jj file list -T` conflict template
+    // (VCS-audit follow-up 2026-07-08; the retired resolve --list scrape
+    // truncated `con flict.txt` to `con` at the first space).
     writeFileSync(join(conflictDir, 'f.txt'), 'baseline\n');
     writeFileSync(join(conflictDir, 'con flict.txt'), 'baseline\n');
     execSync(`jj describe -m 'baseline'`, { cwd: conflictDir, stdio: 'pipe' });
@@ -111,7 +112,7 @@ describe.skipIf(!jjAvailable)('Phase 3 plan 03-05 Task 2 — findConflicts on jj
       }
     });
 
-    it('scope:all returns paths populated via `jj resolve --list`', () => {
+    it('scope:all returns paths populated via the file-list conflict template', () => {
       const vcs = createJjAdapter(conflictDir);
       const conflicts = vcs.findConflicts({ scope: 'all' });
       // The conflict scenario touches both fixture files — every conflicted
@@ -126,8 +127,8 @@ describe.skipIf(!jjAvailable)('Phase 3 plan 03-05 Task 2 — findConflicts on jj
       const vcs = createJjAdapter(conflictDir);
       const conflicts = vcs.findConflicts({ scope: 'working-copy' });
       expect(conflicts.length).toBe(1);
-      // The exact spaced path, and no `con` fragment from /^(\S+)/-style
-      // truncation, and no description prose leaking into any path.
+      // The exact spaced path; no `con` fragment (the retired scrape's
+      // failure mode) and no description prose leaking into any path.
       expect(conflicts[0].paths).toContain('con flict.txt');
       expect(conflicts[0].paths).not.toContain('con');
       for (const p of conflicts[0].paths) {

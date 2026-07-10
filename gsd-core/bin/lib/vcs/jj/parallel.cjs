@@ -315,7 +315,7 @@ function performJjParallelFanIn(mainRepoRoot, handle, results) {
     // `['<UNRESOLVABLE>']` when `conflicts()` flagged the rev but enumeration
     // drew a blank" — it assumes the caller already gated on `conflicts()`.
     // On a clean merge the sidecar still returned `['<UNRESOLVABLE>']`
-    // (`jj resolve --list` prints nothing on a conflict-free rev → WR-04
+    // (the enumeration prints nothing on a conflict-free rev → WR-04
     // sentinel), making `conflicted` always true. Gate explicitly here so
     // the sidecar's behavior matches its contract.
     const conflictsProbeArgs = [
