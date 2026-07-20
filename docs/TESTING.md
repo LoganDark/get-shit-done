@@ -21,7 +21,7 @@ project:
 [CONTRIBUTING.md → Testing Standards](../CONTRIBUTING.md#testing-standards).
 
 **No global setup needed.** Both test layers run from a fresh checkout after
-`npm install`. The root `npm test` script runs a `pretest` hook that builds the
+`pnpm install`. The root `pnpm test` script runs a `pretest` hook that builds the
 SDK and runs two lint guards before any test executes (see
 [Running tests](#running-tests) for the exact sequence).
 
@@ -36,10 +36,10 @@ All commands run from the project root unless otherwise noted.
 
 ```bash
 # Run the full root suite (includes pretest: build:sdk + lint:skill-deps + lint-vcs-no-commit-id)
-npm test
+pnpm test
 
 # Run with coverage (c8, line threshold 70%)
-npm run test:coverage
+pnpm run test:coverage
 
 # Run a single root test file (bypasses pretest hooks)
 node --test tests/config.test.cjs
@@ -48,7 +48,7 @@ node --test tests/config.test.cjs
 node --test --test-concurrency=4 tests/bug-3*.test.cjs
 
 # Tune root concurrency (default 4, see scripts/run-tests.cjs)
-TEST_CONCURRENCY=8 npm test
+TEST_CONCURRENCY=8 pnpm test
 ```
 
 The pretest hook (`pretest` in `package.json`) runs three steps before the
@@ -75,23 +75,23 @@ pnpm --filter @gsd-build/sdk test:unit
 pnpm --filter @gsd-build/sdk test:integration
 
 # Watch mode (Vitest interactive UI)
-cd sdk && npx vitest
+cd sdk && pnpm exec vitest
 
 # Run a single SDK test file
-cd sdk && npx vitest run src/config.test.ts
+cd sdk && pnpm exec vitest run src/config.test.ts
 ```
 
 No `test:watch` script is defined at the package level — invoke
-`npx vitest` from the `sdk/` directory directly for watch mode.
+`pnpm exec vitest` from the `sdk/` directory directly for watch mode.
 
 ### Lint guards (run independently of tests)
 
 ```bash
 # No source-grep tests (test files must not readFileSync source .cjs files)
-npm run lint:tests
+pnpm run lint:tests
 
 # Other guards run by pretest
-npm run lint:skill-deps
+pnpm run lint:skill-deps
 node scripts/lint-vcs-no-commit-id.cjs
 node scripts/lint-vcs-no-raw-git.cjs
 ```
@@ -191,9 +191,9 @@ Jobs:
   - `node scripts/lint-vcs-no-raw-git.cjs` (no raw git in jj-reachable code)
   - `node scripts/lint-vcs-no-commit-id.cjs` (no commit_id leaks)
 - **`test`** — matrix: `os=[ubuntu-latest]` × `node=[22, 24]` × `backend=[git, jj-colocated, jj-native]`, plus a `macos-latest` × Node 24 × git cell. Each cell:
-  - Installs deps with `npm ci`
-  - Builds the SDK (`npm run build:sdk`)
-  - Runs `npm run test:coverage` with `GSD_TEST_BACKENDS` set to the matrix backend
+  - Installs deps with `pnpm install --frozen-lockfile`
+  - Builds the SDK (`pnpm run build:sdk`)
+  - Runs `pnpm run test:coverage` with `GSD_TEST_BACKENDS` set to the matrix backend
   - The `jj-colocated` and `jj-native` cells install `jj 0.41.0` from the
     upstream GitHub release tarball and currently run with `continue-on-error:
     true` (they do not block merge until graduation; see the comment block at

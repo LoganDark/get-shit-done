@@ -136,7 +136,7 @@ function main() {
   } else {
     process.stderr.write(`\nERROR changeset-lint: ${verdict.reason}\n`);
     process.stderr.write(`PR touches user-facing files but does not include a .changeset/*.md fragment.\n`);
-    process.stderr.write(`Run \`npm run changeset\` to create one, or add the \`${OPT_OUT_LABEL}\` label\n`);
+    process.stderr.write(`Run \`pnpm run changeset\` to create one, or add the \`${OPT_OUT_LABEL}\` label\n`);
     process.stderr.write(`if this PR genuinely has no user-facing impact (test refactor, CI tweak, etc.).\n`);
   }
   return verdict.ok ? 0 : 1;

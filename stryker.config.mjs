@@ -28,7 +28,7 @@ const _require = createRequire(import.meta.url);
 const { resolveMutationBreak } = _require('./scripts/mutation-matrix.cjs');
 
 // ADR-457: bin/lib/*.cjs are gitignored build artifacts (compiled from
-// src/*.cts by `npm run build:lib`, which the mutation CI job runs via `npm ci`
+// src/*.cts by `pnpm run build:lib`, which the mutation CI job runs via `pnpm install --frozen-lockfile`
 // → prepare before Stryker). Stryker mutates the *built* .cjs directly — the
 // command runner runs the tests with NO rebuild, so each mutation to the
 // shipped artifact is seen by the tests. (Mutating src/*.cts instead would

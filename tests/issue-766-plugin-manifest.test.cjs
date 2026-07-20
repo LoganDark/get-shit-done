@@ -914,7 +914,7 @@ describe('H: skills surface projection (#1596)', () => {
   });
 
   test('skills/ dir exists with at least one gsd-*/SKILL.md', () => {
-    assert.ok(fs.existsSync(SKILLS_DIR), `skills/ dir must exist (run: npm run gen:plugin-skills -- --write): ${SKILLS_DIR}`);
+    assert.ok(fs.existsSync(SKILLS_DIR), `skills/ dir must exist (run: pnpm run gen:plugin-skills -- --write): ${SKILLS_DIR}`);
     const entries = fs.readdirSync(SKILLS_DIR, { withFileTypes: true });
     const skillDirs = entries.filter(e => e.isDirectory() && e.name.startsWith('gsd-'));
     assert.ok(skillDirs.length > 0, 'skills/ must contain at least one gsd-*/ directory');
@@ -948,7 +948,7 @@ describe('H: skills surface projection (#1596)', () => {
     assert.equal(
       skillDirs.length, commandFiles.length,
       `skills/gsd-*/ count (${skillDirs.length}) must equal commands/gsd/*.md count (${commandFiles.length}). ` +
-      `Run: npm run gen:plugin-skills -- --write`
+      `Run: pnpm run gen:plugin-skills -- --write`
     );
   });
 });

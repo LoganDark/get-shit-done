@@ -8,17 +8,17 @@ git clone https://github.com/open-gsd/gsd-core.git
 cd gsd-core
 
 # Install dependencies
-npm install
+pnpm install
 
 # Run tests
-npm test
+pnpm test
 ```
 
 ---
 
 ## Bootstrap your environment
 
-For a step-by-step setup guide covering Node version managers, `npm ci`, the environment
+For a step-by-step setup guide covering Node version managers, `pnpm install --frozen-lockfile`, the environment
 validator, daily commands, and troubleshooting, see:
 
 **[docs/contributing/bootstrap.md](docs/contributing/bootstrap.md)**
@@ -26,9 +26,9 @@ validator, daily commands, and troubleshooting, see:
 Quick start:
 
 ```bash
-nvm use           # activate the pinned Node version from .nvmrc
-npm run check:env # validate your environment
-npm ci            # install from lockfile
+nvm use                          # activate the pinned Node version from .nvmrc
+pnpm run check:env               # validate your environment
+pnpm install --frozen-lockfile   # install from lockfile
 ```
 
 ---
@@ -195,7 +195,7 @@ Contributor requirements (summary):
 **Do not edit `CHANGELOG.md` directly.** Two PRs that both append to a `### Fixed` block always conflict on merge — git can't pick a serialization order without a human. Instead, every PR with user-facing changes drops a fragment file in `.changeset/`.
 
 ```bash
-npm run changeset -- --type Fixed --pr <YOUR_PR_NUMBER> \
+pnpm run changeset -- --type Fixed --pr <YOUR_PR_NUMBER> \
   --body "**\`/gsd-foo\` no longer drops trailing slashes** — explain the user-visible change."
 ```
 
@@ -293,7 +293,7 @@ When unsure whether a change is user-facing, **update the docs**.
 
 All tests use Node.js built-in test runner (`node:test`) and assertion library (`node:assert`). **Do not use Jest, Mocha, Chai, or any external test framework.**
 
-> **Suite grouping.** Tests live in named suites (`unit`, `integration`, `install`, `security`, `slow`) selected by **filename suffix**: a file named `foo.security.test.cjs` belongs to the `security` suite; a file with no suffix (`foo.test.cjs`) belongs to `unit`. See [docs/TESTING-SUITES.md](docs/TESTING-SUITES.md) for the full policy, CI matrix, and per-suite scripts (`npm run test:unit`, `npm run test:security`, `npm run test:coverage:unit`, …). Default `npm test` still runs every test — backwards compatible.
+> **Suite grouping.** Tests live in named suites (`unit`, `integration`, `install`, `security`, `slow`) selected by **filename suffix**: a file named `foo.security.test.cjs` belongs to the `security` suite; a file with no suffix (`foo.test.cjs`) belongs to `unit`. See [docs/TESTING-SUITES.md](docs/TESTING-SUITES.md) for the full policy, CI matrix, and per-suite scripts (`pnpm run test:unit`, `pnpm run test:security`, `pnpm run test:coverage:unit`, …). Default `pnpm test` still runs every test — backwards compatible.
 
 ### Required Imports
 
@@ -592,7 +592,7 @@ This single test covers key registration in `VALID_CONFIG_KEYS`, the key's names
 
 **Why this pattern broke at scale:** Commit `990c3e64` in this repo updated 5 source-grep tests in one pass when `VALID_CONFIG_KEYS` moved between files. Zero of those tests were testing behavior. If they had been behavioral tests, the migration would have been invisible.
 
-**CI enforcement:** The `local/no-source-grep` ESLint rule (`eslint-rules/no-source-grep.cjs`, wired in `eslint.config.mjs`) detects violations. Any test file that calls `readFileSync` on a `.cjs` path in a source directory without the exemption annotation below is flagged by `npx eslint .` (the `Lint — ESLint` CI step).
+**CI enforcement:** The `local/no-source-grep` ESLint rule (`eslint-rules/no-source-grep.cjs`, wired in `eslint.config.mjs`) detects violations. Any test file that calls `readFileSync` on a `.cjs` path in a source directory without the exemption annotation below is flagged by `pnpm exec eslint .` (the `Lint — ESLint` CI step).
 
 ### Exception: `allow-test-rule: <reason>`
 
@@ -723,13 +723,13 @@ assert.rejects(async () => { ... });       // async throws
 
 ```bash
 # Run all tests
-npm test
+pnpm test
 
 # Run a single test file
 node --test tests/core.test.cjs
 
 # Run with coverage
-npm run test:coverage
+pnpm run test:coverage
 ```
 
 For examples of required negative matrices, parser fixtures, filesystem fault injection, security abuse tests, generated-file checks, and runtime/SDK parity tests, see [`TEST-EXAMPLES.md`](./TEST-EXAMPLES.md).
@@ -748,7 +748,7 @@ This gives maintainers a faster, higher-confidence signal than CI-only validatio
 If you touched any of the command-manifest or generated alias files, run:
 
 ```bash
-npm run check:alias-drift
+pnpm run check:alias-drift
 ```
 
 This verifies generated alias artifacts are in sync with manifest source-of-truth.
@@ -763,7 +763,7 @@ cat > .githooks/pre-commit <<'EOF'
 set -euo pipefail
 
 if git diff --cached --name-only | grep -Eq "^sdk/src/query/command-manifest\.|^sdk/src/query/command-aliases\.generated\.ts$|^gsd-core/bin/lib/command-aliases\.generated\.cjs$|^sdk/scripts/gen-command-aliases\.ts$"; then
-  npm run check:alias-drift
+  pnpm run check:alias-drift
 fi
 EOF
 chmod +x .githooks/pre-commit
@@ -819,7 +819,7 @@ The following checks run on every PR in addition to the test suite:
 | `Lint — ESLint` | No source-grep tests (see above), via the `local/no-source-grep` rule | Replace with `runGsdTools()` behavioral tests, or add `// allow-test-rule: <reason>` |
 | `Lint — cross-platform portability` | Windows-portability defects in tests, via `local/no-path-literal-in-assert` (more rules land per [ADR-1703](docs/adr/1703-portability-enforcement-architecture.md)) — e.g. a path-returning call asserted against a hardcoded `/`-literal | Normalize the actual: `String(pathFn(...)).replace(/\\/g, '/')`, or structure platform-specific code behind a `process.platform !== 'win32'` guard. **No `eslint-disable`** — see [cross-platform-portability-rules.md](docs/contributing/cross-platform-portability-rules.md) |
 
-Run locally before pushing: `npm run lint` (or `npx eslint .`)
+Run locally before pushing: `pnpm run lint` (or `pnpm exec eslint .`)
 
 ### Architecture-Aware Testing Requirements
 
@@ -845,8 +845,8 @@ The required tests differ depending on what you are contributing:
 
 Reviewers do not rely solely on CI to verify correctness. Before approving a PR, reviewers:
 
-- Build locally (`npm run build` if applicable)
-- Run the full test suite locally (`npm test`)
+- Build locally (`pnpm run build` if applicable)
+- Run the full test suite locally (`pnpm test`)
 - Confirm regression tests exist for bug fixes and that they would fail without the fix
 - Validate that the implementation matches what the linked issue described — green CI on the wrong implementation is not an approval signal
 
@@ -882,7 +882,7 @@ gsd-core/
                           (tests/workflow-size-baseline.json) plus loose tier
                           hard caps, both in tests/workflow-size-budget.test.cjs.
                           If you legitimately grow or shrink a workflow file,
-                          run `npm run size:baseline` to update the snapshot and
+                          run `pnpm run size:baseline` to update the snapshot and
                           justify any growth in your PR (or extract content
                           lazily). The same guard covers agent files
                           (agents/gsd-*.md). Full how-to + reference in

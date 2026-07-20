@@ -5,7 +5,7 @@ This guide gets a new contributor from a fresh checkout to a passing baseline in
 Sources:
 - npm engines field: https://docs.npmjs.com/cli/v10/configuring-npm/package-json#engines
 - Reproducible builds: https://reproducible-builds.org/docs/source-tree/
-- npm ci: https://docs.npmjs.com/cli/v10/commands/npm-ci
+- pnpm install: https://pnpm.io/cli/install
 - Docker-based Linux verification: https://github.com/open-gsd/gsd-test-runner
 
 ---
@@ -44,16 +44,19 @@ nvm use          # nvm
 # fnm use        # fnm
 # asdf install   # asdf / mise
 
-# 3. Verify the environment (see Validation below)
-npm run check:env
+# 3. Activate pnpm at the version pinned in package.json (packageManager field)
+corepack enable
 
-# 4. Install dependencies (reproducible, lockfile-driven)
-npm ci
+# 4. Verify the environment (see Validation below)
+pnpm run check:env
+
+# 5. Install dependencies (reproducible, lockfile-driven)
+pnpm install --frozen-lockfile
 ```
 
-`npm ci` is required over `npm install`. It installs exactly what `package-lock.json`
-specifies and fails fast if the lockfile is out of sync — this is intentional.
-See https://docs.npmjs.com/cli/v10/commands/npm-ci
+`pnpm install --frozen-lockfile` is required over a bare `pnpm install`. It installs
+exactly what `pnpm-lock.yaml` specifies and fails fast if the lockfile is out of
+sync — this is intentional. See https://pnpm.io/cli/install
 
 ---
 
@@ -61,13 +64,13 @@ See https://docs.npmjs.com/cli/v10/commands/npm-ci
 
 | Command | Purpose |
 |---|---|
-| `npm run check:env` | Validate your environment before running tests |
-| `npm test` | Run the full test suite (unit + integration + security) |
-| `npm run test:unit` | Unit tests only (fastest) |
-| `npm run test:integration` | Integration tests |
-| `npm run build:lib` | Type-check root TypeScript and emit CommonJS build output |
+| `pnpm run check:env` | Validate your environment before running tests |
+| `pnpm test` | Run the full test suite (unit + integration + security) |
+| `pnpm run test:unit` | Unit tests only (fastest) |
+| `pnpm run test:integration` | Integration tests |
+| `pnpm run build:lib` | Type-check root TypeScript and emit CommonJS build output |
 
-> `npm run check:integrity` — available once [#114](https://github.com/open-gsd/gsd-core/issues/114) merges.
+> `pnpm run check:integrity` ([#114](https://github.com/open-gsd/gsd-core/issues/114)) targets `package-lock.json` repos; on this pnpm-managed repo, lockfile integrity is enforced by `pnpm install --frozen-lockfile` instead.
 
 ---
 
@@ -76,7 +79,7 @@ See https://docs.npmjs.com/cli/v10/commands/npm-ci
 Run the environment validator before any test or audit run:
 
 ```bash
-npm run check:env
+pnpm run check:env
 ```
 
 This runs `scripts/check-env.cjs` and reports pass/fail for each check:
@@ -85,8 +88,8 @@ This runs `scripts/check-env.cjs` and reports pass/fail for each check:
 |---|---|
 | `node-version` | Active Node satisfies `engines.node` (`>=22.0.0`) |
 | `npm-version` | Active npm satisfies `engines.npm` (`>=10.0.0`) |
-| `lockfile-present` | `package-lock.json` exists at root |
-| `lockfile-sync` | `npm ci --dry-run` exits 0 (lockfile matches installed state) |
+| `lockfile-present` | `pnpm-lock.yaml` exists at root (pnpm-managed repo) |
+| `lockfile-sync` | Skipped on this pnpm-managed repo — sync is gated by `pnpm install --frozen-lockfile` |
 | `version-manager-pin` | Active Node major matches `.nvmrc` / `.node-version` / `.tool-versions` |
 
 **Exit codes:**
@@ -97,7 +100,7 @@ This runs `scripts/check-env.cjs` and reports pass/fail for each check:
 For structured output (useful in scripts):
 
 ```bash
-npm run check:env -- --json
+pnpm run check:env -- --json
 ```
 
 ---
@@ -134,30 +137,30 @@ npm --version
 
 ---
 
-### `lockfile-present` FAIL — `package-lock.json` missing
+### `lockfile-present` FAIL — lockfile missing
 
-**Cause:** The lockfile was deleted or was never generated.
+**Cause:** `pnpm-lock.yaml` was deleted or was never generated.
 
 **Fix:**
 ```bash
-npm install      # generates package-lock.json
+pnpm install     # generates pnpm-lock.yaml
 ```
 
 Do NOT commit a regenerated lockfile without verifying no unexpected packages changed.
-Run `git diff package-lock.json` to inspect the diff.
+Inspect the `pnpm-lock.yaml` diff before committing.
 
 ---
 
-### `lockfile-sync` FAIL — `package-lock.json` is out of sync
+### `pnpm install --frozen-lockfile` FAIL — lockfile is out of sync
 
 **Cause:** `package.json` was edited (dependency added/changed) without updating the lockfile,
 or the lockfile was hand-edited.
 
 **Fix:**
 ```bash
-npm ci           # restores node_modules to match lockfile exactly
+pnpm install --frozen-lockfile   # restores node_modules to match lockfile exactly
 # or, if the sync failure is intentional (you updated package.json):
-npm install      # updates lockfile to match package.json
+pnpm install                     # updates lockfile to match package.json
 ```
 
 ---
@@ -182,8 +185,8 @@ nvm use          # re-activate from .nvmrc
 
 **Fix:**
 ```bash
-npm ci           # clean install from lockfile
-npm run build:lib
+pnpm install --frozen-lockfile   # clean install from lockfile
+pnpm run build:lib
 ```
 
 ---

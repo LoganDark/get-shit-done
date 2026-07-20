@@ -113,16 +113,23 @@ jobs:
         if: steps.skip.outputs.skip != 'true' && github.event_name == 'pull_request'
         run: node scripts/ci-rebase-check.cjs
 
+      - name: Enable corepack (pnpm)
+        if: steps.skip.outputs.skip != 'true'
+        run: corepack enable
+
       - name: Set up Node.js ${{ matrix.node-version }}
         if: steps.skip.outputs.skip != 'true'
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+          cache: 'pnpm'
 
+      # Repo dev deps install via pnpm (pnpm-managed repo). The npm pack /
+      # `npm install -g` steps below stay on npm on purpose: they smoke-test the
+      # published-artifact install path exactly as an end user's npm runs it.
       - name: Install root deps
         if: steps.skip.outputs.skip != 'true'
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Pack root tarball
         if: steps.skip.outputs.skip != 'true'
@@ -218,14 +225,19 @@ jobs:
         if: github.event_name == 'pull_request'
         run: node scripts/ci-rebase-check.cjs
 
+      - name: Enable corepack (pnpm)
+        run: corepack enable
+
       - name: Set up Node.js 22
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
         with:
           node-version: 22
-          cache: 'npm'
+          cache: 'pnpm'
 
+      # Repo dev deps install via pnpm; the `npm install -g` below stays on npm
+      # on purpose — it smoke-tests the end-user unpacked-directory install path.
       - name: Install root deps
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Ensure npm global bin is on PATH
         run: |

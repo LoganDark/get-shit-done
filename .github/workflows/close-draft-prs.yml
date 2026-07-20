@@ -52,7 +52,7 @@ jobs:
                 '### What to do instead',
                 '',
                 '1. Finish your implementation locally',
-                '2. Run `npm run test:coverage` and confirm all tests pass',
+                '2. Run `pnpm run test:coverage` and confirm all tests pass',
                 '3. Open a **non-draft** PR using the [correct template](https://github.com/' + repoUrl + '/blob/main/CONTRIBUTING.md#pull-request-guidelines)',
                 '',
                 'See [CONTRIBUTING.md](https://github.com/' + repoUrl + '/blob/main/CONTRIBUTING.md) for the full process.',

@@ -5,7 +5,7 @@
 // NOT a `polarity` field on `truths`; Decision 2 leaves `truths` untouched). Mirrors the round-trip
 // discipline of tests/probe-core.test.cjs and the frontmatter callers. The parser under assertion is
 // the block-name-generic parseMustHavesBlock @ src/frontmatter.cts:207 (built to gsd-core/bin/lib/
-// frontmatter.cjs by `npm run build:lib`) and spliceFrontmatter @ src/frontmatter.cts:198.
+// frontmatter.cjs by `pnpm run build:lib`) and spliceFrontmatter @ src/frontmatter.cts:198.
 //
 // EXPECTED RED until plan 01-02 builds the schema callers + projectProhibitions and plan 01-04 adds
 // the test-tier fail-closed disposition. No `polarity` key appears anywhere. No LLM judgment is

@@ -17,7 +17,7 @@
  *
  *   1. Per-agent baseline (the anti-creep): every agent is pinned to its exact
  *      byte size in `tests/agent-size-baseline.json`. Any growth fails with the
- *      file and delta; `npm run size:baseline` records a deliberate change as a
+ *      file and delta; `pnpm run size:baseline` records a deliberate change as a
  *      reviewable one-line diff. This replaced the tier-max tighten-only ratchet
  *      (which only bound the single largest agent per tier).
  *
@@ -148,7 +148,7 @@ describe('SIZE: per-agent baseline (issue #1074)', () => {
       baseline,
       fail: assert.fail,
       updateHint:
-        'Run `npm run size:baseline` to update tests/agent-size-baseline.json, ' +
+        'Run `pnpm run size:baseline` to update tests/agent-size-baseline.json, ' +
         'then justify any growth in your PR (or extract shared boilerplate to gsd-core/references/).',
     });
   });

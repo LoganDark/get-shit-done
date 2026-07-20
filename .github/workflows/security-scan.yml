@@ -14,7 +14,7 @@ on:
       - 'hooks/**'
       - 'scripts/**'
       - 'package.json'
-      - 'package-lock.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/security-scan.yml'
       - '.secretscanignore'
 
@@ -39,17 +39,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Enable corepack (pnpm)
+        run: corepack enable
+
       - name: Set up Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
         with:
           node-version: 24
-          cache: 'npm'
+          cache: 'pnpm'
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Dependency integrity gate
-        run: node scripts/check-npm-integrity.cjs
+      # Dependency integrity gate: this repo is pnpm-managed (pnpm-lock.yaml).
+      # --frozen-lockfile fails on any manifest↔lockfile drift, which covers the
+      # npm-lock integrity gate (scripts/check-npm-integrity.cjs targets
+      # package-lock.json repos and is exercised against fixtures in tests).
+      - name: Install dependencies (frozen lockfile = integrity gate)
+        run: pnpm install --frozen-lockfile
 
       - name: Prompt injection scan
         env:

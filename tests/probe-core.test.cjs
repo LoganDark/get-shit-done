@@ -8,7 +8,7 @@
  * engine, the `byVerification` rollup, and the `runProbeCli` I/O scaffold.
  *
  * Asserts the LOCKED export surface against the BUILT artifact
- * (`gsd-core/bin/lib/probe-core.cjs`), which `npm run build:lib` (run by pretest /
+ * (`gsd-core/bin/lib/probe-core.cjs`), which `pnpm run build:lib` (run by pretest /
  * the run-tests sentinel) emits from `src/probe-core.cts`.
  *
  * The injected runtime validators are the enforcement contract (ADR-550 #5): the

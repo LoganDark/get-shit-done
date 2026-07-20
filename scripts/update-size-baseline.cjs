@@ -7,7 +7,7 @@
  * Regenerates the committed per-file workflow size baseline
  * (`tests/workflow-size-baseline.json`) from the current workflow files.
  *
- * Run via `npm run size:baseline` whenever a workflow file legitimately grows
+ * Run via `pnpm run size:baseline` whenever a workflow file legitimately grows
  * or shrinks.  Growth must still be justified in the PR; this script only
  * records the new reality so the CI guard (issue #1074) can diff against it.
  *

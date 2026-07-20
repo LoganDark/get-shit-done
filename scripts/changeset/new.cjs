@@ -4,7 +4,7 @@
 /**
  * Scaffolds a new changeset fragment (#2975).
  *
- *   npm run changeset -- --type Fixed --pr 1234 --body "fix the thing"
+ *   pnpm run changeset -- --type Fixed --pr 1234 --body "fix the thing"
  *
  * Writes `.changeset/<adjective>-<noun>-<noun>.md` with frontmatter
  * + body. The random three-word filename minimizes filename collision

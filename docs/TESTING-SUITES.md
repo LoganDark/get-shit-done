@@ -40,7 +40,7 @@ count — is the unit of CI overhead, and it is worst on Windows lanes where
 every spawn is Defender-scanned. The 2026-06 CI audit found 244 one-off
 `bug-*` files (~38% of the suite). That population is grandfathered in
 `scripts/lint-regression-test-names.allowlist.json` and enforced by an
-identity ratchet (`npm run lint:regression-names`, part of `npm run lint:ci`):
+identity ratchet (`pnpm run lint:regression-names`, part of `pnpm run lint:ci`):
 
 - A **new** `bug-*` file fails CI — fold it into the owning module's file.
 - **Deleting/consolidating** a grandfathered file requires pruning its
@@ -70,7 +70,7 @@ both ship in the installed runtime and are loaded into context — workflows on
 every command, agents on every subagent dispatch — so their byte size is a real
 cost. Two sibling guards (`tests/workflow-size-budget.test.cjs` and
 `tests/agent-size-budget.test.cjs`) keep that cost from creeping up invisibly,
-sharing one byte-counter (`measureMdFiles`) and one `npm run size:baseline`
+sharing one byte-counter (`measureMdFiles`) and one `pnpm run size:baseline`
 command that regenerates **both** snapshots. Each is an **anti-creep ratchet**,
 sibling to the regression-name ratchet above — three layers (workflows), ordered
 from day-to-day to last-resort:
@@ -99,7 +99,7 @@ the workflow and agent guards). To resolve:
 
 1. **Regenerate the snapshot** and inspect the one-line diff:
    ```bash
-   npm run size:baseline
+   pnpm run size:baseline
    git diff tests/workflow-size-baseline.json
    ```
 2. **Justify the growth in your PR** (a sentence in the description is enough) —
@@ -122,7 +122,7 @@ that is the signal to extract, per step 3.
 | Artifact | Role |
 |---|---|
 | `scripts/workflow-size.cjs` | Single source of truth — LF-normalized byte counter (`lfByteCount`) + generic `measureMdFiles(dir, predicate)` (backs both workflows and agents) + workflow enumeration (`listWorkflowStems`, `measureWorkflows`). Imported by **both** the guards and the generator so they can never measure differently. |
-| `scripts/update-size-baseline.cjs` (`npm run size:baseline`) | Regenerates **both** `tests/workflow-size-baseline.json` and `tests/agent-size-baseline.json` — sorted keys, trailing newline, idempotent. |
+| `scripts/update-size-baseline.cjs` (`pnpm run size:baseline`) | Regenerates **both** `tests/workflow-size-baseline.json` and `tests/agent-size-baseline.json` — sorted keys, trailing newline, idempotent. |
 | `tests/workflow-size-baseline.json` | The committed per-workflow snapshot (one entry per workflow). |
 | `tests/agent-size-baseline.json` | The committed per-agent snapshot (one entry per `gsd-*` agent). |
 | `tests/workflow-size-budget.test.cjs` | The three workflow guards above, plus the `discuss-phase` progressive-disclosure checks. |
@@ -131,16 +131,16 @@ that is the signal to extract, per step 3.
 ## Running suites locally
 
 ```bash
-npm test                    # everything (backcompat — same as before)
-npm run test:unit           # only unit
-npm run test:integration    # only integration
-npm run test:install        # only install
-npm run test:security       # only security
-npm run test:slow           # only slow
+pnpm test                    # everything (backcompat — same as before)
+pnpm run test:unit           # only unit
+pnpm run test:integration    # only integration
+pnpm run test:install        # only install
+pnpm run test:security       # only security
+pnpm run test:slow           # only slow
 
-npm run test:coverage       # backcompat — coverage over EVERY test
-npm run test:coverage:unit  # fast coverage signal — only unit suite
-npm run test:coverage:all   # alias for test:coverage
+pnpm run test:coverage       # backcompat — coverage over EVERY test
+pnpm run test:coverage:unit  # fast coverage signal — only unit suite
+pnpm run test:coverage:all   # alias for test:coverage
 ```
 
 Direct harness invocation also works:
@@ -152,7 +152,7 @@ node scripts/run-tests.cjs --files "tests/command-contract.test.cjs tests/core.t
 node scripts/run-tests.cjs --files-from .ci-selected-tests.txt
 ```
 
-`npm run test:affected` (scripts/run-affected-tests.cjs) is a **local-only**
+`pnpm run test:affected` (scripts/run-affected-tests.cjs) is a **local-only**
 convenience that selects tests via the `require()` dependency graph of your
 working-tree diff. CI does not use it — CI selection is the rule table in
 `scripts/ci-test-scope.cjs`, which is the authoritative mapping. If the two
@@ -205,7 +205,7 @@ tracked work, not an accident to "fix" silently by raising thresholds.
 To inspect the scope locally:
 
 ```bash
-npm run ci:test-scope -- --files "commands/gsd/plan-phase.md"
+pnpm run ci:test-scope -- --files "commands/gsd/plan-phase.md"
 node scripts/ci-test-scope.cjs --base origin/next --head HEAD
 ```
 

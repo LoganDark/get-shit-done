@@ -22,7 +22,7 @@ const path = require('node:path');
 
 const PROBE_CORE_LIB = path.join(__dirname, '..', 'gsd-core', 'bin', 'lib', 'probe-core.cjs');
 // The ENFORCEMENT-half producer (#1259, ADR-550 D5d heavy half). Authored as
-// src/prohibition-enforcement.cts and compiled by `npm run build:lib` to this gitignored
+// src/prohibition-enforcement.cts and compiled by `pnpm run build:lib` to this gitignored
 // artifact — mirroring how PROBE_CORE_LIB requires the BUILT probe-core.cjs above.
 const ENFORCEMENT_LIB = path.join(__dirname, '..', 'gsd-core', 'bin', 'lib', 'prohibition-enforcement.cjs');
 

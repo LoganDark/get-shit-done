@@ -121,8 +121,8 @@ function ensureBuiltArtifacts(overrides = {}) {
 }
 
 // hooks/dist/ is gitignored (.gitignore) and NOT built by `prepare`
-// (npm run build:lib only) — only the full `build`/`prepublishOnly` scripts run
-// build:hooks. So on a clean checkout + `npm ci` (fresh CI, incl. the scoped
+// (pnpm run build:lib only) — only the full `build`/`prepublishOnly` scripts run
+// build:hooks. So on a clean checkout + `pnpm install --frozen-lockfile` (fresh CI, incl. the scoped
 // test lane) hooks/dist starts absent. Install tests (e.g.
 // bug-3683-workflow-colon-namespace-leak) spawn `install.js --<runtime> --local`
 // which copies hooks from hooks/dist/ and then verifyInstalled() hard-fails if

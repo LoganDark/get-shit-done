@@ -4,7 +4,7 @@
  * Tests for gsd-core/bin/ensure-runtime-build.cjs — the self-healing runtime
  * build that compiles the gitignored ./lib/*.cjs artifacts on demand when the
  * CLI is run from a channel (Claude Code plugin marketplace) that never ran
- * `npm run build:lib`. See #2002.
+ * `pnpm run build:lib`. See #2002.
  *
  * The unit tests inject `spawn` so no real tsc runs; the final integration test
  * drives the REAL module against a real (tiny) tsc build in a temp package to
@@ -95,7 +95,7 @@ test('missing tsconfig.build.json throws an actionable RuntimeBuildError', (t) =
     (err) => {
       assert.ok(err instanceof RuntimeBuildError);
       assert.match(err.message, /tsconfig\.build\.json not found/);
-      assert.match(err.message, /npm run build:lib/);
+      assert.match(err.message, /pnpm run build:lib/);
       return true;
     },
   );
@@ -115,7 +115,7 @@ test('absent TypeScript throws with install guidance and does not spawn', (t) =>
     (err) => {
       assert.ok(err instanceof RuntimeBuildError);
       assert.match(err.message, /TypeScript is unavailable/);
-      assert.match(err.message, /npm install && npm run build:lib/);
+      assert.match(err.message, /pnpm install && pnpm run build:lib/);
       return true;
     },
   );

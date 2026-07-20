@@ -45,7 +45,7 @@
  *
  *   1. Per-file baseline (the anti-creep): every workflow is pinned to its
  *      exact size in `tests/workflow-size-baseline.json`. Any growth fails with
- *      the file and delta; `npm run size:baseline` records a deliberate change
+ *      the file and delta; `pnpm run size:baseline` records a deliberate change
  *      as a one-line reviewable diff. This replaced the tier-max tighten-only
  *      ratchet (#597), which only bound the single largest file per tier and
  *      left the other ~85 files able to grow silently.
@@ -200,7 +200,7 @@ describe('SIZE: per-file workflow baseline (issue #1074)', () => {
   // each tier). Guards EVERY workflow file by name against a committed snapshot
   // (tests/workflow-size-baseline.json). Growth fails with the file and delta;
   // shrinkage fails as a stale snapshot (regenerate to ratchet down). The fix
-  // for any failure is `npm run size:baseline` plus a PR justification for
+  // for any failure is `pnpm run size:baseline` plus a PR justification for
   // genuine growth (or lazy extraction). The tier hard caps above are the outer
   // bound; this is the day-to-day creep control.
   test('every workflow file matches its committed baseline', () => {
@@ -212,7 +212,7 @@ describe('SIZE: per-file workflow baseline (issue #1074)', () => {
       baseline,
       fail: assert.fail,
       updateHint:
-        'Run `npm run size:baseline` to update tests/workflow-size-baseline.json, ' +
+        'Run `pnpm run size:baseline` to update tests/workflow-size-baseline.json, ' +
         'then justify any growth in your PR (or extract content lazily — see workflows/discuss-phase/).',
     });
   });

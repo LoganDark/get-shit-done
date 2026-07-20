@@ -5,7 +5,7 @@
  *
  * The GSD runtime CLI (gsd-tools.cjs) require()s ~150 compiled modules from
  * ./lib/*.cjs. Per ADR-457 ("build-at-publish") those are build artifacts:
- * compiled from src/*.cts by `npm run build:lib` (tsc -p tsconfig.build.json),
+ * compiled from src/*.cts by `pnpm run build:lib` (tsc -p tsconfig.build.json),
  * gitignored, and shipped prebuilt in the npm tarball via the prepack /
  * prepublishOnly lifecycle scripts.
  *
@@ -120,7 +120,7 @@ function ensureRuntimeBuild(opts = {}) {
   if (!fs.existsSync(tsconfig)) {
     throw new RuntimeBuildError(
       'GSD runtime library is not built and cannot be auto-built: ' +
-        `${tsconfig} not found. Run \`npm run build:lib\` in the gsd-core package.`,
+        `${tsconfig} not found. Run \`pnpm run build:lib\` in the gsd-core package.`,
     );
   }
 
@@ -130,7 +130,7 @@ function ensureRuntimeBuild(opts = {}) {
     throw new RuntimeBuildError(
       `GSD runtime library is not built (missing ${path.join(libDir, SENTINEL)}) ` +
         'and TypeScript is unavailable to build it. Run ' +
-        `\`npm install && npm run build:lib\` in the gsd-core package (${packageRoot}).`,
+        `\`pnpm install && pnpm run build:lib\` in the gsd-core package (${packageRoot}).`,
     );
   }
 
@@ -156,7 +156,7 @@ function ensureRuntimeBuild(opts = {}) {
       throw new RuntimeBuildError(
         `GSD runtime build did not complete within ${waitTimeoutMs}ms and the ` +
           `build lock (${lockDir}) is held by another process. Remove it and run ` +
-          '`npm run build:lib` if this persists.',
+          '`pnpm run build:lib` if this persists.',
       );
     }
     if (isBuilt(libDir)) return { built: true, healed: true, waited: true };
@@ -177,7 +177,7 @@ function ensureRuntimeBuild(opts = {}) {
       const detail = ((res && (res.stderr || res.stdout)) || '').toString().trim();
       throw new RuntimeBuildError(
         `GSD runtime build failed (tsc exit ${res ? res.status : 'unknown'}). ` +
-          `Run \`npm run build:lib\` in ${packageRoot} to see the error.` +
+          `Run \`pnpm run build:lib\` in ${packageRoot} to see the error.` +
           (detail ? `\n${detail}` : ''),
       );
     }
@@ -188,7 +188,7 @@ function ensureRuntimeBuild(opts = {}) {
   if (!isBuilt(libDir)) {
     throw new RuntimeBuildError(
       `GSD runtime build ran but ${path.join(libDir, SENTINEL)} is still missing. ` +
-        `Run \`npm run build:lib\` in ${packageRoot}.`,
+        `Run \`pnpm run build:lib\` in ${packageRoot}.`,
     );
   }
   return { built: true, healed: true };

@@ -120,7 +120,7 @@ Run the full engineering directive (rubber-duck → software laws → architectu
 8. **Docs** — add the rule to the reference table + a fix how-to in
    `cross-platform-portability-rules.md`; rewrite the `DEFECT.*` predicate's `detect=`/`fix-forward=`
    in `CONTEXT.md` to point at the rule; record known boundaries honestly.
-9. **Verify** — `npm run lint:ci` green; the touched modules' tests green; the `windows-latest` CI
+9. **Verify** — `pnpm run lint:ci` green; the touched modules' tests green; the `windows-latest` CI
    lane is the only true Windows signal.
 
 ## Catalog (shipped)

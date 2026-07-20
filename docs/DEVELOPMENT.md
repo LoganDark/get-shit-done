@@ -12,7 +12,7 @@ Prerequisites and first-run steps are documented separately:
 - **Prerequisites and first run** — see [GETTING-STARTED.md](GETTING-STARTED.md).
 - **Issue-first contribution flow and PR templates** — see [CONTRIBUTING.md](../CONTRIBUTING.md).
 
-Day-to-day development uses `pnpm` (declared as `packageManager: "pnpm@11.0.8"` in the root `package.json`). The root install plus an SDK build is enough to start hacking:
+Day-to-day development uses `pnpm` (pinned via the `packageManager` field in the root `package.json`). The root install plus an SDK build is enough to start hacking:
 
 ```bash
 git clone https://github.com/LoganDark/get-shit-done.git

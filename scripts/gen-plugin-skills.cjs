@@ -18,7 +18,7 @@
  * npm package and serves plugin-only installs.
  *
  * Depends on: gsd-core/bin/lib/runtime-artifact-conversion.cjs (compiled from
- * src/runtime-artifact-conversion.cts by `npm run build:lib`). Must run AFTER
+ * src/runtime-artifact-conversion.cts by `pnpm run build:lib`). Must run AFTER
  * build:lib in the build chain.
  */
 
@@ -56,7 +56,7 @@ function main() {
     throw new ExitError(
       1,
       `gen-plugin-skills: ${path.relative(ROOT, CONVERSION_MODULE)} not found.\n` +
-      'Run `npm run build:lib` first (this script depends on the compiled converter).'
+      'Run `pnpm run build:lib` first (this script depends on the compiled converter).'
     );
   }
   const conversion = require(CONVERSION_MODULE);
@@ -76,7 +76,7 @@ function main() {
 
   if (CHECK) {
     if (!fs.existsSync(SKILLS_DIR)) {
-      throw new ExitError(1, 'gen-plugin-skills: skills/ missing. Run: npm run gen:plugin-skills -- --write');
+      throw new ExitError(1, 'gen-plugin-skills: skills/ missing. Run: pnpm run gen:plugin-skills -- --write');
     }
     let stale = 0;
     const expectedNames = new Set(results.map(r => r.skillName));
@@ -101,7 +101,7 @@ function main() {
       }
     }
     if (stale > 0) {
-      throw new ExitError(1, `gen-plugin-skills: ${stale} stale skill(s). Run: npm run gen:plugin-skills -- --write`);
+      throw new ExitError(1, `gen-plugin-skills: ${stale} stale skill(s). Run: pnpm run gen:plugin-skills -- --write`);
     }
     process.stdout.write(`gen-plugin-skills: ${results.length} skills up to date\n`);
     return 0;

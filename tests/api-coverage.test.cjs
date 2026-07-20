@@ -26,7 +26,7 @@ describe('detectApiIntegration — pure detector (#1562)', () => {
     mod = require(MODULE_PATH);
   } catch (err) {
     throw new Error(
-      `Could not require ${MODULE_PATH}. Run "npm run build:lib" first. Underlying: ${err.message}`
+      `Could not require ${MODULE_PATH}. Run "pnpm run build:lib" first. Underlying: ${err.message}`
     );
   }
   const { detectApiIntegration, DEFAULT_API_COVERAGE_TERMS } = mod;
@@ -157,7 +157,7 @@ describe('coverage matrix — parse / validate (#1562 acceptance #2)', () => {
   try {
     mod = require(MODULE_PATH);
   } catch (err) {
-    throw new Error(`Could not require ${MODULE_PATH}. Run "npm run build:lib". Underlying: ${err.message}`);
+    throw new Error(`Could not require ${MODULE_PATH}. Run "pnpm run build:lib". Underlying: ${err.message}`);
   }
   const { parseCoverageMatrix, validateCoverageMatrix, renderCoverageMatrix } = mod;
 
@@ -341,7 +341,7 @@ describe('coverage matrix — parse/render bijection (fast-check)', () => {
   try {
     mod = require(MODULE_PATH);
   } catch (err) {
-    throw new Error(`Could not require ${MODULE_PATH}. Run "npm run build:lib". Underlying: ${err.message}`);
+    throw new Error(`Could not require ${MODULE_PATH}. Run "pnpm run build:lib". Underlying: ${err.message}`);
   }
   const { renderCoverageMatrix, validateCoverageMatrix } = mod;
 

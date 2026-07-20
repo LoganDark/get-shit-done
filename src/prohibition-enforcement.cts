@@ -28,7 +28,7 @@
  * with machine proof, closing the gap the ADR-550 D5d note tracked as a follow-up.
  *
  * Authored as strict TypeScript (`src/prohibition-enforcement.cts`) and compiled by
- * `tsc -p tsconfig.build.json` (`npm run build:lib`) to the gitignored runtime artifact
+ * `tsc -p tsconfig.build.json` (`pnpm run build:lib`) to the gitignored runtime artifact
  * `gsd-core/bin/lib/prohibition-enforcement.cjs`. Do NOT hand-write the `.cjs`; it is emitted.
  *
  * DETERMINISM SCOPE: the DECISION layer is pure/deterministic and no-LLM — given a `runCheck` result

@@ -92,7 +92,7 @@ describe('PR policy workflow maintainer carve-outs', () => {
     // Same user-facing policy message as close-draft-prs.yml (locks the core
     // content so the sweep cannot silently drift to a weaker message).
     assert.match(workflow, /## Draft PRs are not accepted/);
-    assert.match(workflow, /npm run test:coverage/);
+    assert.match(workflow, /pnpm run test:coverage/);
     assert.match(workflow, /CONTRIBUTING\.md#pull-request-guidelines/);
   });
 });

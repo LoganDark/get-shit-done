@@ -1,6 +1,6 @@
 // Behavioral tests for the deterministic prohibition-enforcement producer (#1259, ADR-550 D5d
 // "heavy half"). Requires the BUILT gsd-core/bin/lib/prohibition-enforcement.cjs — authored as
-// src/prohibition-enforcement.cts and compiled by `npm run build:lib` (mirrors how the verify-tier
+// src/prohibition-enforcement.cts and compiled by `pnpm run build:lib` (mirrors how the verify-tier
 // suite requires the built probe-core.cjs). Typed-field assertions only; the check-runner is
 // injected so no real subprocess is spawned. No source-grep.
 'use strict';

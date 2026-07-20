@@ -23,7 +23,7 @@ describe('detectAssumptionDelta — pure detector (#1561)', () => {
   } catch (err) {
     // Surface a clear failure if build:lib has not run yet.
     throw new Error(
-      `Could not require ${MODULE_PATH}. Run "npm run build:lib" first. Underlying: ${err.message}`
+      `Could not require ${MODULE_PATH}. Run "pnpm run build:lib" first. Underlying: ${err.message}`
     );
   }
 

@@ -97,12 +97,19 @@ sources: https://csrc.nist.gov/publications/detail/sp/800-218/final) and the
 OpenSSF Scorecard "Pinned-Dependencies" check
 (https://github.com/ossf/scorecard/blob/main/docs/checks.md#pinned-dependencies).
 
+> **pnpm note:** this repo is pnpm-managed (`pnpm-lock.yaml`, no
+> `package-lock.json`), so the gate below cannot parse the repo's own tree —
+> it targets `package-lock.json` repos and is exercised against fixtures in
+> `tests/fixtures/npm-integrity/`. On the repo itself, the equivalent
+> protection is `pnpm install --frozen-lockfile`, which fails fast on any
+> manifest↔lockfile drift.
+
 ### Invoking locally
 
 ```bash
 node scripts/check-npm-integrity.cjs
-# or via npm script:
-npm run check:integrity
+# or via package script:
+pnpm run check:integrity
 ```
 
 The script exits 0 on a clean install and 1 on any finding, with a structured
@@ -119,10 +126,11 @@ Options:
 The canonical fix for any drift is:
 
 ```bash
-rm -rf node_modules && npm ci
+rm -rf node_modules && pnpm install --frozen-lockfile
 ```
 
-Then verify with `npm run check:integrity` before committing.
+`--frozen-lockfile` fails if `pnpm-lock.yaml` and `package.json` disagree, so a
+clean install is itself the verification.
 
 ### Bypass policy
 
@@ -142,7 +150,7 @@ by default).
 
 ### CI coverage
 
-The gate runs in:
-- `test.yml` — all matrix jobs and the coverage job, after `npm ci`
-- `release.yml` — rc and finalize jobs, after `npm ci`
+On this pnpm-managed repo the drift gate is `pnpm install --frozen-lockfile`,
+which runs in:
+- `test.yml` — all matrix jobs and the coverage job
 - `security-scan.yml` — before all diff-based source scans

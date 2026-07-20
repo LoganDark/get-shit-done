@@ -3,7 +3,7 @@
  *
  * Asserts the LOCKED export surface of the spec-completeness edge-probe against
  * the BUILT artifact (`gsd-core/bin/lib/edge-probe.cjs`), which
- * `npm run build:lib` (run by pretest) emits from `src/edge-probe.cts`.
+ * `pnpm run build:lib` (run by pretest) emits from `src/edge-probe.cts`.
  *
  * Post ADR-550 Decision 7: the generic resolution model lives in `probe-core`;
  * edge-probe is its first adapter (shapes/TAXONOMY/proposeEdges + the

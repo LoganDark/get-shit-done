@@ -2,7 +2,7 @@
  * SPEC section-status helper tests.
  *
  * Asserts the LOCKED behaviour of `spec-section` against the BUILT artifact
- * (`gsd-core/bin/lib/spec-section.cjs`), which `npm run build:lib` (run by pretest) emits from
+ * (`gsd-core/bin/lib/spec-section.cjs`), which `pnpm run build:lib` (run by pretest) emits from
  * `src/spec-section.cts`.
  *
  * This is the contract that pins the spec-less probe fallback's per-section absence detection
